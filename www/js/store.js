@@ -1,0 +1,418 @@
+// Estado do aplicativo. Tudo fica SOMENTE no aparelho (IndexedDB, com reserva em localStorage).
+// Nenhum dado é enviado para servidor algum.
+import { EX_POR_ID } from './data/exercises.js';
+import { EQUIPAMENTOS } from './data/equipment.js';
+import { PERGUNTAS as P_TREINO } from './logic/trainer.js';
+import { PERGUNTAS as P_NUTRI } from './logic/nutrition.js';
+import { parValido } from './logic/objetivos.js';
+
+const DB_NAME = 'fitcore';
+const STORE = 'kv';
+const KEY = 'estado';
+const KEY_PREV = 'estado_anterior';
+const LS_KEY = 'fitcore.estado';
+export const VERSAO = 1;
+const MAX_IMPORT = 24 * 1024 * 1024; // cabe o maior histórico possível (5.000 treinos)
+const MAX_ESTADO = 30 * 1024 * 1024; // um backup válido nunca vira um estado maior que isto
+export const MAX_PLANOS = 60;
+
+const defaults = () => ({
+  v: VERSAO,
+  settings: { tema: 'auto', descanso: 90, som: true, vibrar: true, telaLigada: true, animar: true },
+  gym: { all: true, has: {} },
+  plans: [],
+  activePlan: '',
+  sessions: [],
+  current: null,
+  trainer: { answers: {}, aceitoEm: '', revisaoEm: '', adiadoAte: '', versao: 0 },
+  nutri: { answers: {}, calculadoEm: '', seed: 0 },
+  body: [],
+  // objetivosOk: par "treino|alimentação" que o usuário escolheu manter diferente (logic/objetivos.js)
+  ui: { onboarded: false, installDismissedAt: '', backupEm: '', objetivosOk: '' },
+});
+
+export let state = defaults();
+const subs = new Set();
+let db = null;
+let dbOk = true;        // falso se a leitura do banco falhou: não gravamos por cima de dados que não conseguimos ler
+let rev = 0;            // número da última gravação conhecida (para detectar outra aba/janela gravando)
+let saveT = 0;
+let dirty = false;
+let canal = null;
+let aoMudarFora = null;
+let aoFalhar = null;
+
+// ---------- validação (usada ao carregar e ao importar backup) ----------
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const str = (v, max, def = '') => (typeof v === 'string' ? v.slice(0, max) : def);
+const num = (v, min, max, def) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : def);
+const numOrNull = (v, min, max) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : null);
+const bool = (v, def) => (typeof v === 'boolean' ? v : def);
+const oneOf = (v, list, def) => (list.includes(v) ? v : def);
+const arr = (v, max, fn) => (Array.isArray(v) ? v.slice(0, max).map(fn).filter((x) => x != null) : []);
+const BAD_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+// data e hora no formato ISO completo (o mesmo que o app grava): evita datas que cada navegador interpreta de um jeito
+const iso = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/.test(v) && !Number.isNaN(Date.parse(v)) ? v : '');
+const idStr = (v) => (typeof v === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(v) && !BAD_KEYS.has(v) ? v : '');
+const dayKey = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) && new Date(v + 'T00:00:00Z').toISOString().slice(0, 10) === v ? v : '');
+const novoId = (p) => p + Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+function unico(id, vistos, prefixo) {
+  let out = id || novoId(prefixo);
+  while (vistos.has(out)) out = novoId(prefixo);
+  vistos.add(out);
+  return out;
+}
+
+// Respostas das entrevistas: só entram as perguntas que existem, com valores que existem nelas.
+function cleanAnswers(v, perguntas) {
+  const out = {};
+  if (!isObj(v)) return out;
+  for (const q of perguntas) {
+    if (!Object.prototype.hasOwnProperty.call(v, q.k)) continue;
+    const x = v[q.k];
+    if (q.tipo === 'numero') {
+      if (typeof x === 'number' && Number.isFinite(x) && x >= q.min && x <= q.max) out[q.k] = x;
+    } else if (q.tipo === 'um') {
+      if (typeof x === 'string' && q.op.some((o) => o[0] === x)) out[q.k] = x;
+    } else if (Array.isArray(x)) {
+      const ok = [...new Set(x.filter((y) => typeof y === 'string' && q.op.some((o) => o[0] === y)))].slice(0, q.max || q.op.length);
+      if (ok.length) out[q.k] = ok;
+    }
+  }
+  return out;
+}
+const cleanSet = (s) => {
+  if (!isObj(s)) return null;
+  return { kg: numOrNull(s.kg, 0, 2000), reps: numOrNull(s.reps, 0, 2000), seg: numOrNull(s.seg, 0, 86400), ok: bool(s.ok, false) };
+};
+const cleanSessItem = (it) => {
+  if (!isObj(it) || !EX_POR_ID.has(it.ex)) return null;
+  const out = { ex: it.ex, sets: arr(it.sets, 30, cleanSet), alvo: typeof it.alvo === 'string' && /^\d{1,3}(-\d{1,3})?$/.test(it.alvo) ? it.alvo : '10', descanso: Math.round(num(it.descanso, 0, 900, 90)) };
+  if (typeof it.planejadas === 'number' && Number.isFinite(it.planejadas)) out.planejadas = Math.round(Math.min(30, Math.max(0, it.planejadas)));
+  return out;
+};
+function cleanSession(s, isCurrent) {
+  if (!isObj(s)) return null;
+  const inicio = iso(s.inicio);
+  if (!inicio) return null;
+  const out = {
+    id: idStr(s.id),
+    planId: idStr(s.planId), diaId: idStr(s.diaId), nome: str(s.nome, 60, 'Treino'),
+    inicio, fim: iso(s.fim), nota: str(s.nota, 500),
+    itens: arr(s.itens, 60, cleanSessItem),
+  };
+  if (isCurrent) { out.id = out.id || novoId('s'); out.restEnd = num(s.restEnd, 0, 4e12, 0); out.restTotal = num(s.restTotal, 0, 900, 0); }
+  else if (!out.fim || Date.parse(out.fim) < Date.parse(inicio)) return null;
+  // treino já finalizado: só as séries concluídas fazem parte do histórico (um arquivo com séries vazias não incha os dados)
+  if (!isCurrent) for (const it of out.itens) it.sets = it.sets.filter((x) => x.ok);
+  return out;
+}
+const cleanPlanItem = (it) => {
+  if (!isObj(it) || !EX_POR_ID.has(it.ex)) return null;
+  const reps = typeof it.reps === 'string' && /^\d{1,3}(-\d{1,3})?$/.test(it.reps) ? it.reps : '10';
+  return { ex: it.ex, series: Math.round(num(it.series, 1, 12, 3)), reps, descanso: Math.round(num(it.descanso, 0, 900, 90)), nota: str(it.nota, 200) };
+};
+const cleanDay = (d) => {
+  if (!isObj(d)) return null;
+  const id = idStr(d.id);
+  if (!id) return null;
+  return { id, nome: str(d.nome, 40, 'Treino'), foco: str(d.foco, 90), itens: arr(d.itens, 40, cleanPlanItem) };
+};
+function cleanPlan(p) {
+  if (!isObj(p)) return null;
+  const id = idStr(p.id);
+  if (!id) return null;
+  const vistos = new Set();
+  const dias = arr(p.dias, 14, cleanDay).filter((d) => (vistos.has(d.id) ? false : vistos.add(d.id)));
+  const agenda = {};
+  if (isObj(p.agenda)) for (let i = 0; i < 7; i++) { const v = p.agenda[i]; if (typeof v === 'string' && vistos.has(v)) agenda[i] = v; }
+  return { id, nome: str(p.nome, 60, 'Meu treino'), origem: oneOf(p.origem, ['treinador', 'modelo', 'manual'], 'manual'), criadoEm: iso(p.criadoEm), dias, agenda, info: str(p.info, 600) };
+}
+const cleanBody = (b) => {
+  if (!isObj(b)) return null;
+  const data = dayKey(b.data);
+  const peso = numOrNull(b.peso, 20, 400);
+  if (!data || peso == null) return null;
+  return { data, peso, cintura: numOrNull(b.cintura, 30, 250) };
+};
+
+// Reconstrói o estado campo a campo a partir de dados não confiáveis (arquivo de backup ou armazenamento).
+export function sanitize(raw) {
+  const d = defaults();
+  if (!isObj(raw)) return d;
+  const s = isObj(raw.settings) ? raw.settings : {};
+  d.settings = {
+    tema: oneOf(s.tema, ['auto', 'escuro', 'claro'], 'auto'),
+    descanso: Math.round(num(s.descanso, 15, 600, 90)),
+    som: bool(s.som, true), vibrar: bool(s.vibrar, true), telaLigada: bool(s.telaLigada, true), animar: bool(s.animar, true),
+  };
+  const g = isObj(raw.gym) ? raw.gym : {};
+  d.gym.all = bool(g.all, true);
+  if (isObj(g.has)) for (const k of Object.keys(EQUIPAMENTOS)) if (g.has[k] === true) d.gym.has[k] = true;
+  const idsPlano = new Set();
+  d.plans = arr(raw.plans, MAX_PLANOS, cleanPlan).filter((p) => (idsPlano.has(p.id) ? false : idsPlano.add(p.id)));
+  d.activePlan = typeof raw.activePlan === 'string' && idsPlano.has(raw.activePlan) ? raw.activePlan : (d.plans[0] ? d.plans[0].id : '');
+  const idsSessao = new Set();
+  d.sessions = arr(raw.sessions, 5000, (x) => cleanSession(x, false));
+  for (const x of d.sessions) x.id = unico(x.id, idsSessao, 's');
+  d.sessions.sort((a, b) => Date.parse(a.inicio) - Date.parse(b.inicio));
+  d.current = raw.current ? cleanSession(raw.current, true) : null;
+  const t = isObj(raw.trainer) ? raw.trainer : {};
+  d.trainer = { answers: cleanAnswers(t.answers, P_TREINO), aceitoEm: iso(t.aceitoEm), revisaoEm: iso(t.revisaoEm), adiadoAte: iso(t.adiadoAte), versao: Math.round(num(t.versao, 0, 9999, 0)) };
+  const n = isObj(raw.nutri) ? raw.nutri : {};
+  d.nutri = { answers: cleanAnswers(n.answers, P_NUTRI), calculadoEm: iso(n.calculadoEm), seed: Math.round(num(n.seed, 0, 1e6, 0)) };
+  const dias = new Set();
+  d.body = arr(raw.body, 3000, cleanBody).filter((b) => (dias.has(b.data) ? false : dias.add(b.data))).sort((a, b) => (a.data < b.data ? -1 : 1));
+  const u = isObj(raw.ui) ? raw.ui : {};
+  d.ui = { onboarded: bool(u.onboarded, false), installDismissedAt: iso(u.installDismissedAt), backupEm: iso(u.backupEm), objetivosOk: parValido(u.objetivosOk) ? u.objetivosOk : '' };
+  return d;
+}
+
+// ---------- persistência ----------
+let motivoBanco = 'ok'; // 'ok' | 'tempo' (não respondeu) | 'erro' (o navegador não oferece banco, ex.: janela anônima antiga)
+function openDb() {
+  return new Promise((resolve) => {
+    let feito = false;
+    const fim = (v, motivo) => { if (!feito) { feito = true; motivoBanco = motivo; resolve(v); } };
+    setTimeout(() => fim(null, 'tempo'), 4000);
+    try {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
+      req.onsuccess = () => fim(req.result, 'ok');
+      req.onerror = () => fim(null, 'erro');
+      req.onblocked = () => fim(null, 'tempo');
+    } catch { fim(null, 'erro'); }
+  });
+}
+// devolve { ok, value }: ok = falso quando houve ERRO de leitura (diferente de "não existe")
+function idbGet(key) {
+  return new Promise((resolve) => {
+    if (!db) { resolve({ ok: false, value: undefined }); return; }
+    try {
+      const rq = db.transaction(STORE, 'readonly').objectStore(STORE).get(key);
+      rq.onsuccess = () => resolve({ ok: true, value: rq.result });
+      rq.onerror = () => resolve({ ok: false, value: undefined });
+    } catch { resolve({ ok: false, value: undefined }); }
+  });
+}
+function idbPut(key, value) {
+  return new Promise((resolve) => {
+    if (!db) { resolve(false); return; }
+    try {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(value, key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.onabort = () => resolve(false);
+    } catch { resolve(false); }
+  });
+}
+function idbDelete(key) {
+  return new Promise((resolve) => {
+    if (!db) { resolve(false); return; }
+    try {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).delete(key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.onabort = () => resolve(false);
+    } catch { resolve(false); }
+  });
+}
+// grava só se ninguém gravou depois de nós; devolve 'ok' | 'conflito' | 'erro'
+function idbPutSeAtual(registro, revBase) {
+  return new Promise((resolve) => {
+    if (!db) { resolve('erro'); return; }
+    try {
+      const tx = db.transaction(STORE, 'readwrite');
+      const st = tx.objectStore(STORE);
+      let resultado = 'ok';
+      const rq = st.get(KEY);
+      rq.onsuccess = () => {
+        const atual = rq.result;
+        const revAtual = isObj(atual) && typeof atual.rev === 'number' ? atual.rev : 0;
+        if (revAtual > revBase) { resultado = 'conflito'; return; }
+        st.put(registro, KEY);
+      };
+      rq.onerror = () => { resultado = 'erro'; };
+      tx.oncomplete = () => resolve(resultado);
+      tx.onerror = () => resolve('erro');
+      tx.onabort = () => resolve('erro');
+    } catch { resolve('erro'); }
+  });
+}
+const desembrulha = (r) => (isObj(r) && isObj(r.dados) && typeof r.rev === 'number' ? { rev: r.rev, dados: r.dados, semBanco: r.semBanco === true } : isObj(r) ? { rev: 0, dados: r } : null);
+function lerReserva() {
+  try { const t = localStorage.getItem(LS_KEY); return t ? desembrulha(JSON.parse(t)) : null; } catch { return null; }
+}
+const avisar = () => { for (const f of subs) f(state); };
+
+async function recarregar() {
+  const r = await idbGet(KEY);
+  const reg = r.ok ? desembrulha(r.value) : null;
+  if (!reg) return false;
+  state = sanitize(reg.dados);
+  rev = reg.rev;
+  dirty = false;
+  clearTimeout(saveT);
+  avisar();
+  return true;
+}
+
+export async function load() {
+  db = await openDb();
+  if (!db && motivoBanco === 'tempo') db = await openDb(); // o banco demorou: tenta mais uma vez
+  const r = await idbGet(KEY);
+  dbOk = !!db && r.ok;
+  const doBanco = r.ok ? desembrulha(r.value) : null;
+  const daReserva = lerReserva();
+  // O banco não respondeu e não há reserva: abrir "vazio" faria o usuário achar que perdeu tudo e, pior,
+  // gravar por cima dos dados reais depois. Melhor avisar e deixar tentar de novo.
+  if (!dbOk && !daReserva && motivoBanco === 'tempo') throw new Error('banco indisponível');
+  // Usa a cópia mais nova. A reserva só vence o banco se foi gravada com o banco funcionando
+  // (última gravação falhou ou ficou pendente); uma reserva feita "sem banco" nunca apaga o que está no banco.
+  const reservaVale = daReserva && !(daReserva.semBanco && doBanco);
+  const reg = doBanco && reservaVale ? (daReserva.rev > doBanco.rev ? daReserva : doBanco) : doBanco || daReserva;
+  if (daReserva && !reservaVale) { try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ } }
+  state = sanitize(reg ? reg.dados : undefined);
+  rev = reg ? reg.rev : 0;
+  if (reg && reg === daReserva && dbOk) { dirty = true; flush(); } // devolve ao banco o que só estava na reserva
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch { /* ignore */ }
+  window.addEventListener('pagehide', () => { guardarReserva(); flush(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { guardarReserva(); flush(); }
+    else verificarOutraJanela();
+  });
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      canal = new BroadcastChannel('fitcore');
+      canal.onmessage = (e) => { if (e.data && typeof e.data.rev === 'number' && e.data.rev > rev) verificarOutraJanela(); };
+    }
+  } catch { canal = null; }
+  return state;
+}
+// Outra aba ou janela do app gravou dados mais novos? Então esta recarrega (se não tiver nada pendente).
+async function verificarOutraJanela() {
+  if (!dbOk || dirty || gravando) return;
+  const r = await idbGet(KEY);
+  const reg = r.ok ? desembrulha(r.value) : null;
+  if (reg && reg.rev > rev && !dirty && !gravando) { await recarregar(); if (aoMudarFora) aoMudarFora(); }
+}
+
+// Uma gravação por vez. Se duas se cruzassem, a segunda encontraria no banco a revisão da primeira,
+// tomaria isso por "outra janela gravou" e recarregaria dados mais antigos, desfazendo a última alteração.
+let gravando = null;
+export async function flush() {
+  while (gravando) { try { await gravando; } catch { /* a próxima tentativa decide */ } }
+  if (!dirty) return;
+  gravando = gravar();
+  try { await gravando; } finally { gravando = null; }
+}
+// Ao sair da tela (app em segundo plano ou fechando), o que ainda não chegou ao banco fica também na reserva,
+// de forma imediata: se o sistema encerrar o app antes de a gravação terminar, nada se perde.
+function guardarReserva() {
+  if (!dirty && !gravando) return;
+  try { localStorage.setItem(LS_KEY, JSON.stringify({ rev: rev + 2, salvoEm: new Date().toISOString(), dados: state })); } catch { /* sem espaço: segue só com o banco */ }
+}
+async function gravar() {
+  dirty = false;
+  clearTimeout(saveT);
+  const registro = { rev: rev + 1, salvoEm: new Date().toISOString(), dados: state };
+  const r = dbOk ? await idbPutSeAtual(registro, rev) : 'erro';
+  if (r === 'ok') {
+    rev = registro.rev;
+    // a reserva só sai quando não há mais nada pendente (uma alteração feita durante a gravação ainda depende dela)
+    if (!dirty) { try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ } }
+    try { if (canal) canal.postMessage({ rev }); } catch { /* ignore */ }
+    return;
+  }
+  if (r === 'conflito') {
+    // outra janela gravou antes: ficamos com os dados dela, para não apagar o que foi feito lá
+    await recarregar();
+    try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ } // a reserva desta janela ficou velha
+    if (aoMudarFora) aoMudarFora('conflito');
+    return;
+  }
+  try { localStorage.setItem(LS_KEY, JSON.stringify({ ...registro, semBanco: !dbOk })); rev = registro.rev; } catch {
+    dirty = true; // nada foi gravado: tenta de novo na próxima alteração e avisa
+    if (aoFalhar) aoFalhar();
+  }
+}
+export function save() {
+  dirty = true;
+  clearTimeout(saveT);
+  saveT = setTimeout(flush, 200);
+}
+export function update(fn) {
+  fn(state);
+  save();
+  avisar();
+}
+export function subscribe(fn) { subs.add(fn); return () => subs.delete(fn); }
+export function onExternalChange(fn) { aoMudarFora = fn; }
+export function onSaveError(fn) { aoFalhar = fn; }
+
+// ---------- backup ----------
+export function exportData() {
+  return JSON.stringify({ app: 'fitcore', v: VERSAO, exportadoEm: new Date().toISOString(), dados: state });
+}
+// Lê e valida um backup SEM aplicar. Devolve os dados limpos e um resumo para o usuário conferir.
+export function readBackup(text) {
+  if (typeof text !== 'string' || text.length > MAX_IMPORT) throw new Error('Arquivo grande demais ou inválido.');
+  let parsed;
+  try { parsed = JSON.parse(text); } catch { throw new Error('Este arquivo não é um backup válido.'); }
+  if (!isObj(parsed) || parsed.app !== 'fitcore' || !isObj(parsed.dados)) throw new Error('Este arquivo não é um backup deste aplicativo.');
+  const v = typeof parsed.v === 'number' ? parsed.v : typeof parsed.dados.v === 'number' ? parsed.dados.v : 1;
+  if (v > VERSAO) throw new Error('Este backup foi feito por uma versão mais nova do aplicativo. Atualize o app antes de restaurar.');
+  const dados = sanitize(parsed.dados);
+  dados.current = null;
+  const bruto = Array.isArray(parsed.dados.sessions) ? parsed.dados.sessions.length : 0;
+  if (JSON.stringify(dados).length > MAX_ESTADO) throw new Error('Arquivo grande demais ou inválido.');
+  return { dados, resumo: { treinos: dados.sessions.length, planos: dados.plans.length, pesos: dados.body.length, exportadoEm: iso(parsed.exportadoEm), descartados: Math.max(0, bruto - dados.sessions.length) } };
+}
+export async function applyBackup(dados) {
+  // guarda o estado atual para permitir "desfazer"
+  await idbPut(KEY_PREV, { salvoEm: new Date().toISOString(), dados: JSON.parse(JSON.stringify(state)) });
+  state = dados;
+  save();
+  avisar();
+}
+export function importData(text) {
+  const { dados, resumo } = readBackup(text);
+  state = dados;
+  save();
+  avisar();
+  return resumo;
+}
+export async function previousInfo() {
+  const r = await idbGet(KEY_PREV);
+  if (!r.ok || !isObj(r.value) || !isObj(r.value.dados)) return null;
+  const d = sanitize(r.value.dados);
+  return { salvoEm: iso(r.value.salvoEm), treinos: d.sessions.length, planos: d.plans.length };
+}
+export async function restorePrevious() {
+  const r = await idbGet(KEY_PREV);
+  if (!r.ok || !isObj(r.value) || !isObj(r.value.dados)) return false;
+  state = sanitize(r.value.dados);
+  state.current = null;
+  await idbDelete(KEY_PREV);
+  save();
+  avisar();
+  return true;
+}
+export async function resetAll() {
+  state = defaults();
+  await idbDelete(KEY_PREV);
+  dirty = true;
+  await flush();
+  try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
+  avisar();
+}
+
+// ---------- consultas comuns ----------
+export const activePlan = () => state.plans.find((p) => p.id === state.activePlan) || null;
+export const planById = (id) => state.plans.find((p) => p.id === id) || null;
+export function hasEquip(ex) {
+  if (state.gym.all) return true;
+  return ex.equip.every((e) => state.gym.has[e]);
+}

@@ -1,0 +1,23 @@
+{
+  "name": "fitcore",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FitCore — aplicativo de treino e nutrição (PWA + Android)",
+  "type": "module",
+  "scripts": {
+    "start": "node tools/serve.mjs 5173",
+    "test": "node --test tests/*.test.mjs && node tools/check-anim.mjs && node tools/check-postura.mjs",
+    "test:uso": "node tools/e2e/navegador.mjs tools/e2e/uso.mjs",
+    "build:sw": "node tools/build-sw.mjs",
+    "build:icons": "node tools/make-icons.mjs",
+    "build": "node tools/make-icons.mjs && node tools/build-sw.mjs",
+    "android:sync": "npm run build && npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0"
+  }
+}

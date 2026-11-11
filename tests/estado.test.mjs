@@ -1,0 +1,212 @@
+// Testes do armazenamento (validação de backup/importação) e das regras de progresso.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as store from '../www/js/store.js';
+import { sugestao, e1rm, parseReps, sequenciaSemanas, volumeSessao, recorde, estagnados } from '../www/js/logic/progress.js';
+
+const iso = (d) => new Date(d).toISOString();
+
+test('sanitize: dados inválidos ou maliciosos são descartados', () => {
+  const sujo = JSON.parse(`{
+    "__proto__": {"polluted": true},
+    "constructor": {"prototype": {"polluted": true}},
+    "settings": {"tema": "<script>alert(1)</script>", "descanso": 999999, "som": "sim"},
+    "gym": {"all": false, "has": {"halteres": true, "__proto__": true, "inventado": true}},
+    "plans": [
+      {"id": "p1", "nome": "${'x'.repeat(500)}", "origem": "hacker", "dias": [
+        {"id": "d1", "nome": "A", "itens": [
+          {"ex": "supino-reto-barra", "series": 9999, "reps": "8-12; DROP TABLE", "descanso": -5, "nota": "<img src=x onerror=alert(1)>"},
+          {"ex": "nao-existe", "series": 3, "reps": "10", "descanso": 60},
+          {"ex": "__proto__", "series": 3}
+        ]},
+        {"id": "<bad id>", "nome": "B", "itens": []}
+      ], "agenda": {"1": "d1", "2": "inexistente", "__proto__": "d1", "99": "d1"}},
+      "lixo", null, 42
+    ],
+    "activePlan": "nao-existe",
+    "sessions": [
+      {"id": "s1", "nome": "ok", "inicio": "2026-11-01T10:00:00.000Z", "fim": "2026-11-01T11:00:00.000Z", "itens": [{"ex": "supino-reto-barra", "sets": [{"kg": 1e99, "reps": -4, "ok": true}, {"kg": "40", "reps": null, "ok": "yes"}]}]},
+      {"id": "s2", "inicio": "data inválida", "itens": []},
+      {"id": "s3", "inicio": "2026-11-02T10:00:00.000Z", "itens": []}
+    ],
+    "current": {"inicio": "2026-11-03T10:00:00.000Z", "itens": [], "restEnd": "amanhã"},
+    "trainer": {"answers": {"objetivo": "hipertrofia", "__proto__": "x", "constructor": "y", "idade": 30, "foco": ["gluteos", {"a": 1}, "<b>"], "Bad Key": 1, "x": "com espaço e <tag>"}},
+    "nutri": {"answers": {"peso": 1e12}},
+    "body": [{"data": "2026-11-01", "peso": 80}, {"data": "ontem", "peso": 70}, {"data": "2026-11-02", "peso": 99999}, {"data": "2026-10-01", "peso": 79.5, "cintura": 2}],
+    "ui": {"onboarded": "true"},
+    "extra": {"qualquer": "coisa"}
+  }`);
+  const s = store.sanitize(sujo);
+  assert.equal({}.polluted, undefined, 'protótipo global poluído!');
+  assert.equal(Object.prototype.hasOwnProperty.call(s, 'extra'), false);
+  assert.deepEqual(Object.keys(s).sort(), ['activePlan', 'body', 'current', 'gym', 'nutri', 'plans', 'sessions', 'settings', 'trainer', 'ui', 'v'].sort());
+  assert.equal(s.settings.tema, 'auto');
+  assert.equal(s.settings.descanso, 600);
+  assert.equal(s.settings.som, true);
+  assert.deepEqual(s.gym.has, { halteres: true });
+  assert.equal(s.plans.length, 1);
+  const p = s.plans[0];
+  assert.equal(p.nome.length, 60);
+  assert.equal(p.origem, 'manual');
+  assert.equal(p.dias.length, 1, 'dia com id inválido deve ser descartado');
+  assert.equal(p.dias[0].itens.length, 1, 'exercícios inexistentes devem ser descartados');
+  const it = p.dias[0].itens[0];
+  assert.equal(it.series, 12);
+  assert.equal(it.reps, '10');
+  assert.equal(it.descanso, 0);
+  assert.equal(it.nota, '<img src=x onerror=alert(1)>', 'texto é guardado como texto puro (e exibido com textContent)');
+  assert.deepEqual(p.agenda, { 1: 'd1' });
+  assert.equal(s.activePlan, 'p1');
+  assert.equal(s.sessions.length, 1, 'sessões sem data válida ou sem fim são descartadas');
+  assert.equal(s.sessions[0].itens[0].sets[0].kg, 2000);
+  assert.equal(s.sessions[0].itens[0].sets[0].reps, 0);
+  assert.equal(s.sessions[0].itens[0].sets.length, 1, 'no histórico só ficam as séries concluídas (a segunda tinha "ok" inválido)');
+  assert.equal(s.current.restEnd, 0);
+  assert.deepEqual(Object.keys(s.trainer.answers).sort(), ['foco', 'idade', 'objetivo']);
+  assert.deepEqual(s.trainer.answers.foco, ['gluteos']);
+  assert.equal(s.nutri.answers.peso, undefined, 'valor fora da faixa da pergunta é recusado');
+  assert.deepEqual(s.body.map((b) => b.data), ['2026-10-01', '2026-11-01', '2026-11-02']);
+  assert.equal(s.body[2].peso, 400);
+  assert.equal(s.body[0].cintura, 30);
+  assert.equal(s.ui.onboarded, false);
+});
+
+test('sanitize: respostas das entrevistas só aceitam o que existe nas perguntas', async () => {
+  const { gerarPlano, perfil } = await import('../www/js/logic/trainer.js');
+  const { calcular } = await import('../www/js/logic/nutrition.js');
+  const ruins = [
+    { objetivo: 'saude', triagem: 1, limitacoes: true, condicoes: 'x', foco: 7 },
+    { objetivo: 'hipertrofia', idade: 30, peso: 75, altura: 175, experiencia: 'intermediario', dias: '4', tempo: '60', local: 'completa', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'], foco: ['x', '__proto__', 'constructor'] },
+    { objetivo: ['a'], idade: '30', dias: 4, foco: [['gluteos']] },
+  ];
+  for (const answers of ruins) {
+    const s = store.sanitize({ trainer: { answers }, nutri: { answers } });
+    for (const k of ['triagem', 'limitacoes', 'condicoes', 'foco']) assert.ok(s.trainer.answers[k] === undefined || Array.isArray(s.trainer.answers[k]), k + ' deve ser lista ou ausente');
+    assert.doesNotThrow(() => perfil(s.trainer.answers));
+    assert.doesNotThrow(() => gerarPlano(s.trainer.answers, { all: true, has: {} }, 0));
+    // mesmo sem passar pela sanitização, a lógica não pode quebrar
+    assert.doesNotThrow(() => perfil(answers));
+    assert.doesNotThrow(() => gerarPlano(answers, { all: true, has: {} }, 0));
+  }
+  const s2 = store.sanitize({ trainer: { answers: ruins[1] } });
+  assert.equal(s2.trainer.answers.foco, undefined, 'valores que não existem na pergunta são descartados');
+  assert.doesNotThrow(() => calcular({ objetivo: 'manter', sexo: 'm', idade: 30, peso: 70, altura: 170, atividade: 'leve', treinos: '3', horario: 'noite', refeicoes: '4', restricoes: 5, condicoes: 'x' }));
+});
+
+test('sanitize: ids repetidos ou reservados e datas fora do padrão', () => {
+  const s = store.sanitize({
+    plans: [
+      { id: 'p1', nome: 'A', dias: [{ id: 'd1', nome: 'A', itens: [] }, { id: 'd1', nome: 'repetido', itens: [] }] },
+      { id: 'p1', nome: 'repetido', dias: [] },
+      { id: '__proto__', nome: 'reservado', dias: [] },
+      { id: 'constructor', nome: 'reservado', dias: [] },
+    ],
+    sessions: [
+      { id: 'x', nome: 'b', inicio: '2026-11-02T10:00:00.000Z', fim: '2026-11-02T11:00:00.000Z', itens: [] },
+      { id: 'x', nome: 'a', inicio: '2026-11-01T10:00:00.000Z', fim: '2026-11-01T11:00:00.000Z', itens: [] },
+      { id: 'y', nome: 'data solta', inicio: 'Tuesday 5', fim: '2026-11-01T11:00:00.000Z', itens: [] },
+      { id: 'z', nome: 'só número', inicio: '1', fim: '2', itens: [] },
+      { id: 'w', nome: 'fim antes do início', inicio: '2026-11-03T10:00:00.000Z', fim: '2026-11-03T09:00:00.000Z', itens: [] },
+    ],
+  });
+  assert.deepEqual(s.plans.map((p) => p.id), ['p1']);
+  assert.equal(s.plans[0].dias.length, 1);
+  assert.equal(s.sessions.length, 2);
+  assert.notEqual(s.sessions[0].id, s.sessions[1].id, 'ids de sessão repetidos recebem um novo id');
+  assert.deepEqual(s.sessions.map((x) => x.nome), ['a', 'b'], 'sessões ficam em ordem cronológica');
+});
+
+test('backup: leitura mostra resumo antes de aplicar e recusa versão mais nova', () => {
+  const txt = JSON.stringify({ app: 'fitcore', v: 1, exportadoEm: '2026-11-10T12:00:00.000Z', dados: { sessions: [{ id: 'a', nome: 'ok', inicio: '2026-11-01T10:00:00.000Z', fim: '2026-11-01T11:00:00.000Z', itens: [] }, { lixo: true }], plans: [] } });
+  const { dados, resumo } = store.readBackup(txt);
+  assert.equal(resumo.treinos, 1);
+  assert.equal(resumo.descartados, 1);
+  assert.equal(resumo.exportadoEm, '2026-11-10T12:00:00.000Z');
+  assert.equal(dados.current, null);
+  assert.throws(() => store.readBackup(JSON.stringify({ app: 'fitcore', v: 99, dados: {} })), /versão mais nova/);
+});
+
+test('sanitize: entradas que não são objeto viram estado vazio', () => {
+  for (const bad of [null, undefined, 42, 'texto', [], true]) {
+    const s = store.sanitize(bad);
+    assert.equal(s.plans.length, 0);
+    assert.equal(s.settings.tema, 'auto');
+    assert.equal(s.gym.all, true);
+  }
+});
+
+test('importar backup: rejeita arquivos de outros apps, JSON inválido e arquivos enormes', () => {
+  assert.throws(() => store.importData('isto não é json'), /backup válido/);
+  assert.throws(() => store.importData('{"app":"outro","dados":{}}'), /deste aplicativo/);
+  assert.throws(() => store.importData('{"app":"fitcore"}'), /deste aplicativo/);
+  assert.throws(() => store.importData('x'.repeat(25 * 1024 * 1024)), /grande demais/);
+  assert.throws(() => store.importData(12345), /grande demais|inválido/);
+});
+
+test('exportar e importar preserva os dados', () => {
+  store.update((s) => {
+    s.plans.push({ id: 'pA', nome: 'Meu', origem: 'manual', criadoEm: iso('2026-11-01'), dias: [{ id: 'dA', nome: 'A', foco: '', itens: [{ ex: 'leg-press-45', series: 3, reps: '10-12', descanso: 90, nota: '' }] }], agenda: { 1: 'dA' }, info: '' });
+    s.activePlan = 'pA';
+    s.sessions.push({ id: 'sA', planId: 'pA', diaId: 'dA', nome: 'A', inicio: iso('2026-11-02T10:00'), fim: iso('2026-11-02T11:00'), nota: '', itens: [{ ex: 'leg-press-45', alvo: '10-12', descanso: 90, sets: [{ kg: 100, reps: 12, seg: null, ok: true }] }] });
+    s.current = { id: 'sB', planId: '', diaId: '', nome: 'x', inicio: iso('2026-11-03T10:00'), fim: '', nota: '', itens: [], restEnd: 0, restTotal: 0 };
+  });
+  const txt = store.exportData();
+  const r = store.importData(txt);
+  assert.equal(r.treinos, 1);
+  assert.equal(store.state.plans[0].dias[0].itens[0].ex, 'leg-press-45');
+  assert.equal(store.state.sessions[0].itens[0].sets[0].kg, 100);
+  assert.equal(store.state.current, null, 'treino em andamento não é restaurado');
+});
+
+test('progresso: sugestão de carga segue a dupla progressão', () => {
+  const ex = 'supino-reto-barra';
+  const sess = (dia, sets) => ({ id: 's' + dia, planId: '', diaId: '', nome: 't', inicio: iso(`2026-10-${String(dia).padStart(2, '0')}T10:00`), fim: iso(`2026-10-${String(dia).padStart(2, '0')}T11:00`), nota: '', itens: [{ ex, alvo: '8-12', descanso: 90, sets: sets.map(([kg, reps]) => ({ kg, reps, seg: null, ok: true })) }] });
+  store.update((s) => { s.sessions = []; });
+  let g = sugestao(ex, '8-12', 3);
+  assert.equal(g.kg, null); assert.equal(g.reps, 8); assert.match(g.texto, /Primeira vez/);
+  store.update((s) => { s.sessions = [sess(1, [[40, 10], [40, 9], [40, 8]])]; });
+  g = sugestao(ex, '8-12', 3);
+  assert.equal(g.kg, 40); assert.equal(g.reps, 11); assert.match(g.texto, /Mantenha a carga/);
+  store.update((s) => { s.sessions = [sess(1, [[40, 10], [40, 9], [40, 8]]), sess(3, [[40, 12], [40, 12], [40, 12]])]; });
+  g = sugestao(ex, '8-12', 3);
+  assert.equal(g.kg, 40, 'primeira vez no topo: repetir antes de subir (regra 2 por 2)'); assert.equal(g.reps, 12);
+  store.update((s) => { s.sessions = [sess(1, [[40, 12], [40, 12], [40, 12]]), sess(3, [[40, 12], [40, 12], [40, 12]])]; });
+  g = sugestao(ex, '8-12', 3);
+  assert.equal(g.kg, 42.5, 'duas vezes no topo: subir cerca de 5%'); assert.equal(g.reps, 8);
+  assert.ok((g.kg - 40) / 40 >= 0.02 && (g.kg - 40) / 40 <= 0.1, 'aumento entre 2% e 10%');
+  store.update((s) => { s.sessions = [sess(1, [[60, 6], [60, 5]]), sess(3, [[60, 6], [60, 5]])]; });
+  g = sugestao(ex, '8-12', 3);
+  assert.ok(g.kg < 60 && g.kg >= 54, 'duas vezes abaixo do mínimo: reduzir 5 a 10%'); assert.match(g.texto, /Reduza/);
+  // aparelho assistido: evoluir é reduzir a ajuda
+  const gr = 'barra-fixa-assistida-graviton';
+  store.update((s) => { s.sessions = [{ ...sess(5, []), itens: [{ ex: gr, alvo: '8-12', descanso: 90, sets: [{ kg: 30, reps: 12, seg: null, ok: true }, { kg: 30, reps: 12, seg: null, ok: true }] }] }]; });
+  g = sugestao(gr, '8-12', 2);
+  assert.ok(g.kg < 30, 'graviton: sugerir menos ajuda'); assert.match(g.texto, /reduza a ajuda/);
+});
+
+test('progresso: utilitários', () => {
+  assert.deepEqual(parseReps('8-12'), [8, 12]);
+  assert.deepEqual(parseReps('30'), [30, 30]);
+  assert.deepEqual(parseReps('lixo'), [8, 12]);
+  assert.equal(Math.round(e1rm(100, 10)), 133);
+  assert.equal(e1rm(0, 10), 0);
+  store.update((s) => { s.sessions = []; });
+  assert.equal(sequenciaSemanas(3), 0);
+  assert.equal(recorde('supino-reto-barra'), null);
+  assert.deepEqual(estagnados(null), []);
+  assert.equal(volumeSessao({ itens: [{ sets: [{ kg: 50, reps: 10, ok: true }, { kg: 50, reps: 8, ok: false }] }] }), 500);
+});
+
+test('backup: séries vazias em treinos finalizados são descartadas e dia impossível não é aceito', () => {
+  const vazias = Array.from({ length: 30 }, () => ({}));
+  const treino = (i) => ({ id: 't' + i, nome: 'x', inicio: '2026-10-01T10:00:00.000Z', fim: '2026-10-01T11:00:00.000Z', itens: Array.from({ length: 60 }, () => ({ ex: 'supino-reto-barra', sets: vazias })) });
+  const txt = JSON.stringify({ app: 'fitcore', v: 1, dados: { sessions: Array.from({ length: 200 }, (_, i) => treino(i)), body: [{ data: '2026-02-31', peso: 80 }, { data: '2026-02-28', peso: 81 }] } });
+  const { dados } = store.readBackup(txt);
+  assert.equal(dados.sessions.length, 200);
+  assert.ok(dados.sessions.every((x) => x.itens.every((it) => it.sets.length === 0)), 'séries sem nada não entram no histórico');
+  assert.ok(JSON.stringify(dados).length < txt.length, 'o estado limpo não fica maior que o arquivo');
+  assert.deepEqual(dados.body.map((b) => b.data), ['2026-02-28'], '31 de fevereiro não existe');
+  const comPlano = store.sanitize({ sessions: [{ id: 'a', nome: 'x', inicio: '2026-10-01T10:00:00.000Z', fim: '2026-10-01T11:00:00.000Z', itens: [{ ex: 'supino-reto-barra', planejadas: 4.6, sets: [{ kg: 40, reps: 10, ok: true }] }, { ex: 'supino-reto-barra', planejadas: 'x', sets: [] }] }] });
+  assert.equal(comPlano.sessions[0].itens[0].planejadas, 5);
+  assert.equal('planejadas' in comPlano.sessions[0].itens[1], false);
+});
