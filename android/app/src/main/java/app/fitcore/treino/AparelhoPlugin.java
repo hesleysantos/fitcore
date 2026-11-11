@@ -1,5 +1,7 @@
 package app.fitcore.treino;
 
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
@@ -32,6 +34,79 @@ import java.nio.charset.StandardCharsets;
 public class AparelhoPlugin extends Plugin {
 
     private static final int MAX_BACKUP = 24 * 1024 * 1024;
+
+    /** O app está na frente? Com ele na frente, a própria tela avisa o fim do descanso (ver AvisoReceiver). */
+    static volatile boolean naFrente = false;
+
+    @Override
+    public void load() {
+        naFrente = true;
+    }
+
+    @Override
+    protected void handleOnResume() {
+        super.handleOnResume();
+        naFrente = true;
+    }
+
+    @Override
+    protected void handleOnPause() {
+        super.handleOnPause();
+        naFrente = false;
+    }
+
+    private PendingIntent intentAviso(boolean som, boolean vibrar, boolean criar) {
+        Intent i = new Intent(getContext(), AvisoReceiver.class).setAction(AvisoReceiver.ACAO)
+                .putExtra("som", som).putExtra("vibrar", vibrar);
+        int flags = PendingIntent.FLAG_IMMUTABLE | (criar ? PendingIntent.FLAG_UPDATE_CURRENT : PendingIntent.FLAG_NO_CREATE);
+        return PendingIntent.getBroadcast(getContext(), 1, i, flags);
+    }
+
+    /**
+     * Agenda no alarme do Android o aviso do fim do descanso (vibração e bipe), para funcionar com outro
+     * aplicativo na frente ou com a tela apagada. Só um aviso por vez; no máximo 15 minutos à frente.
+     */
+    @PluginMethod
+    public void agendarAviso(PluginCall call) {
+        long em = call.getData().optLong("em", 0);
+        boolean som = Boolean.TRUE.equals(call.getBoolean("som", true));
+        boolean vibrar = Boolean.TRUE.equals(call.getBoolean("vibrar", true));
+        long agora = System.currentTimeMillis();
+        try {
+            AlarmManager alarme = (AlarmManager) getContext().getSystemService(Context.ALARM_SERVICE);
+            if (alarme != null && em > agora && em - agora <= 15 * 60 * 1000L && (som || vibrar)) {
+                PendingIntent pi = intentAviso(som, vibrar, true);
+                boolean exato = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarme.canScheduleExactAlarms();
+                try {
+                    if (exato) {
+                        alarme.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, em, pi);
+                    } else {
+                        alarme.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, em, pi);
+                    }
+                } catch (SecurityException semPermissao) {
+                    alarme.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, em, pi);
+                }
+            }
+        } catch (Exception ignored) {
+            // sem alarme disponível: o aviso da própria tela continua funcionando
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void cancelarAviso(PluginCall call) {
+        try {
+            AlarmManager alarme = (AlarmManager) getContext().getSystemService(Context.ALARM_SERVICE);
+            PendingIntent pi = intentAviso(false, false, false);
+            if (alarme != null && pi != null) {
+                alarme.cancel(pi);
+                pi.cancel();
+            }
+        } catch (Exception ignored) {
+            // nada agendado
+        }
+        call.resolve();
+    }
 
     @PluginMethod
     public void telaLigada(PluginCall call) {

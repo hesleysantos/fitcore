@@ -230,7 +230,13 @@ export function dayView(planId, dayId) {
           mutDay((d) => { if (d.itens[i]) d.itens[i] = nx.registro === ex.registro ? { ...d.itens[i], ex: novo } : novoItem(nx); });
           toast('Exercício trocado'); refresh();
         }, 'sm', 'swap'),
-        btn('Remover', () => { mutDay((d) => { d.itens.splice(i, 1); }); refresh(); }, 'sm danger', 'trash'))));
+        btn('Remover', async () => {
+          const ok = await confirmSheet({ title: 'Remover este exercício?', text: `“${ex.nome}” sai deste treino. O histórico de treinos já feitos não muda.`, okLabel: 'Remover', danger: true });
+          if (!ok) return;
+          // remove o exercício confirmado, mesmo que a lista tenha mudado enquanto a pergunta estava aberta
+          mutDay((d) => { const k = d.itens[i] && d.itens[i].ex === it.ex ? i : d.itens.findIndex((x) => x.ex === it.ex); if (k >= 0) d.itens.splice(k, 1); });
+          refresh();
+        }, 'sm danger', 'trash'))));
   });
   body.push(btn('Adicionar exercícios', async () => {
     if (day.itens.length >= MAX_ITENS) { toast(`Este treino já tem ${MAX_ITENS} exercícios, que é o limite.`); return; }

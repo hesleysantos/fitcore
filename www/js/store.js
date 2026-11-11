@@ -101,7 +101,15 @@ function cleanSession(s, isCurrent) {
     inicio, fim: iso(s.fim), nota: str(s.nota, 500),
     itens: arr(s.itens, 60, cleanSessItem),
   };
-  if (isCurrent) { out.id = out.id || novoId('s'); out.restEnd = num(s.restEnd, 0, 4e12, 0); out.restTotal = num(s.restTotal, 0, 900, 0); }
+  if (isCurrent) {
+    out.id = out.id || novoId('s'); out.restEnd = num(s.restEnd, 0, 4e12, 0); out.restTotal = num(s.restTotal, 0, 900, 0);
+    out.volta = Math.round(num(s.volta, 0, 40000, 0)); // dias parado antes deste treino (0 = sem pausa)
+    // cronômetro de exercício por tempo em andamento: série j do item i, fim (ms) e duração (s)
+    const c = isObj(s.cron) ? s.cron : null;
+    const dentro = (v, min, max) => typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
+    out.cron = c && Number.isInteger(c.i) && Number.isInteger(c.j) && out.itens[c.i] && out.itens[c.i].sets[c.j] && dentro(c.end, 1, 4e12) && dentro(c.total, 1, 36000)
+      ? { i: c.i, j: c.j, end: c.end, total: c.total } : null;
+  }
   else if (!out.fim || Date.parse(out.fim) < Date.parse(inicio)) return null;
   // treino já finalizado: só as séries concluídas fazem parte do histórico (um arquivo com séries vazias não incha os dados)
   if (!isCurrent) for (const it of out.itens) it.sets = it.sets.filter((x) => x.ok);

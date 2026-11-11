@@ -69,6 +69,17 @@ export function vibrate(pattern = [220, 120, 220]) {
     if (navigator.vibrate) navigator.vibrate(pattern);
   } catch { /* ignore */ }
 }
+// ---------- aviso do fim do descanso com o app em segundo plano ----------
+// No aplicativo Android, o próprio sistema dispara a vibração e o bipe no horário certo, mesmo com outro aplicativo
+// na frente ou com a tela apagada (nesses casos o cronômetro da página fica suspenso). Com o FitCore na frente, quem
+// avisa é a própria tela, e o Android não repete. No navegador não há como agendar: o aviso depende da página aberta.
+export function agendarAviso(quando) {
+  if (!native() || !Number.isFinite(quando) || quando <= Date.now()) return;
+  if (!state.settings.som && !state.settings.vibrar) return;
+  plugin('agendarAviso', { em: Math.round(quando), som: !!state.settings.som, vibrar: !!state.settings.vibrar });
+}
+export function cancelarAviso() { if (native()) plugin('cancelarAviso'); }
+
 export const isNativeApp = native;
 export const nativeCall = (pluginName, method, args) => {
   try { if (native() && window.Capacitor.nativePromise) return window.Capacitor.nativePromise(pluginName, method, args || {}); } catch { /* ignore */ }

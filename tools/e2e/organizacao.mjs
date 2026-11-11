@@ -262,7 +262,11 @@ export default async (page) => {
   r = await ev(`const { EX_POR_ID } = await import('/js/data/exercises.js'); const e = EX_POR_ID.get('prancha-lateral'); return e ? e.registro : null;`);
   if (r) ok(d0.ex === 'prancha-lateral' && d0.reps === '30' && d0.series === 3 && d0.descanso === 45, 'trocar um exercício de carga por um de tempo usa os valores de tempo (3 × 30 s)', d0);
   // remover
-  await ev(`[...cart(0).querySelectorAll('button')].find((b) => b.textContent.trim() === 'Remover').click(); await espera(150); return true;`);
+  // Remover pede confirmação: cancelar mantém o exercício; confirmar tira
+  const antesDeRemover = await ordem();
+  const pediu = await ev(`[...cart(0).querySelectorAll('button')].find((b) => b.textContent.trim() === 'Remover').click(); await espera(300); const s = document.querySelector('.sheet'); const txt = s ? s.innerText : ''; const c = s && [...s.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Cancelar'); if (c) c.click(); await espera(300); return txt;`);
+  ok(/Remover este exercício?/.test(pediu) && (await ordem()) === antesDeRemover, 'Remover pede confirmação e Cancelar mantém o exercício', pediu.slice(0, 80));
+  await ev(`[...cart(0).querySelectorAll('button')].find((b) => b.textContent.trim() === 'Remover').click(); await espera(300); const conf = [...document.querySelectorAll('.sheet button')].find((b) => b.textContent.trim() === 'Remover'); if (conf) conf.click(); await espera(250); return true;`);
   ok((await ordem()) === 'flexao-de-bracos,prancha-frontal,caminhada-esteira' && (await ev('return cartoes().length;')) === 3, 'Remover tira o exercício do treino e da tela');
   // descrição (foco)
   await ev(`const i = document.querySelector('main label.field input.input'); digitar(i, '  Peito e braços  '); await espera(60); digitar(i, 'F'.repeat(200)); await espera(60); return true;`);
@@ -661,7 +665,7 @@ export default async (page) => {
   ok(r.id === antes.id && r.hash === '#/sessao', 'desistir de começar outro mantém o treino atual e volta para ele', r);
   // editar o plano com a sessão em andamento
   await ir(`treino/${ps.id}/${ps.dias[0]}`);
-  await ev(`[...cart(0).querySelectorAll('button')].find((b) => b.textContent.trim() === 'Remover').click(); await espera(150); const s = cart(0).querySelector('select[aria-label="Séries"]'); s.value = '6'; s.dispatchEvent(new Event('change', { bubbles: true })); await espera(120); return true;`);
+  await ev(`[...cart(0).querySelectorAll('button')].find((b) => b.textContent.trim() === 'Remover').click(); await espera(300); const conf = [...document.querySelectorAll('.sheet button')].find((b) => b.textContent.trim() === 'Remover'); if (conf) conf.click(); await espera(250); const s = cart(0).querySelector('select[aria-label="Séries"]'); s.value = '6'; s.dispatchEvent(new Event('change', { bubbles: true })); await espera(120); return true;`);
   await clicar('Renomear treino'); await page.sleep(120); await responder('Dia S editado');
   r = await ev(`const c = S.state.current; const d = S.state.plans.find((p) => p.id === ${J(ps.id)}).dias[0]; return { plano: d.itens.length, nomePlano: d.nome, sessao: c.itens.length, nomeSessao: c.nome, sets: JSON.stringify(c.itens.map((i) => i.sets)) };`);
   ok(r.plano === 3 && r.nomePlano === 'Dia S editado' && r.sessao === 4 && r.nomeSessao === 'Dia S' && r.sets === antes.sets, 'editar o plano durante o treino não muda a sessão em andamento', r);

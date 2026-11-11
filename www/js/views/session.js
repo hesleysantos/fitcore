@@ -4,9 +4,10 @@ import { state, update, planById } from '../store.js';
 import { go, refresh, replace } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { figure, thumb } from '../figure.js';
-import { sugestao, retomada, recorde, e1rm, assistido } from '../logic/progress.js';
+import { sugestao, retomada, recorde, e1rm, assistido, voltaDePausa, seriesNaVolta, descansoNaVolta } from '../logic/progress.js';
+import { nivelPausa, cortePausa, duracaoTxt } from '../logic/pausa.js';
 import { pickExercises, novoItem, subtitulo, folha } from './common.js';
-import { keepAwake, unlockAudio, beep, vibrate } from '../device.js';
+import { keepAwake, unlockAudio, beep, vibrate, agendarAviso, cancelarAviso } from '../device.js';
 
 // ---------- iniciar ----------
 function montarItem(planItem) {
@@ -32,15 +33,23 @@ export async function startSession(planId, dayId) {
   if (!day.itens.length) { toast('Este treino ainda não tem exercícios.'); return; }
   if (!(await podeIniciar())) { if (state.current) go('sessao'); return; }
   unlockAudio();
+  // Volta depois de 2 semanas ou mais parado (consenso CSCCa/NSCA de 2019, regra FIT): nas 2 primeiras semanas o treino
+  // começa com menos séries por grupo muscular e mais descanso; a carga e o cardio reduzidos vêm de retomada().
+  const volta = voltaDePausa();
+  let base = day.itens.filter((i) => EX_POR_ID.has(i.ex));
+  if (volta && volta.semana <= 2) {
+    const series = seriesNaVolta(base, cortePausa(nivelPausa(volta.dias)));
+    base = base.map((it, i) => ({ ...it, series: series[i], descanso: descansoNaVolta(it.ex, it.descanso, volta) }));
+  }
   update((s) => {
-    s.current = { id: 's' + uid(), planId, diaId: dayId, nome: day.nome, inicio: new Date().toISOString(), fim: '', nota: '', itens: day.itens.filter((i) => EX_POR_ID.has(i.ex)).map(montarItem), restEnd: 0, restTotal: 0 };
+    s.current = { id: 's' + uid(), planId, diaId: dayId, nome: day.nome, inicio: new Date().toISOString(), fim: '', nota: '', itens: base.map(montarItem), restEnd: 0, restTotal: 0, volta: volta ? volta.dias : 0, cron: null };
   });
   go('sessao');
 }
 export async function startFree() {
   if (!(await podeIniciar())) { if (state.current) go('sessao'); return; }
   unlockAudio();
-  update((s) => { s.current = { id: 's' + uid(), planId: '', diaId: '', nome: 'Treino livre', inicio: new Date().toISOString(), fim: '', nota: '', itens: [], restEnd: 0, restTotal: 0 }; });
+  update((s) => { s.current = { id: 's' + uid(), planId: '', diaId: '', nome: 'Treino livre', inicio: new Date().toISOString(), fim: '', nota: '', itens: [], restEnd: 0, restTotal: 0, volta: 0, cron: null }; });
   go('sessao');
 }
 
@@ -108,7 +117,13 @@ export function sessionView() {
   const recAntes = new Map();
   for (const it of cur.itens) recAntes.set(it.ex, recorde(it.ex));
   let work = null; // cronômetro de exercício por tempo: { i, j, end, total }
-  const setWork = (w) => { work = w; cronometro = w && state.current ? { sid: state.current.id, it: state.current.itens[w.i], j: w.j, end: w.end, total: w.total } : null; };
+  const setWork = (w) => {
+    work = w;
+    cronometro = w && state.current ? { sid: state.current.id, it: state.current.itens[w.i], j: w.j, end: w.end, total: w.total } : null;
+    // também fica gravado no treino em andamento, para não se perder se a página for recarregada
+    update((s) => { if (s.current) s.current.cron = w ? { i: w.i, j: w.j, end: w.end, total: w.total } : null; });
+  };
+  if (!cronometro && cur.cron && cur.itens[cur.cron.i]) cronometro = { sid: cur.id, it: cur.itens[cur.cron.i], j: cur.cron.j, end: cur.cron.end, total: cur.cron.total };
   if (cronometro) {
     const i = cronometro.sid === cur.id ? cur.itens.indexOf(cronometro.it) : -1;
     const st = i >= 0 ? cur.itens[i].sets[cronometro.j] : null;
@@ -127,9 +142,10 @@ export function sessionView() {
     if (!seconds) return;
     alarmed = false;
     mutCur((c) => { c.restEnd = Date.now() + seconds * 1000; c.restTotal = seconds; });
+    agendarAviso(state.current.restEnd);
     drawBar();
   }
-  function stopRest() { mutCur((c) => { c.restEnd = 0; c.restTotal = 0; }); doneUntil = 0; drawBar(); }
+  function stopRest() { mutCur((c) => { c.restEnd = 0; c.restTotal = 0; }); cancelarAviso(); doneUntil = 0; drawBar(); }
 
   function check(i, j) {
     unlockAudio();
@@ -282,9 +298,9 @@ export function sessionView() {
       inner.appendChild(btn('Parar', () => { setWork(null); drawBar(); }, ''));
     } else if (c.restEnd && c.restEnd > now) {
       const rem = (c.restEnd - now) / 1000;
-      inner.appendChild(btn('−15', () => { mutCur((x) => { x.restEnd = Math.max(Date.now(), x.restEnd - 15000); }); tick(); }, 'sm'));
+      inner.appendChild(btn('−15', () => { mutCur((x) => { x.restEnd = Math.max(Date.now(), x.restEnd - 15000); }); agendarAviso(state.current.restEnd); tick(); }, 'sm'));
       inner.appendChild(h('div', { class: 'grow center' }, h('div', { class: 'tiny muted', text: 'DESCANSO' }), h('div', { class: 'time', id: 'rest-time', 'aria-live': 'off', text: fmtClock(Math.ceil(rem)) })));
-      inner.appendChild(btn('+15', () => { mutCur((x) => { x.restEnd += 15000; x.restTotal += 15; }); tick(); }, 'sm'));
+      inner.appendChild(btn('+15', () => { mutCur((x) => { x.restEnd += 15000; x.restTotal += 15; }); agendarAviso(state.current.restEnd); tick(); }, 'sm'));
       inner.appendChild(btn('Pular', stopRest, 'sm primary'));
     } else if (doneUntil > now) {
       bar.className = 'restbar done flash';
@@ -341,6 +357,7 @@ export function sessionView() {
       s.sessions.push({ id: cc.id, planId: cc.planId, diaId: cc.diaId, nome: cc.nome, inicio: cc.inicio, fim: new Date().toISOString(), nota: cc.nota || '', itens });
       if (s.sessions.length > 5000) s.sessions.splice(0, s.sessions.length - 5000);
       s.current = null;
+      cancelarAviso();
       s.ui.onboarded = true;
     });
     replace('historico/' + id);
@@ -372,6 +389,7 @@ export function sessionView() {
       if (rem <= 0) {
         if (!alarmed) { alarmed = true; if (rem > -8) { beep(2); vibrate(); } doneUntil = now + 6000; }
         mutCur((x) => { x.restEnd = 0; x.restTotal = 0; });
+        cancelarAviso();
         drawBar();
       } else if (t) t.textContent = fmtClock(Math.ceil(rem));
       else drawBar();
@@ -391,12 +409,14 @@ export function sessionView() {
   for (const ev of TOQUES) document.addEventListener(ev, liberarSom, true);
 
   const body = [];
+  if (cur.volta >= 14) body.push(note('info', `De volta depois de ${duracaoTxt(cur.volta)} parado: nas duas primeiras semanas o treino começa com menos séries por músculo, mais descanso e carga menor. Você pode ajustar qualquer série.`));
   if (!cur.itens.length) body.push(h('div', { class: 'empty' }, icon('dumbbell'), h('p', { text: 'Treino livre: toque em “Exercício” para escolher o que você vai fazer.' })));
   body.push(cards);
   if (cur.itens.length) body.push(note('info', 'Toque no ✓ ao terminar cada série. O descanso começa sozinho e o app avisa quando acabar.'));
   body.push(h('div', { class: 'row' }, btn('Descartar treino', async () => {
     const ok = await confirmSheet({ title: 'Descartar este treino?', text: 'Tudo o que foi registrado nesta sessão será perdido.', okLabel: 'Descartar', danger: true });
     if (!ok) return;
+    cancelarAviso();
     update((s) => { s.current = null; });
     replace('treinos');
   }, 'plain danger sm', 'trash')));

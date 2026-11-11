@@ -2,7 +2,8 @@
 import { state } from '../store.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { dateKey } from '../ui.js';
-import { DIA, nivelPausa, cortePausa, duracaoTxt, maiorPausa } from './pausa.js';
+import { DIA, nivelPausa, cortePausa, duracaoTxt, maiorPausa, voltaEm, FAIXAS_PAUSA, FAIXA_DA_RESPOSTA, CORTE_CARDIO, IRV_MAX, DESCANSO_MINIMO } from './pausa.js';
+import { pesosDoExercicio } from './trainer.js';
 
 const ASSISTIDOS = new Set(['barra-fixa-assistida-graviton', 'mergulho-assistido-graviton']);
 export const assistido = (exId) => ASSISTIDOS.has(exId);
@@ -102,12 +103,66 @@ export function sugestao(exId, alvoReps, nSeries) {
 }
 
 // ---------- volta depois de uma pausa ----------
+// Regras em logic/pausa.js (consenso CSCCa/NSCA de 2019 — ref caterisano2019).
 const temposDosTreinos = () => { const out = []; for (const s of state.sessions) { const t = s ? Date.parse(s.inicio) : NaN; if (Number.isFinite(t)) out.push(t); } return out.sort((a, b) => a - b); };
 const maiorCarga = (hst) => Math.max(0, ...hst.sets.map((s) => pos(s.kg)));
 const arred = (kg) => { const p = passo(kg); return Math.round(Math.round(kg / p) * p * 100) / 100; };
-// Ajusta a sugestão de carga pelo tempo sem treinar antes de voltar (faixas e percentuais em logic/pausa.js).
-// 1) Primeiro treino do exercício depois de 2 semanas ou mais sem treinar: carga reduzida conforme o tempo parado.
-// 2) Treinos seguintes, até 6 semanas depois da volta: sobe cerca de 10% por treino até a carga de antes da pausa.
+
+// Volta em andamento: null ou { dias, retorno, semana, semanas }. Usa o histórico; para quem ainda não tem treinos
+// registrados, usa o tempo parado informado ao Treinador, contado a partir do plano aceito.
+export function voltaDePausa(agora = Date.now()) {
+  if (!Number.isFinite(agora)) return null;
+  const t = state.trainer || {};
+  const a = t.answers || {};
+  const faixa = a.experiencia === 'nunca' ? 0 : FAIXA_DA_RESPOSTA[a.pausa] || 0;
+  const desde = Date.parse(t.aceitoEm);
+  const declarada = faixa && Number.isFinite(desde) ? { dias: FAIXAS_PAUSA[faixa].meio, desde } : null;
+  return voltaEm(temposDosTreinos(), agora, declarada);
+}
+
+// %1RM estimado para uma série de `reps` repetições parando com cerca de 3 de reserva (Epley)
+const pct1RM = (reps) => 1 / (1 + (Math.max(1, reps) + 3) / 30);
+// Musculação nas 2 primeiras semanas da volta (regra FIT): o volume relativo à intensidade
+// (IRV = séries × repetições × %1RM) fica em até 30 por grupo muscular em cada treino. Recebe os itens do treino do dia
+// ([{ ex, series, reps }]) e devolve quantas séries fazer de cada um; `corte` = redução de carga já aplicada na volta.
+export function seriesNaVolta(itens, corte = 0) {
+  const series = itens.map((it) => Math.max(1, Math.round(Number(it.series) || 1)));
+  const irv = (i) => { const [lo] = parseReps(itens[i].reps); return series[i] * lo * pct1RM(lo) * (1 - corte); };
+  const grupos = new Map();
+  itens.forEach((it, i) => {
+    const ex = EX_POR_ID.get(it.ex);
+    if (!ex || (ex.registro !== 'peso_reps' && ex.registro !== 'reps')) return;
+    const w = pesosDoExercicio(ex);
+    for (const g in w) if (w[g] === 1) { if (!grupos.has(g)) grupos.set(g, []); grupos.get(g).push(i); }
+  });
+  for (let k = 0; k < 200; k++) {
+    let mudou = false;
+    for (const idx of grupos.values()) {
+      if (idx.reduce((s, i) => s + irv(i), 0) <= IRV_MAX) continue;
+      // tira uma série do exercício com mais séries (em caso de empate, do que vem depois no treino)
+      let alvo = -1;
+      for (const i of idx) if (series[i] > 1 && (alvo < 0 || series[i] >= series[alvo])) alvo = i;
+      if (alvo < 0) continue;
+      series[alvo]--; mudou = true;
+    }
+    if (!mudou) break;
+  }
+  return series;
+}
+// descanso entre as séries durante a volta (regra FIT: 4 vezes o tempo de esforço na 1ª semana e 3 vezes na 2ª)
+export function descansoNaVolta(exId, descanso, volta) {
+  const ex = EX_POR_ID.get(exId);
+  const d = Number(descanso) || 0;
+  if (!ex || !volta || volta.semana > 2 || (ex.registro !== 'peso_reps' && ex.registro !== 'reps')) return d;
+  return Math.max(d, DESCANSO_MINIMO[volta.semana - 1]);
+}
+
+// Ajusta a sugestão do exercício pelo tempo sem treinar antes de voltar.
+// Cardio (minutos): regra 50/30/20/10 do consenso — metade do tempo de antes na 1ª semana, 30% a menos na 2ª
+//   (e 20% e 10% a menos na 3ª e na 4ª, depois de 3 meses ou mais parado).
+// Carga (escolha conservadora do aplicativo, o consenso não fixa um corte de carga):
+// 1) primeiro treino do exercício depois de 2 semanas ou mais sem treinar: carga reduzida conforme o tempo parado;
+// 2) treinos seguintes, até 6 semanas depois da volta: sobe cerca de 10% por treino até a carga de antes da pausa.
 // Conta o tempo sem NENHUM treino (não só sem o exercício): quem seguiu treinando outras coisas não tem redução.
 export function retomada(exId, sug, alvoReps, agora = Date.now()) {
   const ex = EX_POR_ID.get(exId);
@@ -118,16 +173,26 @@ export function retomada(exId, sug, alvoReps, agora = Date.now()) {
   if (!Number.isFinite(t0) || t0 > agora) return sug;
   const ts = temposDosTreinos();
   const [lo] = parseReps(alvoReps);
+  if (ex.registro === 'minutos') {
+    const volta = voltaDePausa(agora);
+    if (!volta) return sug;
+    // tempo de antes da pausa: o último treino do exercício anterior à volta
+    const antes = h.find((x) => Date.parse(x.data) < volta.retorno);
+    const ref = antes ? Math.max(0, ...antes.sets.map((s) => pos(s.seg))) : 0;
+    if (!(ref > 0)) return sug;
+    const corte = CORTE_CARDIO[volta.semana - 1] || 0;
+    const min = Math.max(1, Math.round(ref * (1 - corte)));
+    return { ...sug, seg: min, pausaDias: volta.dias, texto: `Volta depois de ${duracaoTxt(volta.dias)} parado, semana ${volta.semana} de ${volta.semanas}: faça ${min} min (antes da pausa: ${ref} min).` };
+  }
   const dias = maiorPausa(ts, t0, agora);
   const n = nivelPausa(dias);
   if (n >= 1) {
     const tempo = duracaoTxt(dias);
     const corte = cortePausa(n);
     const menor = (v) => Math.max(1, Math.round(v * (1 - corte)));
-    if (ex.registro === 'segundos' || ex.registro === 'minutos') {
-      const un = ex.registro === 'minutos' ? 'min' : 's';
+    if (ex.registro === 'segundos') {
       if (!(sug.seg > 0)) return sug;
-      return { ...sug, seg: menor(sug.seg), pausaDias: dias, texto: `Você ficou ${tempo} sem treinar. Hoje faça ${menor(sug.seg)} ${un} (antes da pausa: ${sug.seg} ${un}) e retome aos poucos.` };
+      return { ...sug, seg: menor(sug.seg), pausaDias: dias, texto: `Você ficou ${tempo} sem treinar. Hoje faça ${menor(sug.seg)} s (antes da pausa: ${sug.seg} s) e retome aos poucos.` };
     }
     if (ex.registro === 'reps') {
       const ult = Math.max(0, ...h[0].sets.map((s) => pos(s.reps)));

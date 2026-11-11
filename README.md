@@ -11,7 +11,7 @@ Aplicativo de academia que funciona **100% offline**:
 - **Treinador virtual**: entrevista (objetivo, idade, experiência, tempo sem treinar, limitações, aparelhos) → plano de treino, com sugestão periódica de troca de exercícios que você aceita ou não;
 - **Nutricionista virtual**: entrevista → metas de calorias, proteína e água, o que comer antes e depois de cada treino e cardápio de exemplo;
 - **objetivos alinhados**: o objetivo do treino e o da alimentação andam juntos (ganhar massa com ganhar massa, emagrecer com emagrecer). Ao mudar um, o app pergunta se iguala o outro; você pode manter diferentes;
-- **volta depois de uma pausa**: o tempo sem treinar entra no plano do Treinador, na carga sugerida do treino (de 10% a 50% menor, subindo a cada treino) e nas dicas;
+- **volta depois de uma pausa**: depois de 2 semanas ou mais parado, o treino segue o consenso CSCCa/NSCA de 2019 por 2 semanas (4 no cardio depois de 3 meses parado): menos séries por músculo, descanso mais longo e cardio com metade do tempo na primeira semana. A carga do primeiro treino vem de 10% a 50% menor (escolha conservadora do app) e sobe a cada treino. O tempo parado também entra no plano do Treinador e nas dicas;
 - tudo baseado em diretrizes publicadas (56 referências listadas em *Sobre → Referências científicas*).
 
 Os dados ficam **somente no aparelho**. Não há servidor, cadastro, anúncios nem rastreadores.
@@ -47,7 +47,7 @@ Abra `http://localhost:5173`. Requer Node.js 22 ou mais novo.
 npm test
 ```
 
-Roda 95 testes (mais de 2.500 perfis simulados no Treinador e na Nutricionista, análise de evolução, tempo parado, objetivos alinhados, mãos das figuras, gravação dos dados, validação de backup, catálogo com fontes, política de segurança) e a verificação de física e a postura das 232 animações (ossos de comprimento fixo, articulações dentro do limite, nada atravessa o chão, mãos e pés alcançam o aparelho, mãos apoiadas no chão quando o corpo está deitado).
+Roda 100 testes (mais de 2.500 perfis simulados no Treinador e na Nutricionista, análise de evolução, tempo parado e regras da volta, objetivos alinhados, mãos das figuras, gravação dos dados, validação de backup, catálogo com fontes, política de segurança) e a verificação de física e a postura das 232 animações (ossos de comprimento fixo, articulações dentro do limite, nada atravessa o chão, mãos e pés alcançam o aparelho, mãos apoiadas no chão quando o corpo está deitado).
 
 Teste de uso de ponta a ponta (clica no app como um usuário: entrevista, treino, evolução, nutrição, backup e uso sem internet). Deixe `npm start` rodando em outro terminal e execute:
 
@@ -112,7 +112,7 @@ O APK assinado sai em `android/app/build/outputs/apk/release/app-release.apk`.
 - A interface é montada sem `innerHTML`: texto digitado pelo usuário nunca vira código.
 - Backup importado é validado campo a campo (tipos, tamanhos, ids existentes), com proteção contra poluição de protótipo.
 - O service worker só responde a arquivos do próprio site.
-- Android: **sem permissão de internet** (o sistema bloqueia qualquer conexão), sem backup automático na nuvem, depuração do WebView desligada, única permissão: vibração. Nenhum plugin de terceiros.
+- Android: **sem permissão de internet** (o sistema bloqueia qualquer conexão), sem backup automático na nuvem, depuração do WebView desligada, só duas permissões: vibração e alarme exato (para avisar o fim do descanso com o app em segundo plano; se for publicar na Play Store, a permissão `USE_EXACT_ALARM` precisa ser declarada no formulário como uso de cronômetro). Nenhum plugin de terceiros.
 - Duas janelas do app abertas ao mesmo tempo não sobrescrevem os dados uma da outra.
 - O app não roda dentro de iframe de outro site.
 

@@ -2,6 +2,7 @@
   "name": "fitcore",
   "version": "1.0.0",
   "private": true,
+  "author": "Hesley",
   "description": "FitCore — aplicativo de treino e nutrição (PWA + Android)",
   "type": "module",
   "scripts": {

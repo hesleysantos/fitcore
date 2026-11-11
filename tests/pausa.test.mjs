@@ -2,9 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as store from '../www/js/store.js';
-import { nivelPausa, cortePausa, duracaoTxt, maiorPausa, FAIXAS_PAUSA, FAIXA_DA_RESPOSTA } from '../www/js/logic/pausa.js';
+import { nivelPausa, cortePausa, duracaoTxt, maiorPausa, FAIXAS_PAUSA, FAIXA_DA_RESPOSTA, voltaEm, semanasDeTransicao, IRV_MAX, CORTE_CARDIO } from '../www/js/logic/pausa.js';
 import { PERGUNTAS, respostasCompletas, gerarPlano, perfil, volumeSemanal, tetoSeries } from '../www/js/logic/trainer.js';
-import { sugestao, retomada } from '../www/js/logic/progress.js';
+import { sugestao, retomada, voltaDePausa, seriesNaVolta, descansoNaVolta } from '../www/js/logic/progress.js';
 import { analisar, retomadaRecente } from '../www/js/logic/insights.js';
 import { REFS, FAQ_TREINO } from '../www/js/data/knowledge.js';
 
@@ -214,4 +214,143 @@ test('Evolução: o tempo parado antes de voltar entra nas dicas', () => {
   assert.ok(REFS.bosquet2013 && REFS.caterisano2019);
   const faq = FAQ_TREINO.find((x) => /parado/.test(x.q));
   assert.ok(faq && faq.f.every((k) => REFS[k]));
+});
+
+// ---------- regras do consenso CSCCa/NSCA de 2019 (lido na íntegra) ----------
+test('volta: vale a partir de 2 semanas parado e dura 2 semanas (4 depois de 3 meses)', () => {
+  const t = (d) => AGORA - d * DIA;
+  assert.equal(semanasDeTransicao(14), 2); assert.equal(semanasDeTransicao(89), 2); assert.equal(semanasDeTransicao(90), 4);
+  // treinando sem pausa
+  assert.equal(voltaEm([t(9), t(6), t(3)], AGORA), null);
+  assert.equal(voltaEm([], AGORA), null);
+  // ainda parado: 13 dias não é pausa; 14 é, e a volta começa hoje, na semana 1
+  assert.equal(voltaEm([t(20), t(13)], AGORA), null);
+  assert.deepEqual(voltaEm([t(20), t(14)], AGORA), { dias: 14, retorno: AGORA, semana: 1, semanas: 2 });
+  assert.deepEqual(voltaEm([t(200)], AGORA), { dias: 200, retorno: AGORA, semana: 1, semanas: 4 });
+  // já voltou: semana 1 até o 6º dia, semana 2 até o 13º, depois acabou
+  assert.deepEqual(voltaEm([t(60), t(3)], AGORA), { dias: 57, retorno: t(3), semana: 1, semanas: 2 });
+  assert.equal(voltaEm([t(60), t(8), t(5), t(1)], AGORA).semana, 2);
+  assert.equal(voltaEm([t(60), t(15), t(8), t(1)], AGORA), null);
+  // pausa longa: quatro semanas
+  assert.equal(voltaEm([t(150), t(15), t(8), t(1)], AGORA).semana, 3);
+  assert.equal(voltaEm([t(150), t(26), t(19), t(12), t(5)], AGORA).semana, 4);
+  assert.equal(voltaEm([t(150), t(28), t(21), t(14), t(7), t(1)], AGORA), null);
+  // uma pausa nova no meio da volta recomeça a contagem
+  assert.deepEqual(voltaEm([t(150), t(26), t(8), t(1)], AGORA), { dias: 18, retorno: t(8), semana: 2, semanas: 2 });
+  // treinos no futuro não contam
+  assert.equal(voltaEm([t(9), t(3), AGORA + 5 * DIA], AGORA), null);
+  // pausa informada ao Treinador, para quem ainda não tem treinos registrados
+  const dec = { dias: 60, desde: t(2) };
+  assert.deepEqual(voltaEm([], AGORA, dec), { dias: 60, retorno: AGORA, semana: 1, semanas: 2 });
+  assert.equal(voltaEm([t(1)], AGORA, dec).semana, 1);
+  assert.equal(voltaEm([t(9), t(1)], AGORA, { dias: 60, desde: t(10) }).semana, 2);
+  assert.equal(voltaEm([t(16), t(9), t(2)], AGORA, { dias: 60, desde: t(17) }), null, 'depois de 2 semanas a transição acaba');
+  assert.equal(voltaEm([t(8), t(1)], AGORA, dec), null, 'com treinos antes do plano, vale o histórico');
+  assert.equal(voltaEm([t(30), t(1)], AGORA, dec).dias, 29, 'pausa no histórico vale mais do que a informada');
+  assert.equal(voltaEm([], AGORA, { dias: 5, desde: t(2) }), null);
+  assert.equal(voltaEm([], AGORA, { dias: 60, desde: NaN }), null);
+});
+
+test('volta: o tempo parado informado ao Treinador vale para quem ainda não tem treinos no aplicativo', () => {
+  const aceito = iso(AGORA - 2 * DIA);
+  store.update((s) => { s.sessions = []; s.trainer.answers = { ...base, pausa: '1a3m' }; s.trainer.aceitoEm = aceito; });
+  assert.deepEqual(voltaDePausa(AGORA), { dias: 60, retorno: AGORA, semana: 1, semanas: 2 });
+  store.update((s) => { s.trainer.answers = { ...base, pausa: 'mais6m' }; });
+  assert.equal(voltaDePausa(AGORA).semanas, 4);
+  // sem pausa informada, quem nunca treinou, ou plano ainda não aceito: nada
+  store.update((s) => { s.trainer.answers = { ...base, pausa: 'treinando' }; });
+  assert.equal(voltaDePausa(AGORA), null);
+  store.update((s) => { s.trainer.answers = { ...base, experiencia: 'nunca', pausa: 'mais6m' }; });
+  assert.equal(voltaDePausa(AGORA), null);
+  store.update((s) => { s.trainer.answers = { ...base, pausa: '1a3m' }; s.trainer.aceitoEm = ''; });
+  assert.equal(voltaDePausa(AGORA), null);
+  // com histórico, o histórico manda
+  store.update((s) => { s.trainer.aceitoEm = aceito; s.sessions = [sess(40, tres(60, 10)), sess(36, tres(60, 10))]; });
+  assert.equal(voltaDePausa(AGORA).dias, 36);
+  store.update((s) => { s.sessions = []; s.trainer.answers = {}; s.trainer.aceitoEm = ''; });
+  assert.equal(voltaDePausa(AGORA), null);
+  assert.equal(voltaDePausa(NaN), null);
+});
+
+test('volta, musculação (regra FIT): volume de até 30 por grupo muscular e descanso mínimo nas 2 primeiras semanas', () => {
+  // IRV = séries × repetições × %1RM. Peito com dois exercícios de 3 séries passa de 30: sai série até caber.
+  const peito = [{ ex: 'supino-reto-barra', series: 3, reps: '8-12' }, { ex: 'supino-inclinado-halteres', series: 3, reps: '10-12' }];
+  const irv = (itens, series, corte = 0) => itens.reduce((s, it, i) => { const lo = Number(it.reps.split('-')[0]); return s + series[i] * lo * (1 / (1 + (lo + 3) / 30)) * (1 - corte); }, 0);
+  assert.ok(irv(peito, [3, 3]) > IRV_MAX, 'o treino normal passa do teto');
+  let s = seriesNaVolta(peito, 0);
+  assert.ok(irv(peito, s) <= IRV_MAX && s.every((n) => n >= 1) && s[0] <= 3 && s[1] <= 3, s.join());
+  assert.ok(s[0] + s[1] < 6, 'ficou com menos séries');
+  // com a carga já reduzida, o corte de séries é menor ou igual
+  const s2 = seriesNaVolta(peito, 0.5);
+  assert.ok(s2[0] + s2[1] >= s[0] + s[1]);
+  assert.ok(irv(peito, s2, 0.5) <= IRV_MAX);
+  // um exercício só, dentro do teto: nada muda
+  assert.deepEqual(seriesNaVolta([{ ex: 'supino-reto-barra', series: 3, reps: '8-12' }], 0), [3]);
+  // grupos diferentes não se somam; exercício por tempo e cardio não entram na conta
+  const misto = [{ ex: 'supino-reto-barra', series: 3, reps: '8-12' }, { ex: 'remada-curvada-barra-pronada', series: 3, reps: '8-12' }, { ex: 'prancha-frontal', series: 3, reps: '30-60' }, { ex: 'corrida-esteira', series: 1, reps: '20' }];
+  assert.deepEqual(seriesNaVolta(misto, 0), [3, 3, 3, 1]);
+  // pernas com três exercícios de quadríceps: cada um fica com pelo menos 1 série e o grupo cabe no teto
+  const pernas = [{ ex: 'agachamento-livre-barra', series: 4, reps: '6-10' }, { ex: 'leg-press-45', series: 3, reps: '10-12' }, { ex: 'cadeira-extensora', series: 3, reps: '12-15' }];
+  s = seriesNaVolta(pernas, 0.2);
+  assert.ok(s.every((n) => n >= 1) && s[0] <= 4 && s[1] <= 3 && s[2] <= 3 && s.reduce((a, b) => a + b, 0) < 10, s.join());
+  // valores estranhos não quebram
+  assert.deepEqual(seriesNaVolta([{ ex: 'nao-existe', series: 3, reps: '10' }, { ex: 'supino-reto-barra', series: 0, reps: '' }], 0), [3, 1]);
+  assert.deepEqual(seriesNaVolta([], 0), []);
+  // descanso: pelo menos 2 minutos na 1ª semana e 1 min 30 s na 2ª; depois, o do plano; cardio e prancha não mudam
+  const v = (semana) => ({ dias: 40, retorno: AGORA, semana, semanas: 2 });
+  assert.equal(descansoNaVolta('supino-reto-barra', 60, v(1)), 120);
+  assert.equal(descansoNaVolta('supino-reto-barra', 60, v(2)), 90);
+  assert.equal(descansoNaVolta('supino-reto-barra', 60, v(3)), 60);
+  assert.equal(descansoNaVolta('supino-reto-barra', 180, v(1)), 180, 'descanso maior do plano é mantido');
+  assert.equal(descansoNaVolta('supino-reto-barra', 60, null), 60);
+  assert.equal(descansoNaVolta('prancha-frontal', 45, v(1)), 45);
+  assert.equal(descansoNaVolta('corrida-esteira', 0, v(1)), 0);
+});
+
+test('volta, cardio (regra 50/30/20/10): metade do tempo na 1ª semana e 30% a menos na 2ª', () => {
+  const EST = 'corrida-esteira';
+  const cardio = (d, min) => ({ ...sess(d, []), itens: [{ ex: EST, alvo: '30', descanso: 0, sets: [{ kg: null, reps: null, seg: min, ok: true }] }] });
+  const sug = () => retomada(EST, sugestao(EST, '30', 1), '30', AGORA);
+  store.update((s) => { s.trainer.answers = {}; s.trainer.aceitoEm = ''; s.sessions = [cardio(6, 30), cardio(3, 30)]; });
+  assert.deepEqual(sug(), sugestao(EST, '30', 1), 'sem pausa, nada muda');
+  // parou 40 dias: volta com metade
+  store.update((s) => { s.sessions = [cardio(44, 30), cardio(40, 30)]; });
+  let g = sug();
+  assert.equal(g.seg, 15); assert.match(g.texto, /semana 1 de 2/); assert.match(g.texto, /antes da pausa: 30 min/);
+  // segunda semana da volta: 30% a menos do que antes da pausa (e não do treino reduzido da semana passada)
+  store.update((s) => { s.sessions = [cardio(50, 30), cardio(9, 15), cardio(6, 15)]; });
+  g = sug();
+  assert.equal(g.seg, 21); assert.match(g.texto, /semana 2 de 2/);
+  // terceira semana: volta ao normal
+  store.update((s) => { s.sessions = [cardio(60, 30), cardio(15, 15), cardio(8, 21), cardio(1, 30)]; });
+  assert.deepEqual(sug(), sugestao(EST, '30', 1));
+  // pausa longa (3 meses ou mais): quatro semanas, com 50, 30, 20 e 10% a menos
+  for (const [dias, min, semana] of [[2, 15, 1], [9, 21, 2], [16, 24, 3], [23, 27, 4]]) {
+    const depois = []; for (let d = dias; d > 0; d -= 7) depois.push(cardio(d, 10));
+    store.update((s) => { s.sessions = [cardio(dias + 120, 30), ...depois]; });
+    g = sug();
+    assert.equal(g.seg, min, `semana ${semana}`); assert.match(g.texto, new RegExp(`semana ${semana} de 4`));
+  }
+  store.update((s) => { s.sessions = [cardio(150, 30), cardio(29, 15), cardio(22, 21), cardio(15, 24), cardio(8, 27), cardio(1, 30)]; });
+  assert.deepEqual(sug(), sugestao(EST, '30', 1));
+  assert.deepEqual(CORTE_CARDIO, [0.5, 0.3, 0.2, 0.1]);
+  store.update((s) => { s.sessions = []; });
+});
+
+test('treino em andamento: o cronômetro do exercício e o tempo parado são gravados e validados', () => {
+  const cur = (extra) => ({ id: 's1', planId: '', diaId: '', nome: 'T', inicio: iso(AGORA), fim: '', nota: '', restEnd: 0, restTotal: 0, itens: [{ ex: 'prancha-frontal', alvo: '30-60', descanso: 45, sets: [{ kg: null, reps: null, seg: 30, ok: false }, { kg: null, reps: null, seg: 30, ok: false }] }], ...extra });
+  const limpo = (extra) => store.sanitize({ current: cur(extra) }).current;
+  assert.deepEqual(limpo({ cron: { i: 0, j: 1, end: AGORA + 20000, total: 30 } }).cron, { i: 0, j: 1, end: AGORA + 20000, total: 30 });
+  assert.equal(limpo({}).cron, null);
+  assert.equal(limpo({ cron: { i: 3, j: 0, end: AGORA, total: 30 } }).cron, null, 'exercício inexistente');
+  assert.equal(limpo({ cron: { i: 0, j: 7, end: AGORA, total: 30 } }).cron, null, 'série inexistente');
+  assert.equal(limpo({ cron: { i: 0, j: 0, end: 'amanhã', total: 30 } }).cron, null);
+  assert.equal(limpo({ cron: { i: 0, j: 0, end: AGORA, total: 0 } }).cron, null);
+  assert.equal(limpo({ cron: 'x' }).cron, null);
+  assert.equal(limpo({ cron: { i: -1, j: 0, end: AGORA, total: 30 } }).cron, null);
+  assert.equal(limpo({ cron: { i: 0.5, j: 0, end: AGORA, total: 30 } }).cron, null);
+  assert.equal(limpo({ volta: 45 }).volta, 45);
+  assert.equal(limpo({ volta: -3 }).volta, 0);
+  assert.equal(limpo({ volta: '45' }).volta, 0);
+  assert.equal(limpo({}).volta, 0);
 });

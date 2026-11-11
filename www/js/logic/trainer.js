@@ -703,11 +703,14 @@ function avisos(pf) {
   if (pf.gestante) a.push({ tipo: 'warn', texto: 'Gestação: treine só com liberação do seu obstetra. Deixei de fora exercícios deitada de barriga para cima ou de bruços, com impacto e com muita pressão no abdômen. Mantenha intensidade leve a moderada (dá para conversar durante o esforço). Nesta fase o treino é para manter a saúde, não para emagrecer nem bater recordes de carga.' });
   if (pf.pressao) a.push({ tipo: 'warn', texto: 'Pressão alta ou problema no coração: use cargas leves a moderadas com mais repetições, nunca prenda a respiração (solte o ar na fase de esforço) e não treine se a pressão estiver descontrolada.' });
   if (pf.retorno) {
+    // Regras da volta: consenso CSCCa/NSCA de 2019 (ref caterisano2019), resumidas em logic/pausa.js. O corte de carga é
+    // uma escolha conservadora do aplicativo; o consenso limita o volume, a frequência e o descanso.
+    const duas = 'Nas duas primeiras semanas o treino começa com menos séries por músculo, pelo menos 2 minutos de descanso entre as séries e metade do cardio na primeira semana.';
     const t = {
-      1: 'Volta depois de 2 a 4 semanas parado: a força cai pouco nesse tempo. Na primeira semana, use cerca de 10% menos carga e termine as séries com folga. Depois, retome as cargas de antes.',
-      2: 'Volta depois de 1 a 3 meses parado: nas duas primeiras semanas, use cerca de 20% menos carga do que usava e faça uma série a menos por exercício. Depois, suba aos poucos até as cargas de antes.',
-      3: `Volta depois de 3 a 6 meses parado: ${pf.nivel < pf.nivelBase ? 'montei o plano um nível abaixo da sua experiência, com menos séries' : 'montei o plano com menos séries'}. Comece com cerca de 30% menos carga do que usava e suba um pouco a cada semana. Depois de 4 a 6 semanas treinando, refaça a entrevista para receber o plano completo do seu nível.`,
-      4: 'Volta depois de mais de 6 meses parado: montei um plano de recomeço, com a dose de quem está começando. Comece com metade da carga que usava, ou menos, e suba aos poucos. Depois de 6 a 8 semanas treinando, refaça a entrevista para receber o plano do seu nível.',
+      1: `Volta depois de 2 a 4 semanas parado: a força cai pouco nesse tempo. ${duas} Comece com cerca de 10% menos carga do que usava.`,
+      2: `Volta depois de 1 a 3 meses parado: ${duas} Comece com cerca de 20% menos carga do que usava e suba a cada treino.`,
+      3: `Volta depois de 3 a 6 meses parado: ${pf.nivel < pf.nivelBase ? 'montei o plano um nível abaixo da sua experiência, com menos séries' : 'montei o plano com menos séries'}. Nas duas primeiras semanas o treino começa com ainda menos séries e mais descanso, e o cardio volta aos poucos, em quatro semanas. Comece com cerca de 30% menos carga do que usava. Quem já treinou recupera a força mais depressa do que ganhou da primeira vez. Depois de 4 a 6 semanas treinando, refaça a entrevista para receber o plano completo do seu nível.`,
+      4: 'Volta depois de mais de 6 meses parado: montei um plano de recomeço, com a dose de quem está começando. Nas duas primeiras semanas o treino começa com ainda menos séries e mais descanso, e o cardio volta aos poucos, em quatro semanas. Comece com metade da carga que usava, ou menos. Quem já treinou recupera a força mais depressa do que ganhou da primeira vez. Depois de 6 a 8 semanas treinando, refaça a entrevista para receber o plano do seu nível.',
     }[pf.retorno];
     a.push({ tipo: 'info', texto: t + (pf.idade >= 65 ? ' Depois dos 65 anos a perda de força na pausa é maior: volte com ainda mais calma.' : '') });
   }

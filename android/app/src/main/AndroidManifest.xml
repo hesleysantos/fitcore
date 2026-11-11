@@ -37,6 +37,11 @@
 
         </activity>
 
+        <!-- Aviso do fim do descanso com o app em segundo plano: recebe só o alarme agendado pelo próprio app. -->
+        <receiver
+            android:name=".AvisoReceiver"
+            android:exported="false" />
+
         <!-- Usado só para compartilhar o arquivo de backup que o próprio usuário pede para criar. -->
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -50,9 +55,13 @@
     </application>
 
     <!--
-      Permissões: só vibração. O app NÃO pede acesso à internet: as telas ficam dentro do próprio
+      Permissões: só vibração e alarme exato (para avisar o fim do descanso na hora certa, mesmo com o app em
+      segundo plano). O app NÃO pede acesso à internet: as telas ficam dentro do próprio
       aplicativo e o Android impede qualquer conexão de rede. Também não usa localização, câmera,
       microfone, contatos nem armazenamento. (Testado no Android 15: funciona sem INTERNET.)
     -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Android 12: concedida na instalação. Android 13 em diante: USE_EXACT_ALARM, própria de apps com cronômetro. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 </manifest>

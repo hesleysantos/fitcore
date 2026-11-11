@@ -128,6 +128,25 @@ export default async (page) => {
     for (const it of store.state.current.itens) { if (EX_POR_ID.get(it.ex).registro !== 'peso_reps' || assistido(it.ex)) continue; const h = historico(it.ex, 1)[0]; if (!h) continue; const a = Math.max(...h.sets.map((x) => x.kg || 0)); if (a > 0) out.push([a, it.sets[0].kg]); }
     return out;`);
   ok(cargas.length > 0 && cargas.every(([a, b]) => b < a && b >= a * 0.72 && b <= a * 0.88), 'cargas do treino cerca de 20% abaixo das de antes da pausa: ' + cargas.slice(0, 4).map(([a, b]) => `${a}→${b}`).join(', '));
+  // regras do consenso de 2019 na volta: aviso na tela, menos séries por músculo e descanso de pelo menos 2 minutos
+  ok((await texto()).includes('De volta depois de'), 'treino avisa que é uma volta de pausa');
+  const fit = await page.eval(`
+    const store = await import('/js/store.js'); const { EX_POR_ID } = await import('/js/data/exercises.js');
+    const c = store.state.current; const plan = store.activePlan(); const dia = plan.dias.find((d) => d.id === c.diaId);
+    const forca = c.itens.filter((it) => ['peso_reps', 'reps'].includes(EX_POR_ID.get(it.ex).registro));
+    return { volta: c.volta, series: c.itens.reduce((n, it) => n + it.sets.length, 0), plano: dia.itens.reduce((n, it) => n + it.series, 0), descansoMin: Math.min(...forca.map((it) => it.descanso)) };`);
+  ok(fit.volta >= 49 && fit.series < fit.plano && fit.descansoMin >= 120, `volta de ${fit.volta} dias: ${fit.series} séries (plano: ${fit.plano}) e descanso mínimo de ${fit.descansoMin} s`);
+  // o cronômetro do exercício por tempo continua contando depois de recarregar a página
+  await page.eval(`
+    const store = await import('/js/store.js');
+    store.update((s) => { s.current.itens.push({ ex: 'prancha-frontal', alvo: '30-60', descanso: 45, sets: [{ kg: null, reps: null, seg: 40, ok: false }] }); });
+    await new Promise((r) => setTimeout(r, 300)); return 1;`);
+  await page.reload(1800);
+  await page.eval(`const b = [...document.querySelectorAll('button')].filter((x) => x.getAttribute('aria-label') === 'Cronometrar esta série').pop(); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.click(); await new Promise((r) => setTimeout(r, 700)); return true;`);
+  const antesRec = await page.eval(`return (await import('/js/store.js')).state.current.cron;`);
+  await page.reload(1800);
+  const depoisRec = await page.eval(`const c = (await import('/js/store.js')).state.current.cron; const t = document.getElementById('rest-time'); return { c, relogio: t ? t.textContent : '', parar: [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Parar') };`);
+  ok(!!antesRec && !!depoisRec.c && depoisRec.c.end === antesRec.end && depoisRec.parar, 'cronômetro do exercício continua contando depois de recarregar a página (' + depoisRec.relogio + ')');
 
   console.log('7. Quem só respondeu um lado começa a outra entrevista com o mesmo objetivo');
   await page.eval(`const store = await import('/js/store.js'); store.update((s) => { s.current = null; s.trainer.answers = {}; s.trainer.aceitoEm = ''; s.nutri.answers.objetivo = 'emagrecer'; }); await new Promise((r) => setTimeout(r, 300)); return 1;`);

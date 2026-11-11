@@ -79,22 +79,22 @@ function retomadaDe(ss, agora) {
   }
   return null;
 }
-// o que fazer na volta, por faixa de tempo parado (logic/pausa.js)
+// o que fazer na volta, por faixa de tempo parado (regras em logic/pausa.js)
 const VOLTA = [
   'Volte com um pouco menos de carga e retome o ritmo aos poucos.',
-  'Na volta, use cerca de 10% menos carga na primeira semana.',
-  'Na volta, use cerca de 20% menos carga e uma série a menos por exercício nas duas primeiras semanas.',
-  'Na volta, comece com cerca de 30% menos carga e suba um pouco a cada semana.',
+  'Na volta, o treino começa com menos séries, mais descanso e cerca de 10% menos carga por duas semanas.',
+  'Na volta, o treino começa com menos séries, mais descanso e cerca de 20% menos carga por duas semanas.',
+  'Na volta, o treino começa com menos séries, mais descanso e cerca de 30% menos carga; o cardio volta em 4 semanas.',
   'Recomece com metade da carga, ou menos, e peça um plano novo ao Treinador.',
 ];
 const JA_VOLTOU = [
   '',
-  'Nesta primeira semana, use cerca de 10% menos carga. O treino já sugere a carga reduzida.',
-  'Nas duas primeiras semanas, use cerca de 20% menos carga e uma série a menos por exercício. O treino já sugere a carga reduzida.',
-  'Comece com cerca de 30% menos carga e suba um pouco a cada semana. O treino já sugere a carga reduzida.',
+  'Nestas duas semanas o treino já começa com menos séries, mais descanso e cerca de 10% menos carga.',
+  'Nestas duas semanas o treino já começa com menos séries, mais descanso e cerca de 20% menos carga.',
+  'O treino já começa com menos séries, mais descanso e cerca de 30% menos carga; o cardio volta em 4 semanas.',
   'Recomece com metade da carga, ou menos, e suba aos poucos. Vale pedir um plano novo ao Treinador.',
 ];
-const PORQUE_PAUSA = 'A força cai pouco nas primeiras semanas sem treino e mais depois. Depois de 2 semanas ou mais parado, a volta pede menos carga e menos séries, retomando aos poucos em 2 a 4 semanas.';
+const PORQUE_PAUSA = 'Pausas curtas tiram pouca força; as longas tiram mais. Depois de 2 semanas ou mais parado, o consenso CSCCa/NSCA pede 2 a 4 semanas com menos volume e mais descanso.';
 const REFS_PAUSA = ['bosquet2013', 'caterisano2019'];
 
 // Séries concluídas por semana, por grupo muscular: músculo principal conta 1; auxiliar conta meia; quem só estabiliza
