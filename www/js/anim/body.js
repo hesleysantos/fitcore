@@ -126,27 +126,41 @@ function armMuscSide(o, sh, U, F, act, far) {
   }
 }
 
-function legSkinSide(o, hip, kn, an, fd, fu, far) {
+// pisos = superfícies de apoio acima do chão (degrau, caixa, plataforma): [{ x0, x1, y }], vindas do campo `pisos` da animação
+function legSkinSide(o, hip, kn, an, fd, fu, far, pisos) {
   const T = frameOf(hip, kn);
   const S = frameOf(kn, an);
-  o.begin(far ? 'fg-skf' : 'fg-sk');
-  limb(o, T, TH_F, TH_B, 4.8, 3.3);
-  limb(o, S, SH_F, SH_B, 3.2, 1.6);
-  o.end();
-  // Tênis. Coordenadas locais do pé: x para a ponta, y para cima a partir do tornozelo; a sola fica em y = -3,5.
-  // O pé tem ~27 cm: do calcanhar (-3,6) até a ponta dos dedos (+9,9). Os dedos dobram na "bola do pé"
+  // Pé descalço. Coordenadas locais do pé: x para a ponta, y para cima a partir do tornozelo; a planta fica em y = -3,5.
+  // O pé tem ~27 cm: do calcanhar (-3,5) até a ponta dos dedos (+9,8). Os dedos dobram na "bola do pé"
   // (x = 6,1): quando o calcanhar sobe com a ponta apoiada, eles continuam deitados no chão.
   const Fp = (x, y) => [an[0] + fd[0] * x + fu[0] * y, an[1] + fd[1] * x + fu[1] * y];
   const bola = Fp(6.1, -3.5);
-  let td = fd, tu = fu;
-  if (fd[1] < -0.02 && bola[1] < 1.6) { td = [fd[0] >= 0 ? 1 : -1, 0]; tu = [0, fu[1] < 0 ? -1 : 1]; }
-  const Tp = (x, y) => [bola[0] + td[0] * x + tu[0] * y, bola[1] + td[1] * x + tu[1] * y];
-  o.begin(far ? 'fg-shoef' : 'fg-shoe');
-  o.smooth([Fp(-3.6, -0.6), Fp(-3.4, -2.9), Fp(-2.6, -3.5), Fp(1, -3.5), Fp(6.6, -3.5), Fp(7.0, -1.4), Fp(5.4, -0.3), Fp(3.1, 0.9), Fp(2.1, 2.3), Fp(-2.2, 2.2)]);
-  o.smooth([Tp(-1.0, 0), Tp(2.9, 0), Tp(3.7, 0.5), Tp(3.6, 1.4), Tp(2.4, 2.2), Tp(0.4, 3.0), Tp(-1.0, 2.9)]);
+  let td = fd, tu = fu, base = bola;
+  // calcanhar levantado com a ponta do pé perto do chão (flexão de braços, afundo, corrida): os dedos dobram e deitam no chão
+  let chao = 0;
+  if (pisos) for (const p of pisos) if (bola[0] >= Math.min(p.x0, p.x1) - 2 && bola[0] <= Math.max(p.x0, p.x1) + 2 && Math.abs(bola[1] - p.y) < 3.2) chao = p.y;
+  if (fd[1] < -0.02 && bola[1] - chao < 2.9) {
+    // os dedos dobram para o lado do peito do pé: com o pé em pé (prancha, flexão), apontam para a frente do corpo
+    td = [fd[0] + fu[0] >= 0 ? 1 : -1, 0]; tu = [0, fu[1] < 0 ? -1 : 1];
+    if (tu[1] > 0) base = [bola[0], Math.max(chao, bola[1] - 2.2)];
+  }
+  const Tp = (x, y) => [base[0] + td[0] * x + tu[0] * y, base[1] + td[1] * x + tu[1] * y];
+  // perna e pé formam um contorno só, sem emenda no tornozelo
+  o.begin(far ? 'fg-skf' : 'fg-sk');
+  limb(o, T, TH_F, TH_B, 4.8, 3.3);
+  limb(o, S, SH_F, SH_B, 3.2, 1.6);
+  // calcanhar, arco e peito do pé
+  o.smooth([Fp(-3.5, -1.3), Fp(-3.3, -2.9), Fp(-2.4, -3.5), Fp(0.2, -3.45), Fp(2.6, -3.1), Fp(5.0, -3.45), Fp(6.5, -3.5), Fp(6.7, -2.3), Fp(5.3, -1.5), Fp(3.5, -0.4), Fp(2.3, 1.4), Fp(1.9, 2.4), Fp(-2.0, 2.3), Fp(-2.7, 0.6)]);
+  // dedos: do lado, cada um aparece um pouco à frente do anterior
+  o.smooth([Tp(-0.9, 0), Tp(2.3, 0), Tp(3.3, 0.2), Tp(3.6, 0.7), Tp(3.2, 1.2), Tp(2.0, 1.4), Tp(0.5, 1.5), Tp(-0.9, 1.35)]);
   o.end();
-  o.smooth([Fp(-3.4, -2.6), Fp(-2.7, -3.45), Fp(2, -3.5), Fp(6.2, -3.5), Fp(6.0, -2.7), Fp(1, -2.7)], far ? 'fg-solef' : 'fg-sole');
-  o.smooth([Tp(-0.4, 0), Tp(2.9, 0), Tp(3.6, 0.5), Tp(2.6, 0.75), Tp(-0.4, 0.8)], far ? 'fg-solef' : 'fg-sole');
+  // dobras entre os dedos e unha do dedo da frente
+  const ln = far ? 'fg-ln fg-far' : 'fg-ln';
+  o.line(Tp(1.15, 0.2), Tp(1.3, 1.2), ln, 0.3);
+  o.line(Tp(2.2, 0.2), Tp(2.35, 1.1), ln, 0.3);
+  o.line(Tp(2.9, 0.95), Tp(3.4, 0.75), ln, 0.3);
+  // tornozelo (maléolo)
+  o.line(Fp(-0.5, 0.5), Fp(0.5, 0.3), ln, 0.3);
   return { T, S };
 }
 function legMuscSide(o, T, S, act, far) {
@@ -201,12 +215,12 @@ export function drawSide(o, J, act, pg = null) {
   // braço e perna do lado de lá
   const fa = armSkinSide(o, fo(J.sh), fo(J.elF), fo(J.wrF), J.hdF, true, pg ? pg.F : PUNHO_PADRAO, fo(J.handF), far);
   armMuscSide(o, fo(J.sh), fa.U, fa.F, act, true);
-  const fl = legSkinSide(o, fo(J.hip), fo(J.knF), fo(J.anF), J.fdF, J.fuF, true);
+  const fl = legSkinSide(o, fo(J.hip), fo(J.knF), fo(J.anF), J.fdF, J.fuF, true, J.pisos ? J.pisos.map((p) => ({ x0: p.x0 + far[0], x1: p.x1 + far[0], y: p.y + far[1] })) : null);
   legMuscSide(o, fl.T, fl.S, act, true);
   // tronco, pescoço e cabeça
   const T = torsoSide(o, J, act);
   // perna do lado de cá, com os músculos da coxa, da perna e o glúteo (recortado pela silhueta)
-  const nl = legSkinSide(o, J.hip, J.knN, J.anN, J.fdN, J.fuN, false);
+  const nl = legSkinSide(o, J.hip, J.knN, J.anN, J.fdN, J.fuN, false, J.pisos);
   legMuscSide(o, nl.T, nl.S, act, false);
   o.recorte('cc', () => { blob(o, T, TRONCO); limb(o, nl.T, TH_F, TH_B, 4.8, 3.3); });
   o.dentroDe('cc', () => blob(o, T, [[0.9, -2.6], [0.93, -6.6], [1.07, -8.0], [1.2, -5.9], [1.22, -2.6], [1.08, -1.2]], cls(act, 'gluteos')));
@@ -264,13 +278,18 @@ export function drawFront(o, J, act, isBack, pg = null) {
     legs.push({ T, S, fl, fls, an, kn, naFrente });
   }
   const pintaPerna = ({ T, S, fl, fls, an, kn, naFrente }) => {
+    // Pé descalço visto de frente (os dedos vêm na direção de quem olha) ou de costas (só o calcanhar).
     const Ft = frameOf(an, add(an, S.d, 4.4));
-    o.begin('fg-shoe');
-    blob(o, Ft, [[-0.3, 2.3], [0.45, 3.3], [0.95, 3.1], [1.12, 0.3], [0.95, -2.6], [0.45, -2.8], [-0.3, -2.1]], null, fls);
-    o.end();
     o.begin('fg-sk');
     limb(o, T, F_TH_O, F_TH_I, 4.6, 3.3, null, fl);
     limb(o, S, F_SH_O, F_SH_I, 3.2, 1.6, null, fls);
+    if (isBack) {
+      blob(o, Ft, [[-0.3, 1.8], [0.4, 2.3], [0.9, 2.0], [1.05, 0.1], [0.9, -1.9], [0.4, -2.1], [-0.3, -1.7]], null, fls);
+    } else {
+      blob(o, Ft, [[-0.3, 2.0], [0.45, 2.9], [0.92, 2.8], [1.0, 0.3], [0.92, -2.4], [0.45, -2.5], [-0.3, -1.9]], null, fls);
+      // cinco dedos, do dedão (por dentro) ao mínimo (por fora)
+      for (const [fr, w, r] of [[1.1, -1.75, 0.9], [1.13, -0.5, 0.68], [1.1, 0.5, 0.62], [1.04, 1.4, 0.56], [0.96, 2.15, 0.5]]) o.circ(Ft(fr, w * fls), r);
+    }
     if (naFrente) o.circ(kn, 4.9); // joelho visto de frente, na ponta da coxa
     o.end();
   };
@@ -297,13 +316,12 @@ export function drawFront(o, J, act, isBack, pg = null) {
     o.open([Hp(0.2, 0.2), Hp(0.75, -1.7), Hp(-0.2, -1.95)], 'fg-ln', 0.35);
     o.open([Hp(-1.4, -3.65), Hp(0, -3.8), Hp(1.4, -3.65)], 'fg-ln', 0.45);
   }
-  for (const g of legs) if (g.naFrente) pintaPerna(g);
-
   // --- músculos das pernas; a região da bacia é recortada pela silhueta
   o.recorte('cc', () => { tronco(); for (const g of legs) limb(o, g.T, F_TH_O, F_TH_I, 4.6, 3.3, null, g.fl); });
+  let pintaMusculos = null;
   {
     const bl = (P, pts, c, flip) => o.smooth(pts.map(([f, w]) => P(f, w * flip)), c);
-    for (const { T, S, fl, fls } of legs) {
+    pintaMusculos = ({ T, S, fl, fls }) => {
       if (T.len > 4) {
         if (isBack) {
           bl(T, [[0.16, 0.3], [0.2, 3.8], [0.5, 3.9], [0.9, 2.6], [0.94, 0.2], [0.9, -2.4], [0.5, -3.7], [0.2, -3.5]], cls(act, 'posteriores'), fl);
@@ -322,7 +340,8 @@ export function drawFront(o, J, act, isBack, pg = null) {
           bl(S, [[0.06, -1.1], [0.1, -3.0], [0.3, -3.2], [0.55, -2.0], [0.4, -1.1]], cls(act, 'panturrilhas'), fls);
         }
       }
-    }
+    };
+    for (const g of legs) if (!g.naFrente) pintaMusculos(g);
   }
 
   // --- músculos do tronco
@@ -344,6 +363,9 @@ export function drawFront(o, J, act, isBack, pg = null) {
     both([[4.5, 0.6], [8.8, 0.6], [7.6, 0.37], [8.2, 0.19], [4.5, 0.18], [4.3, 0.36]], cls(act, 'obliquos'));
     if (isOn(act, 'abdutores')) o.dentroDe('cc', () => both([[7.8, 0.17], [9.4, 0.05], [9.3, -0.1], [7.5, -0.02]], cls(act, 'abdutores')));
   }
+
+  // pernas que apontam para a frente (sentado, joelho elevado): ficam por cima do tronco e dos músculos dele
+  for (const g of legs) if (g.naFrente) { pintaPerna(g); pintaMusculos(g); }
 
   // --- braços
   for (const sd of ['R', 'L']) {

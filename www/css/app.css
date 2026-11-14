@@ -132,6 +132,14 @@ li + li { margin-top: 0.35rem; }
 .btn.lg { min-height: 56px; font-size: 1.05rem; border-radius: 14px; }
 .btn.sm { min-height: 40px; padding: 0 12px; font-size: 0.88rem; border-radius: 10px; }
 .btn[disabled] { opacity: 0.45; pointer-events: none; }
+/* dois botões lado a lado: o texto não quebra em telas de 360 px */
+.par-de-botoes { gap: 8px; }
+.par-de-botoes .btn { white-space: nowrap; padding: 0 10px; font-size: 0.94rem; min-width: 0; }
+#cartao-sono .btn { white-space: nowrap; padding: 0 10px; }
+/* ações do cartão de exercício no treino: cabem em uma linha em telas de 360 px */
+.acoes-ex { gap: 6px; }
+.acoes-ex .btn { white-space: nowrap; }
+.acoes-ex .btn.plain { padding: 0 2px; }
 .iconbtn {
   width: 44px; height: 44px; flex: none; display: inline-flex; align-items: center; justify-content: center;
   border-radius: 12px; border: 0; background: transparent; color: var(--text);
@@ -300,6 +308,10 @@ textarea.input { min-height: 84px; resize: vertical; }
 .week .dot.plan { border-color: var(--accent); }
 .week .dot.today { box-shadow: 0 0 0 3px var(--accent-soft); }
 .week .dot .ic { width: 16px; height: 16px; stroke-width: 3; }
+.week .run-mk { height: 16px; margin-top: 4px; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.week .run-mk.plan { color: var(--accent); }
+.week .run-mk.done { color: var(--ok); }
+.week .run-mk .ic { width: 15px; height: 15px; }
 .chart { width: 100%; height: auto; display: block; }
 .chart .ax { stroke: var(--border); stroke-width: 1; }
 .chart .bar { fill: var(--accent); }
@@ -385,3 +397,9 @@ details.acc > div > ul { margin: 0; }
 /* filtros dentro de folhas não encolhem; botão de ícone desligado fica apagado */
 .sheet-bd .chips { flex: none; }
 .iconbtn[disabled] { opacity: 0.35; pointer-events: none; }
+
+/* aba Treinos: um cartão por dia da semana, com corrida e musculação em seções separadas */
+.dia-nome { font-weight: 750; font-size: 1.02rem; }
+.sec-rot { display: flex; align-items: center; gap: 6px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.sec-rot > span { flex: 1 1 auto; }
+.chip.sm { min-height: 32px; padding: 4px 10px; font-size: 0.8rem; flex: 0 0 auto; }

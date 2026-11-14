@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ALIMENTOS } from '../www/js/data/foods.js';
 import { REFS } from '../www/js/data/knowledge.js';
-import { PERGUNTAS, calcular, cardapio, emVoltaDoTreino, imcFaixa } from '../www/js/logic/nutrition.js';
+import { PERGUNTAS, calcular, cardapio, proximaSemente, assinatura, orientacaoCorrida, emVoltaDoTreino, imcFaixa, textosDoPeso, suplementos, fmtDuracao } from '../www/js/logic/nutrition.js';
 
 const FOOD = new Map(ALIMENTOS.map((f) => [f.id, f]));
 function semente(s) {
@@ -21,6 +21,9 @@ const subconjuntos = (l) => { const out = []; for (let m = 0; m < 1 << l.length;
 const TODAS_REST = subconjuntos(REST).map((x) => (x.length ? x : ['nenhuma']));   // 16 combinações
 const TODAS_COND = subconjuntos(COND).map((x) => (x.length ? x : ['nenhuma']));   // 64 combinações
 const base = { objetivo: 'emagrecer', sexo: 'm', idade: 30, peso: 80, altura: 178, atividade: 'sedentario', treinos: '3', horario: 'noite', refeicoes: '4', restricoes: ['nenhuma'], condicoes: ['nenhuma'] };
+const PRECO = op('preco');
+// custo do dia nos preços de referência da pesquisa (R$): só para comparar cardápios entre si
+const custoDia = (c) => c.refeicoes.reduce((s, ref) => s + ref.itens.reduce((t, it) => t + (FOOD.get(it.id).preco.kg * it.g) / 1000, 0), 0);
 const semLixo = (s) => typeof s === 'string' && s.length > 0 && !/undefined|NaN|null|Infinity|\[object/.test(s);
 const PISO = { m: 1500, f: 1200 };
 
@@ -41,15 +44,18 @@ function validarMetas(a, F) {
   const cond = a.condicoes.filter((x) => x !== 'nenhuma'), rest = a.restricoes.filter((x) => x !== 'nenhuma');
   const h = a.altura / 100;
   const imc = a.peso / (h * h);
-  const pesoRef = imc >= 30 ? 25 * h * h : a.peso;
+  const pesoRef = Math.min(a.peso, 25 * h * h);   // acima do IMC 25, as contas por quilo usam o peso de IMC 25
   // campos sempre presentes
   for (const k of ['imc', 'tmb', 'gasto', 'fator', 'agua', 'peso', 'idade']) if (!(Number.isFinite(r[k]) && r[k] > 0)) F.add(`campo ${k} inválido`, `${rot}: ${r[k]}`);
   if (Math.abs(r.imc - imc) > 1e-9) F.add('IMC errado', rot);
   const tmb = 10 * a.peso + 6.25 * a.altura - 5 * a.idade + (a.sexo === 'm' ? 5 : -161);
   if (Math.abs(r.tmb - tmb) > 5.01) F.add('Mifflin-St Jeor não confere', `${rot}: ${r.tmb} vs ${tmb}`);
   if (r.fator < 1.2 || r.fator > 1.9) F.add('fator de atividade fora de 1,2–1,9', `${rot}: ${r.fator}`);
-  // água: 1,5 a 4 L por dia; antes do treino, 150 mL a 1,5 L (5–10 mL/kg)
-  if (r.agua < 1.5 || r.agua > 4) F.add('água fora de 1,5–4 L', `${rot}: ${r.agua}`);
+  // água total: do piso da EFSA (2,0 L mulheres; 2,5 L homens) a 4 L; cerca de 80% em bebidas; antes do treino, 150 mL a 1,5 L
+  const pisoAgua = a.sexo === 'm' ? 2.5 : 2.0;
+  if (r.agua < pisoAgua || r.agua > 4) F.add('água total fora do piso da EFSA–4 L', `${rot}: ${r.agua}`);
+  if (Math.abs(r.agua - Math.min(4, Math.max(pisoAgua, (pesoRef * 35) / 1000))) > 0.051) F.add('água diferente de 35 mL/kg com piso e teto', `${rot}: ${r.agua}`);
+  if (Math.abs(r.aguaBebidas - r.agua * 0.8) > 0.051 || r.aguaBebidas < (a.sexo === 'm' ? 2.0 : 1.6)) F.add('água em bebidas fora de 80% do total', `${rot}: ${r.aguaBebidas}`);
   if (!(Array.isArray(r.aguaPre) && r.aguaPre[0] >= 150 && r.aguaPre[0] < r.aguaPre[1] && r.aguaPre[1] <= 1500)) F.add('água pré-treino implausível', `${rot}: ${r.aguaPre}`);
   for (const av of r.avisos) { if (!['danger', 'warn', 'info'].includes(av.tipo)) F.add('tipo de aviso desconhecido', rot); if (!semLixo(av.texto)) F.add('aviso com valor inválido', `${rot}: ${av.texto}`); if (av.texto.length > 330) F.add('aviso longo demais', av.texto); }
   const aviso = (re) => r.avisos.some((x) => re.test(x.texto));
@@ -76,8 +82,13 @@ function validarMetas(a, F) {
   // números das metas
   for (const k of ['kcal', 'prot', 'carb', 'gord', 'gkg', 'fibra']) if (!(Number.isFinite(r[k]) && r[k] > 0)) F.add(`meta ${k} inválida`, `${rot}: ${r[k]}`);
   const piso = PISO[a.sexo];
-  const baixoPeso = a.idade >= 60 ? imc < 22 : imc < 18.5;
-  const esperado = cond.includes('diabetes') ? 'manter' : a.objetivo === 'emagrecer' && baixoPeso ? 'manter' : a.objetivo === 'ganhar' && imc >= 30 ? 'manter' : a.objetivo;
+  // emagrecer só quando a perda é indicada (AHA/ACC/TOS 2013; ESPEN 2022): nunca abaixo do piso de IMC (18,5; 60+: 22),
+  // nem quando perder 5% do peso já cruzaria o piso, nem com 65 anos ou mais sem obesidade
+  const imcPiso = a.idade >= 60 ? 22 : 18.5;
+  const baixoPeso = imc < imcPiso;
+  const semIndicacao = baixoPeso || a.peso * 0.95 < imcPiso * h * h || (a.idade >= 65 && imc < 30);
+  const esperado = cond.includes('diabetes') ? 'manter' : a.objetivo === 'emagrecer' && semIndicacao ? 'manter' : a.objetivo === 'ganhar' && imc >= 30 ? 'manter' : a.objetivo;
+  if (a.objetivo === 'emagrecer' && semIndicacao && !cond.includes('diabetes') && !aviso(/abaixo da faixa|mínimo saudável|65 anos/)) F.add('emagrecer sem indicação e sem explicação', rot);
   if (r.objetivoCalc !== esperado) F.add('objetivo efetivo errado', `${rot}: ${r.objetivoCalc} (esperado ${esperado})`);
   if ((r.modo === 'manutencao') !== (cond.includes('diabetes') || esperado !== a.objetivo)) F.add('modo manutenção inconsistente', rot);
   if (r.modo === 'manutencao' && !r.avisos.some((x) => x.tipo === 'warn')) F.add('manutenção forçada sem explicação', rot);
@@ -86,23 +97,45 @@ function validarMetas(a, F) {
   if (r.kcal < 1000) F.add('meta abaixo de 1000 kcal', `${rot}: ${r.kcal}`);
   if (r.objetivoCalc === 'emagrecer') {
     const def = r.gasto - r.kcal;
-    if (def < 0 || def > 760 || def > r.gasto * 0.2 + 10) F.add('déficit fora de 0–20% (máx. 750 kcal)', `${rot}: ${def}`);
-    if (r.gasto > piso * 1.3 && def < r.gasto * 0.1) F.add('emagrecer sem déficit de verdade', `${rot}: ${def}`);
+    // teto do déficit: 750 kcal; 500 kcal com 65 anos ou mais (ESPEN); e o que dá 1% do peso por semana (11 kcal por quilo)
+    const teto = Math.min(a.idade >= 65 ? 500 : 750, a.peso * 11);
+    if (def < 0 || def > teto + 10 || def > r.gasto * 0.2 + 10) F.add('déficit fora de 0–20% (máx. 750 kcal; 500 kcal aos 65+; 1% do peso por semana)', `${rot}: ${def}`);
+    if (r.gasto > piso * 1.3 && def < Math.min(r.gasto * 0.1, teto - 10)) F.add('emagrecer sem déficit de verdade', `${rot}: ${def}`);
     if (r.gasto <= piso && !aviso(/gasto estimado já é baixo/)) F.add('gasto baixo sem aviso', rot);
-    if (!(r.ritmo && r.ritmo[0] > 0 && r.ritmo[0] <= r.ritmo[1] && r.ritmo[1] <= 1)) F.add('ritmo de perda fora de 0–1 kg/semana', `${rot}: ${r.ritmo}`);
+    if (a.idade >= 65 && !aviso(/Depois dos 65 anos, emagrecer pede cuidado/)) F.add('65+ emagrecendo sem aviso', rot);
+    if (a.idade < 65 && imc < (a.idade >= 60 ? 27.05 : 25) && !aviso(/faixa saudável.*não baixe de \d+ kg/)) F.add('emagrecer na faixa saudável sem aviso e sem peso mínimo', rot);
+    // a perda por semana sai do déficit real (7.700 kcal por quilo) e não passa de 1% do peso; sem déficit, não aparece
+    if (r.ritmo !== undefined) F.add('emagrecer com ritmo fixo (deve sair do déficit real)', rot);
+    if (r.deficit !== def) F.add('déficit informado diferente de gasto − meta', `${rot}: ${r.deficit} vs ${def}`);
+    const t = textosDoPeso(r), txt = [t.ritmo || '', ...t.linhas].join(' ');
+    if (def >= 50) {
+      if (!(Math.abs(r.perdaSemana - (def * 7) / 7700) <= 0.006)) F.add('perda por semana diferente do déficit real', `${rot}: ${r.perdaSemana} (déficit ${def})`);
+      if (r.perdaSemana > Math.min(1, a.peso * 0.01) + 0.02) F.add('perda acima de 1% do peso por semana', `${rot}: ${r.perdaSemana}`);
+      if (!/perda esperada é de cerca de (\d+ g|\d+(,\d)? kg) por semana/.test(t.ritmo || '')) F.add('texto da perda mal formado', `${rot}: ${t.ritmo}`);
+      if (/reduza de 100 a 200/.test(txt) && r.kcal - 100 < piso) F.add('manda reduzir calorias com a meta já no piso', rot);
+    } else {
+      if (r.perdaSemana !== undefined || t.ritmo) F.add('perda por semana mostrada sem déficit', rot);
+      if (/reduza|perda esperada/.test(txt)) F.add('texto de redução sem déficit', rot);
+    }
+    if (aviso(/Não sugiro comer menos/) && /reduza|perda esperada/.test(txt)) F.add('"não sugiro comer menos" junto com ritmo ou redução', rot);
+    for (const s of [t.ritmo || 'x', ...t.linhas]) if (!semLixo(s) || s.length > 200) F.add('texto do peso inválido', s);
   } else if (r.objetivoCalc === 'ganhar') {
     const sup = r.kcal - r.gasto;
     if (sup <= 0 || sup > 510 || sup > r.gasto * 0.1 + 10) F.add('superávit fora de 0–10% (máx. 500 kcal)', `${rot}: ${sup}`);
     if (!(r.ritmo && r.ritmo[0] > 0 && r.ritmo[0] <= r.ritmo[1] && r.ritmo[1] <= a.peso * 0.005 + 0.06)) F.add('ritmo de ganho acima de 0,5% do peso', `${rot}: ${r.ritmo}`);
   } else {
     if (r.kcal !== r.gasto) F.add('manutenção diferente do gasto', `${rot}: ${r.kcal} vs ${r.gasto}`);
-    if (r.ritmo !== undefined) F.add('manutenção com ritmo de peso', rot);
+    if (r.ritmo !== undefined || r.perdaSemana !== undefined || textosDoPeso(r).ritmo || textosDoPeso(r).linhas.length) F.add('manutenção com ritmo de peso', rot);
     if (r.gasto < piso && !aviso(/abaixo de \d+ kcal/)) F.add('estimativa abaixo do piso sem aviso', rot);
   }
-  // proteína por kg (ISSN 2017: 1,4–2,0; Morton 2018: 1,6, até 2,2; Helms 2014: parte alta em déficit; PROT-AGE: 65+ ≥ 1,0–1,2)
+  // proteína por kg de peso de referência. Quem treina: ISSN 2017 (1,4–2,0), Morton 2018 (1,6, até 2,2), Helms 2014 (parte
+  // alta em déficit). Quem não treina: RDA 0,8 no mínimo; 1,2–1,6 em déficit (Leidy 2015). 65+: pelo menos 1,2 (PROT-AGE).
   const gkg = r.prot / pesoRef;
   const treina = Number(a.treinos) >= 2;
-  const [lo, hi] = r.objetivoCalc === 'manter' ? (treina ? [1.4, 2.0] : [0.8, 1.4]) : [1.6, 2.2];
+  const manter = r.objetivoCalc === 'manter';
+  const [lo, hi] = treina ? (manter ? [1.4, 2.0] : [1.6, 2.2]) : manter ? [0.8, 1.4] : r.objetivoCalc === 'emagrecer' ? [1.2, 1.8] : [1.4, 1.8];
+  // em déficit, nunca abaixo de 1,2 g por kg com o peso limitado ao de IMC 30 (Weijs 2025)
+  if (r.objetivoCalc === 'emagrecer' && r.prot < 1.2 * Math.min(a.peso, 30 * h * h) - 3 && r.prot * 4 < r.kcal * 0.33) F.add('déficit com menos de 1,2 g/kg (peso até IMC 30)', `${rot}: ${r.prot}`);
   const noTeto = r.prot * 4 >= r.kcal * 0.33 || r.prot >= 2.2 * a.peso - 3; // limitada a 35% das calorias ou a 2,2 g por kg de peso real
   const noPiso = r.prot <= (r.kcal * 0.1) / 4 + 2.6;                              // erguida ao piso de 10% das calorias (IOM)
   if (gkg > Math.max(hi, rest.includes('vegano') ? 2.2 : 0) + 0.08 && !noPiso) F.add('proteína acima da faixa de evidência', `${rot}: ${gkg.toFixed(2)} g/kg`);
@@ -142,7 +175,8 @@ function validarCardapio(a, r, seed, F, { metas = true } = {}) {
   let k = 0, p = 0;
   for (const ref of c.refeicoes) {
     if (ref.itens.length < (ref.tipo === 'principal' ? 4 : 1)) F.add('refeição pobre (principal com menos de 4 itens ou outra vazia)', `${rot}: ${ref.nome} = ${ref.itens.map((x) => x.id)}`);
-    if (ref.itens.length > 8) F.add('refeição com itens demais', `${rot}: ${ref.nome} = ${ref.itens.length}`);
+    // até 8 itens por refeição; com meta alta (mais de 900 kcal por refeição, em média), até 10
+    if (ref.itens.length > (r.kcal / c.refeicoes.length > 900 ? 10 : 8)) F.add('refeição com itens demais', `${rot}: ${ref.nome} = ${ref.itens.length}`);
     const vistos = new Set();
     let kr = 0;
     for (const it of ref.itens) {
@@ -192,10 +226,13 @@ function validarCardapio(a, r, seed, F, { metas = true } = {}) {
   // repetição: um alimento aparece no máximo 2 vezes no dia, e poucos alimentos se repetem
   for (const [id, n] of noDia) if (n > 2) F.add('alimento 3 ou mais vezes no mesmo dia', `${rot}: ${id} × ${n}`);
   // (o azeite do almoço e do jantar é tempero: não conta como repetição)
-  const repetidos = [...noDia].filter((x) => x[1] > 1 && x[0] !== 'azeite-de-oliva').map((x) => x[0]);
+  const repetidos = [...noDia].filter((x) => x[1] > 1 && x[0] !== 'azeite-de-oliva' && x[0] !== 'oleo-de-soja').map((x) => x[0]);
+  // "mais baratos": nenhum alimento caro, em nenhuma restrição (no vegano, soja e proteína de soja no lugar do tofu)
+  if (a.preco === 'barato') for (const id of noDia.keys()) if (FOOD.get(id).preco.faixa === 3) F.add('alimento caro com "mais baratos"', `${rot}: ${id}`);
   // quem não come carne tem poucas fontes de proteína na tabela: soja, tofu e leguminosas podem aparecer duas vezes
   // (em metas extremas de calorias, os acompanhamentos se repetem por necessidade: aí vale só o limite de 2 vezes por alimento)
-  if (metas && repetidos.length > (rest.includes('vegano') ? 5 : rest.includes('vegetariano') ? 4 : 3)) F.add('muitos alimentos repetidos no dia', `${rot}: ${repetidos}`);
+  // (acima de 3.600 kcal também: frutas e acompanhamentos entram duas vezes para fechar a energia)
+  if (metas && r.kcal <= 3600 && repetidos.length > (rest.includes('vegano') ? 5 : rest.includes('vegetariano') ? 4 : 3)) F.add('muitos alimentos repetidos no dia', `${rot}: ${repetidos}`);
   if (noDia.size < 8) F.add('pouca variedade (menos de 8 alimentos no dia)', `${rot}: ${noDia.size}`);
   if (![...noDia.keys()].some((id) => FOOD.get(id).papel === 'fruta')) F.add('dia sem fruta', rot);
   if ([...noDia.keys()].filter((id) => FOOD.get(id).papel === 'vegetal').length < 2) F.add('dia com menos de 2 verduras/legumes', rot);
@@ -203,9 +240,11 @@ function validarCardapio(a, r, seed, F, { metas = true } = {}) {
   if (metas) {
     if (Math.abs(c.kcal - r.kcal) > r.kcal * 0.1) F.add('calorias do cardápio a mais de 10% da meta', `${rot}: ${Math.round(c.kcal)} vs ${r.kcal}`);
     if (c.p < r.prot * 0.85) F.add('proteína do cardápio abaixo de 85% da meta', `${rot}: ${Math.round(c.p)} vs ${r.prot}`);
-    // a meta de proteína é um mínimo; quando ela é baixa para as calorias, um dia de comida comum passa um pouco dela
-    // sem sair da faixa aceitável (até 23% das calorias aqui, o comum num dia com carne, ovos e laticínios; o limite da IOM é 35%)
-    if (c.p > Math.max(r.prot * 1.3, (r.kcal * 0.23) / 4)) F.add('proteína do cardápio acima de 130% da meta (e de 23% das calorias)', `${rot}: ${Math.round(c.p)} vs ${r.prot}`);
+    // TOLERÂNCIA DECLARADA do dia de exemplo: calorias a até 10% da meta; proteína de 85% a 125% da meta. Quando a meta
+    // de proteína é baixa, vale o maior entre 125%, 15 g a mais e 16% das calorias do dia: com a meta no piso de 10% das
+    // calorias (quem não treina e gasta muito, ou tem peso de referência baixo), as menores porções de comida comum —
+    // arroz, feijão, pão, uma porção pequena de carne — já passam disso. Continua longe do teto de 35% (DRI).
+    if (c.p > Math.max(r.prot * 1.25, r.prot + 15, (r.kcal * 0.16) / 4)) F.add('proteína do cardápio acima da tolerância (125% da meta, 15 g a mais ou 16% das calorias)', `${rot}: ${Math.round(c.p)} vs ${r.prot}`);
   } else if (c.kcal < Math.min(r.kcal * 0.9, 2400) || c.kcal > r.kcal * 1.1) F.add('cardápio fora de faixa para meta extrema', `${rot}: ${Math.round(c.kcal)} vs ${r.kcal}`);
   if (c.fibra < 15) F.add('cardápio com menos de 15 g de fibras', `${rot}: ${Math.round(c.fibra)}`);
   return c;
@@ -289,12 +328,24 @@ test('travas de segurança: menores, gestantes, doença renal, transtorno alimen
   assert.equal(emVoltaDoTreino(calcular(base)).semNumeros, false);
   // diabetes: só manutenção, com aviso de hipoglicemia
   for (const objetivo of OBJ) { const r = calcular({ ...base, objetivo, condicoes: ['diabetes'] }); assert.equal(r.kcal, r.gasto); assert.ok(r.avisos.some((x) => /hipoglicemia/.test(x.texto))); assert.equal(r.ritmo, undefined); }
-  // baixo peso: nunca déficit (IMC < 18,5; 60+: IMC < 22)
-  for (const [idade, peso, altura, baixo] of [[30, 56, 175, true], [30, 57, 175, false], [59, 60, 172, false], [60, 60, 172, true], [60, 66, 172, false], [99, 40, 150, true]]) {
+  // baixo peso: nunca déficit (IMC < 18,5; 60+: IMC < 22). Perto do piso (perder 5% já cruzaria): também não.
+  // Com 65 anos ou mais, só com obesidade — e com déficit de no máximo 500 kcal.
+  for (const [idade, peso, altura, baixo, esperado] of [[30, 56, 175, true, 'manter'], [30, 57, 175, false, 'manter'], [30, 60, 175, false, 'emagrecer'], [59, 60, 172, false, 'emagrecer'],
+    [60, 60, 172, true, 'manter'], [60, 66, 172, false, 'manter'], [60, 70, 172, false, 'emagrecer'], [64, 85, 172, false, 'emagrecer'], [65, 85, 172, false, 'manter'], [66, 95, 172, false, 'emagrecer'], [99, 40, 150, true, 'manter']]) {
     const r = calcular({ ...base, idade, peso, altura, objetivo: 'emagrecer', atividade: 'moderado' });
     assert.equal(r.baixoPeso, baixo, `${idade}/${peso}/${altura}`);
-    if (r.modo !== 'educativo') assert.equal(r.objetivoCalc, baixo ? 'manter' : 'emagrecer', `${idade}/${peso}/${altura}`);
+    if (r.modo === 'educativo') continue;
+    assert.equal(r.objetivoCalc, esperado, `${idade}/${peso}/${altura}`);
+    if (esperado === 'manter') { assert.equal(r.kcal, r.gasto); assert.equal(r.perdaSemana, undefined); assert.ok(r.avisos.some((x) => x.tipo === 'warn')); }
+    if (idade >= 65 && esperado === 'emagrecer') { assert.ok(r.gasto - r.kcal <= 510); assert.ok(r.avisos.some((x) => /65 anos/.test(x.texto))); }
   }
+  // o caso da auditoria: mulher de 25 anos, 51 kg e 1,65 m (IMC 18,7) pedindo para emagrecer não recebe déficit
+  { const r = calcular({ ...base, objetivo: 'emagrecer', sexo: 'f', idade: 25, peso: 51, altura: 165, atividade: 'leve' });
+    assert.equal(r.kcal, r.gasto); assert.ok(r.avisos.some((x) => /mínimo saudável para a sua altura \(51 kg\)/.test(x.texto))); assert.equal(textosDoPeso(r).ritmo, null); }
+  // e a de 75 anos, 55 kg e 1,50 m: sem déficit, sem "ritmo de perda" e sem "reduza de 100 a 200 kcal"
+  { const r = calcular({ ...base, objetivo: 'emagrecer', sexo: 'f', idade: 75, peso: 55, altura: 150, treinos: '0' });
+    const t = textosDoPeso(r);
+    assert.equal(r.kcal, r.gasto); assert.equal(t.ritmo, null); assert.ok(!/reduza|perda/.test(t.linhas.join(' '))); }
   // obesidade: quem pede para "ganhar massa" recebe manutenção com proteína alta (Slater 2019), não superávit
   for (const [peso, altura] of [[92, 175], [120, 170], [250, 220], [160, 150]]) {
     const r = calcular({ ...base, objetivo: 'ganhar', peso, altura });
@@ -311,11 +362,23 @@ test('travas de segurança: menores, gestantes, doença renal, transtorno alimen
   // pisos: 1200 (mulheres) e 1500 (homens) quando a meta de déficit cairia abaixo
   const f = calcular({ ...base, sexo: 'f', idade: 45, peso: 62, altura: 158, treinos: '0' });
   assert.equal(f.objetivoCalc, 'emagrecer'); assert.equal(f.kcal, 1200); assert.ok(f.avisos.some((x) => /1200 kcal/.test(x.texto)));
-  const m = calcular({ ...base, sexo: 'm', idade: 70, peso: 62, altura: 165, treinos: '0' });
+  const m = calcular({ ...base, sexo: 'm', idade: 55, peso: 62, altura: 165, treinos: '0' });
   assert.equal(m.objetivoCalc, 'emagrecer'); assert.equal(m.kcal, 1500);
+  // meta presa no piso: a perda mostrada é a do déficit que sobrou, e o texto não manda reduzir mais
+  assert.ok(Math.abs(m.perdaSemana - ((m.gasto - 1500) * 7) / 7700) < 0.006);
+  assert.ok(/já está no mínimo de 1\.500 kcal/.test(textosDoPeso(m).linhas.join(' ')) && !/reduza/.test(textosDoPeso(m).linhas.join(' ')));
+  // o mesmo homem aos 70 anos (IMC 22,8): depois dos 65, sem obesidade, não há déficit
+  const m70 = calcular({ ...base, sexo: 'm', idade: 70, peso: 62, altura: 165, treinos: '0' });
+  assert.equal(m70.objetivoCalc, 'manter'); assert.equal(m70.kcal, m70.gasto); assert.ok(m70.avisos.some((x) => x.tipo === 'warn' && /mínimo saudável|Depois dos 65 anos, sem obesidade/.test(x.texto)));
   // água e fibras nos extremos
   assert.equal(calcular({ ...base, peso: 250, altura: 220 }).agua, 4);
-  assert.equal(calcular({ ...base, peso: 30, altura: 150, objetivo: 'manter' }).agua, 1.5);
+  assert.equal(calcular({ ...base, peso: 30, altura: 150, objetivo: 'manter' }).agua, 2.5);                 // piso da EFSA para homens
+  assert.equal(calcular({ ...base, sexo: 'f', peso: 30, altura: 150, objetivo: 'manter' }).agua, 2.0);     // e para mulheres
+  assert.equal(calcular({ ...base, sexo: 'f', peso: 30, altura: 150, objetivo: 'manter' }).aguaBebidas, 1.6);
+  assert.equal(calcular({ ...base, peso: 80, altura: 180 }).agua, 2.8);                                    // 35 mL × 80 kg
+  // sem degrau no IMC 30: 1 kg a mais não muda a meta de proteína nem a de água (antes caía 25 g)
+  // ("ganhar" fica de fora: no IMC 30 ele vira manutenção de propósito)
+  for (const objetivo of ['emagrecer', 'manter']) { const x = calcular({ ...base, objetivo, peso: 86, altura: 170 }), y = calcular({ ...base, objetivo, peso: 87, altura: 170 }); assert.ok(Math.abs(x.prot - y.prot) <= 5, `degrau na proteína (${objetivo}): ${x.prot} → ${y.prot}`); assert.equal(x.agua, y.agua); }
   assert.ok(calcular({ ...base, objetivo: 'manter', peso: 249, altura: 220, atividade: 'intenso', treinos: '6' }).fibra <= 50);
 });
 
@@ -346,24 +409,82 @@ test('cardápio: 100% das restrições, perto das metas, porções realistas e s
   const corpos = [['f', 52, 158, 28], ['f', 68, 165, 45], ['m', 70, 172, 22], ['m', 85, 180, 35], ['m', 105, 188, 50], ['f', 80, 160, 67]];
   const sementes = [0, 1, 2, 3, 4, 5, 6, 7, 13, 99, 500, 999];
   let n = 0;
-  for (const restricoes of TODAS_REST) for (const objetivo of OBJ) for (const refeicoes of REF) for (const [sexo, peso, altura, idade] of corpos) {
-    const a = { ...base, restricoes, objetivo, refeicoes, sexo, peso, altura, idade, atividade: ATIV[n % 4], treinos: TREINOS[n % 5] };
+  for (const preco of PRECO) for (const restricoes of TODAS_REST) for (const objetivo of OBJ) for (const refeicoes of REF) for (const [sexo, peso, altura, idade] of corpos) {
+    const a = { ...base, preco, restricoes, objetivo, refeicoes, sexo, peso, altura, idade, atividade: ATIV[n % 4], treinos: TREINOS[n % 5] };
     const r = calcular(a);
     TOTAL++;
     n++;
     if (r.modo === 'educativo') continue;
-    // com só 3 refeições, porções caseiras não chegam a mais de 3.000 kcal: acima disso o cardápio é só validado
-    for (const seed of sementes) validarCardapio(a, r, seed, F, { metas: !(refeicoes === '3' && r.kcal > 3000) });
+    // todas as metas da grade são conferidas, inclusive as altas com 3 refeições (cada refeição aceita mais itens)
+    for (const seed of sementes) validarCardapio(a, r, seed, F, { metas: true });
     // "outra sugestão" muda o cardápio de verdade
     const dias = sementes.slice(0, 6).map((s) => cardapio(r, s).refeicoes.map((x) => x.itens.map((i) => i.id).join(',')).join('|'));
     for (let i = 1; i < dias.length; i++) if (dias[i] === dias[i - 1]) F.add('"outra sugestão" devolveu o mesmo cardápio', `${rotulo(a)} seeds ${sementes[i - 1]} e ${sementes[i]}`);
     if (new Set(dias).size < 4) F.add('pouca variação entre sugestões', `${rotulo(a)}: ${new Set(dias).size} de 6`);
   }
-  assert.equal(n, 16 * 3 * 4 * 6);
+  assert.equal(n, 2 * 16 * 3 * 4 * 6);
   F.confere('cardápio');
 });
 
-test('cardápio: 4.000 perfis aleatórios com sementes de 0 a 999 (metas de 1.200 a 3.600 kcal conferidas — até 3.000 com 3 refeições; extremos só validados)', () => {
+test('preço: com "mais baratos" o custo médio do cardápio cai em todas as combinações de restrição × objetivo', () => {
+  const corpos = [['f', 52, 158, 28], ['f', 68, 165, 45], ['m', 70, 172, 22], ['m', 85, 180, 35], ['m', 105, 188, 50], ['f', 80, 160, 67]];
+  let n = 0;
+  for (const restricoes of TODAS_REST) for (const objetivo of OBJ) {
+    let normal = 0, barato = 0, k = 0;
+    for (const refeicoes of REF) for (const [sexo, peso, altura, idade] of corpos) {
+      const a = { ...base, restricoes, objetivo, refeicoes, sexo, peso, altura, idade };
+      const rn = calcular({ ...a, preco: 'tanto_faz' }), rb = calcular({ ...a, preco: 'barato' });
+      TOTAL += 2;
+      // a preferência não mexe nas metas
+      for (const campo of ['kcal', 'prot', 'carb', 'gord', 'agua']) assert.equal(rb[campo], rn[campo], campo);
+      assert.equal(calcular(a).preco, 'tanto_faz', 'sem resposta vale "tanto faz"');
+      if (rn.modo === 'educativo') continue;
+      for (let seed = 0; seed < 8; seed++) { normal += custoDia(cardapio(rn, seed)); barato += custoDia(cardapio(rb, seed)); k++; CARDAPIOS += 2; }
+    }
+    n++;
+    assert.ok(k > 0 && barato <= normal, `"mais baratos" saiu mais caro em ${restricoes}/${objetivo}: ${(barato / k).toFixed(2)} vs ${(normal / k).toFixed(2)}`);
+    // quem come de tudo economiza pelo menos 20%; no vegano, com poucas fontes de proteína, a diferença é menor
+    if (!restricoes.includes('vegano')) assert.ok(barato <= normal * 0.8, `economia pequena em ${restricoes}/${objetivo}: ${Math.round((barato / normal) * 100)}%`);
+  }
+  assert.equal(n, 16 * 3);
+});
+
+test('"outra sugestão": cada clique muda os alimentos e mantém as metas, em todas as restrições × objetivos × preferências', () => {
+  const F = new Falhas();
+  let cliques = 0;
+  for (const preco of PRECO) for (const restricoes of TODAS_REST) for (const objetivo of OBJ) for (const refeicoes of REF) for (const [sexo, peso, altura] of [['f', 60, 165], ['m', 85, 180]]) {
+    const a = { ...base, preco, restricoes, objetivo, refeicoes, sexo, peso, altura };
+    const r = calcular(a);
+    TOTAL++;
+    if (r.modo === 'educativo') continue;
+    let seed = 0;
+    const vistos = new Set([assinatura(cardapio(r, seed))]);
+    for (let clique = 1; clique <= 8; clique++) {
+      const prox = proximaSemente(r, seed);
+      if (prox == null) { F.add('"outra sugestão" sem alternativa', rotulo(a)); break; }
+      const antes = cardapio(r, seed), depois = cardapio(r, prox);
+      cliques++; CARDAPIOS++;
+      if (assinatura(antes) === assinatura(depois)) F.add('clique devolveu os mesmos alimentos', `${rotulo(a)} ${seed}→${prox}`);
+      // muda de verdade: pelo menos 3 alimentos diferentes de um dia para o outro
+      const ids = (c) => new Set(c.refeicoes.flatMap((x) => x.itens.map((i) => i.id)));
+      const novos = [...ids(depois)].filter((id) => !ids(antes).has(id)).length;
+      if (novos < 3) F.add('clique trocou menos de 3 alimentos', `${rotulo(a)} ${seed}→${prox}: ${novos}`);
+      // as metas não mudam: o dia continua perto das mesmas calorias e proteína
+      if (Math.abs(depois.kcal - r.kcal) > r.kcal * 0.1 || depois.p < r.prot * 0.85) F.add('clique tirou o dia das metas', `${rotulo(a)} seed ${prox}: ${Math.round(depois.kcal)} kcal, ${Math.round(depois.p)} g`);
+      vistos.add(assinatura(depois));
+      seed = prox;
+    }
+    if (vistos.size < 7) F.add('poucos dias diferentes em 8 cliques', `${rotulo(a)}: ${vistos.size}`);
+  }
+  assert.ok(cliques > 5000, 'cliques: ' + cliques);
+  // a semente dá a volta em 1000 sem repetir o dia atual
+  const r = calcular(base);
+  assert.notEqual(assinatura(cardapio(r, proximaSemente(r, 999))), assinatura(cardapio(r, 999)));
+  assert.equal(proximaSemente(calcular({ ...base, idade: 15 }), 0), null, 'sem cardápio, não há outra sugestão');
+  F.confere('outra sugestão');
+});
+
+test('cardápio: 4.000 perfis aleatórios com sementes de 0 a 999 (metas de 1.200 a 4.600 kcal conferidas, com qualquer número de refeições; extremos só validados)', () => {
   const F = new Falhas();
   const r = semente(42);
   let n = 0, comMeta = 0;
@@ -376,7 +497,7 @@ test('cardápio: 4.000 perfis aleatórios com sementes de 0 a 999 (metas de 1.20
     TOTAL++;
     if (res.modo === 'educativo') continue;
     n++;
-    const normal = res.kcal >= 1200 && res.kcal <= (a.refeicoes === '3' ? 3000 : 3600) && res.prot <= 200;
+    const normal = res.kcal >= 1200 && res.kcal <= 4600 && res.prot <= 200;
     if (normal) comMeta++;
     validarCardapio(a, res, inteiro(r, 0, 999), F, { metas: normal });
   }
@@ -421,7 +542,107 @@ test('em volta do treino: exemplos coerentes com cada restrição, horário e co
   F.confere('em volta do treino');
 });
 
+test('em casa: 3.000 despensas sorteadas — só o que foi marcado, restrições 100%, sem erro, faltas coerentes', () => {
+  const F = new Falhas();
+  const r = semente(7);
+  const todos = ALIMENTOS.map((f) => f.id);
+  let completas = 0, comFalta = 0;
+  for (let i = 0; i < 3000; i++) {
+    const a = { ...base, objetivo: um(r, OBJ), sexo: um(r, SEXO), peso: inteiro(r, 50, 110), altura: inteiro(r, 150, 190), refeicoes: um(r, REF), restricoes: r() < 0.6 ? ['nenhuma'] : um(r, TODAS_REST), treinos: um(r, TREINOS) };
+    const res = calcular(a);
+    TOTAL++;
+    if (res.modo === 'educativo') continue;
+    // despensas de 0 a 120 alimentos, com mais chance para as pequenas
+    const n = r() < 0.05 ? 0 : Math.floor(r() * r() * 120) + 1;
+    const emCasa = [...new Set(Array.from({ length: n }, () => um(r, todos)))];
+    const rot = `${rotulo(a)} casa=[${emCasa.slice(0, 12)}…] (${emCasa.length})`;
+    const seed = inteiro(r, 0, 999);
+    let c;
+    try { c = cardapio(res, seed, { emCasa }); } catch (e) { F.add('cardápio de casa lançou erro', `${rot}: ${e.message}`); continue; }
+    CARDAPIOS++;
+    const rest = a.restricoes.filter((x) => x !== 'nenhuma');
+    const tem = new Set(emCasa);
+    if (!Array.isArray(c.faltas)) { F.add('sem a lista de faltas', rot); continue; }
+    for (const ref of c.refeicoes) {
+      if (!ref.itens.length) F.add('refeição vazia', rot);
+      const vistos = new Set();
+      for (const it of ref.itens) {
+        const f = FOOD.get(it.id);
+        if (!tem.has(it.id)) F.add('alimento que a pessoa não tem', `${rot}: ${it.id}`);
+        if (vistos.has(it.id)) F.add('alimento repetido na refeição', `${rot}: ${it.id}`);
+        vistos.add(it.id);
+        for (const t of rest) if (!f.tags.includes(t)) F.add('restrição ignorada em casa', `${rot}: ${it.id} fere ${t}`);
+        if (!(Number.isFinite(it.g) && it.g > 0 && it.g === Math.round(it.g))) F.add('quantidade inválida', `${rot}: ${it.id} = ${it.g}`);
+        else if (it.g > Math.max(f.porcao.g * 3.01, 60) || it.g > 420) F.add('mais de 3 porções em casa', `${rot}: ${it.id} = ${it.g} g (porção ${f.porcao.g} g)`);
+        if (!semLixo(it.medida)) F.add('medida mal formada', `${rot}: ${it.medida}`);
+      }
+    }
+    if (!Number.isFinite(c.kcal) || !Number.isFinite(c.p) || c.kcal > res.kcal * 1.15) F.add('total inválido ou acima de 115% da meta', `${rot}: ${Math.round(c.kcal)} vs ${res.kcal}`);
+    for (const f of c.faltas) {
+      if (!semLixo(f.texto) || f.texto.length > 140) F.add('texto de falta inválido', f.texto);
+      if (!f.sugestoes.length) F.add('falta sem sugestão', `${rot}: ${f.grupo}`);
+      for (const s of f.sugestoes) { if (tem.has(s.id)) F.add('sugere o que a pessoa já tem', `${rot}: ${s.id}`); for (const t of rest) if (!FOOD.get(s.id).tags.includes(t)) F.add('sugestão fere a restrição', `${rot}: ${s.id}`); }
+    }
+    // sem nenhuma falta, o dia fecha as metas
+    if (!c.faltas.length) { completas++; if (Math.abs(c.kcal - res.kcal) > res.kcal * 0.12 || c.p < res.prot * 0.85) F.add('sem faltas, mas fora das metas', `${rot}: ${Math.round(c.kcal)} kcal, ${Math.round(c.p)} g (metas ${res.kcal} e ${res.prot})`); } else comFalta++;
+    // "outra sugestão" em casa: ou muda os alimentos, ou avisa que não há alternativa
+    const prox = proximaSemente(res, seed, { emCasa });
+    if (prox != null && assinatura(cardapio(res, prox, { emCasa })) === assinatura(c)) F.add('outra sugestão em casa não mudou', rot);
+  }
+  assert.ok(completas > 100 && comFalta > 500, `despensas completas: ${completas}; com falta: ${comFalta}`);
+  F.confere('em casa');
+});
+
+test('corrida: 4.000 perfis com plano de corrida sorteado — metas coerentes, cardápio válido e textos sem lixo', () => {
+  const F = new Falhas();
+  const r = semente(2026);
+  const hoje = new Date('2026-11-13T12:00:00');
+  for (let i = 0; i < 4000; i++) {
+    const a = { ...base, objetivo: um(r, OBJ), sexo: um(r, SEXO), idade: inteiro(r, 14, 80), peso: inteiro(r, 45, 130), altura: inteiro(r, 150, 195), atividade: um(r, ATIV), treinos: um(r, TREINOS), refeicoes: um(r, REF), restricoes: r() < 0.7 ? ['nenhuma'] : um(r, TODAS_REST), condicoes: r() < 0.7 ? ['nenhuma'] : um(r, TODAS_COND) };
+    const km = Math.round(r() * r() * 120);
+    const ritmo = 4 + r() * 5;
+    const cor = { kmSemana: km, minSemana: Math.round(km * ritmo), sessoesSemana: inteiro(r, 1, 7), longoKm: Math.round(km * 0.35), longoMin: Math.round(km * 0.35 * ritmo), fase: 'base', nivel: 'iniciante',
+      prova: r() < 0.6 ? { distKm: um(r, [5, 10, 21.1, 42.195, 3, 60]), data: `2026-${um(r, ['11', '12'])}-${String(inteiro(r, 1, 28)).padStart(2, '0')}`, semanasAte: inteiro(r, 0, 20) } : null,
+      proximaCorrida: r() < 0.5 ? { data: '2026-11-14', durMin: inteiro(r, 20, 150), distKm: inteiro(r, 3, 25), tipo: 'longo' } : null };
+    const rot = `${rotulo(a)} corrida=${JSON.stringify(cor)}`;
+    let sem, com, o;
+    try { sem = calcular(a); com = calcular(a, cor); o = orientacaoCorrida(com, hoje); } catch (e) { F.add('corrida lançou erro', `${rot}: ${e.message}`); continue; }
+    TOTAL++;
+    if (km === 0 && cor.minSemana === 0) continue;
+    if (!o) { F.add('plano de corrida sem orientação', rot); continue; }
+    if (com.modo !== sem.modo) F.add('a corrida mudou o modo de segurança', rot);
+    const textos = [...o.blocos.flatMap((b) => [b.titulo, ...b.linhas]), ...(o.prova ? [o.prova.titulo, ...o.prova.linhas] : [])];
+    for (const s of textos) if (!semLixo(s) || s.length > 330) F.add('texto de corrida inválido ou longo', `${rot}: ${s}`);
+    if (o.semNumeros !== (com.modo === 'educativo')) F.add('semNumeros incoerente na corrida', rot);
+    // achados da auditoria: concordância ("1 semanas"), duração ("1 h 60"), géis fora do total, motivo do carboidrato
+    // baixo e, com diabetes, gramas no bloco da prova
+    const tudo = textos.join(' ');
+    if (/ 1 semanas|\d h 60\b|30 g de carboidrato são 1 gel/.test(tudo)) F.add('texto de corrida com erro de concordância, duração ou gel', `${rot}: ${tudo.slice(0, 200)}`);
+    const gel = /No total, de (\d+) a (\d+) g: por exemplo, (?:(\d+) a )?(\d+) g[eé](?:l|is) de 25 g/.exec(tudo);
+    if (/No total, de/.test(tudo) && !gel) F.add('linha dos géis mal formada', rot);
+    if (gel && (Number(gel[4]) * 25 > Number(gel[2]) || (Number(gel[3] || gel[4]) * 25 < Number(gel[1]) && Number(gel[3] || gel[4]) > 1))) F.add('géis de exemplo fora do total indicado', `${rot}: ${gel[0]}`);
+    if (/por causa da redução de calorias/.test(tudo) && com.objetivoCalc !== 'emagrecer') F.add('"redução de calorias" para quem não está em déficit', rot);
+    if (a.condicoes.includes('diabetes') && o.prova && /10 a 12 g|\d+ g\)|\d+ a \d+ g de carboidrato|No total, de/.test(o.prova.linhas.join(' '))) F.add('diabetes com gramas no bloco da prova', rot);
+    if (a.condicoes.includes('diabetes') && o.prova && o.prova.minutos > 90 && o.prova.dias >= 0 && !/médico ou nutricionista/.test(o.prova.linhas.join(' '))) F.add('diabetes sem orientação de combinar a prova com o médico', rot);
+    if (suplementos(com).semDoses !== (com.modo === 'educativo')) F.add('doses de suplemento no modo educativo', rot);
+    if (com.modo === 'educativo') { if (com.kcal !== undefined || textos.some((s) => /\d+ (a \d+ )?g\b|kcal/.test(s))) F.add('modo educativo com números na corrida', rot); continue; }
+    // energia: nunca menor que sem a corrida, nem acima de 2,4 × o gasto de repouso
+    if (com.gasto < sem.gasto) F.add('a corrida reduziu o gasto', `${rot}: ${com.gasto} < ${sem.gasto}`);
+    if (com.fator > 2.401) F.add('gasto acima de 2,4 × o repouso', `${rot}: ${com.fator}`);
+    const soma = com.prot * 4 + com.carb * 4 + com.gord * 9;
+    if (Math.abs(soma - com.kcal) > 25) F.add('macros da corrida não somam as calorias', `${rot}: ${soma} vs ${com.kcal}`);
+    const pg = (com.gord * 9) / com.kcal;
+    if (pg < 0.19 || pg > 0.37) F.add('gordura fora de 20–35% com corrida', `${rot}: ${Math.round(pg * 100)}%`);
+    // (15 g de folga: 10 kcal a mais podem mudar o arredondamento da gordura)
+    if (com.carb < sem.carb - 15 && com.kcal >= sem.kcal && com.prot <= sem.prot) F.add('a corrida reduziu o carboidrato', `${rot}: ${com.carb} < ${sem.carb}`);
+    if (com.prot * 4 > com.kcal * 0.36 + 10 || com.prot > 2.2 * a.peso + 3) F.add('proteína fora dos limites com corrida', `${rot}: ${com.prot}`);
+    if (i % 4 === 0) validarCardapio(a, com, i % 13, F, { metas: com.kcal >= 1200 && com.kcal <= 4600 && com.prot <= 200 });
+  }
+  F.confere('corrida');
+});
+
 test('referências citadas existem e a contagem de perfis passa de 40 mil', () => {
+  for (const k of ['weijs2025', 'leidy2015', 'deutz2014', 'iom2005', 'volkert2022', 'rodriguez2009', 'burke2011', 'jeukendrup2014', 'hewbutler2017', 'scott2019', 'margaria1963', 'rapoport2010', 'efsa2017', 'hall2008', 'ais_gel', 'precos2026']) assert.ok(REFS[k], k);
   for (const k of ['mifflin1990', 'frankenfield2005', 'jensen2013', 'helms2014', 'iraki2019', 'slater2019', 'jager2017', 'morton2018', 'bauer2013', 'schoenfeld2018', 'thomas2016', 'efsa2010', 'oms_dieta', 'kdigo2024', 'raj2025']) assert.ok(REFS[k], k);
   assert.ok(TOTAL >= 40000, 'perfis: ' + TOTAL);
   assert.ok(CARDAPIOS >= 15000, 'cardápios: ' + CARDAPIOS);

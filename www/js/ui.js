@@ -36,6 +36,7 @@ export const clear = (el) => { while (el.firstChild) el.removeChild(el.firstChil
 
 // ---------- ícones (traços simples) ----------
 const ICONS = {
+  run: ['M14 5.5a1.6 1.6 0 100-3.2 1.6 1.6 0 000 3.2z', 'M6.5 11l3.2-3.4 3.3-.4 2 3.3 3.2 1', 'M13 7.2l-2.2 5 3.2 2.6.8 5.2', 'M10.8 12.2L9 16.5 4.5 18'],
   home: ['M3 11l9-8 9 8', 'M5 10v10h14V10', 'M10 20v-6h4v6'],
   dumbbell: ['M6.5 6.5v11', 'M17.5 6.5v11', 'M3 9v6', 'M21 9v6', 'M6.5 12h11'],
   list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],

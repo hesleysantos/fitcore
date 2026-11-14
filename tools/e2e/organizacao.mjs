@@ -99,7 +99,7 @@ export default async (page) => {
       const ids = new Set(p.dias.map((d) => d.id));
       return { fl, novos: S.state.plans.length - antes, nome: p.nome, origem: p.origem, itens: p.dias.map((d) => d.itens.length), existem: p.dias.every((d) => d.itens.every((i) => EX_POR_ID.has(i.ex) && i.series >= 1 && /^\\d+(-\\d+)?$/.test(i.reps) && i.descanso >= 0)),
         agenda: Object.keys(p.agenda).length, agendaOk: Object.values(p.agenda).every((v) => ids.has(v)), h2: (document.querySelector('main h2') || {}).textContent, aberta: folha(), toast: toastTxt(),
-        cards: document.querySelectorAll('main .card .avatar').length, hash: location.hash };`);
+        cards: new Set([...document.querySelectorAll('main [data-treino]')].map((x) => x.dataset.treino)).size, hash: location.hash };`);
     const certo = !r.erro && r.fl === 'Modelos de treino' && r.novos === 1 && r.nome === m.nome && r.origem === 'modelo' && J(r.itens) === J(m.itens) && r.existem && r.agenda === m.semana && r.agenda === m.diasSemana && r.agendaOk && r.h2 === m.nome && r.aberta === '' && r.cards === m.itens.length && /Modelo copiado/.test(r.toast);
     ok(certo, `modelo ${k + 1} "${m.nome}": plano criado, ativo, ${m.itens.length} treino(s), agenda de ${m.semana} dia(s)`, r);
     // o primeiro treino do modelo inicia; sai sem registrar (alternando Descartar e Encerrar)
@@ -296,7 +296,7 @@ export default async (page) => {
   await recarregar();
   ok((await ev(`const p = S.state.plans.find((x) => x.id === ${J(pt.id)}); return p.dias[1].nome.length;`)) === r.tam, 'depois de recarregar, o nome do treino novo continua igual (não é cortado)');
   await ir('treinos');
-  r = await ev(`semToast(); const c = [...document.querySelectorAll('main .card')].filter((x) => x.querySelector('.avatar'))[1]; const txt = c.innerText; [...c.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Iniciar').click(); await espera(300); return { txt, toast: toastTxt(), cur: !!S.state.current, hash: location.hash };`);
+  r = await ev(`semToast(); const c = document.querySelectorAll('main [data-treino]')[1]; const txt = c.innerText; [...c.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Iniciar').click(); await espera(300); return { txt, toast: toastTxt(), cur: !!S.state.current, hash: location.hash };`);
   ok(r.txt.includes('Nenhum exercício ainda') && /não tem exercícios/.test(r.toast) && !r.cur && r.hash === '#/treinos', 'treino sem exercício não inicia e o app explica o motivo', r);
   // agenda aponta para o treino B; excluir o treino limpa a agenda
   await ev(`S.update((s) => { const p = s.plans.find((x) => x.id === ${J(pt.id)}); p.agenda[1] = ${J(diaB)}; p.agenda[3] = ${J(diaB)}; p.agenda[5] = ${J(pt.dia)}; }); return true;`);
@@ -318,7 +318,7 @@ export default async (page) => {
   await ir('treinos');
   // limite de 14 treinos por plano
   await ev(`S.update((s) => { const p = s.plans.find((x) => x.id === ${J(pt.id)}); while (p.dias.length < 14) p.dias.push({ id: 'dX' + p.dias.length, nome: 'Treino ' + p.dias.length, foco: '', itens: [] }); }); const { refresh } = await import('/js/router.js'); refresh(); await espera(120); return true;`);
-  r = await ev(`semToast(); await clicar('Adicionar um treino ao plano'); await espera(150); return { toast: toastTxt(), fl: folha(), dias: S.activePlan().dias.length, cards: document.querySelectorAll('main .card .avatar').length };`);
+  r = await ev(`semToast(); await clicar('Adicionar um treino ao plano'); await espera(150); return { toast: toastTxt(), fl: folha(), dias: S.activePlan().dias.length, cards: new Set([...document.querySelectorAll('main [data-treino]')].map((x) => x.dataset.treino)).size };`);
   ok(r.dias === 14 && r.cards === 14 && /Limite de 14/.test(r.toast) && r.fl === '', 'com 14 treinos, o app avisa do limite e não cria o 15º', r);
   await ev(`S.update((s) => { const p = s.plans.find((x) => x.id === ${J(pt.id)}); p.dias = p.dias.slice(0, 1); }); return true;`);
   // o mesmo exercício duas vezes (pode vir de um backup): o app precisa conviver com isso
@@ -404,7 +404,7 @@ export default async (page) => {
   // plano sem dias
   await ev(`S.update((s) => { s.plans = s.plans.slice(0, 2); s.plans[0].dias = []; s.plans[0].agenda = {}; s.plans[0].nome = 'Plano sem dias'; s.activePlan = s.plans[0].id; }); return true;`);
   await ir('treinos');
-  r = await ev(`return { h2: document.querySelector('main h2').textContent, cards: document.querySelectorAll('main .card .avatar').length, add: !!achar('Adicionar um treino ao plano'), dica: texto() };`);
+  r = await ev(`return { h2: document.querySelector('main h2').textContent, cards: new Set([...document.querySelectorAll('main [data-treino]')].map((x) => x.dataset.treino)).size, add: !!achar('Adicionar um treino ao plano'), dica: texto() };`);
   ok(r.h2 === 'Plano sem dias' && r.cards === 0 && r.add, 'plano sem nenhum treino abre sem erro e oferece "Adicionar um treino ao plano"', { h2: r.h2, cards: r.cards });
   ok(/ainda não tem treinos/i.test(r.dica), 'plano sem treinos explica o que fazer');
   await ir('');
@@ -439,17 +439,17 @@ export default async (page) => {
   const LONGO = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
   const hoje = await ev('return new Date().getDay();');
   const agendar = (wd, alvo) => ev(`
-    const chip = [...document.querySelectorAll('.week7 .chip')].find((c) => c.getAttribute('aria-label').startsWith(${J(LONGO[wd])} + ':'));
+    const chip = [...document.querySelectorAll('.dia .chip[aria-label]')].find((c) => c.getAttribute('aria-label').startsWith(${J(LONGO[wd])} + ':'));
     if (!chip) return { erro: 'dia não encontrado' };
     chip.click(); await espera(120);
     const fl = folha(); const ops = [...topo().querySelectorAll('.list .item')]; const n = ops.length;
     const op = ops.find((o) => o.querySelector('.t').textContent === ${J(alvo)});
     if (!op) return { erro: 'opção não encontrada', fl, n };
     op.click(); await espera(160);
-    const p = S.activePlan(); const c2 = [...document.querySelectorAll('.week7 .chip')].find((c) => c.getAttribute('aria-label').startsWith(${J(LONGO[wd])} + ':'));
-    return { fl, n, valor: p.agenda[${wd}] || '', rotulo: c2.getAttribute('aria-label'), letra: c2.querySelector('.col > span:last-child').textContent, on: c2.classList.contains('on'), aberta: folha() };`);
+    const p = S.activePlan(); const c2 = [...document.querySelectorAll('.dia .chip[aria-label]')].find((c) => c.getAttribute('aria-label').startsWith(${J(LONGO[wd])} + ':'));
+    return { fl, n, valor: p.agenda[${wd}] || '', rotulo: c2.getAttribute('aria-label'), letra: (c2.closest('.dia').querySelector('h3') || {}).textContent || '', on: c2.classList.contains('on'), aberta: folha() };`);
   await ir('treinos');
-  ok((await ev('return document.querySelectorAll(".week7 .chip").length;')) === 7, 'a agenda mostra os 7 dias da semana');
+  ok((await ev('return document.querySelectorAll(".dia .chip[aria-label]").length;')) === 7, 'a agenda mostra os 7 dias da semana');
   let tudo = true; let diag = [];
   for (let wd = 0; wd < 7; wd++) {
     r = await agendar(wd, tp.dias[1].nome);
@@ -457,8 +457,8 @@ export default async (page) => {
     if (!certo) { tudo = false; diag.push(r); }
   }
   ok(tudo, 'cada dia da semana aceita um treino (folha com os 4 treinos + Descanso); tela e estado mudam juntos', diag);
-  r = await ev(`const p = S.activePlan(); return { n: Object.keys(p.agenda).length, iguais: new Set(Object.values(p.agenda)).size, letras: [...document.querySelectorAll('.week7 .chip .col > span:last-child')].map((x) => x.textContent).join('') };`);
-  ok(r.n === 7 && r.iguais === 1 && /B{7}/.test(r.letras), 'todos os dias com o mesmo treino: agenda com 7 dias iguais (letra B em todos)', r);
+  r = await ev(`const p = S.activePlan(); return { n: Object.keys(p.agenda).length, iguais: new Set(Object.values(p.agenda)).size, letras: [...document.querySelectorAll('.dia')].map((x) => (x.querySelector('h3') || {}).textContent === p.dias[1].nome ? 'B' : '-').join('') };`);
+  ok(r.n === 7 && r.iguais === 1 && /B{7}/.test(r.letras), 'todos os dias com o mesmo treino: agenda com 7 dias iguais (o mesmo treino no cartão de cada dia)', r);
   await ir('');
   r = await ev(`const { metaSemanal } = await import('/js/views/history.js'); return { t: texto(), meta: metaSemanal() };`);
   ok(r.t.includes('TREINO DE HOJE') && r.t.includes(tp.dias[1].nome) && r.t.includes('Iniciar treino'), 'tela inicial mostra o "treino de hoje" agendado');
@@ -469,7 +469,7 @@ export default async (page) => {
   tudo = true; diag = [];
   for (let wd = 0; wd < 7; wd++) {
     r = await agendar(wd, 'Descanso');
-    if (r.erro || r.valor !== '' || r.rotulo !== `${LONGO[wd]}: descanso` || r.on || r.letra !== '–') { tudo = false; diag.push(r); }
+    if (r.erro || r.valor !== '' || r.rotulo !== `${LONGO[wd]}: descanso` || r.on || r.letra !== '') { tudo = false; diag.push(r); }
   }
   ok(tudo && await E('Object.keys(s.plans[0].agenda).length === 0'), 'tirar o treino de cada dia deixa a agenda vazia', diag);
   await ir('');
@@ -572,7 +572,7 @@ export default async (page) => {
     return { toast: toastTxt(), n, total: EXERCICIOS.length, itens: c.itens.length, ex: it && it.ex, sets: it && it.sets.length, desc: it && it.descanso, alvo: it && it.alvo, cards: cartoes().length, padrao: S.state.settings.descanso };`);
   ok(/adicionado no fim/.test(r.toast) && r.n === r.total - 4 && r.itens === 5 && r.ex === 'leg-press-45' && r.sets === 3 && r.desc === r.padrao && r.alvo === '8-12' && r.cards === 5, 'adicionar exercício durante o treino: entra no fim (com aviso), com 3 séries e o descanso padrão dos Ajustes', r);
   ok((await cur('c.itens[0].sets[0].ok && c.itens[1].sets[0].ok === false && c.itens[0].sets[0].kg')) === 40, 'adicionar exercício não mexe no que já foi registrado');
-  const menuEx = async (i, item) => { await ev(`cart(${i}).querySelector('button[aria-label="Opções do exercício"]').click(); await espera(120); return true;`); return item ? clicar(item, '.menu-item') : true; };
+  const menuEx = async (i, item) => { await ev(`cart(${i}).querySelector('button[aria-label^="Opções: "]').click(); await espera(120); return true;`); return item ? clicar(item, '.menu-item') : true; };
   await menuEx(4);
   r = await ev(`return [...topo().querySelectorAll('.menu-item')].map((m) => m.textContent);`);
   ok(J(r) === J(['Trocar por outro exercício', 'Fazer antes', 'Tirar deste treino']), 'menu do último exercício: trocar, fazer antes, tirar (sem "fazer depois")', r);

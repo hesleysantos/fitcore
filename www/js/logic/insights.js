@@ -2,7 +2,7 @@
 // Lê só o que o próprio usuário registrou (treinos e peso) e aplica regras fixas, cada uma apoiada
 // em uma referência da base de conhecimento (data/knowledge.js). Não usa internet nem IA generativa.
 import { EX_POR_ID } from '../data/exercises.js';
-import { GRUPOS } from '../data/muscles.js';
+import { GRUPOS, MUSCULOS } from '../data/muscles.js';
 import { pesosDoExercicio } from './trainer.js';
 import { nivelPausa, duracaoTxt } from './pausa.js';
 
@@ -195,7 +195,9 @@ function duracaoDe(ss, n = 4) {
   return d.length >= 2 ? Math.round(media(d)) : null;
 }
 
-// grupo muscular treinado como principal em dias seguidos
+// Músculo treinado como principal em dias seguidos. A conta é por músculo, não por grupo: a parte de trás do ombro
+// (crucifixo inverso, num treino de puxar) e a da frente (desenvolvimento, num treino de empurrar) são músculos diferentes,
+// e treinar um depois do outro não tira o descanso de nenhum dos dois. O aviso mostra o nome do grupo.
 export function semDescanso(st, agora, dias = 21) { return semDescansoDe(treinos(st, agora), agora, dias); }
 function semDescansoDe(ss, agora, dias = 21) {
   const desde = agora - dias * DIA;
@@ -208,8 +210,9 @@ function semDescansoDe(ss, agora, dias = 21) {
     for (const it of x.itens) {
       const n = feitas(it).length;
       if (!n) continue;
-      const w = pesosDoExercicio(EX_POR_ID.get(it.ex));
-      for (const g in w) if (w[g] === 1 && GRUPOS_PRINCIPAIS.includes(g)) g0[g] = (g0[g] || 0) + n;
+      const ex = EX_POR_ID.get(it.ex);
+      const w = pesosDoExercicio(ex);
+      for (const m of new Set(ex ? ex.primarios : [])) { const g = MUSCULOS[m] ? MUSCULOS[m].grupo : ''; if (w[g] === 1 && GRUPOS_PRINCIPAIS.includes(g)) g0[m] = (g0[m] || 0) + n; }
     }
   }
   const chaves = [...porDia.keys()].sort((a, b) => a - b);
@@ -220,7 +223,7 @@ function semDescansoDe(ss, agora, dias = 21) {
     for (const g of Object.keys(g0)) if (g0[g] >= 3 && (g1[g] || 0) >= 3) cont[g] = (cont[g] || 0) + 1;
   }
   const top = Object.entries(cont).sort((a, b) => b[1] - a[1])[0];
-  return top && top[1] >= 2 ? { grupo: top[0], vezes: top[1] } : null;
+  return top && top[1] >= 2 ? { grupo: MUSCULOS[top[0]].grupo, vezes: top[1] } : null;
 }
 
 // tendência do peso corporal (kg por semana), por regressão linear dos registros recentes
@@ -384,7 +387,7 @@ export function analisar(st, agora = Date.now()) {
     const muitos = GRUPOS_VOLUME.filter((k) => d[k] > SERIES_TETO + 2).sort((a, b) => d[b] - d[a]);
     if (muitos.length) add({ id: 'muito-' + muitos[0], tom: 'atencao', icone: 'warn', p: 4, titulo: `Muitas séries de ${minusc(muitos[0])}`, texto: `${num1(d[muitos[0]])} séries diretas por semana. Acima de ${SERIES_TETO}, o ganho extra é pequeno e o cansaço cresce.`, porque: 'Passar muito de 20 séries semanais por grupo traz pouco resultado a mais e dificulta a recuperação.', refs: ['bazvalle2022'] });
     if (g.peito >= 6 && g.costas < g.peito * 0.67) {
-      add({ id: 'empurra-puxa', tom: 'ideia', icone: 'swap', p: 4, titulo: 'Equilibre peito e costas', texto: `${num1(g.peito)} séries de peito e ${num1(g.costas)} de costas por semana. Inclua mais remadas e puxadas.`, porque: 'Empurrar muito mais do que puxar está ligado a dores no ombro em quem faz musculação.', refs: ['kolber2010'], acao: { rotulo: 'Ajustar treino', rota: 'treinos' } });
+      add({ id: 'empurra-puxa', tom: 'ideia', icone: 'swap', p: 4, titulo: 'Equilibre peito e costas', texto: `${num1(g.peito)} séries de peito e ${num1(g.costas)} de costas por semana. ${st && st.trainer && st.trainer.answers && st.trainer.answers.local === 'corporal' ? 'Sem aparelhos, a opção é a puxada de bruços; ou faça menos séries de peito.' : 'Inclua mais remadas e puxadas.'}`, porque: 'Empurrar muito mais do que puxar está ligado a dores no ombro em quem faz musculação.', refs: ['kolber2010'], acao: { rotulo: 'Ajustar treino', rota: 'treinos' } });
     }
     if (g.quadriceps >= 6 && g.posteriores + g.gluteos * 0.5 < g.quadriceps * 0.5) {
       add({ id: 'frente-tras', tom: 'ideia', icone: 'swap', p: 5, titulo: 'Reforce a parte de trás da coxa', texto: `${num1(g.quadriceps)} séries de quadríceps e ${num1(g.posteriores)} de posteriores por semana.`, porque: 'Um programa equilibrado treina os músculos dos dois lados de cada articulação.', refs: ['acsm2009'], acao: { rotulo: 'Ajustar treino', rota: 'treinos' } });

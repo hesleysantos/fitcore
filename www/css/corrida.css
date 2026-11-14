@@ -1,0 +1,16 @@
+/* Treinador de corrida: cronômetro guiado e lista dos dias da semana. O resto usa as classes de app.css. */
+.cron { text-align: center; }
+.cron-fase { font-size: 1.2rem; font-weight: 750; }
+.cron-tempo { font-size: 3.4rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.05; }
+.cron.forte, .cron.correr { border-color: var(--accent); }
+.cron.forte .cron-fase, .cron.correr .cron-fase { color: var(--accent); }
+.cron.caminhar .cron-fase, .cron.trote .cron-fase, .cron.aquecer .cron-fase, .cron.desaquecer .cron-fase { color: var(--ok); }
+.blocos { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 6px; font-size: 0.94rem; }
+.blocos li + li { margin-top: 0; }
+.dia-wd { width: 40px; flex: none; text-align: center; font-weight: 750; font-size: 0.78rem; color: var(--muted); text-transform: uppercase; }
+.item.hoje { border-color: var(--accent); }
+.item .s { white-space: normal; }
+.barra-plano { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.barra-plano > i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.w0 { width: 0; } .w10 { width: 10%; } .w20 { width: 20%; } .w30 { width: 30%; } .w40 { width: 40%; } .w50 { width: 50%; }
+.w60 { width: 60%; } .w70 { width: 70%; } .w80 { width: 80%; } .w90 { width: 90%; } .w100 { width: 100%; }

@@ -175,13 +175,27 @@ function anchorSide(J, at, far) {
   }
 }
 
+// Cabo que vem de uma polia baixa atrás da pessoa e passa ENTRE as pernas: abaixo do quadril fica atrás da perna de cá;
+// daí para cima, na frente do tronco, até a mão. Assim ele nunca parece atravessar o corpo.
+function caboEntreAsPernas(o, e, J, layer) {
+  const to = add(anchorSide(J, e.to || 'hand'), e.off || [0, 0]);
+  const a = e.from;
+  const yc = J.hip[1] - 2;
+  let m = to;
+  if (to[1] > yc && a[1] < yc) { const k = (yc - a[1]) / (to[1] - a[1]); m = [a[0] + (to[0] - a[0]) * k, yc]; }
+  if (layer === 'back') { o.line(a, m, 'fg-cable', 0.8); polia(o, a); }
+  else if (m !== to) o.line(m, to, 'fg-cable', 0.8);
+}
+
 function drawSideItem(o, e, J, layer, t) {
+  if (e.k === 'cable' && e.entre) { caboEntreAsPernas(o, e, J, layer); return; }
   const z = e.z || (BACK_KINDS.has(e.k) ? 'back' : 'front');
   const both = e.k === 'db' || e.k === 'kb' || e.k === 'handle';
   if (both) {
     // mão de trás no plano de fundo, mão da frente no primeiro plano
+    // (under: o objeto da mão de cá também vai para trás do braço, como num corte, para a pegada aparecer)
     if (layer === 'back' && !e.single) sideHeld(o, e, J, true);
-    if (layer === 'front') sideHeld(o, e, J, false);
+    if (layer === (e.under ? 'back' : 'front')) sideHeld(o, e, J, false);
     return;
   }
   if (z !== layer) return;

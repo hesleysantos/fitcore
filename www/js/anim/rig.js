@@ -315,6 +315,8 @@ export function renderFrame(anim, act, t, wantBox) {
   }
   if (view === 'side') {
     const J = solveSide(pose);
+    // superfícies de apoio dos pés acima do chão (degrau, plataforma): os dedos dobram nelas como no chão
+    if (Array.isArray(anim.pisos)) J.pisos = anim.pisos;
     const pg = pegadasLado(anim, J);
     drawEquip(o, anim.equip, J, 'back', view, t);
     drawSide(o, J, act, pg);

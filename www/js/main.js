@@ -1,7 +1,7 @@
 // Ponto de entrada: carrega o estado, monta a navegação e desenha a tela atual.
 import { h, clear, icon, iconBtn, btn, toast } from './ui.js';
-import { load, state, subscribe, onExternalChange, onSaveError } from './store.js';
-import { setRenderer, back } from './router.js';
+import { load, state, subscribe, onExternalChange, onSaveError, armazenamentoOk } from './store.js';
+import { setRenderer, back, replace } from './router.js';
 import { initInstall, maybeAutoPrompt } from './install.js';
 import { homeView } from './views/home.js';
 import { exercisesView, exerciseView } from './views/exercises.js';
@@ -9,6 +9,8 @@ import { plansView, dayView } from './views/plans.js';
 import { sessionView } from './views/session.js';
 import { historyView, sessionDetailView, progressView } from './views/history.js';
 import { trainerView } from './views/trainer.js';
+import { corridaView, corridaDiaView } from './views/corrida.js';
+import { sonoView } from './views/sono.js';
 import { nutritionView } from './views/nutrition.js';
 import { gymView, settingsView, aboutView } from './views/more.js';
 
@@ -23,6 +25,9 @@ const ROUTES = [
   { re: /^historico\/([\w-]+)$/, view: sessionDetailView, tab: 'inicio' },
   { re: /^progresso$/, view: progressView, tab: 'inicio' },
   { re: /^treinador$/, view: trainerView, tab: 'treinador' },
+  { re: /^corrida$/, view: corridaView, tab: 'treinador' },
+  { re: /^corrida\/dia\/(\d{4}-\d{2}-\d{2})$/, view: corridaDiaView, tab: 'treinador' },
+  { re: /^sono$/, view: sonoView, tab: 'inicio' },
   { re: /^nutricao$/, view: nutritionView, tab: 'nutricao' },
   { re: /^academia$/, view: gymView, tab: 'inicio' },
   { re: /^ajustes$/, view: settingsView, tab: 'inicio' },
@@ -62,7 +67,7 @@ function render(keepScroll = false) {
   if (cleanup) { try { cleanup(); } catch { /* ignore */ } cleanup = null; }
   let page;
   try { page = route.view(...m.slice(1)) || {}; } catch { page = telaDeErro(); }
-  if (page.redirect != null) { location.replace('#/' + page.redirect); return; }
+  if (page.redirect != null) { replace(page.redirect); return; } // pelo roteador, para o botão Voltar continuar certo
   clear(root);
   // barra superior
   const top = h('header', { class: 'topbar' });
@@ -138,11 +143,15 @@ async function boot() {
   await load();
   applyTheme();
   subscribe(applyTheme);
-  if (window.matchMedia) window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', applyTheme);
+  if (window.matchMedia) {
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    if (mq.addEventListener) mq.addEventListener('change', applyTheme); else if (mq.addListener) mq.addListener(applyTheme); // Safari antigo
+  }
   initInstall();
   onExternalChange((motivo) => { render(true); toast(motivo === 'conflito' ? 'O app estava aberto em outra janela: carreguei os dados mais recentes.' : 'Dados atualizados a partir de outra janela do app.'); });
   onSaveError(() => toast('Atenção: não foi possível salvar. Libere espaço no aparelho e faça um backup em Ajustes.'));
   render();
+  if (!armazenamentoOk()) toast('Atenção: o armazenamento principal do aparelho não respondeu. Seus dados estão indo para uma cópia de reserva. Faça um backup em Ajustes.');
   // app deixado aberto de um dia para o outro: ao voltar, redesenha (treino de hoje, semana, datas)
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && diaDoDesenho !== new Date().toDateString() && !document.querySelector('.backdrop')) render(true); });
   registerSw();

@@ -3,12 +3,12 @@
 const B = 'http://localhost:5173/';
 const PERFIS = {
   1: {
-    treino: { 'principal objetivo': 'Ganhar massa muscular', experiência: 'Menos de 6 meses de treino', 'sem treinar': 'De 1 a 3 meses', 'dias por semana': '3 dias', 'tempo você tem': 'Cerca de 1 hora', 'Onde você vai treinar': 'Academia completa', 'dor ou lesão': 'Nenhuma', condições: 'Nenhuma', sinais: 'Nenhum deles', 'atenção extra': 'Não, quero um treino equilibrado' },
-    nutri: { 'objetivo com a alimentação': 'Ganhar massa muscular', 'sexo biológico': 'Masculino', 'dia a dia': 'Fico sentado a maior parte do dia', 'dias por semana você treina': '3 dias', horário: 'À noite', refeições: '4 refeições', 'restrição alimentar': 'Nenhuma', situações: 'Nenhuma' },
+    treino: { 'principal objetivo': 'Ganhar massa muscular', experiência: 'Menos de 6 meses de treino', 'sem treinar': 'De 1 a 3 meses', 'dias por semana': '3 dias', 'tempo você tem': 'Cerca de 1 hora', 'Onde você vai treinar': 'Academia completa', 'dor ou lesão': 'Nenhuma', condições: 'Nenhuma', sinais: 'Nenhum deles', 'prioridade a algum músculo': 'Não, quero um treino equilibrado' },
+    nutri: { 'objetivo com a alimentação': 'Ganhar massa muscular', 'alimentos mais baratos': 'Sim, priorize os mais baratos', 'sexo biológico': 'Masculino', 'dia a dia': 'Fico sentado a maior parte do dia', 'dias por semana você treina': '3 dias', horário: 'À noite', refeições: '4 refeições', 'restrição alimentar': 'Nenhuma', situações: 'Nenhuma' },
   },
   2: {
-    treino: { 'principal objetivo': 'Emagrecer', experiência: 'Nunca treinei', 'dias por semana': '2 dias', 'tempo você tem': 'Cerca de 30 minutos', 'Onde você vai treinar': 'Em casa, com halteres e banco', 'dor ou lesão': 'Joelho', condições: 'Pressão alta', sinais: 'Nenhum deles', 'atenção extra': 'Glúteos' },
-    nutri: { 'objetivo com a alimentação': 'Emagrecer', 'sexo biológico': 'Feminino', 'dia a dia': 'Fico em pé ou caminho parte do dia', 'dias por semana você treina': '1 a 2 dias', horário: 'De manhã', refeições: '3 refeições', 'restrição alimentar': 'Vegetariano', situações: 'Pressão alta' },
+    treino: { 'principal objetivo': 'Emagrecer', experiência: 'Nunca treinei', 'dias por semana': '2 dias', 'tempo você tem': 'Cerca de 30 minutos', 'Onde você vai treinar': 'Em casa, com halteres e banco', 'mais algum destes': 'Nenhum destes', 'dor ou lesão': 'Joelho', condições: 'Pressão alta', sinais: 'Nenhum deles', 'prioridade a algum músculo': 'Glúteos' },
+    nutri: { 'objetivo com a alimentação': 'Emagrecer', 'alimentos mais baratos': 'Tanto faz', 'sexo biológico': 'Feminino', 'dia a dia': 'Fico em pé ou caminho parte do dia', 'dias por semana você treina': '1 a 2 dias', horário: 'De manhã', refeições: '3 refeições', 'restrição alimentar': 'Vegetariano', situações: 'Pressão alta' },
   },
 };
 

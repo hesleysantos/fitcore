@@ -55,15 +55,17 @@ export function duracaoTxt(dias) {
 
 // Maior intervalo (em dias) entre treinos seguidos, de `desde` até `agora`. `tempos` = inícios dos treinos, em ms, em ordem.
 // É o tempo que a pessoa ficou de fato sem treinar nesse período (e não só sem fazer um exercício).
+// Conta dias do calendário do aparelho: treinou numa segunda à noite e voltou na segunda de manhã, duas semanas depois = 14 dias.
+const diaLocal = (t) => { const d = new Date(t); return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DIA); };
+export const diasEntre = (a, b) => (Number.isFinite(a) && Number.isFinite(b) ? diaLocal(b) - diaLocal(a) : 0);
 export function maiorPausa(tempos, desde, agora) {
   let ant = desde, maior = 0;
   for (const t of tempos) {
     if (!(t > desde) || t > agora) continue;
-    if (t - ant > maior) maior = t - ant;
+    maior = Math.max(maior, diasEntre(ant, t));
     ant = t;
   }
-  if (agora - ant > maior) maior = agora - ant;
-  return Math.max(0, Math.floor(maior / DIA));
+  return Math.max(0, maior, diasEntre(ant, agora));
 }
 
 // Volta de uma pausa em andamento. `tempos` = inícios dos treinos (ms, em ordem); `declarada` = pausa informada ao
@@ -72,13 +74,13 @@ export function maiorPausa(tempos, desde, agora) {
 export function voltaEm(tempos, agora, declarada = null) {
   const ts = tempos.filter((t) => t <= agora);
   const ult = ts.length ? ts[ts.length - 1] : null;
-  if (ult != null && agora - ult >= PAUSA_MINIMA * DIA) {
-    const dias = Math.floor((agora - ult) / DIA);
+  if (ult != null && diasEntre(ult, agora) >= PAUSA_MINIMA) {
+    const dias = diasEntre(ult, agora);
     return { dias, retorno: agora, semana: 1, semanas: semanasDeTransicao(dias) };
   }
   for (let i = ts.length - 1; i >= 1; i--) {
     if (agora - ts[i] > 28 * DIA) break;
-    const dias = Math.floor((ts[i] - ts[i - 1]) / DIA);
+    const dias = diasEntre(ts[i - 1], ts[i]);
     if (dias < PAUSA_MINIMA) continue;
     const semanas = semanasDeTransicao(dias);
     const semana = Math.floor((agora - ts[i]) / (7 * DIA)) + 1;

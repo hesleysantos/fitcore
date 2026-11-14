@@ -2,6 +2,7 @@
 import { L } from './rig.js';
 import { AK, H, X, SHY, D2R, CHAO, add, foot, frame, shOf, ankleFromToe, stand, seated, tower, estacao, POLIA_F } from './base.js';
 import { P } from './equip.js';
+import { torre } from './pecas.js';
 
 const norm = (v) => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; };
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
@@ -47,18 +48,35 @@ export function crunch({ mode = 'floor' } = {}) {
     };
   }
   if (mode === 'machine') {
-    const s = seated({ hx: 92, recl: 0 });
+    const s = seated({ hx: 92, recl: 0, noBack: true });
     const arm = { rel: [5.5, 3.5], bend: -1 };
+    const hx = s.hip[0], hy = s.hip[1];
+    // ponto preso ao braço móvel, que gira junto com o tronco em volta do eixo (na altura do quadril)
+    const noBraco = (J, tras, cima) => add(add(J.hip, [-J.up[1], J.up[0]], tras), J.up, cima);
+    const cauda0 = [hx - 13.5, hy - 6]; // ponta de baixo do braço com o tronco em pé: é nela que o cabo prende
     return {
       view: 'side',
       frames: [{ hip: s.hip, torso: 0, leg: s.leg, arm }, { hip: s.hip, torso: 38, leg: s.leg, arm, head: 12 }],
-      // abdominal máquina: torre atrás, braço articulado na altura da cintura (por trás do corpo) com os pegadores e o rolo do peito,
-      // e o rolo que prende os pés
+      // abdominal máquina: torre da pilha atrás; coluna fixa com o apoio lombar e o eixo na altura do quadril; braço móvel
+      // que sobe por trás das costas (com a almofada das costas), passa por cima dos ombros e desce até os pegadores;
+      // a ponta de baixo do braço puxa o cabo, que passa pela polia da base e vai levantar a pilha; rolo que prende os pés
       equip: [
-        sapata(51, s.hip[0] - 14), tower(57, 86, { trk: 'hand', gain: 0.6 }), ...s.equip,
-        { k: 'frame', pts: [[s.hip[0] + 15, CHAO], [s.hip[0] + 29.5, CHAO], [s.hip[0] + 29.5, 9]], w: 1.7, z: 'back' },
+        sapata(51, hx - 14),
+        { k: 'fn', z: 'back', f: (o, J) => {
+          const cauda = noBraco(J, 13.5, -6);
+          torre(o, { x: 57, top: 86, w: 10, dir: 1, sobe: Math.hypot(cauda[0] - cauda0[0], cauda[1] - cauda0[1]), de: [cauda, [hx - 13.5, 5]] });
+          P.tubo(o, [[hx - 18, CHAO], [hx - 18, hy], J.hip], 2.2);                         // coluna fixa e suporte do eixo
+          P.tubo(o, [cauda, noBraco(J, 13, 3), noBraco(J, 13, 30), noBraco(J, 5, 37.5), J.handN], 1.9); // braço móvel
+          P.tubo(o, [noBraco(J, 13, 3), J.hip], 1.9);
+          o.circ(cauda, 1.1, 'fg-steel');
+        } },
+        ...s.equip,
+        { k: 'pad', a: [hx - 9.6, hy - 3], b: [hx - 9.6, hy + 8], th: 1.7 },
+        { k: 'fn', z: 'back', f: (o, J) => P.estofado(o, noBraco(J, 9.6, 13), noBraco(J, 9.6, 31), 1.8) },
+        { k: 'frame', pts: [[hx + 15, CHAO], [hx + 29.5, CHAO], [hx + 29.5, 9]], w: 1.7, z: 'back' },
         { k: 'roller', at: 'ankle', off: [3.6, 3.4], r: 2.6 },
-        { k: 'lever', pivot: [s.hip[0] + 2, s.hip[1] + 4], to: 'hand', z: 'back' }, { k: 'handle' }, { k: 'roller', at: 'chest', r: 3, z: 'front' },
+        { k: 'handle' },
+        { k: 'fn', f: (o, J) => P.eixo(o, J.hip, 1.7) },
       ],
     };
   }
@@ -177,11 +195,17 @@ export function vUp() {
 }
 
 export function russianTwist() {
-  const base = { hip: [X, 14], lt: 0.82, leg: { a: 128, la: 0.5, b: 8, lb: 0.76 } };
+  // Sentado no colchonete, tronco inclinado para trás (por isso aparece mais curto), joelhos dobrados e juntos apontando
+  // para quem olha, pés no chão. A bola sai do lado de um quadril, passa na frente do peito e desce ao lado do outro
+  // quadril; ombros e tronco acompanham a bola e os joelhos não saem do lugar.
+  const base = { hip: [X, 10], lt: 0.72, leg: { a: 152, la: 0.32, b: 2, lb: 0.58 } }; // joelhos um pouco afastados: o abdômen aparece entre eles
+  // braço do lado da bola: dobrado e apontando para quem olha (aparece mais curto); o outro cruza na frente do corpo
+  const br = (x, by, k) => ({ hand: [x, by], bend: 1, la: k, lb: k });
+  const mk = (bx, by, tilt) => ({ ...base, tilt, armR: br(bx + 3.4, by, bx > 0 ? 0.7 : bx < 0 ? 0.9 : 0.45), armL: br(3.4 - bx, by, bx < 0 ? 0.7 : bx > 0 ? 0.9 : 0.45) });
   return {
-    view: 'front', label: 'Vista de frente',
-    frames: [{ ...base, tilt: -9, armR: { hand: [-15, 22] }, armL: { hand: [15, 22] } }, { ...base, tilt: 9, armR: { hand: [15, 22] }, armL: { hand: [-15, 22] } }],
-    equip: [mat(60, 140), { k: 'ballheld', r: 4.4 }],
+    view: 'front', label: 'Vista de frente, sentado com o tronco inclinado para trás: ombros e tronco giram juntos; joelhos parados',
+    frames: [mk(-13, 12.5, -7), mk(0, 26.5, 0), mk(13, 12.5, 7)],
+    equip: [mat(60, 140), { k: 'ballheld', r: 4.4, off: [0, -1.5] }],
   };
 }
 
@@ -289,6 +313,7 @@ export function treadmill({ run = false, incline = false } = {}) {
   return {
     view: 'side', loop: true, fast: run,
     frames: lift(gait(run, slope), dy),
+    ...(incline ? {} : { pisos: [{ x0: 56, x1: 140, y: dy }] }),
     // esteira: deque com a lona (as marcas correm para trás), rolo de trás, capô do motor, coluna, corrimão e painel
     equip: [{ k: 'fn', z: 'back', f: (o, J, t) => {
       const g = 4.3; // espessura do deque
@@ -470,6 +495,7 @@ export function stairs() {
   return {
     view: 'side', loop: true,
     frames: [{ hip: [X + 1, H + 5], torso: 6, legN: hi, legF: lo, arm }, { hip: [X + 1, H + 4], torso: 6, legN: lo, legF: hi, arm }],
+    pisos: [{ x0: X - 16, x1: X + 2, y: 6 }, { x0: X + 2, x1: X + 18, y: 16 }],
     // simulador de escada: base, carenagem lateral em degraus com os pisos, coluna alta com o painel e o corrimão comprido
     equip: [{ k: 'fn', z: 'back', f: (o) => {
       o.line([X - 22, CHAO], [X + 50, CHAO], 'fg-eq', 1.7);
@@ -488,7 +514,17 @@ export function jumpRope() {
   return {
     view: 'side', loop: true, fast: true,
     frames: [{ hip: [X, H - 0.6], torso: 0, leg: foot(X + 1), arm }, { hip: [X, H + 5], torso: 0, leg: { foot: [X + 1, AK + 5.4], footAng: 34 }, arm }],
-    equip: [{ k: 'fn', f: (o, J, t) => { const ph = t * 2 * Math.PI; const h = J.handN; o.line(h, [h[0] - 26 * Math.sin(ph) - 4, h[1] + 46 * Math.cos(ph) - (Math.cos(ph) < 0 ? 0 : 8)], 'fg-cable', 1); } }],
+    // a corda gira em volta das mãos: de lado ela aparece como um arco que passa por cima da cabeça, pela frente,
+    // por baixo dos pés (no instante do salto) e por trás
+    equip: [{ k: 'fn', f: (o, J, t) => {
+      const ph = t * 2 * Math.PI, h = J.handN;
+      const ponta = [h[0] - 26 * Math.sin(ph) - 4 - 3.5 * (1 - Math.cos(ph)), h[1] + 46 * Math.cos(ph) - (Math.cos(ph) < 0 ? 0 : 8)];
+      const v = [ponta[0] - h[0], ponta[1] - h[1]], n = [-v[1], v[0]];
+      const pts = [];
+      for (let i = 0; i <= 8; i++) { const u = i / 8, b = Math.sin(u * Math.PI) * 0.09; pts.push([h[0] + v[0] * u + n[0] * b, h[1] + v[1] * u + n[1] * b]); }
+      o.open(pts, 'fg-cable', 1);
+      o.line(add(h, [-1.6, 0.4]), add(h, [1.9, -0.5]), 'fg-grip', 1.9);
+    } }],
   };
 }
 
@@ -572,6 +608,7 @@ export function boxJump() {
       { hip: [bx - 4, 44], torso: 16, legN: foot(bx + 6, top + AK), legF: foot(bx - 14, AK), arm: { a: 4, b: 10 } },
     ],
     equip: [{ k: 'box', x0: bx, x1: bx + 30, h: top }],
+    pisos: [{ x0: bx, x1: bx + 30, y: top }],
   };
 }
 

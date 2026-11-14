@@ -171,7 +171,12 @@ export function progressView() {
       if (state.body.length > 1) pesoCard.appendChild(h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Desde o primeiro registro' }), h('span', { text: `${dif > 0 ? '+' : ''}${fmtKg(dif)} kg` })));
     } else pesoCard.appendChild(h('p', { class: 'small muted', text: 'Pese-se uma vez por semana, sempre no mesmo horário.' }));
     pesoCard.appendChild(h('div', { class: 'row' }, h('div', { class: 'grow' }, pesoInput), btn('Registrar', salvarPeso, 'primary')));
-    if (state.body.length) pesoCard.appendChild(btn('Apagar o último registro', () => { update((s) => { s.body.pop(); }); refresh(); }, 'plain sm danger'));
+    if (state.body.length) pesoCard.appendChild(btn('Apagar o último registro', async () => {
+      const u = state.body[state.body.length - 1];
+      if (!u || !(await confirmSheet({ title: 'Apagar este registro de peso?', text: `${fmtKg(u.peso)} kg, de ${fmtDate(u.data + 'T12:00:00')}.`, okLabel: 'Apagar', danger: true }))) return;
+      update((s) => { const i = s.body.findIndex((b) => b.data === u.data); if (i >= 0) s.body.splice(i, 1); });
+      refresh();
+    }, 'plain sm danger'));
     body.push(pesoCard);
   }
 

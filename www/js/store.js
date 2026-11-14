@@ -3,8 +3,11 @@
 import { EX_POR_ID } from './data/exercises.js';
 import { EQUIPAMENTOS } from './data/equipment.js';
 import { PERGUNTAS as P_TREINO } from './logic/trainer.js';
-import { PERGUNTAS as P_NUTRI } from './logic/nutrition.js';
+import { PERGUNTAS as P_NUTRI, limparEmCasa } from './logic/nutrition.js';
 import { parValido } from './logic/objetivos.js';
+import { limparDores } from './logic/dor.js';
+import { limparCorrida, limparRegistros } from './logic/corrida.js';
+import { limparSono, sonoPadrao } from './logic/sono.js';
 
 const DB_NAME = 'fitcore';
 const STORE = 'kv';
@@ -25,16 +28,27 @@ const defaults = () => ({
   sessions: [],
   current: null,
   trainer: { answers: {}, aceitoEm: '', revisaoEm: '', adiadoAte: '', versao: 0 },
-  nutri: { answers: {}, calculadoEm: '', seed: 0 },
+  nutri: { answers: {}, calculadoEm: '', seed: 0, emCasa: [], soCasa: false },
   body: [],
+  // Treinador de corrida (logic/corrida.js): entrevista e plano aceito; runs = corridas registradas
+  run: { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [] },
+  runs: [],
+  dores: [], // dores contadas ao Treinador (logic/dor.js); valem para musculação e corrida
+  sono: sonoPadrao(), // meta de sono e noites registradas (logic/sono.js)
   // objetivosOk: par "treino|alimentação" que o usuário escolheu manter diferente (logic/objetivos.js)
-  ui: { onboarded: false, installDismissedAt: '', backupEm: '', objetivosOk: '' },
+  // backupAdiadoEm: quando a pessoa tocou em "Depois" no lembrete de backup da tela inicial
+  ui: { onboarded: false, installDismissedAt: '', backupEm: '', backupAdiadoEm: '', objetivosOk: '' },
 });
 
 export let state = defaults();
 const subs = new Set();
 let db = null;
 let dbOk = true;        // falso se a leitura do banco falhou: não gravamos por cima de dados que não conseguimos ler
+let comBase = true;     // falso quando o app abriu vazio SEM conseguir ler o banco: o que for gravado assim não pode vencer o banco depois
+const LS_MARCA = 'fitcore-tem-dados'; // marca de que este aparelho já gravou dados no banco (ver load)
+const temMarca = () => { try { return localStorage.getItem(LS_MARCA) === '1'; } catch { return false; } };
+const porMarca = () => { try { localStorage.setItem(LS_MARCA, '1'); } catch { /* ignore */ } };
+export const armazenamentoOk = () => dbOk;
 let rev = 0;            // número da última gravação conhecida (para detectar outra aba/janela gravando)
 let saveT = 0;
 let dirty = false;
@@ -107,8 +121,10 @@ function cleanSession(s, isCurrent) {
     // cronômetro de exercício por tempo em andamento: série j do item i, fim (ms) e duração (s)
     const c = isObj(s.cron) ? s.cron : null;
     const dentro = (v, min, max) => typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
-    out.cron = c && Number.isInteger(c.i) && Number.isInteger(c.j) && out.itens[c.i] && out.itens[c.i].sets[c.j] && dentro(c.end, 1, 4e12) && dentro(c.total, 1, 36000)
-      ? { i: c.i, j: c.j, end: c.end, total: c.total } : null;
+    // `ex` confere que o item i ainda é o exercício cronometrado (a ordem pode ter mudado); série já feita não tem cronômetro
+    out.cron = c && Number.isInteger(c.i) && Number.isInteger(c.j) && out.itens[c.i] && out.itens[c.i].sets[c.j] && !out.itens[c.i].sets[c.j].ok
+      && out.itens[c.i].ex === c.ex && dentro(c.end, 1, 4e12) && dentro(c.total, 1, 36000)
+      ? { i: c.i, j: c.j, end: c.end, total: c.total, ex: c.ex } : null;
   }
   else if (!out.fim || Date.parse(out.fim) < Date.parse(inicio)) return null;
   // treino já finalizado: só as séries concluídas fazem parte do histórico (um arquivo com séries vazias não incha os dados)
@@ -161,18 +177,25 @@ export function sanitize(raw) {
   d.plans = arr(raw.plans, MAX_PLANOS, cleanPlan).filter((p) => (idsPlano.has(p.id) ? false : idsPlano.add(p.id)));
   d.activePlan = typeof raw.activePlan === 'string' && idsPlano.has(raw.activePlan) ? raw.activePlan : (d.plans[0] ? d.plans[0].id : '');
   const idsSessao = new Set();
-  d.sessions = arr(raw.sessions, 5000, (x) => cleanSession(x, false));
-  for (const x of d.sessions) x.id = unico(x.id, idsSessao, 's');
+  // lê um pouco além do limite, ordena e fica com os 5.000 treinos MAIS RECENTES (num arquivo fora de ordem, cortar antes
+  // de ordenar jogaria fora os mais novos)
+  d.sessions = arr(raw.sessions, 20000, (x) => cleanSession(x, false));
   d.sessions.sort((a, b) => Date.parse(a.inicio) - Date.parse(b.inicio));
+  if (d.sessions.length > 5000) d.sessions = d.sessions.slice(-5000);
+  for (const x of d.sessions) x.id = unico(x.id, idsSessao, 's');
   d.current = raw.current ? cleanSession(raw.current, true) : null;
   const t = isObj(raw.trainer) ? raw.trainer : {};
   d.trainer = { answers: cleanAnswers(t.answers, P_TREINO), aceitoEm: iso(t.aceitoEm), revisaoEm: iso(t.revisaoEm), adiadoAte: iso(t.adiadoAte), versao: Math.round(num(t.versao, 0, 9999, 0)) };
   const n = isObj(raw.nutri) ? raw.nutri : {};
-  d.nutri = { answers: cleanAnswers(n.answers, P_NUTRI), calculadoEm: iso(n.calculadoEm), seed: Math.round(num(n.seed, 0, 1e6, 0)) };
+  d.nutri = { answers: cleanAnswers(n.answers, P_NUTRI), calculadoEm: iso(n.calculadoEm), seed: Math.round(num(n.seed, 0, 1e6, 0)), emCasa: limparEmCasa(n.emCasa), soCasa: n.soCasa === true };
   const dias = new Set();
   d.body = arr(raw.body, 3000, cleanBody).filter((b) => (dias.has(b.data) ? false : dias.add(b.data))).sort((a, b) => (a.data < b.data ? -1 : 1));
+  d.dores = limparDores(raw.dores);
+  d.sono = limparSono(raw.sono);
+  d.run = limparCorrida(raw.run);
+  d.runs = limparRegistros(raw.runs); // até 3000 registros, sem id repetido
   const u = isObj(raw.ui) ? raw.ui : {};
-  d.ui = { onboarded: bool(u.onboarded, false), installDismissedAt: iso(u.installDismissedAt), backupEm: iso(u.backupEm), objetivosOk: parValido(u.objetivosOk) ? u.objetivosOk : '' };
+  d.ui = { onboarded: bool(u.onboarded, false), installDismissedAt: iso(u.installDismissedAt), backupEm: iso(u.backupEm), backupAdiadoEm: iso(u.backupAdiadoEm), objetivosOk: parValido(u.objetivosOk) ? u.objetivosOk : '' };
   return d;
 }
 
@@ -276,7 +299,9 @@ export async function load() {
   const daReserva = lerReserva();
   // O banco não respondeu e não há reserva: abrir "vazio" faria o usuário achar que perdeu tudo e, pior,
   // gravar por cima dos dados reais depois. Melhor avisar e deixar tentar de novo.
-  if (!dbOk && !daReserva && motivoBanco === 'tempo') throw new Error('banco indisponível');
+  // Vale também quando o banco deu erro neste aparelho que já tinha dados gravados nele (marca): não é aparelho novo.
+  if (!dbOk && !daReserva && (motivoBanco === 'tempo' || temMarca())) throw new Error('banco indisponível');
+  if (doBanco) porMarca();
   // Usa a cópia mais nova. A reserva só vence o banco se foi gravada com o banco funcionando
   // (última gravação falhou ou ficou pendente); uma reserva feita "sem banco" nunca apaga o que está no banco.
   const reservaVale = daReserva && !(daReserva.semBanco && doBanco);
@@ -284,6 +309,9 @@ export async function load() {
   if (daReserva && !reservaVale) { try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ } }
   state = sanitize(reg ? reg.dados : undefined);
   rev = reg ? reg.rev : 0;
+  // Há base confiável quando o banco respondeu ou quando os dados vieram de uma reserva feita a partir de dados reais.
+  // Só o caso "abriu vazio sem banco" (ou continuou uma reserva assim) fica marcado como sem base.
+  comBase = dbOk || (!!reg && !(reg === daReserva && daReserva.semBanco));
   if (reg && reg === daReserva && dbOk) { dirty = true; flush(); } // devolve ao banco o que só estava na reserva
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch { /* ignore */ }
   window.addEventListener('pagehide', () => { guardarReserva(); flush(); });
@@ -329,6 +357,7 @@ async function gravar() {
   const r = dbOk ? await idbPutSeAtual(registro, rev) : 'erro';
   if (r === 'ok') {
     rev = registro.rev;
+    porMarca();
     // a reserva só sai quando não há mais nada pendente (uma alteração feita durante a gravação ainda depende dela)
     if (!dirty) { try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ } }
     try { if (canal) canal.postMessage({ rev }); } catch { /* ignore */ }
@@ -341,7 +370,8 @@ async function gravar() {
     if (aoMudarFora) aoMudarFora('conflito');
     return;
   }
-  try { localStorage.setItem(LS_KEY, JSON.stringify({ ...registro, semBanco: !dbOk })); rev = registro.rev; } catch {
+  // sem banco: a reserva guarda a alteração. Se a sessão partiu de dados reais (comBase), ela vence o banco na próxima abertura
+  try { localStorage.setItem(LS_KEY, JSON.stringify({ ...registro, semBanco: !dbOk && !comBase })); rev = registro.rev; } catch {
     dirty = true; // nada foi gravado: tenta de novo na próxima alteração e avisa
     if (aoFalhar) aoFalhar();
   }
@@ -376,14 +406,15 @@ export function readBackup(text) {
   dados.current = null;
   const bruto = Array.isArray(parsed.dados.sessions) ? parsed.dados.sessions.length : 0;
   if (JSON.stringify(dados).length > MAX_ESTADO) throw new Error('Arquivo grande demais ou inválido.');
-  return { dados, resumo: { treinos: dados.sessions.length, planos: dados.plans.length, pesos: dados.body.length, exportadoEm: iso(parsed.exportadoEm), descartados: Math.max(0, bruto - dados.sessions.length) } };
+  return { dados, resumo: { treinos: dados.sessions.length, planos: dados.plans.length, pesos: dados.body.length, corridas: dados.runs.length, dores: dados.dores.length, noites: dados.sono.registros.length, exportadoEm: iso(parsed.exportadoEm), descartados: Math.max(0, bruto - dados.sessions.length) } };
 }
 export async function applyBackup(dados) {
   // guarda o estado atual para permitir "desfazer"
-  await idbPut(KEY_PREV, { salvoEm: new Date().toISOString(), dados: JSON.parse(JSON.stringify(state)) });
+  const guardou = await idbPut(KEY_PREV, { salvoEm: new Date().toISOString(), dados: JSON.parse(JSON.stringify(state)) });
   state = dados;
   save();
   avisar();
+  return guardou; // falso: não foi possível guardar os dados anteriores (não haverá "desfazer")
 }
 export function importData(text) {
   const { dados, resumo } = readBackup(text);
@@ -401,8 +432,7 @@ export async function previousInfo() {
 export async function restorePrevious() {
   const r = await idbGet(KEY_PREV);
   if (!r.ok || !isObj(r.value) || !isObj(r.value.dados)) return false;
-  state = sanitize(r.value.dados);
-  state.current = null;
+  state = sanitize(r.value.dados); // inclui o treino que estava em andamento na hora da restauração
   await idbDelete(KEY_PREV);
   save();
   avisar();
@@ -413,8 +443,15 @@ export async function resetAll() {
   await idbDelete(KEY_PREV);
   dirty = true;
   await flush();
-  try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
+  // Confere se o estado vazio chegou mesmo ao banco. Se não chegou, fica uma reserva vazia que vence o banco na próxima
+  // abertura (senão os dados "apagados" voltariam). Devolve falso se nem isso foi possível.
+  let ok = false;
+  if (dbOk) { const r = await idbGet(KEY); const reg = r.ok ? desembrulha(r.value) : null; ok = !!reg && reg.rev === rev; }
+  if (ok) { try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ } } else {
+    try { rev += 1; localStorage.setItem(LS_KEY, JSON.stringify({ rev, salvoEm: new Date().toISOString(), dados: state, semBanco: false })); ok = true; } catch { ok = false; }
+  }
   avisar();
+  return ok;
 }
 
 // ---------- consultas comuns ----------

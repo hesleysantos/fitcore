@@ -280,10 +280,10 @@ test('volta, musculação (regra FIT): volume de até 30 por grupo muscular e de
   let s = seriesNaVolta(peito, 0);
   assert.ok(irv(peito, s) <= IRV_MAX && s.every((n) => n >= 1) && s[0] <= 3 && s[1] <= 3, s.join());
   assert.ok(s[0] + s[1] < 6, 'ficou com menos séries');
-  // com a carga já reduzida, o corte de séries é menor ou igual
-  const s2 = seriesNaVolta(peito, 0.5);
-  assert.ok(s2[0] + s2[1] >= s[0] + s[1]);
-  assert.ok(irv(peito, s2, 0.5) <= IRV_MAX);
+  // a carga reduzida na volta não entra na conta: quem ficou mais tempo parado nunca faz mais séries
+  assert.deepEqual(seriesNaVolta(peito, 0.5), s);
+  const tresDePeito = [{ ex: 'supino-reto-barra', series: 3, reps: '8-12' }, { ex: 'supino-inclinado-halteres', series: 3, reps: '8-12' }, { ex: 'supino-maquina', series: 3, reps: '8-12' }];
+  assert.ok(seriesNaVolta(tresDePeito).reduce((a, b) => a + b, 0) < 9, 'três exercícios do mesmo grupo sempre perdem séries');
   // um exercício só, dentro do teto: nada muda
   assert.deepEqual(seriesNaVolta([{ ex: 'supino-reto-barra', series: 3, reps: '8-12' }], 0), [3]);
   // grupos diferentes não se somam; exercício por tempo e cardio não entram na conta
@@ -340,17 +340,84 @@ test('volta, cardio (regra 50/30/20/10): metade do tempo na 1ª semana e 30% a m
 test('treino em andamento: o cronômetro do exercício e o tempo parado são gravados e validados', () => {
   const cur = (extra) => ({ id: 's1', planId: '', diaId: '', nome: 'T', inicio: iso(AGORA), fim: '', nota: '', restEnd: 0, restTotal: 0, itens: [{ ex: 'prancha-frontal', alvo: '30-60', descanso: 45, sets: [{ kg: null, reps: null, seg: 30, ok: false }, { kg: null, reps: null, seg: 30, ok: false }] }], ...extra });
   const limpo = (extra) => store.sanitize({ current: cur(extra) }).current;
-  assert.deepEqual(limpo({ cron: { i: 0, j: 1, end: AGORA + 20000, total: 30 } }).cron, { i: 0, j: 1, end: AGORA + 20000, total: 30 });
+  assert.deepEqual(limpo({ cron: { i: 0, j: 1, end: AGORA + 20000, total: 30, ex: 'prancha-frontal' } }).cron, { i: 0, j: 1, end: AGORA + 20000, total: 30, ex: 'prancha-frontal' });
+  // o cronômetro só vale se o item daquela posição ainda é o mesmo exercício (a ordem pode ter mudado, o exercício pode ter saído)
+  assert.equal(limpo({ cron: { i: 0, j: 1, end: AGORA + 20000, total: 30, ex: 'supino-reto-barra' } }).cron, null, 'outro exercício na posição');
+  assert.equal(limpo({ cron: { i: 0, j: 1, end: AGORA + 20000, total: 30 } }).cron, null, 'sem o exercício gravado');
   assert.equal(limpo({}).cron, null);
-  assert.equal(limpo({ cron: { i: 3, j: 0, end: AGORA, total: 30 } }).cron, null, 'exercício inexistente');
-  assert.equal(limpo({ cron: { i: 0, j: 7, end: AGORA, total: 30 } }).cron, null, 'série inexistente');
-  assert.equal(limpo({ cron: { i: 0, j: 0, end: 'amanhã', total: 30 } }).cron, null);
-  assert.equal(limpo({ cron: { i: 0, j: 0, end: AGORA, total: 0 } }).cron, null);
+  assert.equal(limpo({ cron: { i: 3, j: 0, end: AGORA, total: 30, ex: 'prancha-frontal' } }).cron, null, 'exercício inexistente');
+  assert.equal(limpo({ cron: { i: 0, j: 7, end: AGORA, total: 30, ex: 'prancha-frontal' } }).cron, null, 'série inexistente');
+  assert.equal(limpo({ cron: { i: 0, j: 0, end: 'amanhã', total: 30, ex: 'prancha-frontal' } }).cron, null);
+  assert.equal(limpo({ cron: { i: 0, j: 0, end: AGORA, total: 0, ex: 'prancha-frontal' } }).cron, null);
   assert.equal(limpo({ cron: 'x' }).cron, null);
-  assert.equal(limpo({ cron: { i: -1, j: 0, end: AGORA, total: 30 } }).cron, null);
+  assert.equal(limpo({ cron: { i: -1, j: 0, end: AGORA, total: 30, ex: 'prancha-frontal' } }).cron, null);
   assert.equal(limpo({ cron: { i: 0.5, j: 0, end: AGORA, total: 30 } }).cron, null);
   assert.equal(limpo({ volta: 45 }).volta, 45);
   assert.equal(limpo({ volta: -3 }).volta, 0);
   assert.equal(limpo({ volta: '45' }).volta, 0);
   assert.equal(limpo({}).volta, 0);
+});
+
+test('sugestão de carga: aquecimento e pirâmide não travam a subida; a redução olha a maioria das séries', () => {
+  const com = (...sessoes) => store.update((s) => { s.sessions = sessoes; });
+  // série de aquecimento mais leve antes das séries de trabalho no topo, por dois treinos: a carga sobe
+  com(sess(4, [[40, 12], [60, 12], [60, 12], [60, 12]]), sess(2, [[40, 12], [60, 12], [60, 12], [60, 12]]));
+  let g = sugestao(EX, '8-12', 3);
+  assert.equal(g.kg, 62.5); assert.match(g.texto, /suba para 62,5 kg/);
+  // pirâmide 55/57,5/60 no topo: conta como topo (as séries com 90% ou mais da carga)
+  com(sess(4, [[55, 12], [57.5, 12], [60, 12]]), sess(2, [[55, 12], [57.5, 12], [60, 12]]));
+  assert.equal(sugestao(EX, '8-12', 3).kg, 62.5);
+  // só uma série de trabalho no topo não basta (o resto foi aquecimento)
+  com(sess(4, [[20, 12], [30, 12], [60, 12]]), sess(2, [[20, 12], [30, 12], [60, 12]]));
+  assert.equal(sugestao(EX, '8-12', 3).kg, 60);
+  // uma série de trabalho abaixo do topo: mantém
+  com(sess(4, tres(60, 12)), sess(2, [[40, 12], [60, 12], [60, 10], [60, 12]]));
+  g = sugestao(EX, '8-12', 3);
+  assert.equal(g.kg, 60); assert.match(g.texto, /Mantenha a carga/);
+  // treino mais leve inteiro na vez anterior não vale como "topo" da carga de hoje
+  com(sess(4, tres(55, 12)), sess(2, tres(60, 12)));
+  assert.equal(sugestao(EX, '8-12', 3).kg, 60);
+  // redução: só a primeira série abaixo do mínimo não reduz; a maioria abaixo, por dois treinos, reduz
+  com(sess(4, [[60, 7], [60, 9], [60, 9]]), sess(2, [[60, 7], [60, 10], [60, 10]]));
+  assert.doesNotMatch(sugestao(EX, '8-12', 3).texto, /Reduza/);
+  com(sess(4, [[60, 8], [60, 6], [60, 5]]), sess(2, [[60, 8], [60, 6], [60, 5]]));
+  g = sugestao(EX, '8-12', 3);
+  assert.match(g.texto, /Reduza/); assert.ok(g.kg < 60 && g.kg >= 54);
+  // máquina com ajuda: a série que vale é a de MENOR ajuda
+  const GR = 'barra-fixa-assistida-graviton';
+  com(sess(2, [[30, 12], [20, 12], [10, 12]], GR));
+  g = sugestao(GR, '8-12', 3);
+  assert.equal(g.kg, 10, 'mantém a menor ajuda'); assert.match(g.texto, /Mantenha a ajuda/);
+  com(sess(2, [[20, 12], [20, 12], [20, 12]], GR));
+  g = sugestao(GR, '8-12', 3);
+  assert.ok(g.kg < 20); assert.match(g.texto, /reduza a ajuda/);
+  // séries sem repetições registradas não entram na conta
+  com(sess(2, [[60, 12], [60, 12], [80, 0]]));
+  assert.equal(sugestao(EX, '8-12', 3).kg, 60);
+});
+
+test('volta: pausa antiga já superada não corta a carga; 14 dias de calendário contam como pausa', () => {
+  // supino há 90 dias, 30 dias parado, depois 60 dias treinando outra coisa dia sim, dia não
+  const outros = [];
+  for (let d = 58; d >= 2; d -= 2) outros.push(sess(d, tres(100, 10), 'agachamento-livre-barra'));
+  store.update((s) => { s.trainer = store.sanitize({}).trainer; s.sessions = [sess(90, tres(60, 10)), ...outros]; });
+  assert.equal(voltaDePausa(AGORA), null);
+  const sug = sugestao(EX, '8-12', 3);
+  const r = retomada(EX, sug, '8-12', AGORA);
+  assert.equal(r.kg, sug.kg, 'sem corte de carga');
+  assert.doesNotMatch(r.texto, /sem treinar/);
+  assert.match(r.texto, /^Faz 3 meses que você não faz este exercício/);
+  // na primeira sessão da volta (30 dias parado), o corte aparece
+  store.update((s) => { s.sessions = [sess(30, tres(60, 10))]; });
+  assert.match(retomada(EX, sugestao(EX, '8-12', 3), '8-12', AGORA).texto, /Você ficou 4 semanas sem treinar/);
+  // segunda à noite → segunda de manhã, duas semanas depois: 13 dias e meio no relógio, 14 dias no calendário
+  const noite = new Date(2026, 9, 26, 20, 0).getTime(), manha = new Date(2026, 10, 9, 7, 0).getTime();
+  assert.equal(maiorPausa([noite], noite, manha), 14);
+  const v = voltaEm([noite], manha);
+  assert.ok(v && v.dias === 14 && v.semana === 1);
+  assert.equal(voltaEm([noite], new Date(2026, 10, 8, 23, 0).getTime()), null, '13 dias ainda não é pausa');
+  // textos no singular e sem "reduzir" para o mesmo valor
+  store.update((s) => { s.sessions = [sess(30, [[null, 1], [null, 1]], 'barra-fixa-pronada')]; });
+  const t = retomada('barra-fixa-pronada', sugestao('barra-fixa-pronada', '6-10', 2), '6-10', AGORA).texto;
+  assert.doesNotMatch(t, /1 repetições/);
 });

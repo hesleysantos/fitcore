@@ -7,7 +7,7 @@ import { juntasEm, renderFrame } from '../www/js/anim/rig.js';
 import { pegadasLado, pegadasFrente } from '../www/js/anim/maos.js';
 
 const pg = (id, t) => { const anim = animFor(id); const { J, view } = juntasEm(anim, t); return view === 'side' ? pegadasLado(anim, J) : pegadasFrente(anim, J); };
-const MODOS = new Set(['aberta', 'chao', 'eixo', 'punho', 'solta']);
+const MODOS = new Set(['aberta', 'chao', 'eixo', 'punho', 'solta', 'oculta']);
 
 test('mãos: toda animação tem uma pegada válida em todos os instantes, e o desenho não quebra', () => {
   for (const ex of EXERCICIOS) {
@@ -44,11 +44,36 @@ test('mãos: apoiadas no chão, no banco e na parede ficam espalmadas', () => {
 
 test('mãos: fecham os dedos por cima do cabo que seguram', () => {
   // barras vistas de frente ou de costas
-  for (const id of ['barra-fixa-pronada', 'desenvolvimento-halteres-sentado', 'agachamento-sumo-kettlebell', 'remada-alta-polia', 'puxada-frente-aberta']) {
+  for (const id of ['barra-fixa-pronada', 'barra-fixa-supinada', 'desenvolvimento-halteres-sentado', 'agachamento-sumo-kettlebell', 'remada-alta-polia', 'encolhimento-barra']) {
     const g = pg(id, 0);
     assert.equal(g.R.m, 'eixo', id); assert.equal(g.L.m, 'eixo', id);
   }
+  // de que lado da mão se vê: pendurado de costas na pegada pronada aparece o dorso (a mão cobre a barra, nós dos dedos por cima);
+  // na supinada aparece a palma (dedos dando a volta na barra, pontas voltadas para o punho)
+  assert.equal(pg('barra-fixa-pronada', 0).R.face, 'dorso');
+  assert.equal(pg('suspensao-barra-fixa-dead-hang', 0).L.face, 'dorso');
+  assert.equal(pg('barra-fixa-supinada', 0).R.face, 'palma');
+  // de frente: empurrando acima da cabeça vê-se a palma; com a barra pendurada à frente das coxas, o dorso
+  assert.equal(pg('desenvolvimento-halteres-sentado', 1).R.face, 'palma');
+  assert.equal(pg('encolhimento-barra', 0).R.face, 'dorso');
+  // polegares: para o meio do corpo na pronada, para fora na supinada
+  assert.equal(pg('barra-fixa-pronada', 0).R.pol, -1); assert.equal(pg('barra-fixa-pronada', 0).L.pol, 1);
+  assert.equal(pg('barra-fixa-supinada', 0).R.pol, 1);
+  // pegada neutra em pegadores curtos e barra vista pela ponta: punho fechado
+  assert.equal(pg('barra-fixa-neutra', 0).R.m, 'punho');
+  assert.equal(pg('puxada-frente-aberta', 0).N.m, 'punho');
+  // rosca de punho: palma para cima na normal e para baixo na inversa
+  assert.equal(pg('rosca-punho-barra', 0).N.pal, 1);
+  assert.equal(pg('rosca-punho-inversa-barra', 0).N.pal, -1);
+  // rosca simultânea de frente: palma à vista embaixo (palmas para a frente) e dorso no alto
+  assert.equal(pg('rosca-simultanea-halteres', 0).R.face, 'palma');
+  assert.equal(pg('rosca-simultanea-halteres', 1).R.face, 'dorso');
+  // de costas com os braços à frente do corpo, a mão fica escondida até passar da linha do ombro
+  assert.equal(pg('crucifixo-inverso-polia', 0).R.m, 'oculta');
+  assert.equal(pg('crucifixo-inverso-polia', 1).R.m, 'punho');
   // halter e kettlebell de lado, barras paralelas e hastes em pé
+  // halter de lado (martelo): a mão de cá mostra o dorso
+  assert.equal(pg('rosca-martelo-halteres', 0).N.face, 'dorso');
   for (const id of ['rosca-martelo-halteres', 'kettlebell-swing', 'mergulho-paralelas-triceps', 'mergulho-assistido-graviton', 'empurrar-treno']) {
     for (const t of [0, 1]) assert.equal(pg(id, t).N.m, 'eixo', `${id} t=${t}`);
   }

@@ -5,10 +5,12 @@ import { refresh, replace } from '../router.js';
 import { EXERCICIOS } from '../data/exercises.js';
 import { EQUIPAMENTOS, CATEGORIAS_EQUIP } from '../data/equipment.js';
 import { REFS } from '../data/knowledge.js';
-import { isNativeApp, nativeCall } from '../device.js';
+import { REFS_CORRIDA } from '../data/corrida.js';
+import { REFS_SONO } from '../data/sono.js';
+import { isNativeApp, nativeCall, cancelarAviso } from '../device.js';
 import { canSuggestInstall, openInstall } from '../install.js';
 
-export const APP_VERSAO = '1.0.0';
+export const APP_VERSAO = '1.1.0';
 
 // ---------- Minha academia ----------
 export function gymView() {
@@ -91,21 +93,23 @@ function importar() {
     let lido;
     try { lido = readBackup(text); } catch (e) { toast(e.message || 'Não foi possível ler o backup.'); return; }
     const r = lido.resumo;
-    const partes = [`Este backup tem ${plural(r.treinos, 'treino', 'treinos')} no histórico e ${plural(r.planos, 'plano', 'planos')}${r.exportadoEm ? `, feito em ${fmtDate(r.exportadoEm, true)}` : ''}.`,
-      `Hoje este aparelho tem ${plural(state.sessions.length, 'treino', 'treinos')} e ${plural(state.plans.length, 'plano', 'planos')}, que serão substituídos.`];
+    const partes = [`Este backup tem ${plural(r.treinos, 'treino', 'treinos')} no histórico, ${plural(r.corridas || 0, 'corrida', 'corridas')}, ${plural(r.noites || 0, 'noite de sono', 'noites de sono')} e ${plural(r.planos, 'plano', 'planos')}${r.exportadoEm ? `, feito em ${fmtDate(r.exportadoEm, true)}` : ''}.`,
+      `Hoje este aparelho tem ${plural(state.sessions.length, 'treino', 'treinos')}, ${plural(state.runs.length, 'corrida', 'corridas')} e ${plural(state.plans.length, 'plano', 'planos')}, que serão substituídos.`];
     if (state.current) partes.push('O treino em andamento será descartado.');
     if (r.descartados) partes.push(`${plural(r.descartados, 'registro inválido foi ignorado', 'registros inválidos foram ignorados')}.`);
     partes.push('Se mudar de ideia, use “Desfazer a última restauração” em Ajustes.');
     const ok = await confirmSheet({ title: 'Restaurar este backup?', text: partes.join(' '), okLabel: 'Restaurar', danger: true });
     if (!ok) return;
-    await applyBackup(lido.dados);
+    cancelarAviso(); // um descanso em contagem no treino descartado não deve tocar depois
+    const guardou = await applyBackup(lido.dados);
     sh.close();
-    toast(`Backup restaurado: ${plural(r.treinos, 'treino', 'treinos')} no histórico.`);
+    toast(`Backup restaurado: ${plural(r.treinos, 'treino', 'treinos')} no histórico.${guardou ? '' : ' Não foi possível guardar os dados anteriores para desfazer.'}`);
     replace('');
   };
   file.addEventListener('change', () => {
     const f = file.files && file.files[0];
     if (!f) return;
+    file.value = ''; // permite escolher o mesmo arquivo de novo depois de um erro
     if (f.size > 24 * 1024 * 1024) { toast('Arquivo grande demais para ser um backup do FitCore.'); return; }
     const rd = new FileReader();
     rd.onload = () => aplicar(String(rd.result || ''));
@@ -158,9 +162,10 @@ export function settingsView() {
     if (!ok) return;
     const ok2 = await confirmSheet({ title: 'Tem certeza?', text: 'Esta é a última confirmação. Se quiser guardar os dados, cancele e faça um backup antes.', okLabel: 'Sim, apagar', danger: true });
     if (!ok2) return;
-    await resetAll();
+    cancelarAviso();
+    const apagou = await resetAll();
     if (isNativeApp()) nativeCall('Aparelho', 'limparBackups', {}).catch(() => {});
-    toast('Dados apagados');
+    toast(apagou ? 'Dados apagados' : 'Não foi possível apagar tudo: o armazenamento do aparelho não respondeu. Feche o aplicativo, abra de novo e repita.');
     replace('');
   }, 'block plain danger', 'trash'));
   return { title: 'Ajustes', back: '', body };
@@ -178,15 +183,17 @@ export function aboutView() {
     'O “Treinador” e a “Nutricionista” do aplicativo são assistentes virtuais que seguem regras fixas. Não são profissionais registrados.',
   ]));
   body.push(bloco('Privacidade e seus dados', [
-    'Tudo o que você registra (treinos, peso, respostas ao Treinador e à Nutricionista) fica guardado somente neste aparelho. O aplicativo não tem cadastro, não envia dados para servidores, não usa anúncios, rastreadores nem serviços de terceiros.',
+    'Tudo o que você registra (treinos, corridas, peso, dores, alimentos de casa e respostas ao Treinador e à Nutricionista) fica guardado somente neste aparelho. O aplicativo não tem cadastro, não envia dados para servidores, não usa anúncios, rastreadores nem serviços de terceiros.',
     'Como os dados não saem do aparelho, só você tem acesso a eles. O arquivo de backup, quando você decide criá-lo, não tem senha e fica sob sua responsabilidade: guarde-o em lugar seguro, pois contém informações de saúde. No Android, a cópia temporária usada para compartilhar o backup é apagada quando você faz um novo backup ou apaga os dados.',
     'Você pode apagar todos os dados a qualquer momento em Ajustes → Apagar todos os meus dados. Desinstalar o aplicativo ou limpar os dados do navegador também apaga tudo.',
     'O aplicativo funciona sem internet. Na versão aberta ou instalada pelo navegador (iPhone, Android ou computador), a conexão só é usada para baixar o próprio aplicativo e suas atualizações.',
-    'Permissão usada no Android: só vibração (aviso do fim do descanso). O aplicativo Android nem sequer pede acesso à internet: o próprio sistema impede qualquer conexão. Nenhuma permissão de localização, câmera, microfone, contatos ou arquivos.',
+    'Permissões usadas no Android: vibração e alarme na hora exata, as duas só para avisar o fim do descanso, mesmo com a tela apagada. O aplicativo Android nem sequer pede acesso à internet: o próprio sistema impede qualquer conexão. Nenhuma permissão de localização, câmera, microfone, contatos ou arquivos.',
   ]));
   const refs = h('div', { class: 'col gap-s' });
-  for (const k of Object.keys(REFS)) refs.appendChild(h('p', { class: 'ref', text: '• ' + REFS[k] }));
-  body.push(bloco(`Referências científicas (${Object.keys(REFS).length})`, [h('p', { class: 'small', text: 'As orientações do Treinador e da Nutricionista vêm destas publicações:' }), refs]));
+  // a mesma publicação pode estar nas duas listas: aparece uma vez só
+  const todasRefs = [...new Set([...Object.values(REFS), ...Object.values(REFS_CORRIDA), ...Object.values(REFS_SONO)])];
+  for (const t of todasRefs) refs.appendChild(h('p', { class: 'ref', text: '• ' + t }));
+  body.push(bloco(`Referências científicas (${todasRefs.length})`, [h('p', { class: 'small', text: 'As orientações do Treinador (musculação e corrida), da Nutricionista e da meta de sono vêm destas publicações:' }), refs]));
   body.push(bloco('De onde vem a técnica dos exercícios', [
     'A descrição de cada exercício (posição, passo a passo, respiração, erros comuns e músculos) foi conferida, página por página, em bibliotecas de exercícios e publicações abertas: ACE (American Council on Exercise), NASM, NSCA, artigos científicos de acesso aberto e, quando não havia página nessas fontes, guias de treinadores certificados.',
     'As páginas usadas aparecem no fim da tela de cada exercício, em "Fontes da técnica". Quando as fontes divergem, o aplicativo fica com a orientação mais conservadora.',

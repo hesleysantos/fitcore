@@ -1,10 +1,12 @@
 // Tela da Nutricionista virtual.
-import { h, btn, icon, note, sectionTitle, fmtInt, DIAS_LONGO } from '../ui.js';
+import { h, btn, chip, seg, sheet, icon, note, sectionTitle, toast, norm, fmtInt, dateKey, DIAS_LONGO } from '../ui.js';
 import { state, update, activePlan } from '../store.js';
 import { refresh } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
-import { FAQ_NUTRI } from '../data/knowledge.js';
-import { PERGUNTAS, ROTULO, respostasCompletas, calcular, cardapio, emVoltaDoTreino, imcFaixa } from '../logic/nutrition.js';
+import { FAQ_NUTRI, REFS } from '../data/knowledge.js';
+import { resumoParaNutricao } from '../logic/corrida.js';
+import { ALIMENTOS, CATEGORIAS_ALIMENTO, NOME_FAIXA } from '../data/foods.js';
+import { PERGUNTAS, ROTULO, respostasCompletas, calcular, cardapio, proximaSemente, limparEmCasa, USADOS_EM_CASA, orientacaoCorrida, faltaDeCarboidrato, emVoltaDoTreino, imcFaixa, suplementos, textosDoPeso } from '../logic/nutrition.js';
 import { interview, faqBlock, notaObjetivo, conferirObjetivos, cartaoObjetivos } from './coach.js';
 import { nutriPara } from '../logic/objetivos.js';
 
@@ -27,6 +29,73 @@ function acc(titulo, linhas) {
   return d;
 }
 const lista = (itens) => { const ul = h('ul'); for (const t of itens) ul.appendChild(h('li', { text: t })); return ul; };
+// faixa de preço de um alimento, bem discreta: $ barato, $$ médio, $$$ caro
+const cifroes = (faixa) => h('span', { class: 'tiny muted nowrap', role: 'img', 'aria-label': 'preço ' + NOME_FAIXA[faixa], title: 'Preço ' + NOME_FAIXA[faixa], text: ' ' + '$'.repeat(faixa) });
+const chipPequeno = (texto, ligado, fn) => { const c = chip(texto, ligado, fn); c.classList.add('sm'); return c; };
+
+// "O que eu tenho em casa": a pessoa marca os alimentos por grupo (com busca); a lista fica salva no aparelho.
+function escolherEmCasa() {
+  const marcados = new Set(limparEmCasa(state.nutri.emCasa));
+  const grupos = h('div', { class: 'col gap-s' });
+  const contagem = h('span', { class: 'small muted grow' });
+  const conta = () => { contagem.textContent = marcados.size === 1 ? '1 alimento marcado' : marcados.size + ' alimentos marcados'; };
+  const desenha = (termo) => {
+    while (grupos.firstChild) grupos.removeChild(grupos.firstChild);
+    const t = norm(termo).trim();
+    for (const [cat, nomeCat] of Object.entries(CATEGORIAS_ALIMENTO)) {
+      const itens = ALIMENTOS.filter((f) => f.cat === cat && (!t || norm(f.nome).includes(t)));
+      if (!itens.length) continue;
+      const resumo = h('summary');
+      const titulo = () => { resumo.textContent = nomeCat + ' · ' + itens.filter((f) => marcados.has(f.id)).length + ' de ' + itens.length; };
+      const caixa = h('div', { class: 'chips wrap' });
+      for (const f of itens) {
+        const c = chipPequeno(f.nome, marcados.has(f.id), () => {
+          if (marcados.has(f.id)) marcados.delete(f.id); else marcados.add(f.id);
+          const on = marcados.has(f.id);
+          c.classList.toggle('on', on); c.setAttribute('aria-pressed', on ? 'true' : 'false');
+          titulo(); conta();
+        });
+        c.title = f.nome + ' — preço ' + NOME_FAIXA[f.preco.faixa] + (USADOS_EM_CASA.has(f.id) ? '' : ' (não entra no cardápio)');
+        caixa.appendChild(c);
+      }
+      titulo();
+      // com busca, os grupos encontrados já vêm abertos
+      grupos.appendChild(h('details', { class: 'acc', open: !!t }, resumo, h('div', null, caixa)));
+    }
+    if (!grupos.firstChild) grupos.appendChild(h('p', { class: 'small muted', text: 'Nenhum alimento com esse nome.' }));
+  };
+  const busca = h('input', { class: 'input', type: 'search', placeholder: 'Buscar alimento', 'aria-label': 'Buscar alimento', autocomplete: 'off', maxlength: 40, onInput: (e) => desenha(e.target.value) });
+  const sh = sheet({
+    title: 'O que eu tenho em casa', full: true,
+    body: h('div', { class: 'col' },
+      h('p', { class: 'small muted', text: 'Marque o que você tem. O cardápio passa a usar só esses alimentos e avisa o que faltar. Temperos, doces e bebidas podem ser marcados, mas não entram na conta.' }),
+      h('div', { class: 'search' }, icon('search'), busca), grupos),
+    footer: [contagem,
+      btn('Limpar', () => { marcados.clear(); desenha(busca.value); conta(); }, 'ghost'),
+      btn('Salvar', () => { update((s) => { s.nutri.emCasa = limparEmCasa([...marcados]); s.nutri.soCasa = marcados.size > 0; s.nutri.seed = 0; }); sh.close(); refresh(); }, 'primary')],
+  });
+  desenha(''); conta();
+}
+
+// Único ponto de ligação com o plano de corrida: sem plano (ou se algo falhar), a Nutricionista funciona como antes.
+function resumoDaCorrida() {
+  try { return resumoParaNutricao(state, dateKey()); } catch { return null; }
+}
+// Alimentação para quem corre: o dia a dia, o treino longo e, com prova marcada, a semana e o dia da prova.
+function cartaoCorrida(r) {
+  const o = orientacaoCorrida(r, new Date());
+  if (!o) return [];
+  const out = [sectionTitle('Alimentação para a corrida')];
+  const card = h('div', { class: 'card col gap-s' });
+  for (const l of o.blocos[0].linhas) card.appendChild(h('p', { class: 'small', text: l }));
+  out.push(card);
+  if (o.prova) { const d = acc(o.prova.titulo, [lista(o.prova.linhas)]); d.open = o.prova.dias >= 0 && o.prova.dias <= 7; out.push(d); }
+  for (const b of o.blocos.slice(1)) out.push(acc(b.titulo, [lista(b.linhas)]));
+  const fontes = h('div', { class: 'col gap-s' });
+  for (const k of o.refs) if (REFS[k]) fontes.appendChild(h('p', { class: 'ref', text: '• ' + REFS[k] }));
+  out.push(acc('Fontes da orientação de corrida', [fontes]));
+  return out;
+}
 
 function treinoDeHoje() {
   const plan = activePlan();
@@ -39,12 +108,13 @@ function treinoDeHoje() {
 
 function resultado() {
   const a = state.nutri.answers;
-  const r = calcular(a);
+  const r = calcular(a, resumoDaCorrida());
   const body = [cabecalho(), cartaoObjetivos()].filter(Boolean);
   for (const av of r.avisos) body.push(note(av.tipo, av.texto));
 
   if (r.modo !== 'educativo') {
     const obj = r.objetivoCalc;
+    const peso = textosDoPeso(r);   // perda ou ganho por semana e o que fazer se o peso não mudar
     body.push(h('div', { class: 'card col' },
       h('div', { class: 'row between' }, h('h2', { text: 'Suas metas diárias' }), h('span', { class: 'badge acc', text: ROTULO.objetivo[obj] })),
       h('div', { class: 'stats' },
@@ -57,12 +127,15 @@ function resultado() {
         h('div', { class: 'row between' }, h('span', null, h('i', { class: 'dotc c' }), 'Carboidrato'), h('span', { class: 'bold', text: `${r.carb} g` })),
         h('div', { class: 'row between' }, h('span', null, h('i', { class: 'dotc g' }), 'Gordura'), h('span', { class: 'bold', text: `${r.gord} g` })),
         h('div', { class: 'row between' }, h('span', { text: 'Fibras' }), h('span', { class: 'bold', text: `pelo menos ${r.fibra} g` })),
+        h('div', { class: 'row between' }, h('span', { text: 'Água (bebidas + alimentos)' }), h('span', { class: 'bold', text: `${dec(r.agua)} L · ${dec(r.aguaBebidas)} L em bebidas` })),
         h('div', { class: 'row between' }, h('span', { text: 'Proteína por refeição' }), h('span', { class: 'bold', text: `${r.protRefeicao[0]} a ${r.protRefeicao[1]} g` }))),
-      r.ritmo ? h('p', { class: 'small', text: `Ritmo ${obj === 'emagrecer' ? 'saudável: perder' : 'esperado: ganhar'} de ${dec(r.ritmo[0])} a ${dec(r.ritmo[1])} kg por semana.` }) : null));
+      peso.ritmo ? h('p', { class: 'small', text: peso.ritmo }) : null));
     const linhas = [`Você gasta cerca de ${fmtInt(r.gasto)} kcal por dia (${fmtInt(r.tmb)} em repouso). A fórmula tem margem de erro de uns 10%: acompanhe o peso por 2 a 3 semanas e ajuste.`];
-    if (r.ritmo) linhas.push(obj === 'emagrecer'
-      ? 'Se estiver perdendo peso mais rápido que o ritmo saudável, coma um pouco mais. Se o peso não mudar em 3 semanas, reduza de 100 a 200 kcal, sem ficar abaixo de 1.200 kcal (mulheres) ou 1.500 kcal (homens).'
-      : 'Ganhar mais rápido que o ritmo esperado costuma ser gordura. Se o peso não subir em 3 semanas, aumente de 100 a 200 kcal.');
+    linhas.push(...peso.linhas);
+    linhas.push(`Água: os ${dec(r.agua)} L somam o que você bebe e a água da comida; cerca de ${dec(r.aguaBebidas)} L vêm de água e outras bebidas. No calor e nos dias de treino você precisa de mais: beba conforme a sede e observe a urina, que deve ficar clara.`);
+    linhas.push(r.imc > 25
+      ? 'Proteína e água são calculadas pelo peso que você teria com IMC 25: o peso acima disso é quase todo gordura e não aumenta essas necessidades.'
+      : 'Proteína: a meta por quilo depende do objetivo e de você treinar ou não. A partir dos 65 anos, nunca fica abaixo de 1,2 g por quilo.');
     linhas.push(`IMC: ${dec(r.imc)} (${imcFaixa(r.imc, r.idade)}). É só uma referência: não distingue músculo de gordura.`);
     body.push(acc('Entenda os números', linhas));
   } else {
@@ -88,25 +161,57 @@ function resultado() {
   }
   cardHoje.appendChild(h('div', { class: 'note info' }, icon('water'), h('div', { text: t.agua })));
   body.push(cardHoje);
+  body.push(...cartaoCorrida(r));
 
   // cardápio
-  const c = cardapio(r, state.nutri.seed || 0);
+  const semente = state.nutri.seed || 0;
+  const emCasa = limparEmCasa(state.nutri.emCasa);
+  const soCasa = state.nutri.soCasa === true && emCasa.length > 0;
+  const opcoes = { emCasa: soCasa ? emCasa : null };
+  const c = cardapio(r, semente, opcoes);
   if (c) {
-    body.push(sectionTitle('Um dia de exemplo', btn('Outra sugestão', () => { update((s) => { s.nutri.seed = ((s.nutri.seed || 0) + 1) % 1000; }); refresh(); }, 'sm', 'refresh')));
-    body.push(h('p', { class: 'small muted', text: 'Exemplo com comida comum, não uma dieta prescrita. Toque numa refeição para ver as quantidades.' }));
+    // "Outra sugestão" só troca a semente quando o dia seguinte tem alimentos diferentes; se não houver, avisa
+    const outra = () => {
+      const prox = proximaSemente(r, semente, opcoes);
+      if (prox == null) { toast(soCasa ? 'Com estes alimentos não há outra combinação. Marque mais itens em casa.' : 'Não há outra combinação com as suas restrições.'); return; }
+      update((s) => { s.nutri.seed = prox; }); refresh();
+    };
+    body.push(sectionTitle('Um dia de exemplo', btn('Outra sugestão', outra, 'sm', 'refresh')));
+    body.push(seg([['comum', 'Comida comum'], ['casa', 'O que tenho em casa']], soCasa ? 'casa' : 'comum', (v) => {
+      if (v === 'casa' && !emCasa.length) { escolherEmCasa(); return; }
+      update((s) => { s.nutri.soCasa = v === 'casa'; s.nutri.seed = 0; }); refresh();
+    }));
+    if (soCasa) {
+      body.push(h('div', { class: 'row between' },
+        h('span', { class: 'small muted grow', text: `Montado só com os ${emCasa.length} alimentos que você marcou.` }),
+        btn('Editar lista', escolherEmCasa, 'ghost sm', 'edit')));
+      // o que falta para o dia fechar, com a opção mais barata para completar
+      if (c.faltas.length) {
+        body.push(h('div', { class: 'note warn' }, icon('warn'), h('div', { class: 'col gap-s' },
+          h('div', { class: 'bold', text: c.faltas.length === 1 ? 'Falta um item para fechar o dia' : 'O que falta para fechar o dia' }),
+          lista(c.faltas.map((f) => f.texto + (f.sugestoes.length ? ' Mais barato: ' + f.sugestoes.map((s) => s.nome.split(' (')[0].toLowerCase()).join(' ou ') + '.' : ''))))));
+      }
+    } else {
+      const barato = r.preco === 'barato';
+      body.push(h('div', { class: 'row between' },
+        h('span', { class: 'tiny muted grow', text: 'Exemplo, não dieta prescrita. $ barato · $$ médio · $$$ caro: o preço varia com a região e a época.' }),
+        chipPequeno('Mais baratos', barato, () => { update((s) => { s.nutri.answers.preco = barato ? 'tanto_faz' : 'barato'; }); refresh(); })));
+    }
+    if (!c.refeicoes.length) body.push(h('p', { class: 'small muted', text: 'Com o que está marcado não dá para montar uma refeição. Marque mais alimentos.' }));
     for (const ref of c.refeicoes) {
       const inner = h('div');
-      for (const it of ref.itens) inner.appendChild(h('div', { class: 'kv' }, h('span', { text: it.nome }), h('span', { class: 'small muted', text: it.medida })));
+      for (const it of ref.itens) inner.appendChild(h('div', { class: 'kv' }, h('span', null, it.nome, cifroes(it.faixa)), h('span', { class: 'small muted', text: it.medida })));
       body.push(h('details', { class: 'acc refeicao' },
         h('summary', null, h('div', { class: 'grow' }, h('div', { text: ref.nome }), h('div', { class: 'tiny muted resumo', text: ref.itens.map((it) => it.nome.split(' (')[0].split(',')[0]).join(', ') })), h('span', { class: 'small muted nowrap', text: `${fmtInt(ref.kcal)} kcal · ${Math.round(ref.p)} g` })),
         inner));
     }
-    body.push(h('div', { class: 'card col gap-s' }, h('h3', { text: 'Total do dia de exemplo' }),
+    if (c.refeicoes.length) body.push(h('div', { class: 'card col gap-s' }, h('h3', { text: 'Total do dia de exemplo' }),
       h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Calorias' }), h('span', { text: `${fmtInt(c.kcal)} kcal (meta ${fmtInt(r.kcal)})` })),
       h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Proteína' }), h('span', { text: `${Math.round(c.p)} g (meta ${r.prot})` })),
-      h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Carboidrato' }), h('span', { text: `${Math.round(c.c)} g` })),
+      h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Carboidrato' }), h('span', { text: r.corrida ? `${Math.round(c.c)} g (meta ${r.carb})` : `${Math.round(c.c)} g` })),
       h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Gordura' }), h('span', { text: `${Math.round(c.g)} g` })),
       h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Fibras' }), h('span', { text: `${Math.round(c.fibra)} g` })),
+      faltaDeCarboidrato(r, c) ? h('p', { class: 'small', text: faltaDeCarboidrato(r, c) }) : null,
       h('p', { class: 'tiny muted', text: 'Valores das tabelas TACO, TBCA e USDA. Medidas caseiras aproximadas.' })));
   }
 
@@ -132,14 +237,11 @@ function resultado() {
       'Registre o peso na tela Evolução para ver a tendência.',
     ])]));
   }
+  const sup = suplementos(r);
   body.push(acc('Suplementos: o que a ciência diz', [
-    h('p', { text: 'Suplemento não é obrigatório. Os que têm boa evidência para quem treina são:' }),
-    lista([
-      'Creatina monoidratada: 3 a 5 g por dia, todos os dias. Melhora força e ganho de massa.',
-      'Cafeína: cerca de 3 mg por quilo de peso (até 200 mg por vez), 1 hora antes do treino, sem passar de 400 mg por dia. Evite à noite.',
-      'Whey protein: só uma forma prática de proteína; conta na meta do dia.',
-    ]),
-    h('div', { class: 'note warn' }, icon('warn'), h('div', { text: 'Não use sem orientação médica se você está grávida ou amamentando, tem menos de 18 anos, doença nos rins ou no fígado, pressão alta ou arritmia, ou usa remédios de uso contínuo. Este aplicativo não prescreve suplementos.' })),
+    h('p', { text: sup.intro }),
+    ...(sup.linhas.length ? [lista(sup.linhas)] : []),
+    h('div', { class: 'note warn' }, icon('warn'), h('div', { text: sup.aviso })),
     h('p', { class: 'ref', text: 'Fontes: posicionamentos da International Society of Sports Nutrition sobre creatina (2017), cafeína (2021) e proteína (2017); EFSA (2015).' }),
   ]));
   body.push(faqBlock(FAQ_NUTRI, 'Pergunte à Nutricionista', 'Ex.: proteína, jejum, pré-treino, creatina'));

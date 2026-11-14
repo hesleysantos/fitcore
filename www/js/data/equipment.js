@@ -54,6 +54,7 @@ export const EQUIPAMENTOS = {
   mergulho_maquina: { nome: 'Mergulho sentado máquina (seated dip)', cat: 'maquinas_sup', raro: true },
   encolhimento_maquina: { nome: 'Encolhimento máquina (shrug)', cat: 'maquinas_sup', raro: true },
   rotacao_tronco_maquina: { nome: 'Rotação de tronco máquina (rotary torso)', cat: 'maquinas_sup', raro: true },
+  remada_t_apoio: { nome: 'Remada cavalinho com apoio de peito (incline lever row)', cat: 'maquinas_sup' },
 
   // Máquinas — inferiores
   leg_press_45: { nome: 'Leg press 45°', cat: 'maquinas_inf' },
@@ -97,6 +98,7 @@ export const EQUIPAMENTOS = {
   bicicleta_reclinada: { nome: 'Bicicleta reclinada (horizontal)', cat: 'cardio', raro: true },
   esteira_curva: { nome: 'Esteira curva (sem motor)', cat: 'cardio', raro: true },
   simulador_esqui: { nome: 'Simulador de esqui (SkiErg)', cat: 'cardio', raro: true },
+  ergometro_braco: { nome: 'Ergômetro de braço (bicicleta de braço)', cat: 'cardio', raro: true },
 
   // Acessórios
   colchonete: { nome: 'Colchonete', cat: 'acessorios' },
@@ -108,4 +110,5 @@ export const EQUIPAMENTOS = {
   corda_pular: { nome: 'Corda de pular', cat: 'acessorios' },
   corda_naval: { nome: 'Corda naval', cat: 'acessorios' },
   treno: { nome: 'Trenó (sled)', cat: 'acessorios' },
+  rolo_punho: { nome: 'Rolo de punho (wrist roller)', cat: 'acessorios', raro: true },
 };

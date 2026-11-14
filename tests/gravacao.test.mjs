@@ -56,7 +56,7 @@ test('gravação: muitas alterações seguidas (como marcar séries durante o tr
   await espera(400);
   assert.equal(store.state.body.length, 41);
   assert.equal(noBanco().dados.body.length, 41, 'todas as alterações estão gravadas');
-  assert.equal(local.size, 0, 'sem cópia de reserva pendurada depois de gravar tudo');
+  assert.equal(local.has('fitcore.estado'), false, 'sem cópia de reserva pendurada depois de gravar tudo');
 });
 
 test('gravação: outra janela que grava dados mais novos continua sendo respeitada', async () => {
@@ -86,5 +86,5 @@ test('gravação: ao sair da tela com gravação pendente, a reserva guarda a ú
   await emCurso;
   await espera(300);
   assert.equal(noBanco().dados.settings.descanso, 90, 'se o app continua aberto, o banco também recebe');
-  assert.equal(local.size, 0, 'e a reserva é dispensada');
+  assert.equal(local.has('fitcore.estado'), false, 'e a reserva é dispensada');
 });

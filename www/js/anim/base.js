@@ -103,9 +103,11 @@ export const backPadF = { k: 'pad', a: [0, 24], b: [0, 62], th: 8.5, z: 'back' }
 export const tower = (x, top = 106, extra = {}) => ({ k: 'tower', x, top, ...extra });
 // estação de polia (vista lateral): coluna, carrinho da polia regulável na altura py (na face dir) e o cabo até a mão (ou "to").
 // A pilha sobe conforme a peça puxada se afasta da posição inicial.
-export function estacao(x, py, { top = 104, dir = -1, w = 9, to = 'hand', z, gain } = {}) {
+// entre: o cabo passa entre as pernas (polia baixa atrás da pessoa); ver caboEntreAsPernas em equip.js
+export function estacao(x, py, { top = 104, dir = -1, w = 9, to = 'hand', z, gain, entre } = {}) {
   const cabo = { k: 'cable', from: [x + dir * (w / 2 + 2.6), py], to };
   if (z) cabo.z = z;
+  if (entre) cabo.entre = true;
   const col = { k: 'tower', x, top, w, py, dir, trk: to };
   if (gain) col.gain = gain;
   return [col, cabo];

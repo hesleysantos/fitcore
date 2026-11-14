@@ -44,8 +44,10 @@ for (const ex of list) {
         // foco=mao (ou maoL, maoF): aproxima o desenho na mão, para conferir dedos e pegada
         if (foco) {
           const { J, chao, view } = juntasEm(anim, t);
-          const k = view === 'side' ? (foco === 'maoF' ? 'F' : 'N') : (foco === 'maoL' ? 'L' : 'R');
-          const p = J['hand' + k];
+          // foco=mao | maoF | maoL (mão de cá, de lá, esquerda) ou foco=pe | peF | peL (pé)
+          const outro = /F$|L$/.test(foco);
+          const k = view === 'side' ? (outro ? 'F' : 'N') : (outro ? 'L' : 'R');
+          const p = foco.startsWith('pe') ? J['an' + k] : J['hand' + k];
           const m = Number(q.get('raio')) || 13;
           svg.setAttribute('viewBox', `${p[0] - m} ${chao - p[1] - m} ${2 * m} ${2 * m}`);
         }

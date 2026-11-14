@@ -1,7 +1,8 @@
 // Animações de membros inferiores (quadríceps, posteriores, glúteos, adutores/abdutores, panturrilhas).
-import { L } from './rig.js';
+import { L, solveSide } from './rig.js';
 import { AK, H, X, SHY, D2R, CHAO, add, foot, frame, fromSh, shOf, ankleFromToe, stand, seated, SEAT_F, seatBoxF, backPadF, tower, estacao, POLIA_F } from './base.js';
 import { P } from './equip.js';
+import { came, torre, bracoDoRolo } from './pecas.js';
 
 const TRAP_ARM = { rel: [-3.2, 1.2], bend: 1, la: 0.62, lb: 0.6 };
 const norm = (v) => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; };
@@ -115,16 +116,21 @@ export function legPress({ horizontal = false, uni = false, calf = false } = {})
   if (horizontal) {
     const s = seated({ hx: 78, recl: 16 });
     const mk = (x) => ({ hip: s.hip, torso: s.torso, leg: { foot: [x, 31], footAng: 270 }, arm: { a: -8, b: 22 } });
+    let x0 = null;
     return {
       view: 'side', frames: [mk(108), mk(118)],
-      // leg press horizontal: cadeira, trilho baixo com o carro da plataforma e a torre da pilha na frente
+      // leg press horizontal: cadeira, trilho baixo com o carro da plataforma e a torre da pilha na frente; o cabo sai do
+      // carro, dá a volta na polia do começo do trilho e segue rente ao chão até a pilha
       equip: [
         ...s.equip,
         sapata(s.hip[0] + 15, 148),
         { k: 'frame', pts: [[99, CHAO], [99, 12], [147.5, 12]], w: 2, z: 'back' },
-        tower(152, 80, { trk: 'ankle', gain: 0.8 }),
         { k: 'fn', z: 'back', f: (o, J) => {
           const x = J.heelN[0] + 1.1;
+          if (x0 == null || x < x0) x0 = x;
+          o.line([x + 4, 9.2], [103, 9.2], 'fg-cable', 0.8);
+          P.polia(o, [103, 6.6], 2.6);
+          torre(o, { x: 152, top: 80, w: 9, dir: -1, sobe: (x - x0) * 0.9, de: [[103, 4]] });
           P.tubo(o, [[x + 1, 24], [x + 5, 12]], 1.6);
           o.line([x + 1, 39], [x + 11, 12.6], 'fg-eq', 1.3);
           o.line([x + 2, 12], [x + 13, 12], 'fg-eq', 3.2);
@@ -164,7 +170,7 @@ export function legPress({ horizontal = false, uni = false, calf = false } = {})
     o.line(add(add(c, d, 7), rr, 1), add(q, rr, 10), 'fg-eq', 1.4);
     P.chapa(o, c, d, 13, 1, 'fg-steel');
   } });
-  const arm = { a: -12, b: 28 };
+  const arm = { hand: [hip[0] - 0.5, hip[1] - 3.2] }; // mãos nos pegadores, um de cada lado do assento
   if (calf) {
     const toe = [110.4, 52.1];
     const mk = (fa) => ({ hip, torso, arm, leg: { foot: ankleFromToe(toe, fa), footAng: fa } });
@@ -184,17 +190,30 @@ function legMachineSeat(hx, hy, recl) {
   s.equip[0] = { k: 'pad', a: [hx - 6, hy - 8.3], b: [hx + 18, hy - 8.3] };
   return s;
 }
-const rollerFn = (side, dist = 4.6) => ({
-  k: 'fn', f: (o, J) => {
-    const d = norm([J.anN[0] - J.knN[0], J.anN[1] - J.knN[1]]);
-    const nf = [-d[1] * side, d[0] * side];
-    const p = add(add(J.anN, d, -2), nf, dist);
-    // braço articulado no eixo do joelho, com o rolo de espuma na ponta
-    P.tubo(o, [J.knN, p], 1.4);
-    P.eixo(o, J.knN, 1.7);
-    P.rolo(o, p, 2.9);
-  },
-});
+// Mecanismo da cadeira extensora e das flexoras. O eixo da máquina fica ao lado do joelho, preso à estrutura por um
+// suporte; nele giram o came (disco onde o cabo enrola) e o braço em L que leva o rolo até a canela. Do came, o cabo
+// corre por dentro do suporte (tubo de aço) e só aparece longe das pernas, no ponto "saida": dali vai até a torre,
+// sobe por fora e levanta a pilha. Assim o cabo nunca cruza a perna, que varre toda a região em volta do joelho.
+//   lado: +1 = rolo na frente da canela (extensão); -1 = rolo atrás, no tendão (flexão)
+//   b0: ângulo inicial da canela (o mesmo "b" do primeiro quadro); suporte: pontos do tubo fixo que chega ao eixo
+function mecanismoDoJoelho({ lado, b0, torreEm, suporte, saida, ganho = 6 }) {
+  const d0 = [Math.sin(b0 * D2R), -Math.cos(b0 * D2R)];
+  const RC = 8;
+  const canela = (J) => norm(sub(J.anN, J.knN));
+  return [
+    { k: 'fn', z: 'back', f: (o, J) => {
+      const d = canela(J);
+      const giro = Math.acos(Math.max(-1, Math.min(1, d[0] * d0[0] + d[1] * d0[1])));
+      torre(o, { ...torreEm, sobe: giro * ganho, polia0: true, ...saida });
+      P.tubo(o, [...suporte, J.knN], 2.2);
+      came(o, J.knN, RC, Math.atan2(d[1], d[0]));
+    } },
+    { k: 'fn', f: (o, J) => {
+      bracoDoRolo(o, J.knN, canela(J), L.shin - 2, lado);
+      P.eixo(o, J.knN, 1.6);
+    } },
+  ];
+}
 
 export function legExtension({ uni = false } = {}) {
   const s = legMachineSeat(86, 33.5, 14);
@@ -202,45 +221,72 @@ export function legExtension({ uni = false } = {}) {
   const A = { ...base, leg: { a: 88, b: -6 } };
   const B = { ...base, leg: { a: 88, b: 80 } };
   if (uni) { A.legF = { a: 88, b: -6 }; B.legF = { a: 88, b: -6 }; A.legN = A.leg; B.legN = B.leg; }
-  // cadeira extensora: torre da pilha atrás do encosto, perna da frente da cadeira, pegadores e o braço com o rolo na canela
-  return { view: 'side', frames: [A, B], equip: [sapata(49, s.hip[0] - 14), tower(55, 82, { trk: 'ankle', gain: 0.45 }), ...s.equip, { k: 'frame', pts: [[s.hip[0] + 16.5, s.hip[1] - 10.6], [s.hip[0] + 16.5, CHAO]], w: 2 }, sapata(s.hip[0] + 15, s.hip[0] + 21), pegadorDoAssento(s.hip[1] - 8), { k: 'handle' }, rollerFn(1)] };
+  const hx = s.hip[0], hy = s.hip[1];
+  const [fundo, frente] = mecanismoDoJoelho({ lado: 1, b0: -6, torreEm: { x: 55, top: 82, w: 10, dir: 1 }, suporte: [[hx + 16.5, hy - 10.6]], saida: { de: [[hx + 13.6, 4.2]] } });
+  // cadeira extensora: torre da pilha atrás do encosto, cadeira com a perna da frente, pegadores ao lado do assento e,
+  // ao lado do joelho, o eixo com o came e o braço que leva o rolo até a frente da canela; o cabo vai do came à pilha
+  return { view: 'side', frames: [A, B], equip: [sapata(49, hx - 14), fundo, ...s.equip, { k: 'frame', pts: [[hx + 16.5, hy - 10.6], [hx + 16.5, CHAO]], w: 2 }, sapata(hx + 15, hx + 34), pegadorDoAssento(hy - 8), { k: 'handle' }, frente] };
 }
 
 export function legCurl({ mode = 'lying' } = {}) {
   if (mode === 'seated') {
     const s = legMachineSeat(84, 33.5, 16);
     const base = { hip: s.hip, torso: s.torso, arm: { a: -10, b: 18 } };
+    const hx = s.hip[0], hy = s.hip[1];
+    const [fundo, frente] = mecanismoDoJoelho({ lado: -1, b0: 72, torreEm: { x: hx - 3, top: 80, w: 12, dir: 1 }, suporte: [[hx + 16.5, hy - 10.6]], saida: { de: [[hx + 13.6, 4.2]], interno: true }, ganho: 5.5 });
     return {
       view: 'side',
       frames: [{ ...base, leg: { a: 88, b: 72 } }, { ...base, leg: { a: 88, b: -26 } }],
-      // cadeira flexora: torre atrás, perna da frente, apoio sobre as coxas, pegadores e o braço com o rolo atrás do tornozelo
-      equip: [sapata(47, s.hip[0] - 14), tower(53, 82, { trk: 'ankle', gain: 0.45 }), ...s.equip, { k: 'frame', pts: [[s.hip[0] + 16.5, s.hip[1] - 10.6], [s.hip[0] + 16.5, CHAO]], w: 2 }, sapata(s.hip[0] + 15, s.hip[0] + 21), pegadorDoAssento(s.hip[1] - 8), { k: 'handle' }, { k: 'pad', a: [s.hip[0] + 9, s.hip[1] + 8.6], b: [s.hip[0] + 20, s.hip[1] + 8.4], z: 'front' }, rollerFn(-1)],
+      // cadeira flexora: a pilha fica ao lado do assento (aparece por trás do corpo), como nas cadeiras flexoras de pilha;
+      // perna da frente, pegadores, eixo com o came ao lado do joelho, braço com o rolo atrás
+      // do tornozelo e a almofada que prende as coxas, na sua haste (presa à estrutura, ao lado da perna)
+      equip: [
+        fundo, ...s.equip,
+        { k: 'frame', pts: [[hx + 16.5, hy - 10.6], [hx + 16.5, CHAO]], w: 2 }, sapata(hx + 15, hx + 21),
+        { k: 'frame', pts: [[hx + 12, hy - 10.6], [hx + 12, hy + 14.5], [hx + 14.5, hy + 14.5]], w: 1.6, z: 'back' },
+        pegadorDoAssento(hy - 8), { k: 'handle' },
+        { k: 'pad', a: [hx + 9, hy + 8.6], b: [hx + 20, hy + 8.4], z: 'front' },
+        { k: 'line', a: [hx + 14.5, hy + 10.3], b: [hx + 14.5, hy + 14.5], c: 'fg-eq', w: 1.6, z: 'front' },
+        frente,
+      ],
     };
   }
   if (mode === 'standing') {
     const base = { hip: [94, H], torso: 14, legF: foot(96), arm: { hand: [117, 66] } };
+    const [fundo, frente] = mecanismoDoJoelho({ lado: -1, b0: 0, torreEm: { x: 131, top: 88, w: 10, dir: -1 }, suporte: [[126, 25.4]], saida: { de: [[123.2, 25.4]], direto: true }, ganho: 5.5 });
     return {
       view: 'side',
       frames: [{ ...base, legN: { a: 2, b: 0 } }, { ...base, legN: { a: 6, b: -104 } }],
-      // flexora em pé: torre da pilha à frente com o pegador, braço do apoio da coxa e o rolo atrás do tornozelo
-      equip: [sapata(84, 122), tower(126, 88, { trk: 'ankle', gain: 0.5 }), { k: 'frame', pts: [[121.5, 66], [115.5, 66]], w: 1.6, z: 'back' }, { k: 'frame', pts: [[121.5, 34], [105.5, 34]], z: 'back' }, { k: 'pad', a: [103.5, 28], b: [104.5, 40], z: 'back' }, rollerFn(-1)],
+      // flexora em pé: torre da pilha à frente com o pegador, apoio da coxa, eixo com o came ao lado do joelho (no braço
+      // que sai da torre) e o rolo atrás do tornozelo
+      equip: [sapata(82, 126), fundo, { k: 'frame', pts: [[126, 71], [119.3, 71], [119.3, 69.5]], w: 1.6, z: 'back' }, { k: 'line', a: [119.3, 62], b: [119.3, 70.5], c: 'fg-grip', w: 2.3, z: 'back' }, { k: 'frame', pts: [[126, 34], [105.5, 34]], z: 'back' }, { k: 'pad', a: [103.5, 28], b: [104.5, 40], z: 'back' }, frente],
     };
   }
-  const hip = [94, 27.2];
-  const base = { hip, torso: 90, head: -14, arm: { a: 62, b: 118 } };
+  // Mesa dobrada no quadril (o quadril fica no ponto mais alto): a almofada do peito desce para a cabeceira e a das
+  // coxas desce para os joelhos. É o desenho das mesas flexoras de academia, que evita arquear a lombar.
+  const hip = [94, 33];
+  const tr = frame(100);
+  const cx = [-Math.sin(80 * D2R), -Math.cos(80 * D2R)], cn = [-cx[1], cx[0]]; // ao longo da coxa e para baixo dela
+  const noPeito = (u, f) => add(add(hip, tr.up, u), tr.front, f), naCoxa = (u, f) => add(add(hip, cx, u), cn, f);
+  const T = naCoxa(18.5, 10.6), PICO = [hip[0], hip[1] - 11.4], C = noPeito(35, 11.2);
+  const naLongarina = (x) => (x < PICO[0] ? [x, T[1] + ((x - T[0]) / (PICO[0] - T[0])) * (PICO[1] - T[1])] : [x, PICO[1] + ((x - PICO[0]) / (C[0] - PICO[0])) * (C[1] - PICO[1])]);
+  const base = { hip, torso: 100, head: -20, arm: { a: 62, b: 118 } };
+  const [fundo, frente] = mecanismoDoJoelho({ lado: -1, b0: -83, torreEm: { x: 161, top: 82, w: 10, dir: -1 }, suporte: [T], saida: { de: [[87, 4.2]] }, ganho: 5 });
   return {
     view: 'side',
-    frames: [{ ...base, leg: { a: -90, b: -93 } }, { ...base, leg: { a: -90, b: -204 } }],
-    // mesa flexora: mesa com longarina e dois pés, base até a torre da pilha, pegadores sob a cabeceira e o braço com o rolo
+    frames: [{ ...base, leg: { a: -80, b: -83 } }, { ...base, leg: { a: -80, b: -194 } }],
+    // mesa flexora: mesa dobrada no quadril com longarina e dois pés, base até a torre da pilha, pegadores sob a
+    // cabeceira, eixo com o came na ponta da mesa (ao lado do joelho) e o braço com o rolo sobre o tendão
     equip: [
-      sapata(66, 148),
-      { k: 'frame', pts: [[78, 16.2], [78, CHAO]], w: 2 }, { k: 'frame', pts: [[126, 16.2], [126, CHAO]], w: 2 },
-      { k: 'frame', pts: [[72, 16], [132, 16]], w: 1.6 },
-      { k: 'pad', a: [70, 18.4], b: [134, 18.4] },
-      tower(153, 82, { trk: 'ankle', gain: 0.5 }),
-      { k: 'fn', z: 'back', f: (o, J) => { const h = J.handN; o.line([h[0], 16], h, 'fg-eq', 1.3); } },
+      sapata(60, 156),
+      fundo,
+      { k: 'frame', pts: [naLongarina(84), [84, CHAO]], w: 2 }, { k: 'frame', pts: [naLongarina(120), [120, CHAO]], w: 2 },
+      { k: 'frame', pts: [T, PICO, C], w: 1.6 },
+      { k: 'pad', a: naCoxa(1.5, 8.2), b: naCoxa(18.5, 8.2) },
+      { k: 'pad', a: noPeito(3, 8.8), b: noPeito(35, 8.8) },
+      { k: 'fn', z: 'back', f: (o, J) => { const h = J.handN; P.tubo(o, [C, [h[0], C[1] - 1], h], 1.4); } },
       { k: 'handle' },
-      rollerFn(-1),
+      frente,
     ],
   };
 }
@@ -290,6 +336,7 @@ export function stepUp() {
       { hip: [112, top + H], torso: 2, legN: foot(114, top + AK), legF: foot(108, top + AK), arm: { a: 2, b: 8 } },
     ],
     equip: [{ k: 'box', x0: 104, x1: 130, h: top }],
+    pisos: [{ x0: 104, x1: 130, y: top }],
   };
 }
 
@@ -397,8 +444,40 @@ export function hipThrust({ tool = 'barbell', uni = false, floor = false } = {})
     eq.push({ k: 'bench', x0: 50, x1: 79, h: 15 });
     if (tool === 'barbell') eq.push({ k: 'barbell', at: 'hipfront' });
     if (tool === 'smith') eq.push({ k: 'rail', x: 103, top: 104, at: 'hipfront' }, { k: 'barbell', at: 'hipfront' });
-    // máquina articulada: base, braço com eixo perto dos pés, anilha no pino e o rolo estofado sobre o quadril
-    if (tool === 'machine') eq.push(sapata(74, 150), { k: 'frame', pts: [[144, CHAO], [144, 7]], w: 2.2 }, { k: 'lever', pivot: [144, 7], to: 'hipfront', plate: 0.2, pr: 6.5, w: 1.6 }, { k: 'roller', at: 'hipfront', r: 3 });
+    // máquina de elevação pélvica (modelo de anilhas com encosto articulado e cinto): base, encosto das costas que gira
+    // no seu poste e acompanha o tronco, cinto estofado sobre o quadril preso à alavanca (eixo à frente dos pés, anilha
+    // no pino), plataforma inclinada para os pés e pegadores ao lado do quadril
+    if (tool === 'machine') {
+      // Referência: Nautilus Glute Drive (foto do fabricante, com pessoa). O eixo das alavancas fica baixo, na base, sob
+      // os joelhos; as alavancas sobem até o lado do quadril, onde ficam os pinos das anilhas e onde prende o cinto.
+      const PV = [119, 5], RL = 22;
+      const pe = { foot: [124, AK + 3.6], footAng: -18 };
+      A.leg = pe; B.leg = pe;
+      const costas = (J, u) => add(add(J.sh, [-J.up[1], J.up[0]], 6.8), J.up, u);
+      eq.length = 0;
+      eq.push(
+        sapata(60, 140),
+        { k: 'frame', pts: [[PV[0], CHAO], PV], w: 2.2 },
+        { k: 'fn', z: 'back', f: (o, J) => {
+          const m = costas(J, -6.5);
+          P.tubo(o, [[80, CHAO], [80, 9], m], 2);            // poste e articulação do encosto
+          P.estofado(o, costas(J, -15), costas(J, 2), 1.9);
+          P.eixo(o, m, 1.5);
+          const c = add(add(J.heelN, J.fdN, 4), J.fuN, -1.2); // plataforma inclinada, nos seus dois pés
+          P.tubo(o, [add(c, J.fdN, -7), [add(c, J.fdN, -7)[0], CHAO]], 1.6);
+          P.tubo(o, [add(c, J.fdN, 8), [add(c, J.fdN, 8)[0], CHAO]], 1.6);
+          P.chapa(o, c, J.fdN, 10.5, 1, 'fg-steel');
+          const q = add(J.hip, J.up, 2);                      // ponto do cinto, ao lado do quadril
+          const u = norm(sub(q, PV)), e = add(PV, u, RL);     // a alavanca aponta para o quadril; o cinto dá a folga
+          P.tubo(o, [PV, e], 1.8);
+          P.anilha(o, add(PV, u, RL * 0.84), 6.5);
+          o.line(e, q, 'fg-grip', 1.6);
+          P.eixo(o, PV, 1.7);
+        } },
+        { k: 'fn', f: (o, J) => { const fr = [J.up[1], -J.up[0]], c = add(add(J.hip, J.up, 2), fr, 6.4); o.cap(add(c, J.up, -5), add(c, J.up, 5), 1.5, 1.5, 'fg-cush'); o.line(add(c, J.up, -5), add(J.hip, J.up, -3), 'fg-eq', 1.2); } },
+        { k: 'handle' },
+      );
+    }
   }
   if (uni) { A.legN = leg; B.legN = leg; A.legF = { a: 100, b: 96 }; B.legF = { a: 112, b: 110 }; } // perna livre na linha do tronco
   return { view: 'side', frames: [A, B], equip: eq };
@@ -414,18 +493,32 @@ export function gluteKickback({ mode = 'cable' } = {}) {
   if (mode === 'machine') {
     const hip = [90, H - 1];
     const base = { hip, torso: 42, head: -20, legF: foot(92), arm: { hand: [121, 50] } };
+    // O eixo da máquina fica atrás e acima do quadril. O pé (na chapa) descreve um arco em volta dele: começa embaixo do
+    // corpo, com o joelho dobrado, e vai para trás e para cima até a perna quase estender.
+    const PV = [84, 56.8], RB = 44.2, RC = 6;
+    const TH = [-81.3, -103.8, -126.3], FA = [40, 58, 75];
+    const naChapa = (J) => add(meio(J.heelN, J.toeN), J.fuN, -2);
     return {
       view: 'side',
-      frames: [{ ...base, legN: { a: 34, b: -52 } }, { ...base, legN: { a: -26, b: -24 } }],
-      // glúteo máquina: coluna com o apoio de peito e o pegador, torre da pilha logo atrás dela e o braço com a chapa do pé
+      frames: TH.map((th, i) => ({ ...base, legN: { foot: [PV[0] + RB * Math.cos(th * D2R), PV[1] + RB * Math.sin(th * D2R)], footAng: FA[i] } })),
+      // glúteo máquina: coluna com o apoio de peito e o pegador, torre da pilha logo atrás dela; da coluna sai o suporte
+      // do eixo; no eixo giram o came e o braço que leva a chapa onde a sola do pé empurra; o cabo desce do came até a
+      // polia da base e vai até a pilha
       equip: [
-        sapata(84, 128),
-        tower(133, 88, { trk: 'foot', gain: 0.4 }),
+        sapata(74, 130),
+        { k: 'fn', z: 'back', f: (o, J) => {
+          const d = norm(sub(naChapa(J), PV));
+          const giro = Math.max(0, (TH[0] * D2R) - Math.atan2(d[1], d[0]));
+          // o cabo corre por dentro da travessa que segura o eixo e só aparece junto da torre, longe do corpo
+          torre(o, { x: 135, top: 88, w: 10, dir: -1, sobe: giro * 9, de: [[127.2, PV[1]]], direto: true, polia0: true });
+          P.tubo(o, [[130, PV[1]], PV], 2);
+          came(o, PV, RC, Math.atan2(d[1], d[0]));
+          P.tubo(o, [PV, naChapa(J)], 1.7);
+        } },
         { k: 'frame', pts: [[111, 50], [122, 44], [122, CHAO]], z: 'back', w: 2.2 },
-        { k: 'frame', pts: [[122, 56], [128.5, 56]], w: 1.6, z: 'back' },
+        { k: 'fn', z: 'back', f: (o, J) => { const h = J.handN; P.tubo(o, [[h[0] + 3.5, h[1]], [130, h[1]]], 1.5); o.line([h[0] - 4, h[1]], [h[0] + 4, h[1]], 'fg-grip', 2.2); } }, // pegador
         { k: 'pad', a: [106, 46], b: [116, 54], z: 'back' },
-        { k: 'fn', z: 'back', f: (o, J) => { const b = add(meio(J.heelN, J.toeN), J.fuN, -2); P.tubo(o, [b, [122, 36]], 1.5); P.eixo(o, [122, 36], 1.7); } },
-        { k: 'fn', f: (o, J) => { const b = add(meio(J.heelN, J.toeN), J.fuN, -2); P.chapa(o, b, J.fdN, 5.5, 1, 'fg-steel'); } },
+        { k: 'fn', f: (o, J) => { P.chapa(o, naChapa(J), J.fdN, 5.5, 1, 'fg-steel'); P.eixo(o, PV, 1.6); } },
       ],
     };
   }
@@ -440,17 +533,40 @@ export function gluteKickback({ mode = 'cable' } = {}) {
 
 // ---------- ADUTORES / ABDUTORES ----------
 export function hipMachine({ ab = false } = {}) {
-  const closed = { ...SEAT_F, leg: { a: 72, la: 0.12, b: 0, lb: 0.93 }, arm: { a: 14, b: -6, la: 0.8 } };
-  const open = { ...SEAT_F, leg: { a: 86, la: 0.72, b: 0, lb: 0.93 }, arm: { a: 14, b: -6, la: 0.8 } };
+  // joelho a "kx" do meio do corpo (a coxa aponta para quem olha e abre para o lado, girando no quadril)
+  const perna = (kx) => ({ a: 80, la: (kx - L.hpw) / (L.thigh * Math.sin(80 * D2R)), b: 0, lb: 0.93 });
+  // mãos nos pegadores, um de cada lado do assento; o cotovelo dobra para trás (por isso o braço aparece mais curto)
+  const arm = { hand: [13, 33.5], bend: 1, la: 0.72, lb: 0.76 };
+  const DP = 7; // do centro do joelho até o centro da almofada
+  // abdutora: almofadas por fora dos joelhos; adutora: por dentro (fechadas, as duas almofadas se encostam no meio)
+  const closed = { ...SEAT_F, leg: perna(ab ? 7.4 : DP + 1.9), arm };
+  const open = { ...SEAT_F, leg: perna(21.4), arm };
+  const s = ab ? 1 : -1;
+  // De cada lado, um braço sai do eixo sob a frente do assento, corre por baixo da coxa e sobe até a almofada, que fica
+  // em pé encostada no lado do joelho; do mesmo braço desce a haste do apoio do pé.
+  const braco = (o, J, sd, sg, frente) => {
+    const kn = J['kn' + sd], an = J['an' + sd];
+    const px = kn[0] + sg * s * DP; // linha da almofada
+    const yb = 17.5;
+    if (!frente) {
+      P.tubo(o, [[X + sg * 2.6, yb], [px + sg * s * 2.2, yb], [px + sg * s * 2.2, kn[1] - 2]], 1.7);
+      o.line([kn[0], yb], [kn[0], an[1] - 4.2], 'fg-eq', 1.4);
+      o.line([kn[0] - 4.2, an[1] - 4.4], [kn[0] + 4.2, an[1] - 4.4], 'fg-eq', 2);
+      P.eixo(o, [X + sg * 2.6, yb], 1.6);
+      return;
+    }
+    o.line([px + sg * s * 2.2, kn[1] - 2], [px + sg * s * 0.6, kn[1] - 2], 'fg-eq', 1.5);
+    P.estofado(o, [px, kn[1] - 6.5], [px, kn[1] + 3], 1.8);
+  };
   return {
-    view: 'front', label: 'Vista de frente',
+    view: 'front', label: ab ? 'Vista de frente: almofadas por fora dos joelhos' : 'Vista de frente: almofadas por dentro dos joelhos',
     frames: ab ? [closed, open] : [open, closed],
-    // torre da pilha atrás do encosto, braços que saem do eixo sob o assento até as almofadas dos joelhos e os pegadores
+    // torre da pilha atrás do encosto, assento, os dois braços com as almofadas e os apoios dos pés, e os pegadores
     equip: [
       { k: 'tower', x: 0, top: 86, w: 22, trk: 'knR', gain: 0.6 }, seatBoxF, backPadF,
-      { k: 'lever', pivot: [2.5, 21], to: 'kn', dx: ab ? 5.4 : -5.4, w: 1.5, z: 'back' },
-      { k: 'fn', z: 'back', f: (o, J) => { for (const h of [J.handR, J.handL]) o.line([h[0], 18], [h[0], h[1] + 2.5], 'fg-eq', 1.3); } },
-      { k: 'roller', at: 'kn', dx: ab ? 5.4 : -5.4, dy: 0, r: 2.8 },
+      { k: 'fn', z: 'back', f: (o, J) => { braco(o, J, 'R', 1, false); braco(o, J, 'L', -1, false); } },
+      { k: 'fn', z: 'back', f: (o, J) => { for (const h of [J.handR, J.handL]) { P.tubo(o, [[h[0], 18], [h[0], h[1] - 1]], 1.5); o.circ(h, 1.7, 'fg-rub'); o.circ(h, 0.6, 'fg-steel'); } } },
+      { k: 'fn', f: (o, J) => { braco(o, J, 'R', 1, true); braco(o, J, 'L', -1, true); } },
     ],
   };
 }
@@ -494,23 +610,39 @@ export function calfRaise({ mode = 'bw' } = {}) {
   if (mode === 'seated') {
     const s = seated({ hx: 88, noBack: true });
     const toe = [116, 7];
-    const mk = (fa) => ({ hip: s.hip, torso: 4, arm: { a: 30, b: 80 }, leg: { foot: ankleFromToe(toe, fa), footAng: fa } });
+    // Referência: Body-Solid GSCR349 (foto do fabricante, com pessoa sentada). A alavanca gira num eixo sob a frente do
+    // assento e segue para a frente, por entre as pernas, até o pino das anilhas, que fica à frente dos joelhos; dela
+    // sobe a haste da almofada, apoiada sobre as coxas logo atrás dos joelhos, com dois pegadores em pé em cima.
+    const PV = [s.hip[0] + 6, s.hip[1] - 11];
+    const almofada = (kn) => add(kn, [-3, 6.4]);
+    const mk = (fa) => {
+      const pose = { hip: s.hip, torso: 4, leg: { foot: ankleFromToe(toe, fa), footAng: fa } };
+      const p = almofada(solveSide(pose).knN);
+      return { ...pose, arm: { hand: [p[0] + 1.5, p[1] + 4.6] } }; // mãos nos pegadores da almofada
+    };
     return {
-      view: 'side', frames: [mk(-12), mk(36)],
-      // panturrilha sentado (articulada): base, calço dos pés, coluna do eixo à frente, braço com a anilha no pino e o apoio sobre as coxas
+      view: 'side', frames: [mk(-12), mk(36)], maos: 'eixo-v',
+      // panturrilha sentado (articulada): base, calço dos pés, alavanca com eixo sob o assento e anilhas na ponta da
+      // frente, haste com a almofada das coxas e os pegadores
       equip: [
         ...s.equip,
-        sapata(s.hip[0] + 15, 142),
+        sapata(s.hip[0] + 15, 128),
         { k: 'box', x0: 110, x1: 124, h: 5 },
-        { k: 'frame', pts: [[136, CHAO], [136, 33]], w: 2.2, z: 'back' },
+        { k: 'fn', z: 'back', f: (o, J) => {
+          const p = almofada(J.knN), c = add(p, [0, -15]);
+          const d = norm(sub(c, PV)), e = add(PV, d, 46);
+          P.tubo(o, [PV, e], 2);
+          P.tubo(o, [c, p], 1.7);
+          P.anilha(o, e, 7);
+          P.eixo(o, PV, 1.8);
+        } },
         { k: 'fn', f: (o, J) => {
-          const p = add(J.knN, [-3, 6.4]), pv = [136, 33];
-          P.tubo(o, [add(p, [0, 1.6]), pv], 1.6);
-          P.anilha(o, [p[0] + (pv[0] - p[0]) * 0.52, p[1] + 1.6 + (pv[1] - p[1] - 1.6) * 0.52], 6.5);
-          P.eixo(o, pv, 1.8);
+          const p = almofada(J.knN);
           P.estofado(o, add(p, [-5, 0]), add(p, [5, 0]), 1.8);
+          o.line(add(p, [1.5, 1.8]), add(p, [1.5, 8]), 'fg-grip', 2.2);
         } },
       ],
+      pisos: [{ x0: 110, x1: 124, y: 5 }],
     };
   }
   if (mode === 'tibial') {
@@ -527,9 +659,17 @@ export function calfRaise({ mode = 'bw' } = {}) {
   const eq = [{ k: 'box', x0: 101, x1: 122, h: 6 }];
   if (mode === 'machine') {
     A.arm = B.arm = { rel: [7.5, -3.5] };
-    // panturrilha em pé: torre da pilha atrás, braço articulado com as ombreiras e os pegadores à frente dos ombros
-    eq.unshift(sapata(64, 101), tower(72, 104, { trk: 'sh', gain: 1 }));
-    eq.push({ k: 'fn', z: 'back', f: (o, J) => { const p = add(J.sh, [-1, 4.7]); P.tubo(o, [[76.5, 82], [p[0] - 3, p[1] + 1]], 1.8); P.eixo(o, [76.5, 82], 1.8); o.line([p[0] + 4, p[1]], J.handN, 'fg-eq', 1.3); } });
+    // panturrilha em pé: torre da pilha atrás, braço articulado (eixo na torre) com as ombreiras e os pegadores à frente
+    // dos ombros; do meio do braço desce o cabo até a polia da base, que vai levantar a pilha
+    const pv = [78, 82];
+    const noBraco = (J) => { const p = add(J.sh, [-1, 4.7]); return [pv[0] + (p[0] - 3 - pv[0]) * 0.55, pv[1] + (p[1] + 1 - pv[1]) * 0.55]; };
+    const q0 = noBraco({ sh: shOf(A.hip, A.torso) });
+    eq.unshift(sapata(64, 101));
+    eq.push({ k: 'fn', z: 'back', f: (o, J) => {
+      const p = add(J.sh, [-1, 4.7]), q = noBraco(J);
+      torre(o, { x: 72, top: 104, w: 9, dir: 1, sobe: Math.max(0, q[1] - q0[1]) * 1.6, de: [q, [q[0], 4.5]] });
+      P.tubo(o, [pv, [p[0] - 3, p[1] + 1]], 1.8); P.eixo(o, pv, 1.8); o.line([p[0] + 4, p[1]], J.handN, 'fg-eq', 1.3);
+    } });
     eq.push({ k: 'fn', f: (o, J) => { const p = add(J.sh, [-1, 4.7]); P.estofado(o, add(p, [-4.5, 0]), add(p, [4, 0]), 1.9); } }, { k: 'handle' });
   } else if (mode === 'smith') {
     A.arm = B.arm = TRAP_ARM;
@@ -543,5 +683,5 @@ export function calfRaise({ mode = 'bw' } = {}) {
     A.arm = B.arm = { hand: [122, 64] };
     eq.push(sapata(117, 131, 'back'), { k: 'frame', pts: [[124, CHAO], [124, 68]], z: 'back', w: 2.2 });
   }
-  return { view: 'side', frames: [A, B], equip: eq };
+  return { view: 'side', frames: [A, B], equip: eq, pisos: [{ x0: 101, x1: 122, y: 6 }] };
 }

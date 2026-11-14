@@ -2,17 +2,20 @@
 
 Aplicativo de academia que funciona **100% offline**:
 
-- **232 exercícios** com figura humana animada (com o aparelho), que toca sozinha como um vídeo, e os músculos trabalhados em destaque. As mãos mudam conforme o exercício: espalmadas no apoio, com os dedos fechados em volta da barra ou do halter, ou soltas;
+- **281 exercícios** (inclusive 31 para fazer em casa sem aparelhos) com figura humana animada (com o aparelho), que toca sozinha como um vídeo, e os músculos trabalhados em destaque. As mãos mudam conforme o exercício: espalmadas no apoio, com os dedos fechados em volta da barra ou do halter, ou soltas;
 - técnica de cada exercício conferida em fontes abertas (ACE, NASM, NSCA, artigos científicos), listadas na tela do exercício;
 - busca e filtros por grupo muscular, equipamento, nível e aparelhos da sua academia;
-- **treinos por dia** totalmente personalizáveis, com 9 modelos prontos;
+- **treinos por dia da semana** totalmente personalizáveis, com 9 modelos prontos. Cada dia mostra, em seções separadas, a musculação e a corrida;
 - registro do treino com um toque por série, cronômetro de descanso, sugestão de carga e histórico;
 - **Evolução**: análise automática dos treinos registrados, com dicas curtas (constância, séries por músculo, equilíbrio, exercícios travados, recuperação, ritmo do peso, volta depois de um tempo parado), cada uma com a fonte;
-- **Treinador virtual**: entrevista (objetivo, idade, experiência, tempo sem treinar, limitações, aparelhos) → plano de treino, com sugestão periódica de troca de exercícios que você aceita ou não;
-- **Nutricionista virtual**: entrevista → metas de calorias, proteína e água, o que comer antes e depois de cada treino e cardápio de exemplo;
+- **Treinador virtual**: entrevista (objetivo, idade, experiência, tempo sem treinar, limitações, aparelhos, o que tem em casa) → plano de treino, com sugestão periódica de troca de exercícios que você aceita ou não. Dá para priorizar até 2 músculos, e “Outra versão” sempre troca exercícios de verdade (ou avisa que não há outra);
+- **dores**: conte uma dor ao Treinador (local, tipo, intensidade) e o treino se ajusta — troca, alivia ou tira os exercícios que carregam a região, na musculação e na corrida; dor de alerta pede avaliação e a região não é treinada. O aviso aparece também no treino em andamento;
+- **Treinador de corrida**: do iniciante (corrida e caminhada) ao avançado, por tempo, ritmo ou esforço, com ou sem relógio; plano por objetivo ou prova, acompanhamento pelos registros, volta de pausa, cronômetro guiado e ajuste por dor. Só marca uma prova quando o prazo comporta a distância;
+- **Nutricionista virtual**: entrevista → metas de calorias, proteína e água, o que comer antes e depois de cada treino e cardápio de exemplo. 269 alimentos com faixa de preço pesquisada, opção de alimentos mais baratos, cardápio com o que você tem em casa e alimentação ajustada à corrida e à prova;
+- **meta de sono**: faixa de horas pela idade (consensos da National Sleep Foundation e da Academia Americana de Medicina do Sono), ajustada à semana de treino e à prova; hora de deitar, registro das noites, semana em barras e dicas com fonte;
 - **objetivos alinhados**: o objetivo do treino e o da alimentação andam juntos (ganhar massa com ganhar massa, emagrecer com emagrecer). Ao mudar um, o app pergunta se iguala o outro; você pode manter diferentes;
 - **volta depois de uma pausa**: depois de 2 semanas ou mais parado, o treino segue o consenso CSCCa/NSCA de 2019 por 2 semanas (4 no cardio depois de 3 meses parado): menos séries por músculo, descanso mais longo e cardio com metade do tempo na primeira semana. A carga do primeiro treino vem de 10% a 50% menor (escolha conservadora do app) e sobe a cada treino. O tempo parado também entra no plano do Treinador e nas dicas;
-- tudo baseado em diretrizes publicadas (56 referências listadas em *Sobre → Referências científicas*).
+- tudo baseado em diretrizes e estudos publicados (302 referências listadas em *Sobre → Referências científicas*).
 
 Os dados ficam **somente no aparelho**. Não há servidor, cadastro, anúncios nem rastreadores.
 
@@ -47,7 +50,7 @@ Abra `http://localhost:5173`. Requer Node.js 22 ou mais novo.
 npm test
 ```
 
-Roda 100 testes (mais de 2.500 perfis simulados no Treinador e na Nutricionista, análise de evolução, tempo parado e regras da volta, objetivos alinhados, mãos das figuras, gravação dos dados, validação de backup, catálogo com fontes, política de segurança) e a verificação de física e a postura das 232 animações (ossos de comprimento fixo, articulações dentro do limite, nada atravessa o chão, mãos e pés alcançam o aparelho, mãos apoiadas no chão quando o corpo está deitado).
+Roda 202 testes (centenas de milhares de perfis simulados no Treinador, na corrida, na Nutricionista e no sono; dores; armazenamento com o banco do aparelho falhando; análise de evolução, tempo parado e regras da volta, objetivos alinhados, mãos das figuras, gravação dos dados, validação de backup, catálogo com fontes, política de segurança) e a verificação de física e a postura das 281 animações (ossos de comprimento fixo, articulações dentro do limite, nada atravessa o chão, mãos e pés alcançam o aparelho, mãos apoiadas no chão quando o corpo está deitado).
 
 Teste de uso de ponta a ponta (clica no app como um usuário: entrevista, treino, evolução, nutrição, backup e uso sem internet). Deixe `npm start` rodando em outro terminal e execute:
 
@@ -55,7 +58,7 @@ Teste de uso de ponta a ponta (clica no app como um usuário: entrevista, treino
 npm run test:uso
 ```
 
-Outros roteiros de ponta a ponta, rodados do mesmo jeito (`node tools/e2e/navegador.mjs <roteiro>`): `tools/e2e/organizacao.mjs` (organização dos treinos: planos, dias, agenda, treino em andamento) e `tools/e2e/ajustes-de-perfil.mjs` (objetivos alinhados e volta depois de uma pausa).
+Outros roteiros de ponta a ponta, rodados do mesmo jeito (`node tools/e2e/navegador.mjs <roteiro>`): `tools/e2e/organizacao.mjs` (organização dos treinos: planos, dias, agenda, treino em andamento), `tools/e2e/ajustes-de-perfil.mjs` (objetivos alinhados e volta depois de uma pausa), `tools/e2e/corrida.mjs` (Treinador de corrida) e `tools/e2e/sono.mjs` (meta de sono).
 
 Precisa do Microsoft Edge ou do Google Chrome instalado. `tools/e2e/textos.mjs` mede a quantidade de texto de cada tela.
 

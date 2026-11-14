@@ -1,11 +1,13 @@
 // Treino em andamento: registro das séries, cronômetro de descanso e finalização.
-import { h, btn, icon, iconBtn, confirmSheet, toast, note, parseNum, fmtClock, uid, plural } from '../ui.js';
+import { h, btn, icon, iconBtn, confirmSheet, toast, note, parseNum, fmtClock, uid, plural, dateKey } from '../ui.js';
 import { state, update, planById } from '../store.js';
 import { go, refresh, replace } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { figure, thumb } from '../figure.js';
 import { sugestao, retomada, recorde, e1rm, assistido, voltaDePausa, seriesNaVolta, descansoNaVolta } from '../logic/progress.js';
 import { nivelPausa, cortePausa, duracaoTxt } from '../logic/pausa.js';
+import { doresAtivas } from '../logic/dor.js';
+import { alertaDoExercicio } from '../logic/trainer.js';
 import { pickExercises, novoItem, subtitulo, folha } from './common.js';
 import { keepAwake, unlockAudio, beep, vibrate, agendarAviso, cancelarAviso } from '../device.js';
 
@@ -17,6 +19,9 @@ function montarItem(planItem) {
   for (let i = 0; i < planItem.series; i++) {
     sets.push({ kg: ex.registro === 'peso_reps' ? (sug.kg ?? null) : null, reps: ex.registro === 'peso_reps' || ex.registro === 'reps' ? (sug.reps ?? null) : null, seg: ex.registro === 'segundos' || ex.registro === 'minutos' ? (sug.seg ?? Number(String(planItem.reps).split('-')[0])) : null, ok: false });
   }
+  // carga e tempo sugeridos pelo app contam como "copiados": se a pessoa corrige a 1ª série e marca, as seguintes
+  // (que ela não editou) acompanham. As repetições sugeridas ficam: são o alvo de cada série.
+  for (const st of sets) { const c = {}; if (st.kg != null) c.kg = st.kg; if (st.seg != null) c.seg = st.seg; if (Object.keys(c).length) copiados.set(st, c); }
   return { ex: planItem.ex, alvo: planItem.reps, descanso: planItem.descanso, sets };
 }
 async function podeIniciar() {
@@ -38,7 +43,7 @@ export async function startSession(planId, dayId) {
   const volta = voltaDePausa();
   let base = day.itens.filter((i) => EX_POR_ID.has(i.ex));
   if (volta && volta.semana <= 2) {
-    const series = seriesNaVolta(base, cortePausa(nivelPausa(volta.dias)));
+    const series = seriesNaVolta(base);
     base = base.map((it, i) => ({ ...it, series: series[i], descanso: descansoNaVolta(it.ex, it.descanso, volta) }));
   }
   update((s) => {
@@ -90,11 +95,14 @@ function numin({ value, step, min = 0, max = 2000, onChange, label, dec = false,
   input.addEventListener('focus', () => input.select());
   input.addEventListener('change', () => { const n = parseNum(input.value); set(input.value.trim() === '' ? null : (Number.isFinite(n) ? n : cur)); });
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
-  const st = () => (typeof step === 'function' ? step(cur) : step);
+  // os botões andam sempre pela grade do passo (20 → 19 → 20 → 22,5 → 20), mesmo quando o passo muda no caminho
+  const passoDe = (v) => Math.max(0.01, typeof step === 'function' ? step(v) : step);
+  const sobe = () => { const v = cur ?? 0; const p = passoDe(v); return (Math.floor(v / p + 1e-9) + 1) * p; };
+  const desce = () => { const v = cur ?? 0; const p = passoDe(Math.max(0, v - 1e-6)); return Math.max(min, (Math.ceil(v / p - 1e-9) - 1) * p); };
   const menos = h('button', { type: 'button', 'aria-label': 'Diminuir ' + label }, '−');
   const mais = h('button', { type: 'button', 'aria-label': 'Aumentar ' + label }, '+');
-  repetir(menos, () => { unlockAudio(); set(Math.max(min, (cur ?? 0) - st())); });
-  repetir(mais, () => { unlockAudio(); set((cur ?? 0) + st()); });
+  repetir(menos, () => { unlockAudio(); set(desce()); });
+  repetir(mais, () => { unlockAudio(); set(sobe()); });
   return h('div', { class: 'numin' }, menos, input, mais);
 }
 
@@ -115,20 +123,33 @@ export function sessionView() {
   if (!cur) return { redirect: 'treinos' };
   keepAwake(true);
   const recAntes = new Map();
-  for (const it of cur.itens) recAntes.set(it.ex, recorde(it.ex));
+  for (const it of cur.itens) {
+    // a marca a bater é a maior entre o histórico e o que já foi feito neste treino (a tela pode ser redesenhada no meio)
+    const r = recorde(it.ex);
+    const aqui = Math.max(0, ...it.sets.filter((s) => s.ok && s.kg != null && s.reps).map((s) => e1rm(s.kg, s.reps)));
+    recAntes.set(it.ex, r && aqui > r.v ? { v: aqui } : r);
+  }
   let work = null; // cronômetro de exercício por tempo: { i, j, end, total }
   const setWork = (w) => {
     work = w;
     cronometro = w && state.current ? { sid: state.current.id, it: state.current.itens[w.i], j: w.j, end: w.end, total: w.total } : null;
     // também fica gravado no treino em andamento, para não se perder se a página for recarregada
-    update((s) => { if (s.current) s.current.cron = w ? { i: w.i, j: w.j, end: w.end, total: w.total } : null; });
+    update((s) => { if (s.current) s.current.cron = w && s.current.itens[w.i] ? { i: w.i, j: w.j, end: w.end, total: w.total, ex: s.current.itens[w.i].ex } : null; });
   };
-  if (!cronometro && cur.cron && cur.itens[cur.cron.i]) cronometro = { sid: cur.id, it: cur.itens[cur.cron.i], j: cur.cron.j, end: cur.cron.end, total: cur.cron.total };
+  // depois de recarregar a página só resta o que foi gravado: vale se o item daquela posição ainda é o mesmo exercício
+  if (!cronometro && cur.cron && cur.itens[cur.cron.i] && cur.itens[cur.cron.i].ex === cur.cron.ex) cronometro = { sid: cur.id, it: cur.itens[cur.cron.i], j: cur.cron.j, end: cur.cron.end, total: cur.cron.total };
   if (cronometro) {
     const i = cronometro.sid === cur.id ? cur.itens.indexOf(cronometro.it) : -1;
     const st = i >= 0 ? cur.itens[i].sets[cronometro.j] : null;
     if (st && !st.ok) work = { i, j: cronometro.j, end: cronometro.end, total: cronometro.total };
     else cronometro = null;
+  }
+  // o gravado acompanha o que está valendo: se o exercício cronometrado saiu, foi trocado ou mudou de posição, o registro
+  // antigo não pode "ressuscitar" depois apontando para outro exercício
+  {
+    const g = cur.cron;
+    const igual = work ? !!g && g.i === work.i && g.j === work.j && g.end === work.end && g.ex === cur.itens[work.i].ex : !g;
+    if (!igual) update((s) => { if (s.current) s.current.cron = work ? { i: work.i, j: work.j, end: work.end, total: work.total, ex: s.current.itens[work.i].ex } : null; });
   }
   let alarmed = false;
   let doneUntil = 0;
@@ -236,6 +257,9 @@ export function sessionView() {
     if (menosSerie) menosSerie.setAttribute('aria-label', 'Remover a última série');
     const feitas = it.sets.filter((s) => s.ok).length;
     const alvoTxt = tipo === 'minutos' ? `${it.alvo} min` : tipo === 'segundos' ? `${it.sets.length} × ${it.alvo} s` : `${it.sets.length} × ${it.alvo} repetições`;
+    // dor que o usuário contou ao Treinador e que este exercício sobrecarrega: aviso no próprio cartão
+    let avisoDor = null;
+    try { avisoDor = alertaDoExercicio(it.ex, doresAtivas(state, dateKey(new Date())), state.trainer.answers); } catch { avisoDor = null; }
     const card = h('div', { class: 'card col' },
       h('div', { class: 'exhead' },
         h('button', { class: 'thumb', type: 'button', 'aria-label': 'Ver como fazer: ' + ex.nome, onClick: () => infoSheet(ex) }, thumb(ex)),
@@ -243,10 +267,11 @@ export function sessionView() {
           h('div', { class: 'bold', text: ex.nome }),
           h('div', { class: 'small muted', text: `Alvo: ${alvoTxt}${it.descanso && tipo !== 'minutos' ? ` · descanso ${it.descanso} s` : ''}` }),
           h('div', { class: 'tiny ' + (feitas === it.sets.length ? 'ok bold' : 'muted'), text: feitas === it.sets.length ? 'Concluído' : `${feitas} de ${it.sets.length} séries` })),
-        iconBtn('more', 'Opções do exercício', () => itemMenu(i), '')),
+        iconBtn('more', 'Opções: ' + ex.nome, () => itemMenu(i), '')),
+      avisoDor ? note(avisoDor.nivel === 'evitar' ? 'warn' : 'info', avisoDor.texto) : null,
       sug.texto ? h('p', { class: 'small muted', text: sug.texto }) : null,
       grid,
-      h('div', { class: 'row' }, maisSerie, menosSerie,
+      h('div', { class: 'row acoes-ex' }, maisSerie, menosSerie,
         h('div', { class: 'grow' }),
         btn('Como fazer', () => infoSheet(ex), 'sm plain', 'info')));
     if (old) cards.replaceChild(card, old); else cards.appendChild(card);

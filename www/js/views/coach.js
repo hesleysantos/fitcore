@@ -1,7 +1,7 @@
 // Entrevista em formato de conversa, usada pelo Treinador e pela Nutricionista.
 import { h, btn, icon, stepper, note, sheet, toast } from '../ui.js';
 import { state, update } from '../store.js';
-import { refresh } from '../router.js';
+import { go, refresh } from '../router.js';
 import { situacao, alinhar, manterDiferentes, nutriPara, treinoPara } from '../logic/objetivos.js';
 import { ROTULO as ROT_T } from '../logic/trainer.js';
 import { ROTULO as ROT_N } from '../logic/nutrition.js';
@@ -78,6 +78,12 @@ export function interview({ perguntas, respostas, onDone, onCancel, avatar = 'co
   function bar(f) { const el = h('i'); el.style.width = Math.round(f * 100) + '%'; return el; }
   draw();
   return root;
+}
+
+// Abas do Treinador: musculação e corrida. Cada uma tem a sua tela (rotas "treinador" e "corrida").
+export function abasTreinador(ativa) {
+  const b = (id, rota, texto) => h('button', { type: 'button', class: ativa === id ? 'on' : '', 'aria-pressed': ativa === id ? 'true' : 'false', onClick: () => { if (ativa !== id) go(rota); } }, texto);
+  return h('div', { class: 'seg', role: 'group', 'aria-label': 'Tipo de treino' }, b('forca', 'treinador', 'Musculação'), b('corrida', 'corrida', 'Corrida'));
 }
 
 // ---------- objetivo do treino e da alimentação andam juntos (logic/objetivos.js) ----------

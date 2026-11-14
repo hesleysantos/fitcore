@@ -12,12 +12,17 @@ function plugin(method, args) {
 // ---------- tela ligada ----------
 let lock = null;
 let wanted = false;
+let pedindo = false;
 async function acquire() {
   if (!wanted || document.visibilityState !== 'visible') return;
   if (native()) { plugin('telaLigada', { ligada: true }); return; }
   try {
-    if ('wakeLock' in navigator && !lock) {
-      const novo = await navigator.wakeLock.request('screen');
+    if ('wakeLock' in navigator && !lock && !pedindo) {
+      pedindo = true;
+      let novo;
+      try { novo = await navigator.wakeLock.request('screen'); } finally { pedindo = false; }
+      // a pessoa saiu da tela enquanto o pedido estava em andamento: solta na hora
+      if (!wanted) { novo.release().catch(() => {}); return; }
       lock = novo;
       novo.addEventListener('release', () => { if (lock === novo) lock = null; });
     }

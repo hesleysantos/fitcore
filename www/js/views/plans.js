@@ -1,7 +1,8 @@
 // Treinos: planos, dias, agenda da semana e editor de cada treino.
-import { h, btn, icon, iconBtn, confirmSheet, promptSheet, toast, badge, sectionTitle, note, uid, DIAS_CURTO, DIAS_LONGO, plural } from '../ui.js';
+import { h, btn, icon, iconBtn, confirmSheet, promptSheet, toast, badge, sectionTitle, note, uid, DIAS_CURTO, DIAS_LONGO, plural, dateKey } from '../ui.js';
+import { planoDaSemana } from '../logic/corrida.js';
 import { state, update, activePlan, planById, MAX_PLANOS } from '../store.js';
-import { go, refresh } from '../router.js';
+import { go, refresh, replace } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { NIVEIS } from '../data/muscles.js';
 import { MODELOS } from '../data/templates.js';
@@ -100,65 +101,109 @@ function planMenu(plan) {
   const s = folha({ title: plan.nome, body });
 }
 
+// Corrida planejada para cada dia desta semana (Treinador de corrida): { semana, totalSemanas, fase, dias: Array(7) } ou null.
+const corridaSemana = () => { try { return planoDaSemana(state, dateKey(new Date())); } catch { return null; } };
+
+// folha para escolher em que dia da semana fica um treino que ainda não tem dia
+function diaSheet(plan, d) {
+  const list = h('div', { class: 'list' });
+  for (const wd of ORDEM_SEMANA) {
+    const atual = plan.dias.find((x) => x.id === plan.agenda[wd]);
+    list.appendChild(h('button', { class: 'item', type: 'button', onClick: () => { mut(plan.id, (p) => { p.agenda[wd] = d.id; }); s.close(); refresh(); } },
+      h('div', { class: 'grow' }, h('div', { class: 't', text: DIAS_LONGO[wd] }), h('div', { class: 's', text: atual ? `Agora: ${atual.nome}` : 'Livre' }))));
+  }
+  const s = folha({ title: d.nome, body: [h('p', { class: 'muted small', text: 'Em que dia da semana você faz este treino?' }), list] });
+}
+
 export function plansView() {
   const plan = activePlan();
+  const corrida = corridaSemana();
   const body = [];
   if (state.current) {
     body.push(h('div', { class: 'card hl row' }, icon('timer', 'accent'), h('div', { class: 'grow' }, h('div', { class: 'bold', text: 'Treino em andamento' }), h('div', { class: 'small muted', text: state.current.nome })), btn('Continuar', () => go('sessao'), 'primary sm')));
   }
-  if (!plan) {
+  const opcoesDeInicio = () => h('div', { class: 'opts' },
+    h('button', { class: 'opt', type: 'button', onClick: () => go('treinador') }, icon('coach', 'l accent'), h('div', null, h('div', { class: 'o-t', text: 'Pedir ao Treinador' }), h('div', { class: 'o-s', text: 'Responda algumas perguntas e receba uma sugestão de treino para o seu objetivo' }))),
+    h('button', { class: 'opt', type: 'button', onClick: modelsSheet }, icon('copy', 'l accent'), h('div', null, h('div', { class: 'o-t', text: 'Usar um modelo pronto' }), h('div', { class: 'o-s', text: 'Treinos clássicos para copiar e adaptar' }))),
+    h('button', { class: 'opt', type: 'button', onClick: novoDoZero }, icon('plus', 'l accent'), h('div', null, h('div', { class: 'o-t', text: 'Montar do zero' }), h('div', { class: 'o-s', text: 'Escolha você mesmo os exercícios de cada dia' }))),
+    h('button', { class: 'opt', type: 'button', onClick: startFree }, icon('bolt', 'l accent'), h('div', null, h('div', { class: 'o-t', text: 'Treino livre agora' }), h('div', { class: 'o-s', text: 'Comece a registrar e vá adicionando exercícios' }))));
+  const opcaoCorrida = () => h('button', { class: 'opt', type: 'button', onClick: () => go('corrida') }, icon('run', 'l accent'), h('div', null, h('div', { class: 'o-t', text: 'Treinos de corrida' }), h('div', { class: 'o-s', text: 'O Treinador de corrida monta um plano para o seu nível e os seus dias' })));
+  if (!plan && !corrida) {
     body.push(h('div', { class: 'empty' }, icon('dumbbell'), h('h2', { text: 'Você ainda não tem um treino' }), h('p', { text: 'Escolha por onde começar:' })));
-    body.push(h('div', { class: 'opts' },
-      h('button', { class: 'opt', type: 'button', onClick: () => go('treinador') }, icon('coach', 'l accent'), h('div', null, h('div', { class: 'o-t', text: 'Pedir ao Treinador' }), h('div', { class: 'o-s', text: 'Responda algumas perguntas e receba uma sugestão de treino para o seu objetivo' }))),
-      h('button', { class: 'opt', type: 'button', onClick: modelsSheet }, icon('copy', 'l accent'), h('div', null, h('div', { class: 'o-t', text: 'Usar um modelo pronto' }), h('div', { class: 'o-s', text: 'Treinos clássicos para copiar e adaptar' }))),
-      h('button', { class: 'opt', type: 'button', onClick: novoDoZero }, icon('plus', 'l accent'), h('div', null, h('div', { class: 'o-t', text: 'Montar do zero' }), h('div', { class: 'o-s', text: 'Escolha você mesmo os exercícios de cada dia' }))),
-      h('button', { class: 'opt', type: 'button', onClick: startFree }, icon('bolt', 'l accent'), h('div', null, h('div', { class: 'o-t', text: 'Treino livre agora' }), h('div', { class: 'o-s', text: 'Comece a registrar e vá adicionando exercícios' })))));
+    body.push(opcoesDeInicio());
+    body.push(h('div', { class: 'opts' }, opcaoCorrida()));
     return { title: 'Treinos', body };
   }
 
-  body.push(h('div', { class: 'row between' },
-    h('div', { class: 'grow' }, h('h2', { class: 'ellipsis', text: plan.nome }), h('div', { class: 'row gap-s mt' }, badge(ORIGEM[plan.origem], plan.origem === 'treinador' ? 'acc' : ''))),
-    iconBtn('more', 'Opções do plano', () => planMenu(plan), 'soft')));
-  if (plan.info) body.push(h('p', { class: 'small muted', text: plan.info }));
-
-  // agenda da semana
-  const week = h('div', { class: 'week' });
-  const hoje = new Date().getDay();
-  for (const wd of ORDEM_SEMANA) {
-    const d = plan.dias.find((x) => x.id === plan.agenda[wd]);
-    const idx = d ? plan.dias.indexOf(d) : -1;
-    week.appendChild(h('button', { class: 'chip' + (d ? ' on' : ''), type: 'button', 'aria-label': `${DIAS_LONGO[wd]}: ${d ? d.nome : 'descanso'}`, onClick: () => agendaSheet(plan, wd) },
-      h('div', { class: 'col gap-s center' }, h('span', { class: 'tiny' + (wd === hoje ? ' bold' : ''), text: DIAS_CURTO[wd] }), h('span', { class: 'bold', text: d ? ('ABCDEFGHIJKLMN'[idx] || '•') : '–' }))));
+  if (plan) {
+    body.push(h('div', { class: 'row between' },
+      h('div', { class: 'grow' }, h('h2', { class: 'ellipsis', text: plan.nome }), h('div', { class: 'row gap-s mt' }, badge('Musculação'), badge(ORIGEM[plan.origem], plan.origem === 'treinador' ? 'acc' : ''))),
+      iconBtn('more', 'Opções do plano', () => planMenu(plan), 'soft')));
+    if (plan.info) body.push(h('p', { class: 'small muted', text: plan.info }));
+  } else {
+    body.push(h('h2', { text: 'Sua semana' }));
   }
-  week.className = 'week7';
-  body.push(h('div', { class: 'card tight col gap-s' }, h('div', { class: 'row between' }, h('h3', { text: 'Semana' }), h('span', { class: 'tiny muted', text: 'Toque num dia para mudar' })), week));
 
-  // dias do plano
-  body.push(sectionTitle('Treinos do plano'));
-  if (!plan.dias.length) body.push(h('p', { class: 'small muted', text: 'Este plano ainda não tem treinos. Adicione o primeiro abaixo.' }));
-  plan.dias.forEach((d, i) => {
-    const thumbs = h('div', { class: 'row gap-s' });
-    for (const it of d.itens.slice(0, 4)) { const ex = EX_POR_ID.get(it.ex); if (ex) thumbs.appendChild(h('div', { class: 'thumb mini' }, thumb(ex))); }
-    body.push(h('div', { class: 'card col' },
-      h('div', { class: 'row top' },
-        h('div', { class: 'avatar', text: 'ABCDEFGHIJKLMN'[i] || '•' }),
-        h('div', { class: 'grow' }, h('h3', { text: d.nome }), h('div', { class: 'small muted', text: d.foco || 'Sem descrição' }),
-          h('div', { class: 'tiny muted mt', text: d.itens.length ? `${plural(d.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(d)} min` : 'Nenhum exercício ainda' }))),
-      h('div', { class: 'row' },
-        btn('Editar', () => go(`treino/${plan.id}/${d.id}`), 'ghost grow', 'edit'),
-        btn('Iniciar', () => startSession(plan.id, d.id), 'primary grow', 'play'))));
-  });
-  body.push(btn('Adicionar um treino ao plano', async () => {
-    if (plan.dias.length >= 14) { toast('Limite de 14 treinos por plano.'); return; }
-    const nome = await promptSheet({ title: 'Novo treino', label: 'Nome', value: 'Treino ' + ('ABCDEFGHIJKLMN'[plan.dias.length] || ''), okLabel: 'Criar', maxLength: 40 });
-    if (!nome) return;
-    const d = { id: 'd' + uid(), nome, foco: '', itens: [] };
-    mut(plan.id, (p) => p.dias.push(d));
-    go(`treino/${plan.id}/${d.id}`);
-  }, 'block', 'plus'));
+  // ---------- a semana, um cartão por dia, com corrida e musculação em seções separadas ----------
+  const hojeWd = new Date().getDay();
+  const rotulo = (ic, t, extra) => h('div', { class: 'sec-rot' }, icon(ic, 's'), h('span', { text: t }), extra || null);
+  // botão que troca o treino de musculação de um dia (o rótulo diz o dia e o treino atual)
+  const chipAgenda = (wd, d) => h('button', { class: 'chip sm' + (d ? ' on' : ''), type: 'button', 'aria-label': `${DIAS_LONGO[wd]}: ${d ? d.nome : 'descanso'}`, onClick: () => agendaSheet(plan, wd) }, d ? 'Trocar' : 'Definir treino');
+  const blocoTreino = (d, wd = null) => h('div', { class: 'treino col gap-s', 'data-treino': d.id },
+    h('div', { class: 'row top' },
+      h('div', { class: 'grow' }, h('h3', { text: d.nome }), h('div', { class: 'small muted', text: d.foco || 'Sem descrição' }),
+        h('div', { class: 'tiny muted mt', text: d.itens.length ? `${plural(d.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(d)} min` : 'Nenhum exercício ainda' })),
+      wd != null ? chipAgenda(wd, d) : h('button', { class: 'chip sm', type: 'button', onClick: () => diaSheet(plan, d) }, 'Definir dia')),
+    h('div', { class: 'row' },
+      btn('Editar', () => go(`treino/${plan.id}/${d.id}`), 'ghost grow', 'edit'),
+      btn('Iniciar', () => startSession(plan.id, d.id), 'primary grow', 'play')));
+  const blocoCorrida = (c) => h('div', { class: 'treino col gap-s' },
+    h('div', { class: 'row top' },
+      h('div', { class: 'grow' }, h('h3', { text: String(c.nome || 'Corrida') }), c.resumo ? h('div', { class: 'small muted', text: String(c.resumo) }) : null),
+      c.feito ? badge('Feita', 'ok') : null),
+    btn(c.feito ? 'Ver corrida' : 'Abrir corrida', () => go('corrida/dia/' + c.data), c.feito ? 'ghost block' : 'block', 'run'));
+  const semana = h('div', { class: 'col semana' });
+  for (const wd of ORDEM_SEMANA) {
+    const d = plan ? plan.dias.find((x) => x.id === plan.agenda[wd]) : null;
+    const c = corrida && Array.isArray(corrida.dias) ? corrida.dias[wd] : null;
+    const card = h('div', { class: 'card col dia' + (wd === hojeWd ? ' hl' : ''), 'data-wd': String(wd) },
+      h('div', { class: 'row between' }, h('div', { class: 'dia-nome', text: DIAS_LONGO[wd] }), wd === hojeWd ? badge('Hoje', 'acc') : null));
+    if (c) { card.appendChild(rotulo('run', 'Corrida')); card.appendChild(blocoCorrida(c)); }
+    if (plan) {
+      card.appendChild(rotulo('dumbbell', 'Musculação', d ? null : chipAgenda(wd, null)));
+      card.appendChild(d ? blocoTreino(d, wd) : h('div', { class: 'small muted', text: c ? 'Sem musculação neste dia.' : 'Descanso.' }));
+    } else if (!c) card.appendChild(h('div', { class: 'small muted', text: 'Descanso.' }));
+    semana.appendChild(card);
+  }
+  body.push(semana);
+
+  if (plan) {
+    // treinos do plano que ainda não têm dia da semana
+    const comDia = new Set(Object.values(plan.agenda));
+    const soltos = plan.dias.filter((d) => !comDia.has(d.id));
+    if (!plan.dias.length) body.push(h('p', { class: 'small muted', text: 'Este plano ainda não tem treinos. Adicione o primeiro abaixo.' }));
+    if (soltos.length) {
+      body.push(sectionTitle('Treinos sem dia definido'));
+      for (const d of soltos) body.push(h('div', { class: 'card col' }, blocoTreino(d)));
+    }
+    body.push(btn('Adicionar um treino ao plano', async () => {
+      if (plan.dias.length >= 14) { toast('Limite de 14 treinos por plano.'); return; }
+      const nome = await promptSheet({ title: 'Novo treino', label: 'Nome', value: 'Treino ' + ('ABCDEFGHIJKLMN'[plan.dias.length] || ''), okLabel: 'Criar', maxLength: 40 });
+      if (!nome) return;
+      const d = { id: 'd' + uid(), nome, foco: '', itens: [] };
+      mut(plan.id, (p) => p.dias.push(d));
+      go(`treino/${plan.id}/${d.id}`);
+    }, 'block', 'plus'));
+  }
+
+  // corrida
+  body.push(sectionTitle('Corrida'));
+  body.push(corrida
+    ? h('div', { class: 'card row' }, icon('run', 'accent'), h('div', { class: 'grow' }, h('div', { class: 'bold', text: `Plano de corrida: semana ${corrida.semana} de ${corrida.totalSemanas}` }), corrida.fase ? h('div', { class: 'small muted', text: String(corrida.fase) }) : null), btn('Abrir', () => go('corrida'), 'sm'))
+    : h('div', { class: 'opts' }, opcaoCorrida()));
 
   // outros planos
-  const outros = state.plans.filter((p) => p.id !== plan.id);
+  const outros = state.plans.filter((p) => !plan || p.id !== plan.id);
   if (outros.length) {
     body.push(sectionTitle('Outros planos'));
     const l = h('div', { class: 'list' });
@@ -168,7 +213,7 @@ export function plansView() {
     }
     body.push(l);
   }
-  body.push(sectionTitle('Criar outro plano'));
+  body.push(sectionTitle(plan ? 'Criar outro plano de musculação' : 'Musculação'));
   body.push(h('div', { class: 'col' },
     btn('Pedir um treino ao Treinador', () => go('treinador'), 'block', 'coach'),
     btn('Modelos prontos', modelsSheet, 'block', 'copy'),
@@ -252,7 +297,7 @@ export function dayView(planId, dayId) {
       const ok = await confirmSheet({ title: 'Excluir este treino?', text: `“${day.nome}” será removido do plano.`, okLabel: 'Excluir', danger: true });
       if (!ok) return;
       mut(planId, (p) => { p.dias = p.dias.filter((d) => d.id !== dayId); for (const k of Object.keys(p.agenda)) if (p.agenda[k] === dayId) delete p.agenda[k]; });
-      go('treinos');
+      replace('treinos'); // a tela do treino apagado não fica no histórico do botão Voltar
     }, 'block plain danger', 'trash'));
   }
   body.push(note('info', 'As alterações são salvas automaticamente.'));

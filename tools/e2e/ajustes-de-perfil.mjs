@@ -23,6 +23,9 @@ export default async (page) => {
       const k = Object.keys(respostas).find((x) => q.includes(x));
       if (k && !(await escolher(respostas[k]))) falhas.push(`opção não encontrada: ${q} -> ${respostas[k]}`);
       await page.sleep(120);
+      // pergunta nova, que o usuário de exemplo ainda não respondeu: escolhe a primeira opção, como a pessoa teria de fazer
+      if (!k) await page.eval(`const b = [...document.querySelectorAll('button.btn.primary')].find((e) => /^(Continuar|Concluir)$/.test(e.textContent.trim())); if (b && b.disabled) { const o = document.querySelector('.opt'); if (o) o.click(); }`);
+      await page.sleep(80);
       if (!(await avancar())) { falhas.push('não avançou na pergunta: ' + q); break; }
       await page.sleep(250);
     }

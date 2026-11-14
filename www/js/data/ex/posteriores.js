@@ -482,7 +482,7 @@ export default [
       'Empurrar o quadril alto demais e arquear a lombar.',
       'Fazer rápido e perder o controle da bola.',
     ],
-    cuidado: ['lombar', 'gestante'],
+    cuidado: ['joelho', 'lombar', 'gestante'],
     aliases: ['swiss ball leg curl', 'stability ball leg curl', 'hamstring curl na bola', 'flexora na bola', 'leg curl na bola'],
     fontes: [
       { org: 'ACE', titulo: 'Stability Ball Hamstring Curl', url: 'https://www.acefitness.org/resources/everyone/exercise-library/59/stability-ball-hamstring-curl/' },

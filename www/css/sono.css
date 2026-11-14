@@ -1,0 +1,27 @@
+/* Meta de sono: o alvo em destaque, o registro da noite e as barras da semana. O resto usa as classes de app.css. */
+.sono-alvo { font-size: 2.3rem; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.sono-alvo.m { font-size: 1.6rem; }
+.sono-motivos { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
+.sono-motivos li + li { margin-top: 0; }
+.sono-passo output { display: block; min-width: 84px; padding: 0 4px; text-align: center; font-weight: 700; font-size: 1.05rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sono-passo.sm output { min-width: 72px; font-size: 0.98rem; }
+.input.sono-hora { width: auto; min-width: 118px; flex: none; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sono-graf .bar.dentro { fill: var(--ok); }
+.sono-graf .bar.abaixo { fill: var(--warn); }
+.sono-graf .bar.acima { fill: var(--info); }
+.sono-graf .alvo { stroke: var(--ok); stroke-width: 1.4; stroke-dasharray: 4 3; }
+/* os dias ficam embaixo das barras: o recuo acompanha a margem esquerda do gráfico (20 de 320) */
+.sono-dias { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding-left: 6.25%; }
+.sono-dia { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 48px; padding: 4px 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); color: var(--text); font-size: 0.72rem; }
+.sono-dia b { font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.sono-dia.vazio b { color: var(--muted); }
+.sono-dia.hoje { border-color: var(--accent); }
+.sono-dia:active { background: var(--border); }
+/* cartão do Início: o link para a tela mostra a meta; o convite (sem meta) é um cartão-link */
+.sono-abrir { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; color: var(--muted); font-size: 0.86rem; text-align: right; }
+a.sono-convite { text-decoration: none; }
+.sono-sinais ul { margin: 4px 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 4px; }
+.sono-sinais li + li { margin-top: 0; }
+/* linha "horas + Registrar": cabe no cartão em telas de 360 px */
+.sono-passo + .btn { white-space: nowrap; padding: 0 12px; flex: 0 1 auto; min-width: 0; }
+@media (max-width: 380px) { .sono-passo output { min-width: 70px; } .sono-passo.sm output { min-width: 62px; } }

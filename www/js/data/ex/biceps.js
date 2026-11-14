@@ -125,7 +125,7 @@ export default [
     nivel: 1,
     registro: 'peso_reps',
     unilateral: false,
-    posicao: 'Em pé, um halter em cada mão ao lado do corpo, palmas para a frente, cotovelos junto ao tronco.',
+    posicao: 'Em pé, um halter em cada mão ao lado do corpo, cotovelos junto ao tronco. Pegada por baixo: palmas viradas para a frente.',
     execucao: [
       'Mantenha os cotovelos ao lado do tronco e o abdômen contraído.',
       'Dobre os dois cotovelos ao mesmo tempo e suba os halteres até a altura dos ombros.',
@@ -134,7 +134,7 @@ export default [
     ],
     respiracao: 'Solte o ar ao subir os halteres e inspire ao descer.',
     dicas: [
-      'Mantenha as palmas para cima durante todo o movimento.',
+      'As palmas ficam para a frente embaixo e para cima (viradas para os ombros) no alto. Não gire os punhos.',
       'Se o tronco balançar, diminua a carga ou faça sentado.',
     ],
     erros: [

@@ -5,6 +5,7 @@
 import { L } from './rig.js';
 import { AK, H, X, D2R, add, foot, shOf, ankleFromToe, seated, SEAT_F, seatBoxF, backPadF } from './base.js';
 import { treadmill } from './core.js';
+import { torre, came } from './pecas.js';
 
 const norm = (v) => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; };
 const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
@@ -12,7 +13,8 @@ const passos = (n) => Array.from({ length: n }, (_, i) => i / (n - 1));
 const entre = (a, b, t) => a + (b - a) * t;
 // ponto a uma distância r do centro c; ângulo em graus a partir de "para baixo", positivo = para a frente
 const polar = (c, r, graus) => [c[0] + r * Math.sin(graus * D2R), c[1] - r * Math.cos(graus * D2R)];
-const MAOS_NO_PEITO = { rel: [7.5, -9], la: 0.7, lb: 0.6 };
+// braços cruzados no peito: cotovelo embaixo, junto das costelas, e a mão subindo para o ombro do outro lado
+const MAOS_NO_PEITO = { rel: [6, -2.4], la: 0.7, lb: 0.6 };
 
 // ---------- peças (mesmo acabamento das de equip.js) ----------
 function tubo(o, pts, w = 1.6) {
@@ -207,7 +209,20 @@ export function rotaryTorso() {
       { k: 'frame', pts: [[-17, 106], [17, 106]], z: 'back' },
       { k: 'frame', pts: [[0, 106], [0, 62]], z: 'back' },
       { k: 'fn', f: (o, J) => { for (const h of [J.handR, J.handL]) { tubo(o, [[h[0], 106], [h[0], h[1] - 2.5]], 1.5); } } },
-      { k: 'roller', at: 'kn', dx: 5.6, dy: 0.5, r: 2.9 },
+      // berço dos joelhos: gira junto com o assento; uma almofada em pé por fora de cada joelho, presas à travessa que
+      // passa por baixo das coxas e desce até o eixo, sob o assento
+      { k: 'fn', z: 'back', f: (o, J) => {
+        const xr = J.knR[0] + 9, xl = J.knL[0] - 9, yb = J.knR[1] - 8;
+        tubo(o, [[xr, J.knR[1] - 2], [xr, yb], [xl, yb], [xl, J.knL[1] - 2]], 1.7);
+        tubo(o, [[(xr + xl) / 2, yb], [X, 14]], 1.9);
+        eixo(o, [X, 14]);
+      } },
+      { k: 'fn', f: (o, J) => {
+        for (const [kn, s] of [[J.knR, 1], [J.knL, -1]]) {
+          o.line([kn[0] + s * 9, kn[1] - 2], [kn[0] + s * 7.4, kn[1] - 2], 'fg-eq', 1.5);
+          estofado(o, [kn[0] + s * 6.9, kn[1] - 6.5], [kn[0] + s * 6.9, kn[1] + 3], 1.8);
+        }
+      } },
     ],
   };
 }
@@ -215,15 +230,22 @@ export function rotaryTorso() {
 // ---------- QUADRÍCEPS ----------
 // Agachamento pêndulo: costas no encosto e ombros sob os apoios; o carro pende de um eixo no alto da torre e desce em arco.
 export function pendulumSquat() {
-  const P = [158.6, 96.5];
-  const R = 76;
-  const an = [112, 12];
-  const fa = -20;
+  // Referência: Atlantis Pendulum Squat Pro PW212 (foto do fabricante). A estrutura alta fica à FRENTE da pessoa, com a
+  // plataforma inclinada ao pé dela; o eixo fica no alto dessa estrutura, na altura dos ombros. Dele sai para trás um
+  // braço comprido, quase horizontal, que leva as ombreiras, o encosto pendurado e, na ponta de trás, o pino das
+  // anilhas; do outro lado do eixo fica o contrapeso. O carro é rígido no braço: ao descer, os ombros descem em arco,
+  // o corpo vai para a frente e para baixo e o encosto deita um pouco mais.
+  const P = [150, 82];
+  const R = 62;      // do eixo até o ponto do braço que fica sobre o ombro
+  const SOBRE = 5.5; // esse ponto fica 5,5 acima do ombro (a ombreira está entre os dois)
+  const an = [131, 15];
+  const fa = -40;
   const mk = (s) => {
-    const al = entre(17.2, 35.8, s) * D2R;
-    const sh = [P[0] - R * Math.cos(al), P[1] - R * Math.sin(al)];
-    const torso = entre(-16, 2.6, s); // o encosto gira junto com o braço do pêndulo
-    return { hip: [sh[0] - L.torso * Math.sin(torso * D2R), sh[1] - L.torso * Math.cos(torso * D2R)], torso, leg: { foot: an, footAng: fa }, arm: { rel: [6.5, -3] } };
+    const al = entre(6, 18, s);
+    const q = [P[0] - R * Math.cos(al * D2R), P[1] - R * Math.sin(al * D2R)];
+    const torso = -20 - (al - 6);
+    const k = L.torso + SOBRE;
+    return { hip: [q[0] - k * Math.sin(torso * D2R), q[1] - k * Math.cos(torso * D2R)], torso, leg: { foot: an, footAng: fa }, arm: { rel: [6.5, -3] } };
   };
   const fd = [Math.cos(fa * D2R), -Math.sin(fa * D2R)];
   const sola = add(an, [-fd[1], fd[0]], -(L.ankle * 0.55 + 1.3));
@@ -231,21 +253,27 @@ export function pendulumSquat() {
     view: 'side',
     frames: passos(5).map(mk),
     equip: [
-      { k: 'frame', pts: [[78, 0.8], [P[0] + 8, 0.8]] },
-      { k: 'frame', pts: [[P[0] + 2, 0.8], [P[0] + 2, P[1]]], w: 2.4, z: 'back' },
+      { k: 'frame', pts: [[84, 0.8], [P[0] + 12, 0.8]] },
+      { k: 'frame', pts: [[P[0] + 3, 0.8], [P[0] + 3, P[1] + 4]], w: 2.6, z: 'back' },
+      { k: 'frame', pts: [[P[0] + 3, 52], [P[0] - 12, 0.8]], w: 1.8, z: 'back' },
       { k: 'frame', pts: [[add(sola, fd, -2)[0], add(sola, fd, -2)[1] - 1], [add(sola, fd, -2)[0], 0.8]], z: 'back' },
       { k: 'frame', pts: [[add(sola, fd, 8)[0], add(sola, fd, 8)[1] - 1], [add(sola, fd, 8)[0], 0.8]], z: 'back' },
       { k: 'fn', z: 'back', f: (o) => chapa(o, add(sola, fd, 2.5), fd, 9.5, 1.1) },
       { k: 'fn', z: 'back', f: (o, J) => {
         const up = J.up, back = [-up[1], up[0]], front = [up[1], -up[0]];
-        tubo(o, [add(add(J.sh, up, 5), back, 7), add(add(J.sh, up, 24), back, 4), P], 2); // braço do pêndulo: sobe por trás da cabeça e vai até o eixo
-        const pino = add(add(J.sh, up, -7), back, 18.5);
-        tubo(o, [add(add(J.sh, up, -7), back, 9.4), pino], 1.4);
+        const q = add(J.sh, up, SOBRE);                      // ponto do braço sobre o ombro
+        const d = norm([P[0] - q[0], P[1] - q[1]]);
+        const pino = add(q, d, -21);                         // ponta de trás do braço, com as anilhas
+        tubo(o, [pino, P, add(P, d, 11)], 2.2);              // braço do pêndulo; depois do eixo, o contrapeso
+        chapa(o, add(P, d, 11), d, 3.2, 2.8, 'fg-rub');
         anilha(o, pino, 8);
+        tubo(o, [add(q, d, -9), add(add(J.hip, back, 11.5), up, 30)], 1.6); // suporte que pendura o encosto no braço
         estofado(o, add(add(J.hip, back, 9.4), up, -2), add(add(J.hip, back, 9.4), up, 35));
         o.circ(add(add(J.sh, up, 4.5), front, 1), 3, 'fg-cush');
+        o.line(add(add(J.sh, up, 4.5), front, 3.5), J.handN, 'fg-eq', 1.4); // pegador que desce da ombreira
         eixo(o, P);
       } },
+      { k: 'handle' },
     ],
   };
 }
@@ -264,6 +292,7 @@ export function beltSquat() {
   return {
     view: 'side',
     frames: [{ hip: [X, top + H - 0.4], torso: 3, leg, arm: maoEm(60) }, { hip: [X - 9, top + 26.5], torso: 20, leg, arm: maoEm(44) }],
+    pisos: [{ x0: 84, x1: 117, y: top }],
     equip: [
       { k: 'box', x0: 84, x1: 117, h: top },
       { k: 'frame', pts: [[X + 23.4, 0.8], [X + 23.4, top + 66]], w: 2, z: 'back' },
@@ -283,23 +312,31 @@ export function beltSquat() {
 // Leg press vertical: deitado de costas, os pés empurram a plataforma para cima, em linha com o quadril.
 export function verticalLegPress() {
   const hip = [100, 12.4];
-  const base = { hip, torso: -90, arm: { a: 94, b: 92 } };
+  // Referência: leg press vertical de anilhas da Sportgear (foto do vendedor). Torre alta com duas colunas e as hastes-
+  // guia; o carro corre nelas levando a plataforma dos pés, com os pinos das anilhas dos dois lados, na altura da
+  // plataforma; encosto baixo no chão, com o quadril embaixo da plataforma, e as alças das travas ao lado do quadril.
+  const base = { hip, torso: -90, arm: { hand: [hip[0] - 2, hip[1] + 6] } };
   const mk = (y) => ({ ...base, leg: { foot: [99, y], footAng: 180 } });
   return {
     view: 'side',
     frames: [mk(55.6), mk(46.4)],
     equip: [
       { k: 'pad', a: [56, 3], b: [107, 3] },
-      { k: 'frame', pts: [[52, 0.8], [118, 0.8]] },
-      { k: 'frame', pts: [[84, 0.8], [84, 88], [112, 88], [112, 0.8]], w: 2, z: 'back' },
+      { k: 'frame', pts: [[52, 0.8], [120, 0.8]] },
+      { k: 'frame', pts: [[84, 0.8], [84, 100], [112, 100], [112, 0.8]], w: 2.2, z: 'back' },
       { k: 'fn', z: 'back', f: (o, J) => {
+        o.line([88, 2.4], [88, 98.5], 'fg-rod', 0.9); // hastes-guia
+        o.line([108, 2.4], [108, 98.5], 'fg-rod', 0.9);
         const y = J.anN[1] + L.ankle * 0.55 + 1.2;
         const c = [J.anN[0] - 2, y];
-        chapa(o, c, [1, 0], 10.5, 1.1);
-        tubo(o, [[84, y + 4], [112, y + 4]], 1.6); // travessa do carro, que corre nas duas colunas
+        anilha(o, [c[0], y + 4.5], 8);             // anilhas nos pinos laterais do carro
+        tubo(o, [[84, y + 4], [112, y + 4]], 1.8); // travessa do carro, que corre nas duas colunas
         tubo(o, [[c[0], y + 1], [c[0], y + 4]], 1.6);
-        anilha(o, [c[0], y + 12.5], 7.5);
+        chapa(o, c, [1, 0], 10.5, 1.1);
+        const h = J.handN;
+        tubo(o, [[h[0], 0.8], [h[0], h[1] - 1]], 1.4); // alça da trava, ao lado do quadril
       } },
+      { k: 'handle' },
     ],
   };
 }
@@ -362,8 +399,11 @@ export function ghdRaise() {
 export function reverseHyper() {
   const hip = [84, 52];
   const base = { hip, torso: 90, head: -24, arm: { hand: [127, 37.5] } };
-  const P = [87, 44];
-  const BRACO = 36;
+  // Como na patente da máquina (US 5.356.359): o eixo do pêndulo fica logo abaixo da mesa, na linha da cintura; em
+  // repouso o pêndulo pende na vertical e a correia dos tornozelos fica frouxa; quando as pernas sobem, a correia
+  // estica e leva o pêndulo, com as anilhas na ponta de baixo.
+  const P = [86, 40];
+  const BRACO = 35, CORREIA = 14;
   return {
     view: 'side',
     frames: [{ ...base, leg: { a: 12, b: 12 } }, { ...base, leg: { a: -93, b: -93 } }],
@@ -371,20 +411,28 @@ export function reverseHyper() {
       { k: 'pad', a: [88.5, 42.8], b: [114, 42.8] },
       { k: 'frame', pts: [[108, 41], [108, 0.8]], w: 2 },
       { k: 'frame', pts: [[96, 41], [108, 16]] },
+      { k: 'frame', pts: [[92, 40.6], P], w: 1.8, z: 'back' },
       { k: 'frame', pts: [[82, 0.8], [132, 0.8]] },
       { k: 'frame', pts: [[127, 0.8], [127, 36]], w: 2, z: 'back' },
       { k: 'frame', pts: [[123.5, 36], [130.5, 36]], w: 1.8, z: 'back' },
       { k: 'fn', z: 'back', f: (o, J) => {
         const d = norm([J.anN[0] - J.knN[0], J.anN[1] - J.knN[1]]);
-        const r = add(J.anN, [d[1], -d[0]], 4.8);            // rolo/tira atrás dos tornozelos
-        const perna = Math.atan2(d[0], -d[1]) / D2R;         // ângulo das pernas (0 = penduradas)
-        const e = polar(P, BRACO, entre(6, -88, (12 - perna) / 105));
+        const r = add(J.anN, [d[1], -d[0]], -2.6);           // onde a correia chega ao tornozelo, do lado do pêndulo
+        let e = [P[0], P[1] - BRACO];                         // pêndulo parado, na vertical
+        if (Math.hypot(r[0] - e[0], r[1] - e[1]) > CORREIA) { // correia esticada: a ponta do pêndulo fica a um comprimento de correia do rolo
+          const v = [r[0] - P[0], r[1] - P[1]], dist = Math.hypot(v[0], v[1]) || 1, u = [v[0] / dist, v[1] / dist];
+          const a = Math.min(BRACO, (BRACO * BRACO - CORREIA * CORREIA + dist * dist) / (2 * dist));
+          const h = Math.sqrt(Math.max(0, BRACO * BRACO - a * a));
+          const c1 = [P[0] + u[0] * a - u[1] * h, P[1] + u[1] * a + u[0] * h], c2 = [P[0] + u[0] * a + u[1] * h, P[1] + u[1] * a - u[0] * h];
+          e = c1[1] < c2[1] ? c1 : c2;
+        }
         tubo(o, [P, e], 1.8);
-        anilha(o, e, 5.5);
+        anilha(o, e, 4.5);
         o.line(e, r, 'fg-cable', 1.3);
-        rolo(o, r, 2.5);
         eixo(o, P);
       } },
+      // laço da correia em volta do tornozelo
+      { k: 'fn', f: (o, J) => { const d = norm([J.anN[0] - J.knN[0], J.anN[1] - J.knN[1]]); o.line(add(J.anN, [d[1], -d[0]], -2.7), add(J.anN, [d[1], -d[0]], 2.7), 'fg-grip', 2.4); } },
     ],
   };
 }
@@ -394,12 +442,22 @@ export function reverseHyper() {
 export function multiHip() {
   const base = { hip: [X, H], legL: { a: 3, b: 2 }, arm: { a: 12, b: -40, lb: 0.5 } }; // mãos na barra de apoio, à frente da cintura
   const pv = [X + L.hpw, H + 1];
+  const RC = 5;
+  const d0 = [Math.sin(3 * D2R), -Math.cos(3 * D2R)];
   return {
     view: 'front', label: 'Vista de frente',
     frames: [{ ...base, legR: { a: 3, b: 3 } }, { ...base, legR: { a: 36, b: 36 } }],
+    // multi-hip: torre da pilha de um lado, travessa até o eixo na altura do quadril; no eixo giram o came e o braço com
+    // o rolo, que encosta por fora da coxa; o cabo passa por dentro da travessa e sobe pela torre até a pilha
     equip: [
-      { k: 'tower', x: 44, only: 'L', top: 84 },
-      { k: 'fn', z: 'back', f: (o) => tubo(o, [[X - 41, pv[1]], pv], 2) },
+      { k: 'fn', z: 'back', f: (o, J) => {
+        const d = norm([J.knR[0] - J.hjR[0], J.knR[1] - J.hjR[1]]);
+        const giro = Math.acos(Math.max(-1, Math.min(1, d[0] * d0[0] + d[1] * d0[1])));
+        // o cabo corre por dentro da travessa e só aparece junto da torre, longe das pernas
+        torre(o, { x: X - 44, top: 84, w: 8, dir: 1, sobe: giro * 9, de: [[X - 37.2, pv[1]]], direto: true, polia0: true });
+        tubo(o, [[X - 41, pv[1]], pv], 2);
+        came(o, pv, RC, Math.atan2(d[1], d[0]));
+      } },
       { k: 'fn', f: (o, J) => {
         const d = norm([J.knR[0] - J.hjR[0], J.knR[1] - J.hjR[1]]);
         const r = add(add(J.knR, d, -3.5), [-d[1], d[0]], 6.2);
@@ -428,6 +486,7 @@ export function donkeyCalf() {
   return {
     view: 'side',
     frames: [mk(-14), mk(38)],
+    pisos: [{ x0: 94.5, x1: 114, y: 6 }],
     equip: [
       { k: 'box', x0: 94.5, x1: 114, h: 6 },
       { k: 'frame', pts: [[52, 0.8], [140, 0.8]] },
@@ -469,20 +528,31 @@ export function recumbentBike() {
       arm: { hand: [s.hip[0] + 4, s.hip[1]] },
     });
   }
-  const pedal = (o, an) => { const p = add(an, PE); o.line(c, p, 'fg-eq', 1.6); o.line(add(p, fd, -3.4), add(p, fd, 3.4), 'fg-eq', 1.9); };
+  const pedal = (o, an, c2) => { const p = add(an, PE); o.line(c, p, 'fg-eq' + c2, 1.6); o.line(add(p, fd, -3.4), add(p, fd, 3.4), 'fg-grip' + c2, 2); };
   return {
     view: 'side', loop: true, frames,
+    // bicicleta reclinada: quadro baixo e aberto (dá para entrar andando), assento com encosto no trilho, pegadores com
+    // sensor ao lado do assento, pedais à frente do corpo, carenagem do volante, coluna com o guidão da frente e o painel
     equip: [
       ...s.equip,
-      { k: 'frame', pts: [[60, 17.6], [100, 17.6], [c[0] + 4, 13]], w: 2, z: 'back' },
-      { k: 'frame', pts: [[66, 17.6], [64, 0.8]], z: 'back' },
-      { k: 'frame', pts: [[56, 0.8], [138, 0.8]] },
-      { k: 'circ', at: [c[0] + 8, 19], r: 13, c: 'fg-plate', z: 'back' },
-      { k: 'frame', pts: [[c[0] + 13, 30], [c[0] + 16, 60]], w: 2, z: 'back' },
-      { k: 'pad', a: [c[0] + 11.5, 63], b: [c[0] + 20, 60.5], th: 2, z: 'back' },
-      { k: 'frame', pts: [[s.hip[0] + 5, 19], [s.hip[0] + 5, s.hip[1] - 1]], w: 1.5, z: 'back' },
-      { k: 'fn', z: 'back', f: (o, J) => { o.circ(c, 2.2, 'fg-eqs'); pedal(o, add(J.anF, [1.8, 1])); } },
-      { k: 'fn', f: (o, J) => pedal(o, J.anN) },
+      { k: 'frame', pts: [[58, 17.6], [100, 17.6], [c[0] - 6, 9]], w: 2.2, z: 'back' },
+      { k: 'frame', pts: [[64, 17.6], [62, 0.8]], z: 'back' },
+      { k: 'frame', pts: [[54, 0.8], [146, 0.8]] },
+      { k: 'fn', z: 'back', f: (o, J) => {
+        o.smooth([[c[0] - 12, 4], [c[0] - 11, 22], [c[0] - 2, 37], [c[0] + 12, 39], [c[0] + 24, 30], [c[0] + 27, 14], [c[0] + 24, 3.4]], 'fg-shroud');
+        o.circ([c[0] + 12, 19], 10.5, 'fg-plate');
+        o.circ([c[0] + 12, 19], 8.6, 'fg-ring');
+        tubo(o, [[c[0] + 15, 37], [c[0] + 12.5, 66]], 2.2);               // coluna do painel
+        tubo(o, [[c[0] + 12.8, 60], [c[0] + 3, 57]], 1.6);                // guidão da frente
+        o.line([c[0] + 3, 57], [c[0] + 8, 58.5], 'fg-grip', 2.2);
+        chapa(o, [c[0] + 11, 70], [0.97, -0.24], 5.2, 3.6, 'fg-shroud');
+        chapa(o, [c[0] + 10.9, 70.3], [0.97, -0.24], 3.9, 2.4, 'fg-screen');
+        tubo(o, [[s.hip[0] + 5, 17.6], [s.hip[0] + 5, s.hip[1] - 1]], 1.5); // haste do pegador ao lado do assento
+        o.circ(c, 2.2, 'fg-eqs');
+        pedal(o, add(J.anF, [1.8, 1]), ' fg-far');
+      } },
+      { k: 'handle' },
+      { k: 'fn', f: (o, J) => pedal(o, J.anN, '') },
     ],
   };
 }
@@ -490,21 +560,32 @@ export function recumbentBike() {
 // Simulador de esqui: em pé, as mãos puxam os dois cabos do alto até as coxas, dobrando o quadril antes dos joelhos.
 export function skiErg() {
   const leg = foot(97);
-  const topo = [128, 108];
+  // A máquina fica um passo à frente da pessoa: os cabos descem do alto, pela frente do rosto e do peito, até as mãos.
+  const topo = [136, 100];
+  const v = [141, 99]; // volante (ventoinha) dentro da grade, no alto da coluna
   return {
     view: 'side', label: 'Ordem: tronco e quadril, depois os braços',
     frames: [
-      { hip: [96, H - 0.4], torso: 3, leg, arm: { hand: [112, 90] } },
-      { hip: [93, 46], torso: 24, head: -10, leg, arm: { hand: [114, 60] } },
-      { hip: [89, 43.5], torso: 40, head: -22, leg, arm: { hand: [95.5, 40.5] } },
+      { hip: [96, H - 0.4], torso: 3, leg, arm: { hand: [118, 92] } },
+      { hip: [93, 46], torso: 24, head: -10, leg, arm: { hand: [117, 62] } },
+      { hip: [89, 43.5], torso: 40, head: -22, leg, arm: { hand: [106, 40] } },
     ],
+    // simulador de esqui: coluna alta (cerca de 2,15 m) presa à base de piso, que tem a plataforma onde se pisa; no alto,
+    // a ventoinha dentro da grade; o monitor num braço na altura dos olhos; os dois cabos descem do alto até os pegadores
     equip: [
-      { k: 'frame', pts: [[114, 0.8], [142, 0.8]] },
-      { k: 'frame', pts: [[131, 0.8], [131, 112]], w: 2.4, z: 'back' },
-      { k: 'circ', at: [131, 99], r: 9.5, c: 'fg-plate', z: 'back' },
-      { k: 'pad', a: [124.5, 78], b: [124.5, 85], th: 1.5, z: 'back' },
-      { k: 'frame', pts: [[124.5, 81.5], [131, 81.5]], w: 1.2, z: 'back' },
-      { k: 'fn', z: 'back', f: (o, J) => o.line(topo, add(J.handF, [1.8, 1]), 'fg-cable', 0.8) },
+      { k: 'frame', pts: [[80, 0.8], [155, 0.8]] },
+      { k: 'frame', pts: [[141, 0.8], [141, 88]], w: 2.6, z: 'back' },
+      { k: 'frame', pts: [[141, 24], [153, 0.8]], w: 1.6, z: 'back' },
+      { k: 'fn', z: 'back', f: (o, J, t) => {
+        o.circ(v, 11, 'fg-plate');
+        o.circ(v, 9.4, 'fg-ring');
+        for (let i = 0; i < 6; i++) { const a = (i * Math.PI) / 3 + t * Math.PI * 2; o.line(add(v, [Math.cos(a) * 2, Math.sin(a) * 2]), add(v, [Math.cos(a + 0.3) * 8.6, Math.sin(a + 0.3) * 8.6]), 'fg-eqhi', 0.8); }
+        o.circ(v, 1.9, 'fg-steel');
+        tubo(o, [[141, 78], [135.5, 80]], 1.3);
+        chapa(o, [133.6, 81.5], [0.26, 0.97], 3.6, 2.4, 'fg-shroud');
+        chapa(o, [133.3, 81.6], [0.26, 0.97], 2.6, 1.5, 'fg-screen');
+        o.line(topo, add(J.handF, [1.8, 1]), 'fg-cable', 0.8);
+      } },
       { k: 'cable', from: topo, z: 'back' },
       { k: 'handle' },
     ],

@@ -3,9 +3,13 @@ import * as U from './upper.js';
 import * as W from './lower.js';
 import * as C from './core.js';
 import * as E from './extra.js';
+import { ANIMS_CASA } from './casa.js';
+import { ANIMS_MAIS } from './mais.js';
 import { stand } from './base.js';
 
 const M = {
+  ...ANIMS_CASA, // treino em casa, sem aparelhos (anim/casa.js)
+  ...ANIMS_MAIS, // exercícios e aparelhos acrescentados no levantamento de lacunas (anim/mais.js)
   // PEITO
   'supino-reto-barra': [U.benchPress],
   'supino-inclinado-barra': [U.benchPress, { inc: 32 }],
@@ -54,8 +58,8 @@ const M = {
   // TRÍCEPS
   'triceps-pulley-barra-reta': [U.pushdown],
   'triceps-pulley-corda': [U.pushdown, { rope: true }],
-  'triceps-pulley-inverso': [U.pushdown],
-  'triceps-unilateral-polia': [U.pushdown],
+  'triceps-pulley-inverso': [U.pushdown, { pega: 'supinada' }],
+  'triceps-unilateral-polia': [U.pushdown, { pega: 'neutra' }],
   'triceps-testa-barra-w': [U.skullCrusher],
   'triceps-testa-halteres': [U.skullCrusher, { tool: 'db' }],
   'triceps-frances-halter': [U.overheadExt],
@@ -70,18 +74,18 @@ const M = {
   'triceps-maquina': [U.tricepsMachine],
   // COSTAS
   'barra-fixa-pronada': [U.pullup],
-  'barra-fixa-supinada': [U.pullup, { w: 9.5 }],
-  'barra-fixa-neutra': [U.pullup, { w: 11.5 }],
+  'barra-fixa-supinada': [U.pullup, { w: 9.5, pega: 'supinada' }],
+  'barra-fixa-neutra': [U.pullup, { w: 11.5, pega: 'neutra' }],
   'barra-fixa-assistida-graviton': [U.pullup, { assisted: true }],
   'puxada-frente-aberta': [U.latPulldown],
   'puxada-frente-supinada': [U.latPulldown, { grip: 'sup' }],
   'puxada-triangulo': [U.latPulldown, { grip: 'close' }],
   'puxada-unilateral-polia': [U.latPulldown, { uni: true }],
-  'puxada-maquina-articulada': [U.latPulldown, { machine: true }],
+  'puxada-maquina-articulada': [U.platePulldown],
   'pulldown-bracos-estendidos': [U.straightArmPulldown],
   'pullover-maquina': [U.pulloverMachine],
   'remada-curvada-barra-pronada': [U.bentRow],
-  'remada-curvada-barra-supinada': [U.bentRow],
+  'remada-curvada-barra-supinada': [U.bentRow, { pega: 'supinada' }],
   'remada-curvada-halteres': [U.bentRow, { tool: 'db' }],
   'remada-unilateral-halter-serrote': [U.oneArmRow],
   'remada-baixa-triangulo': [U.seatedCableRow],
@@ -102,9 +106,9 @@ const M = {
   'rosca-direta-barra-reta': [U.curl],
   'rosca-direta-barra-w': [U.curl, { tool: 'ez' }],
   'rosca-alternada-halteres': [U.curl, { tool: 'db', mode: 'alt' }],
-  'rosca-simultanea-halteres': [U.curl, { tool: 'db' }],
+  'rosca-simultanea-halteres': [U.curl, { tool: 'db', mode: 'frente' }],
   'rosca-martelo-halteres': [U.curl, { tool: 'hammer' }],
-  'rosca-martelo-polia-corda': [U.curl, { mode: 'cable' }],
+  'rosca-martelo-polia-corda': [U.curl, { mode: 'cable', pega: 'neutra' }],
   'rosca-concentrada': [U.curl, { mode: 'conc' }],
   'rosca-scott-barra-w': [U.curl, { mode: 'preacher', tool: 'ez' }],
   'rosca-scott-halter-unilateral': [U.curl, { mode: 'preacher', tool: 'db' }],
@@ -116,12 +120,12 @@ const M = {
   'rosca-bayesian': [U.curl, { mode: 'bayesian' }],
   // ANTEBRAÇO
   'rosca-punho-barra': [U.wristCurl],
-  'rosca-punho-inversa-barra': [U.wristCurl],
-  'rosca-inversa-barra-w': [U.curl, { tool: 'ez' }],
+  'rosca-punho-inversa-barra': [U.wristCurl, { inversa: true }],
+  'rosca-inversa-barra-w': [U.curl, { tool: 'ez', pega: 'pronada', label: 'Palmas para baixo (pegada pronada)' }],
   'suspensao-barra-fixa-dead-hang': [U.pullup, { hang: true }],
   'pegada-pinca-anilhas': [U.holdStand],
   'rosca-punho-halter-unilateral': [U.wristCurl, { single: true }],
-  'rosca-punho-inversa-halter-unilateral': [U.wristCurl, { single: true }],
+  'rosca-punho-inversa-halter-unilateral': [U.wristCurl, { single: true, inversa: true }],
   // QUADRÍCEPS
   'agachamento-livre-barra': [W.squat],
   'agachamento-frontal-barra': [W.squat, { tool: 'front' }],
@@ -269,7 +273,6 @@ const MAOS = {
   'gluteo-maquina-coice': 'eixo-h',
   // barra desenhada à parte
   'remada-alta-polia': 'eixo-h',
-  'puxada-frente-aberta': { R: { m: 'eixo', u: [0.97, -0.26] }, L: { m: 'eixo', u: [0.97, 0.26] } },
 };
 
 const cache = new Map();

@@ -2,7 +2,7 @@
 import { state } from '../store.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { dateKey } from '../ui.js';
-import { DIA, nivelPausa, cortePausa, duracaoTxt, maiorPausa, voltaEm, FAIXAS_PAUSA, FAIXA_DA_RESPOSTA, CORTE_CARDIO, IRV_MAX, DESCANSO_MINIMO } from './pausa.js';
+import { DIA, nivelPausa, cortePausa, duracaoTxt, maiorPausa, diasEntre, voltaEm, FAIXAS_PAUSA, FAIXA_DA_RESPOSTA, CORTE_CARDIO, IRV_MAX, DESCANSO_MINIMO } from './pausa.js';
 import { pesosDoExercicio } from './trainer.js';
 
 const ASSISTIDOS = new Set(['barra-fixa-assistida-graviton', 'mergulho-assistido-graviton']);
@@ -78,13 +78,23 @@ export function sugestao(exId, alvoReps, nSeries) {
   }
   const primeira = { kg: null, reps: lo, texto: `Primeira vez: comece leve. Escolha uma carga com que você faça ${hi} repetições sobrando umas 3.` };
   if (!last || !last.sets.some((s) => pos(s.reps))) return primeira;
-  const kg = Math.max(...last.sets.map((s) => pos(s.kg)));
-  const comCarga = last.sets.filter((s) => pos(s.kg) >= kg);
+  // Carga de trabalho: a maior da última vez (na máquina com ajuda, a MENOR ajuda, que é a série mais difícil).
+  // Séries de trabalho: as feitas com pelo menos 90% dessa carga (ou até 10% mais ajuda). Aquecimento e degraus de
+  // pirâmide ficam de fora: registrar essas séries não pode impedir a carga de subir.
+  const ajuda = assistido(exId);
+  const feitas = (hst) => (hst ? hst.sets.filter((s) => pos(s.reps) > 0) : []);
+  const cargas = feitas(last).map((s) => pos(s.kg));
+  const kg = ajuda ? Math.min(...cargas) : Math.max(...cargas);
+  const deTrabalho = (hst) => feitas(hst).filter((s) => (ajuda ? pos(s.kg) <= kg * 1.1 + 1e-9 : pos(s.kg) >= kg * 0.9 - 1e-9));
+  const comCarga = deTrabalho(last);
   const resumo = last.sets.map((s) => `${kgTxt(pos(s.kg))} kg × ${pos(s.reps)}`).join(' · ');
-  const noTopo = (hst) => !!hst && hst.sets.length >= minSeries && hst.sets.every((s) => pos(s.reps) >= hi && pos(s.kg) >= kg);
-  const abaixo = (hst) => !!hst && hst.sets.length > 0 && pos(hst.sets[0].reps) < lo;
+  // no topo: todas as séries de trabalho chegaram ao alto da faixa, e pelo menos uma foi feita com a carga cheia
+  const cheia = (s) => (ajuda ? pos(s.kg) <= kg + 1e-9 : pos(s.kg) >= kg - 1e-9);
+  const noTopo = (hst) => { const w = deTrabalho(hst); return w.length >= minSeries && w.some(cheia) && w.every((s) => pos(s.reps) >= hi); };
+  // abaixo: a maioria das séries de trabalho ficou abaixo do mínimo da faixa
+  const abaixo = (hst) => { const w = deTrabalho(hst); return w.length > 0 && w.filter((s) => pos(s.reps) < lo).length * 2 > w.length; };
   const maisUma = Math.min(hi, Math.max(lo, pos(comCarga[0].reps) + 1));
-  if (assistido(exId)) {
+  if (ajuda) {
     if (noTopo(last) && kg > 0) return { kg: menos(kg), reps: lo, texto: `Última vez: ${resumo}. Você atingiu o alvo: reduza a ajuda da máquina para ${kgTxt(menos(kg))} kg.` };
     return { kg, reps: maisUma, texto: `Última vez: ${resumo}. Mantenha a ajuda e tente mais repetições.` };
   }
@@ -124,10 +134,12 @@ export function voltaDePausa(agora = Date.now()) {
 const pct1RM = (reps) => 1 / (1 + (Math.max(1, reps) + 3) / 30);
 // Musculação nas 2 primeiras semanas da volta (regra FIT): o volume relativo à intensidade
 // (IRV = séries × repetições × %1RM) fica em até 30 por grupo muscular em cada treino. Recebe os itens do treino do dia
-// ([{ ex, series, reps }]) e devolve quantas séries fazer de cada um; `corte` = redução de carga já aplicada na volta.
-export function seriesNaVolta(itens, corte = 0) {
+// ([{ ex, series, reps }]) e devolve quantas séries fazer de cada um. O %1RM é o da faixa de repetições do treino: a
+// carga menor sugerida na volta acompanha a força que caiu com o tempo parado, então o esforço relativo é o mesmo e
+// ela NÃO entra na conta (senão quem ficou mais tempo parado faria mais séries do que quem ficou menos).
+export function seriesNaVolta(itens) {
   const series = itens.map((it) => Math.max(1, Math.round(Number(it.series) || 1)));
-  const irv = (i) => { const [lo] = parseReps(itens[i].reps); return series[i] * lo * pct1RM(lo) * (1 - corte); };
+  const irv = (i) => { const [lo] = parseReps(itens[i].reps); return series[i] * lo * pct1RM(lo); };
   const grupos = new Map();
   itens.forEach((it, i) => {
     const ex = EX_POR_ID.get(it.ex);
@@ -185,19 +197,29 @@ export function retomada(exId, sug, alvoReps, agora = Date.now()) {
     return { ...sug, seg: min, pausaDias: volta.dias, texto: `Volta depois de ${duracaoTxt(volta.dias)} parado, semana ${volta.semana} de ${volta.semanas}: faça ${min} min (antes da pausa: ${ref} min).` };
   }
   const dias = maiorPausa(ts, t0, agora);
-  const n = nivelPausa(dias);
+  // O corte vale enquanto a volta da pausa está em andamento. Pausa antiga, já superada com semanas de treino, não corta
+  // nada: só lembra que o exercício não é feito há tempo.
+  const emVolta = !!voltaDePausa(agora);
+  const n = emVolta ? nivelPausa(dias) : 0;
+  if (!emVolta && nivelPausa(dias) >= 1) {
+    const semEx = diasEntre(t0, agora);
+    if (semEx >= 28 && typeof sug.texto === 'string') return { ...sug, texto: `Faz ${duracaoTxt(semEx)} que você não faz este exercício: se a carga pesar, reduza. ${sug.texto}` };
+    return sug;
+  }
   if (n >= 1) {
     const tempo = duracaoTxt(dias);
     const corte = cortePausa(n);
     const menor = (v) => Math.max(1, Math.round(v * (1 - corte)));
     if (ex.registro === 'segundos') {
       if (!(sug.seg > 0)) return sug;
+      if (menor(sug.seg) >= sug.seg) return { ...sug, pausaDias: dias, texto: `Você ficou ${tempo} sem treinar. Retome aos poucos.` };
       return { ...sug, seg: menor(sug.seg), pausaDias: dias, texto: `Você ficou ${tempo} sem treinar. Hoje faça ${menor(sug.seg)} s (antes da pausa: ${sug.seg} s) e retome aos poucos.` };
     }
     if (ex.registro === 'reps') {
       const ult = Math.max(0, ...h[0].sets.map((s) => pos(s.reps)));
       if (!(ult > 0)) return sug;
-      return { ...sug, reps: menor(ult), pausaDias: dias, texto: `Você ficou ${tempo} sem treinar. Hoje faça ${menor(ult)} repetições por série (antes da pausa: ${ult}) e retome aos poucos.` };
+      if (menor(ult) >= ult) return { ...sug, pausaDias: dias, texto: `Você ficou ${tempo} sem treinar. Retome aos poucos.` };
+      return { ...sug, reps: menor(ult), pausaDias: dias, texto: `Você ficou ${tempo} sem treinar. Hoje faça ${menor(ult)} ${menor(ult) === 1 ? 'repetição' : 'repetições'} por série (antes da pausa: ${ult}) e retome aos poucos.` };
     }
     const antes = maiorCarga(h[0]);
     if (assistido(exId)) {

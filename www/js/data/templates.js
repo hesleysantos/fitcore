@@ -1,9 +1,11 @@
 // Modelos de treino prontos. O usuário pode copiar um modelo e personalizar à vontade.
 // Formato de cada exercício: [id, séries, repetições (ou segundos), descanso em segundos].
 // Critérios (os mesmos do Treinador, conferidos em tests/estresse-treinador.test.mjs):
-//   - modelos de iniciante só usam exercícios de nível 1 quando existe equivalente com os mesmos aparelhos;
-//   - séries diretas por grupo e por semana dentro do teto do nível (12 iniciante, 16 intermediário, 20 avançado;
-//     no grupo em foco de um modelo específico, até 20) — Baz-Valle 2022 (ref bazvalle2022);
+//   - modelos de iniciante só usam exercícios de nível 1, sem impacto (saltos) e sem barra livre em exercício composto;
+//   - nenhum modelo usa exercício que o Treinador deixa só para a escolha manual;
+//   - séries diretas por grupo e por semana dentro do teto do nível (12 iniciante, 16 intermediário, 20 avançado),
+//     inclusive no grupo em foco — Baz-Valle 2022 (ref bazvalle2022);
+//   - todo grande grupo com pelo menos 4 séries por semana — Iversen 2021 (ref iversen2021);
 //   - nenhum modelo dispara os alertas de desequilíbrio ou de excesso da tela Evolução.
 
 const dia = (nome, foco, itens) => ({ nome, foco, itens: itens.map(([ex, series, reps, descanso]) => ({ ex, series, reps, descanso })) });
@@ -125,11 +127,11 @@ export const MODELOS = [
     desc: 'Dois treinos de inferiores (um com ênfase em glúteos, outro em quadríceps) e um de superiores.',
     agenda: [0, 2, 1], dias: [
       dia('A: Glúteos e posteriores', 'Glúteos e posteriores de coxa', [
-        ['elevacao-pelvica-barra', 4, '8-12', 120], ['levantamento-terra-romeno', 3, '8-10', 120], ['agachamento-bulgaro-halteres', 3, '10-12', 90],
+        ['elevacao-pelvica-barra', 3, '8-12', 120], ['levantamento-terra-romeno', 3, '8-10', 120], ['agachamento-bulgaro-halteres', 2, '10-12', 90],
         ['mesa-flexora', 3, '10-12', 60], ['cadeira-abdutora', 3, '12-15', 60], ['coice-polia', 2, '12-15', 45],
       ]),
       dia('B: Quadríceps e glúteos', 'Quadríceps, glúteos e panturrilhas', [
-        ['agachamento-livre-barra', 4, '8-10', 150], ['leg-press-45', 3, '10-12', 120],
+        ['agachamento-livre-barra', 4, '8-10', 150], ['leg-press-45', 2, '10-12', 120],
         ['cadeira-extensora', 3, '12-15', 60], ['cadeira-adutora', 3, '12-15', 60], ['panturrilha-em-pe-maquina', 3, '10-15', 60], ['prancha-frontal', 3, '30', 45],
       ]),
       dia('C: Superiores', 'Costas, peito, ombros e braços', [
@@ -142,10 +144,10 @@ export const MODELOS = [
     id: 'casa-halteres', nome: 'Em casa com halteres', nivel: 1, diasSemana: 3,
     desc: 'Dois treinos de corpo inteiro que usam só halteres, um banco com encosto regulável e um colchonete.',
     agenda: [0, 1, 0], dias: [
-      // stiff e desenvolvimento são de nível 2: não há equivalente de nível 1 com halteres. Comece com cargas leves.
+      // só exercícios de nível 1: o bom-dia sem carga ensina o movimento do stiff, e a elevação frontal faz o papel do desenvolvimento
       dia('Treino A', 'Pernas, peito, costas e abdômen', [
         ['agachamento-goblet', 3, '10-12', 90], ['flexao-inclinada-maos-no-banco', 3, '8-15', 75], ['remada-unilateral-halter-serrote', 3, '10-12', 75],
-        ['stiff-halteres', 2, '10-12', 90], ['desenvolvimento-halteres-sentado', 2, '10-12', 75], ['prancha-frontal', 2, '30', 45],
+        ['bom-dia-peso-corporal', 2, '10-12', 60], ['elevacao-frontal-halteres', 2, '10-12', 60], ['prancha-frontal', 2, '30', 45],
       ]),
       dia('Treino B', 'Pernas, costas, peito, ombros e braços', [
         ['agachamento-sumo-halter', 2, '12-15', 90], ['remada-halteres-banco-inclinado', 3, '10-12', 90], ['flexao-de-bracos', 3, '8-15', 75],
@@ -155,15 +157,15 @@ export const MODELOS = [
   },
   {
     id: 'peso-corporal', nome: 'Só com o peso do corpo', nivel: 1, diasSemana: 3,
-    desc: 'Sem aparelhos: para casa, parque ou viagem. Use uma cadeira ou degrau firme. Sem barra não dá para puxar: se tiver uma, acrescente remadas para as costas.',
+    desc: 'Sem aparelhos: para casa, parque ou viagem. Use uma cadeira ou degrau firme. As costas entram com a puxada de bruços; se tiver uma barra, acrescente remadas.',
     agenda: [0, 1, 0], dias: [
-      dia('Treino A', 'Pernas, peito e abdômen', [
+      dia('Treino A', 'Pernas, peito, costas e abdômen', [
         ['agachamento-peso-corporal', 3, '12-20', 60], ['flexao-de-bracos-joelhos', 3, '8-15', 60], ['ponte-gluteos-solo', 2, '12-20', 60],
-        ['superman-solo', 2, '10-15', 45], ['prancha-frontal', 2, '30', 45], ['abdominal-supra-solo', 2, '12-20', 45],
+        ['puxada-de-brucos', 3, '10-15', 60], ['prancha-frontal', 2, '30', 45], ['abdominal-supra-solo', 2, '12-20', 45],
       ]),
       dia('Treino B', 'Pernas, peito, lombar e condicionamento', [
-        ['subida-caixote', 2, '10-12', 60], ['flexao-inclinada-maos-no-banco', 3, '10-15', 60], ['abducao-quadril-deitado-lado', 2, '12-15', 45],
-        ['perdigueiro', 2, '10-12', 45], ['abdominal-obliquo-cruzado', 2, '10-12', 45], ['polichinelo', 3, '30', 45],
+        ['subida-caixote', 2, '10-12', 60], ['flexao-inclinada-maos-no-banco', 2, '10-15', 60], ['abducao-quadril-deitado-lado', 2, '12-15', 45],
+        ['perdigueiro', 2, '10-12', 45], ['abdominal-obliquo-cruzado', 2, '10-12', 45], ['polichinelo-sem-salto', 3, '30', 45],
       ]),
     ],
   },

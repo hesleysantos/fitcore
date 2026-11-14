@@ -112,7 +112,7 @@ def keystoreProps = new Properties()
 def keystoreFile = rootProject.file('keystore.properties')
 if (keystoreFile.exists()) { keystoreFile.withInputStream { keystoreProps.load(it) } }
 `);
-  g = g.replace('versionName "1.0"', 'versionName "1.0.0"');
+  g = g.replace(/versionCode 1$/m, 'versionCode 2').replace('versionName "1.0"', 'versionName "1.1.0"');
   g = g.replace('    buildTypes {\n        release {\n            minifyEnabled false', `    signingConfigs {
         release {
             if (keystoreFile.exists()) {

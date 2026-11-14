@@ -39,7 +39,7 @@ test('sanitize: dados inválidos ou maliciosos são descartados', () => {
   const s = store.sanitize(sujo);
   assert.equal({}.polluted, undefined, 'protótipo global poluído!');
   assert.equal(Object.prototype.hasOwnProperty.call(s, 'extra'), false);
-  assert.deepEqual(Object.keys(s).sort(), ['activePlan', 'body', 'current', 'gym', 'nutri', 'plans', 'sessions', 'settings', 'trainer', 'ui', 'v'].sort());
+  assert.deepEqual(Object.keys(s).sort(), ['activePlan', 'body', 'current', 'dores', 'gym', 'nutri', 'plans', 'run', 'runs', 'sessions', 'settings', 'sono', 'trainer', 'ui', 'v'].sort());
   assert.equal(s.settings.tema, 'auto');
   assert.equal(s.settings.descanso, 600);
   assert.equal(s.settings.som, true);
@@ -209,4 +209,56 @@ test('backup: séries vazias em treinos finalizados são descartadas e dia impos
   const comPlano = store.sanitize({ sessions: [{ id: 'a', nome: 'x', inicio: '2026-10-01T10:00:00.000Z', fim: '2026-10-01T11:00:00.000Z', itens: [{ ex: 'supino-reto-barra', planejadas: 4.6, sets: [{ kg: 40, reps: 10, ok: true }] }, { ex: 'supino-reto-barra', planejadas: 'x', sets: [] }] }] });
   assert.equal(comPlano.sessions[0].itens[0].planejadas, 5);
   assert.equal('planejadas' in comPlano.sessions[0].itens[1], false);
+});
+
+test('sanitize: Treinador de corrida (run) e corridas registradas (runs)', () => {
+  const sujo = JSON.parse(`{
+    "run": {"answers": {"experiencia": "regular", "kmSemana": 9999, "dias": ["1", "3", "9", {"a": 1}, "__proto__"], "objetivo": "<script>", "__proto__": {"x": 1}, "liberado": "sim", "idade": 40},
+            "aceitoEm": "2026-11-02T10:00:00.000Z", "inicio": "2026-11-04", "pausadoEm": "ontem", "extra": {"a": 1}},
+    "runs": [
+      {"id": "r1", "data": "2026-11-03", "tipo": "leve", "distKm": 5, "durMin": 30, "pse": 4, "dor": {"onde": "joelho", "nivel": 3, "x": 1}, "nota": "${'n'.repeat(500)}", "planejado": "${'p'.repeat(500)}", "lixo": {"a": 1}},
+      {"id": "r1", "data": "2026-11-04", "tipo": "leve", "distKm": 5, "durMin": 30},
+      {"id": "r2", "data": "2026-02-31", "tipo": "leve", "distKm": 5, "durMin": 30},
+      {"id": "r3", "data": "2026-11-01", "tipo": "inventado", "distKm": 1e9, "durMin": -5, "pse": 99, "dor": {"onde": "__proto__", "nivel": 5}},
+      {"id": "r4", "data": "2026-11-05", "tipo": "leve", "distKm": 10, "durMin": 5},
+      {"id": "__proto__", "data": "2026-11-05", "tipo": "leve", "distKm": 5, "durMin": 30},
+      {"id": "r5", "data": "2026-11-05", "tipo": "leve"},
+      {"id": "r6", "data": "2026-11-06", "tipo": "tempo", "distKm": "5", "durMin": 41.26, "pse": 6.4, "dor": {"onde": "canela", "nivel": 0}},
+      "lixo", null, 42, []
+    ]
+  }`);
+  const s = store.sanitize(sujo);
+  assert.equal({}.x, undefined, 'protótipo global poluído!');
+  assert.deepEqual(Object.keys(s.run).sort(), ['aceitoEm', 'answers', 'cron', 'inicio', 'pausadoEm', 'pausas']);
+  assert.deepEqual(s.run.pausas, []);
+  assert.equal(s.run.cron, null);
+  assert.deepEqual(Object.keys(s.run.answers).sort(), ['dias', 'experiencia', 'idade', 'liberado'], 'só perguntas e valores que existem');
+  assert.deepEqual(s.run.answers.dias, ['1', '3']);
+  assert.equal(s.run.inicio, '2026-11-02', 'o início é sempre a segunda-feira da semana');
+  assert.equal(s.run.pausadoEm, '');
+  assert.deepEqual(s.runs.map((r) => r.id), ['r3', 'r1', 'r6'], 'ids repetidos, datas impossíveis, ritmos impossíveis e registros vazios saem; ordem por data');
+  const r1 = s.runs[1];
+  assert.deepEqual(Object.keys(r1).sort(), ['data', 'distKm', 'dor', 'durMin', 'id', 'nota', 'planejado', 'pse', 'tipo']);
+  assert.deepEqual(r1.dor, { onde: 'joelho', nivel: 3 });
+  assert.equal(r1.nota.length, 200); assert.equal(r1.planejado.length, 160);
+  const r3 = s.runs[0];
+  assert.equal(r3.tipo, 'livre'); assert.equal(r3.distKm, 120); assert.equal(r3.durMin, 0); assert.equal(r3.pse, null); assert.equal(r3.dor, null);
+  const r6 = s.runs[2];
+  assert.equal(r6.distKm, 0, 'texto no lugar de número não vale'); assert.equal(Math.round(r6.durMin * 60), 2476, 'tempo guardado com precisão de 1 segundo'); assert.equal(r6.pse, 6); assert.equal(r6.dor, null);
+  // sem aceite válido, não há início nem pausa
+  const semAceite = store.sanitize({ run: { answers: {}, aceitoEm: 'x', inicio: '2026-11-02', pausadoEm: '2026-11-03T10:00:00.000Z' } });
+  assert.deepEqual(semAceite.run, { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [] });
+  // cronômetro da corrida em andamento: guardado só com números válidos
+  const comCron = store.sanitize({ run: { answers: {}, aceitoEm: '2026-11-02T10:00:00.000Z', inicio: '2026-11-02', cron: { data: '2026-11-03', i: 2, fim: 1794000000000, pausadoEm: 0, inicio: 1793999000000, parado: 0, inicioPasso: 1793999500000, terminado: 0, chave: 4321, extra: '<x>' }, pausas: [{ de: '2026-11-04', ate: '2026-11-20', semanas: 9, extra: '<x>' }, { de: 'ontem', ate: 'hoje' }, '<x>'] } });
+  assert.deepEqual(comCron.run.cron, { data: '2026-11-03', i: 2, fim: 1794000000000, pausadoEm: 0, inicio: 1793999000000, parado: 0, inicioPasso: 1793999500000, terminado: 0, chave: 4321 });
+  assert.deepEqual(comCron.run.pausas, [{ de: '2026-11-04', ate: '2026-11-20', semanas: 2 }], 'pausas do plano: só datas válidas, e as semanas puladas não passam do tamanho da pausa');
+  assert.equal(store.sanitize({ run: { answers: {}, aceitoEm: '2026-11-02T10:00:00.000Z', inicio: '2026-11-02', cron: { data: 'ontem', i: 'a', fim: {} } } }).run.cron, null);
+  for (const bad of [null, 5, 'x', [], { run: 7, runs: 'abc' }, { run: [], runs: {} }]) {
+    const z = store.sanitize(bad);
+    assert.deepEqual(z.run, { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [] });
+    assert.deepEqual(z.runs, []);
+  }
+  // limite de 3000 registros
+  const muitos = Array.from({ length: 3500 }, (_, i) => ({ id: 'm' + i, data: '2026-10-01', tipo: 'leve', distKm: 5, durMin: 30 }));
+  assert.equal(store.sanitize({ runs: muitos }).runs.length, 3000);
 });

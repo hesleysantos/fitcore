@@ -1,17 +1,15 @@
 /* Cores da figura humana e dos aparelhos */
 .fig { display: block; width: 100%; height: auto; }
 /* pele: cada parte do corpo é um grupo com contorno único (o traço fica por baixo do preenchimento) */
-.fig .fg-sk, .fig .fg-skf, .fig .fg-shoe, .fig .fg-shoef { paint-order: stroke; stroke-linejoin: round; stroke-width: 1; }
+.fig .fg-sk, .fig .fg-skf { paint-order: stroke; stroke-linejoin: round; stroke-width: 1; }
 .fig .fg-sk { fill: var(--skin); stroke: var(--skin-line); }
 .fig .fg-skf { fill: var(--skin-far); stroke: var(--skin-line); }
-.fig .fg-shoe { fill: var(--shoe); stroke: var(--shoe-line); }
-.fig .fg-shoef { fill: var(--shoe-far); stroke: var(--shoe-line); }
-.fig .fg-sole { fill: var(--sole); }
-.fig .fg-solef { fill: var(--sole); opacity: 0.7; }
 .fig .fg-hair { fill: var(--hair); }
 .fig .fg-ear { fill: var(--skin); stroke: var(--skin-line); stroke-width: 0.35; }
 .fig .fg-eye { fill: var(--hair); }
 .fig .fg-ln { stroke: var(--skin-line); fill: none; stroke-linecap: round; stroke-linejoin: round; }
+/* unha: risco claro na ponta do dedo, para mostrar para onde as pontas dos dedos apontam */
+.fig .fg-nail { stroke: rgba(255, 255, 255, 0.55); fill: none; stroke-linecap: round; }
 /* músculos: em repouso só marcam o relevo; trabalhando ficam em vermelho (principal) ou laranja (auxiliar) */
 .fig .fg-m0 { fill: var(--skin-def); stroke: var(--skin-defl); stroke-width: 0.3; }
 .fig .fg-m1 { fill: var(--m1); fill-opacity: 0.9; stroke: var(--m1-line); stroke-width: 0.25; }
