@@ -362,13 +362,15 @@ function resumoRegistro(r) {
   if (r.dor) partes.push(`dor em ${LOCAIS_DOR[r.dor.onde].toLowerCase()} (${r.dor.nivel})`);
   return partes.join(' · ');
 }
-// "32", "32,5", "32:30" ou "1:05:20" → minutos
+// "32", "32:30" ou "1:05:20" → minutos. Não há minuto decimal: "32,5" não é aceito (seria ambíguo com 32 min 50 s);
+// a tela pede minutos:segundos.
 function lerTempo(txt) {
   const t = String(txt).trim();
   if (!t) return 0;
   // "32.30" ou "32,30" (dois dígitos depois do ponto ou da vírgula) é lido como 32 min 30 s, igual a "32:30"
   const mmss = /^(\d{1,3})[.,](\d{2})$/.exec(t);
   if (mmss) return Number(mmss[2]) > 59 ? NaN : emMin(Number(mmss[1]) * 60 + Number(mmss[2]));
+  if (/[.,]/.test(t)) return NaN;
   if (t.includes(':')) {
     const p = t.split(':').map((x) => parseNum(x));
     if (p.some((x) => !Number.isFinite(x) || x < 0) || p.length > 3) return NaN;
@@ -519,7 +521,7 @@ function formulario(data, planejado, existente, aoFechar) {
     btn(existente ? 'Salvar alterações' : 'Registrar corrida', () => {
       const d = dist.value.trim() ? parseNum(dist.value) : 0, t = lerTempo(dur.value);
       if (!Number.isFinite(d) || d < 0 || d > 120) { toast('Confira a distância, em quilômetros.'); dist.focus(); return; }
-      if (!Number.isFinite(t) || t < 0 || t > 900) { toast('Confira o tempo: minutos, ou minutos:segundos.'); dur.focus(); return; }
+      if (!Number.isFinite(t) || t < 0 || t > 900) { toast('Confira o tempo: minutos (32) ou minutos:segundos (32:30).'); dur.focus(); return; }
       if (!d && !t) { toast('Informe a distância ou o tempo.'); dist.focus(); return; }
       const limpo = limparRegistro({ ...r, distKm: d, durMin: t, nota: nota.value });
       if (!limpo) { toast('Esse ritmo não parece possível. Confira a distância e o tempo.'); return; }

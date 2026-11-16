@@ -8,7 +8,8 @@ import { buscarFaq } from '../data/knowledge.js';
 import { REFS_SONO, FAQ_SONO, SINAIS_SONO } from '../data/sono.js';
 import {
   painelDeSono, metaDeSono, noiteDe, gravarNoite, apagarNoite, cochilosDe, minutosDeCochilo, gravarCochilo, apagarCochilo, horaDeDormir, horaValida, fmtHoras, fmtFaixa,
-  HORAS_MAX, PASSO, IDADE_MIN, IDADE_MAX, NOITES_PARA_REGULARIDADE, COCHILO_PASSO, COCHILO_MAX, COCHILOS_POR_DIA,
+  minutosEntre, horaMais,
+  HORAS_MAX, PASSO_MIN, IDADE_MIN, IDADE_MAX, NOITES_PARA_REGULARIDADE, COCHILO_PASSO, COCHILO_MIN, COCHILO_MAX, COCHILOS_POR_DIA,
 } from '../logic/sono.js';
 
 const hojeKey = () => dateKey(new Date());
@@ -49,16 +50,37 @@ const porQue = (refs, rotulo = 'Fontes') => (refs && refs.length ? h('details', 
 const acc = (titulo, ...filhos) => h('details', { class: 'acc' }, h('summary', { text: titulo }), h('div', null, ...filhos));
 const aviso = (a) => h('div', { class: 'note ' + (a.tipo === 'warn' ? 'warn' : 'info') }, icon(a.tipo === 'warn' ? 'warn' : 'info'), h('div', { class: 'grow' }, h('div', { text: a.texto }), porQue(a.refs)));
 
-// horas dormidas com − e + (de 15 em 15 minutos)
-function passoHoras(valor, onChange, cls = '') {
-  let v = valor;
-  const saida = h('output', { 'aria-live': 'polite', text: fmtHoras(v) });
-  const set = (n) => { v = Math.min(HORAS_MAX, Math.max(0, Math.round(n / PASSO) * PASSO)); saida.textContent = fmtHoras(v); onChange(v); };
-  return h('div', { class: 'stepper sono-passo ' + cls, role: 'group', 'aria-label': 'Horas dormidas' },
-    h('button', { type: 'button', 'aria-label': 'Menos 15 minutos de sono', onClick: () => set(v - PASSO) }, '−'),
-    saida,
-    h('button', { type: 'button', 'aria-label': 'Mais 15 minutos de sono', onClick: () => set(v + PASSO) }, '+'));
+// Tempo ao minuto: os números são campos que se digitam (horas e minutos, ou só minutos no cochilo); − e + andam de
+// 5 em 5 minutos, parando nos múltiplos de 5. `onChange` recebe o total em minutos. O elemento devolvido tem
+// `definir(minutos)`, para mudar o valor por fora (quando a pessoa informa os horários e a tela faz a conta).
+function campoDeTempo(minutos, onChange, { cls = '', min = 0, max = HORAS_MAX * 60, passo = PASSO_MIN, soMinutos = false, rotulo = 'Tempo dormido', de = 'de sono' } = {}) {
+  const limitar = (n) => Math.min(max, Math.max(min, Math.round(n)));
+  let v = limitar(minutos);
+  const campo = (label, tam) => h('input', { type: 'text', inputmode: 'numeric', maxlength: String(tam), autocomplete: 'off', 'aria-label': label });
+  const cH = soMinutos ? null : campo(`${rotulo}: horas`, 2);
+  const cM = campo(soMinutos ? `${rotulo}, em minutos` : `${rotulo}: minutos`, soMinutos ? 3 : 2);
+  const num = (c) => { const n = parseInt(c.value.replace(/\D/g, ''), 10); return Number.isFinite(n) ? n : 0; };
+  const lido = () => (cH ? num(cH) * 60 : 0) + num(cM); // "75" nos minutos vale 1 h 15
+  const mostrar = () => { if (cH) { cH.value = String(Math.floor(v / 60)); cM.value = p2(v % 60); } else cM.value = String(v); };
+  const set = (n, calado = false) => { v = limitar(n); mostrar(); if (!calado) onChange(v); };
+  for (const c of [cH, cM]) {
+    if (!c) continue;
+    c.addEventListener('focus', () => c.select());
+    // enquanto digita, o valor já vale (para o botão de registrar), mas o campo só é reescrito ao sair dele
+    c.addEventListener('input', () => { v = limitar(lido()); onChange(v); });
+    c.addEventListener('change', () => set(lido()));
+  }
+  mostrar();
+  const el = h('div', { class: 'stepper sono-passo ' + (soMinutos ? 'so-min ' : '') + cls, role: 'group', 'aria-label': rotulo },
+    h('button', { type: 'button', 'aria-label': `Menos ${passo} minutos ${de}`, onClick: () => set(Math.ceil(v / passo) * passo - passo) }, '−'),
+    h('div', { class: 'sono-tempo' }, cH, cH ? h('span', { 'aria-hidden': 'true', text: 'h' }) : null, cM, h('span', { 'aria-hidden': 'true', text: 'min' })),
+    h('button', { type: 'button', 'aria-label': `Mais ${passo} minutos ${de}`, onClick: () => set(Math.floor(v / passo) * passo + passo) }, '+'));
+  el.definir = (n) => set(n);
+  return el;
 }
+// horas dormidas em uma noite (o valor guardado é em horas, com precisão de 1 minuto)
+const passoHoras = (horas, onChange, cls = '') => campoDeTempo(Math.round(horas * 60), (m) => onChange(m / 60), { cls });
+const DICA_DIGITAR = 'Toque nos números para digitar o tempo exato.';
 // "Como você acordou?", de 1 a 5 (opcional: tocar de novo desmarca). Os botões não são recriados ao tocar, para o
 // foco do teclado e do leitor de tela ficar onde estava.
 function notaDeAcordar(r) {
@@ -78,7 +100,8 @@ function horasIniciais(meta) {
 }
 function salvarNoite(data, r) {
   let ok = null;
-  update((s) => { ok = gravarNoite(s.sono, { data, horas: r.horas, ...(r.qualidade ? { qualidade: r.qualidade } : {}) }, hojeKey()); });
+  const horarios = horaValida(r.dormiu) && horaValida(r.acordou) ? { dormiu: r.dormiu, acordou: r.acordou } : {};
+  update((s) => { ok = gravarNoite(s.sono, { data, horas: r.horas, ...(r.qualidade ? { qualidade: r.qualidade } : {}), ...horarios }, hojeKey()); });
   toast(ok ? 'Noite registrada.' : 'Não consegui registrar essa noite.');
   return !!ok;
 }
@@ -87,17 +110,26 @@ function salvarNoite(data, r) {
 function folhaCochilo(data, indice = -1) {
   const atual = indice >= 0 ? cochilosDe(state, data)[indice] || null : null;
   const r = { min: atual ? atual.min : 20, inicio: atual && atual.inicio ? atual.inicio : '' };
-  let v = r.min;
-  const saida = h('output', { 'aria-live': 'polite', text: fmtMin(v) });
-  const set = (n) => { v = Math.min(COCHILO_MAX, Math.max(COCHILO_PASSO, Math.round(n / COCHILO_PASSO) * COCHILO_PASSO)); saida.textContent = fmtMin(v); r.min = v; };
-  const passo = h('div', { class: 'stepper sono-passo', role: 'group', 'aria-label': 'Duração do cochilo' },
-    h('button', { type: 'button', 'aria-label': 'Menos 5 minutos de cochilo', onClick: () => set(v - COCHILO_PASSO) }, '−'), saida,
-    h('button', { type: 'button', 'aria-label': 'Mais 5 minutos de cochilo', onClick: () => set(v + COCHILO_PASSO) }, '+'));
-  const hora = h('input', { type: 'time', class: 'input sono-hora', value: r.inicio, 'aria-label': 'Hora em que o cochilo começou', onChange: (e) => { r.inicio = e.target.value; } });
+  const aviso2 = h('p', { class: 'small muted', id: 'sono-cochilo-intervalo', 'aria-live': 'polite' });
+  // com a hora de início, o fim acompanha a duração; mudando o fim (ou o início, com o fim preenchido), a duração é a conta
+  const fim = h('input', { type: 'time', class: 'input sono-hora', value: r.inicio ? horaMais(r.inicio, r.min) : '', 'aria-label': 'Hora em que o cochilo terminou', onChange: () => pelosHorarios() });
+  const passo = campoDeTempo(r.min, (m) => { r.min = m; if (horaValida(r.inicio)) fim.value = horaMais(r.inicio, m); aviso2.textContent = ''; },
+    { min: COCHILO_MIN, max: COCHILO_MAX, passo: COCHILO_PASSO, soMinutos: true, rotulo: 'Duração do cochilo', de: 'de cochilo' });
+  const hora = h('input', { type: 'time', class: 'input sono-hora', value: r.inicio, 'aria-label': 'Hora em que o cochilo começou', onChange: (e) => { r.inicio = e.target.value; pelosHorarios(); } });
+  function pelosHorarios() {
+    const m = minutosEntre(r.inicio, fim.value);
+    if (m == null) { aviso2.textContent = ''; return; }
+    if (m > COCHILO_MAX) { aviso2.textContent = `Das ${r.inicio} às ${fim.value} são ${fmtMin(m)}: confira os horários (um cochilo vai até ${fmtMin(COCHILO_MAX)}).`; return; }
+    passo.definir(m);
+    aviso2.textContent = `Das ${r.inicio} às ${fim.value}: ${fmtMin(m)}.`;
+  }
   const corpo = h('div', { class: 'col gap-l' },
     h('p', { class: 'bold', id: 'sono-folha-cochilo', text: `Cochilo de ${diaTxt(data)}` }),
-    h('div', { class: 'col gap-s center' }, h('div', { class: 'small bold', text: 'Quanto tempo você cochilou?' }), h('div', null, passo)),
-    h('div', { class: 'row between' }, h('span', { class: 'small', text: 'Começou às (opcional)' }), hora));
+    h('div', { class: 'col gap-s center' }, h('div', { class: 'small bold', text: 'Quanto tempo você cochilou?' }), h('div', null, passo), h('p', { class: 'tiny muted', text: DICA_DIGITAR })),
+    h('div', { class: 'col gap-s' },
+      h('div', { class: 'row between' }, h('span', { class: 'small', text: 'Começou às (opcional)' }), hora),
+      h('div', { class: 'row between' }, h('span', { class: 'small', text: 'Terminou às (opcional)' }), fim),
+      aviso2));
   const salvar = () => {
     let ok = null;
     update((s) => { ok = gravarCochilo(s.sono, { data, min: r.min, ...(horaValida(r.inicio) ? { inicio: r.inicio } : {}) }, hojeKey(), atual ? indice : -1); });
@@ -130,10 +162,27 @@ function listaDeCochilos(data, antes = null) {
 // Embaixo ficam os cochilos do mesmo dia.
 function folhaNoite(data, meta) {
   const atual = noiteDe(state, data);
-  const r = { horas: atual ? atual.horas : horasIniciais(meta), qualidade: atual && atual.qualidade ? atual.qualidade : 0 };
+  const r = { horas: atual ? atual.horas : horasIniciais(meta), qualidade: atual && atual.qualidade ? atual.qualidade : 0, dormiu: atual && atual.dormiu ? atual.dormiu : '', acordou: atual && atual.acordou ? atual.acordou : '' };
+  const tempo = passoHoras(r.horas, (v) => { r.horas = v; });
+  // Horários da noite (opcionais): com os dois, a tela faz a conta do tempo, ao minuto. O tempo continua editável, porque
+  // quem demorou a dormir ou acordou no meio da noite dormiu menos que o intervalo.
+  const intervalo = h('p', { class: 'small muted', id: 'sono-intervalo', 'aria-live': 'polite' });
+  const contar = (aplicar) => {
+    const m = minutosEntre(r.dormiu, r.acordou);
+    if (m == null) { intervalo.textContent = 'Opcional: informe os dois horários e eu faço a conta do tempo.'; return; }
+    if (m > HORAS_MAX * 60) { intervalo.textContent = `Das ${r.dormiu} às ${r.acordou} são ${fmtHoras(m / 60)}: confira os horários.`; return; }
+    if (aplicar) tempo.definir(m);
+    intervalo.textContent = `Das ${r.dormiu} às ${r.acordou} são ${fmtHoras(m / 60)}. Se você demorou a dormir ou acordou no meio da noite, ajuste o tempo abaixo.`;
+  };
+  const campoHora = (k, rotulo) => h('input', { type: 'time', class: 'input sono-hora', value: r[k], 'aria-label': rotulo, onChange: (e) => { r[k] = e.target.value; contar(true); } });
+  contar(false);
   const corpo = h('div', { class: 'col gap-l' },
     h('p', { class: 'bold', id: 'sono-folha-noite', text: noiteTxt(data) }),
-    h('div', { class: 'col gap-s center' }, h('div', { class: 'small bold', text: 'Quanto você dormiu?' }), h('div', null, passoHoras(r.horas, (v) => { r.horas = v; }))),
+    h('div', { class: 'col gap-s' },
+      h('div', { class: 'row between' }, h('span', { class: 'small', text: 'Dormi às' }), campoHora('dormiu', 'Hora em que você dormiu')),
+      h('div', { class: 'row between' }, h('span', { class: 'small', text: 'Acordei às' }), campoHora('acordou', 'Hora em que você acordou')),
+      intervalo),
+    h('div', { class: 'col gap-s center' }, h('div', { class: 'small bold', text: 'Quanto você dormiu?' }), h('div', null, tempo), h('p', { class: 'tiny muted', text: DICA_DIGITAR })),
     notaDeAcordar(r),
     h('div', { class: 'col gap-s' }, h('div', { class: 'small bold', text: `Cochilos de ${DIAS[wd(data)]}` }), listaDeCochilos(data, () => f.close())));
   const apagar = async () => {
@@ -210,14 +259,17 @@ function cartaoNoite(pn) {
     return h('div', { class: 'card col gap-s', id: 'sono-noite' },
       h('div', { class: 'row between wrap' }, h('h3', { text: noiteTxt(hoje) }), est ? badge(est[0], est[1]) : null),
       h('div', { class: 'row between' },
-        h('div', null, h('div', { class: 'sono-alvo m', text: fmtHoras(u.horas) }), u.qualidade ? h('div', { class: 'small muted', text: `Acordou: ${u.qualidade} de 5` }) : null),
+        h('div', null, h('div', { class: 'sono-alvo m', text: fmtHoras(u.horas) }),
+          u.dormiu && u.acordou ? h('div', { class: 'small muted', text: `Das ${u.dormiu} às ${u.acordou}` }) : null,
+          u.qualidade ? h('div', { class: 'small muted', text: `Acordou: ${u.qualidade} de 5` }) : null),
         btn('Corrigir', () => { if (mesmoDia(hoje)) folhaNoite(hoje, meta); }, 'sm ghost', 'edit')));
   }
   const r = { horas: horasIniciais(meta), qualidade: 0 };
   return h('div', { class: 'card col', id: 'sono-noite' },
-    h('div', null, h('h3', { text: noiteTxt(hoje) }), h('p', { class: 'small muted', text: 'Quanto você dormiu?' })),
-    h('div', { class: 'row between' }, passoHoras(r.horas, (v) => { r.horas = v; }), btn('Registrar', () => { if (mesmoDia(hoje) && salvarNoite(hoje, r)) refresh(); }, 'primary', 'check')),
-    notaDeAcordar(r));
+    h('div', null, h('h3', { text: noiteTxt(hoje) }), h('p', { class: 'small muted', text: 'Quanto você dormiu? ' + DICA_DIGITAR })),
+    h('div', { class: 'row between wrap gap-s' }, passoHoras(r.horas, (v) => { r.horas = v; }), btn('Registrar', () => { if (mesmoDia(hoje) && salvarNoite(hoje, r)) refresh(); }, 'primary', 'check')),
+    notaDeAcordar(r),
+    btn('Informar os horários de dormir e acordar', () => { if (mesmoDia(hoje)) folhaNoite(hoje, meta); }, 'sm ghost block', 'edit'));
 }
 
 // Cochilos de hoje: lista, botão de registrar e como eles contam para a meta (soma até os 18 anos; à parte nos adultos).
@@ -388,7 +440,7 @@ export function cartaoSono() {
   } else {
     const r = { horas: horasIniciais(meta) };
     card.appendChild(h('div', { class: 'small muted', text: `Noite de ${entreDias(hoje)}: quanto você dormiu?` }));
-    card.appendChild(h('div', { class: 'row between' },
+    card.appendChild(h('div', { class: 'row between wrap gap-s' },
       passoHoras(r.horas, (v) => { r.horas = v; }, 'sm'),
       btn('Registrar', () => { if (mesmoDia(hoje) && salvarNoite(hoje, r)) refresh(); }, 'sm primary', 'check')));
   }

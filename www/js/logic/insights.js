@@ -95,7 +95,7 @@ const JA_VOLTOU = [
   'Recomece com metade da carga, ou menos, e suba aos poucos. Vale pedir um plano novo ao Treinador.',
 ];
 const PORQUE_PAUSA = 'Pausas curtas tiram pouca força; as longas tiram mais. Depois de 2 semanas ou mais parado, o consenso CSCCa/NSCA pede 2 a 4 semanas com menos volume e mais descanso.';
-const REFS_PAUSA = ['bosquet2013', 'caterisano2019'];
+const REFS_PAUSA = ['caterisano2019'];
 
 // Séries concluídas por semana, por grupo muscular: músculo principal conta 1; auxiliar conta meia; quem só estabiliza
 // não conta (a mesma conta do Treinador). `diretas` soma só as séries em que o grupo é o principal.
@@ -258,7 +258,7 @@ function cardioDe(ss, agora, dias = 14) {
 }
 
 // Exercícios do plano que bateram o topo das repetições em todas as séries. A carga sobe depois de DOIS treinos
-// seguidos no topo (regra "2 por 2" do ACSM 2009 — ref acsm2009, a mesma da sugestão de carga do treino):
+// seguidos no topo (adaptação da regra "2 por 2" do ACSM 2009 — ref acsm2009, a mesma da sugestão de carga do treino):
 // `treinos` = 2 quando os dois últimos treinos do exercício foram no topo; 1 quando só o último.
 export function prontosParaSubir(st) { return prontosDe(treinos(st, Infinity), st); }
 function prontosDe(ss, st) {
@@ -349,10 +349,10 @@ export function analisar(st, agora = Date.now()) {
   if (caindo.length >= 2 && caindo.length >= subindo.length) {
     add({ id: 'queda', tom: 'atencao', icone: 'down', p: 2, titulo: 'Rendimento caindo', texto: `Queda em ${caindo.length} exercícios. Durma bem, coma o suficiente e faça uma semana mais leve.`, porque: 'Queda em vários exercícios ao mesmo tempo costuma ser cansaço acumulado. Uma semana com menos carga e menos séries ajuda a recuperar.', refs: ['bell2023'] });
   } else if (caindo.length) {
-    add({ id: 'queda', tom: 'ideia', icone: 'down', p: 4, titulo: `Queda em: ${curto(caindo[0].nome, 50)}`, texto: `${Math.round(caindo[0].variacao * 100)}% nos últimos ${caindo[0].treinos} treinos. Confira a técnica e o descanso.`, porque: 'Uma queda isolada pode ser só um dia ruim. Se continuar, reduza um pouco a carga e refaça a progressão.', refs: ['acsm2009'], acao: { rotulo: 'Ver exercício', rota: 'exercicio/' + caindo[0].id } });
+    add({ id: 'queda', tom: 'ideia', icone: 'down', p: 4, titulo: `Queda em: ${curto(caindo[0].nome, 50)}`, texto: `${Math.round(caindo[0].variacao * 100)}% nos últimos ${caindo[0].treinos} treinos. Confira a técnica e o descanso.`, porque: 'Uma queda isolada pode ser só um dia ruim. Se continuar, pode ser cansaço acumulado: reduzir por alguns dias as séries e a carga alivia a fadiga.', refs: ['bell2023'], acao: { rotulo: 'Ver exercício', rota: 'exercicio/' + caindo[0].id } });
   }
   if (parados.length >= 3) {
-    add({ id: 'travado', tom: 'ideia', icone: 'swap', p: 3, titulo: `${parados.length} exercícios sem evoluir`, texto: 'Mesma marca há vários treinos. O Treinador pode sugerir trocas.', porque: 'Quando a evolução para por semanas, variar o exercício para o mesmo músculo ajuda a retomar o progresso.', refs: ['kassiano2022', 'acsm2009'], acao: { rotulo: 'Abrir o Treinador', rota: 'treinador' } });
+    add({ id: 'travado', tom: 'ideia', icone: 'swap', p: 3, titulo: `${parados.length} exercícios sem evoluir`, texto: 'Mesma marca há vários treinos. O Treinador pode sugerir trocas.', porque: 'Trocar o exercício por outro para o mesmo músculo dá resultado parecido e aumenta a motivação. Mantenha os exercícios principais e varie os mais simples.', refs: ['bazvalle2019'], acao: { rotulo: 'Abrir o Treinador', rota: 'treinador' } });
   } else if (parados.length) {
     add({ id: 'travado', tom: 'ideia', icone: 'swap', p: 3, titulo: `Travou: ${curto(parados[0].nome, 52)}`, texto: `${parados[0].treinos} treinos na mesma marca. Tente 1 repetição a mais por série ou troque a variação.`, porque: 'Progredir pede aumentar aos poucos as repetições ou a carga, chegando perto do limite com boa técnica.', refs: ['acsm2009', 'refalo2023'], acao: { rotulo: 'Ver exercício', rota: 'exercicio/' + parados[0].id } });
   }
@@ -377,31 +377,32 @@ export function analisar(st, agora = Date.now()) {
     if (poucos.length) {
       const k = poucos[0];
       const outros = poucos.slice(1, 3).map(minusc);
-      add({ id: 'pouco-' + k, tom: 'ideia', icone: 'dumbbell', p: 5, titulo: g[k] === 0 ? `Sem treino de ${minusc(k)}` : `Pouco treino de ${minusc(k)}`, texto: `${num1(g[k])} séries por semana${outros.length ? ` (também: ${outros.join(' e ')})` : ''}. O ideal é ${SERIES_BOM} ou mais.`, porque: 'Estudos mostram mais ganho de músculo com 10 ou mais séries semanais por grupo. Com menos de 4, o ganho costuma ser bem menor.', refs: ['schoenfeld2017vol', 'bazvalle2022'], acao: { rotulo: 'Ajustar treino', rota: 'treinos' } });
+      add({ id: 'pouco-' + k, tom: 'ideia', icone: 'dumbbell', p: 5, titulo: g[k] === 0 ? `Sem treino de ${minusc(k)}` : `Pouco treino de ${minusc(k)}`, texto: `${num1(g[k])} séries por semana${outros.length ? ` (também: ${outros.join(' e ')})` : ''}. O ideal é ${SERIES_BOM} ou mais.`, porque: 'Estudos mostram mais ganho de músculo com 10 ou mais séries semanais por grupo. Quatro séries por semana são a dose mínima estudada.', refs: ['schoenfeld2017vol', 'pelland2026', 'iversen2021'], acao: { rotulo: 'Ajustar treino', rota: 'treinos' } });
     } else if (objetivo === 'hipertrofia' && experiente) {
       const medios = GRUPOS_PRINCIPAIS.filter((k) => g[k] < SERIES_BOM - 1).sort((a, b) => g[a] - g[b]);
-      if (medios.length) add({ id: 'mais-series', tom: 'ideia', icone: 'dumbbell', p: 7, titulo: `Mais séries de ${minusc(medios[0])}`, texto: `${num1(g[medios[0]])} séries por semana. Para ganhar massa, mire em ${SERIES_BOM} a ${SERIES_TETO}.`, porque: 'Para quem já treina há mais tempo, 10 a 20 séries semanais por grupo dão os melhores resultados.', refs: ['schoenfeld2017vol', 'bazvalle2022'], acao: { rotulo: 'Ajustar treino', rota: 'treinos' } });
+      if (medios.length) add({ id: 'mais-series', tom: 'ideia', icone: 'dumbbell', p: 7, titulo: `Mais séries de ${minusc(medios[0])}`, texto: `${num1(g[medios[0]])} séries por semana. Para ganhar massa, mire em ${SERIES_BOM} a ${SERIES_TETO}.`, porque: 'Para quem já treina há mais tempo, 12 a 20 séries semanais por grupo dão os melhores resultados.', refs: ['bazvalle2022'], acao: { rotulo: 'Ajustar treino', rota: 'treinos' } });
     }
     // excesso: conta só as séries em que o grupo é o músculo principal (as meias séries de músculo auxiliar não entram)
     const d = vol.diretas;
     const muitos = GRUPOS_VOLUME.filter((k) => d[k] > SERIES_TETO + 2).sort((a, b) => d[b] - d[a]);
     if (muitos.length) add({ id: 'muito-' + muitos[0], tom: 'atencao', icone: 'warn', p: 4, titulo: `Muitas séries de ${minusc(muitos[0])}`, texto: `${num1(d[muitos[0]])} séries diretas por semana. Acima de ${SERIES_TETO}, o ganho extra é pequeno e o cansaço cresce.`, porque: 'Passar muito de 20 séries semanais por grupo traz pouco resultado a mais e dificulta a recuperação.', refs: ['bazvalle2022'] });
+    // (o corte de dois terços é critério deste aplicativo: as fontes falam em desequilíbrio, sem dar uma razão numérica)
     if (g.peito >= 6 && g.costas < g.peito * 0.67) {
-      add({ id: 'empurra-puxa', tom: 'ideia', icone: 'swap', p: 4, titulo: 'Equilibre peito e costas', texto: `${num1(g.peito)} séries de peito e ${num1(g.costas)} de costas por semana. ${st && st.trainer && st.trainer.answers && st.trainer.answers.local === 'corporal' ? 'Sem aparelhos, a opção é a puxada de bruços; ou faça menos séries de peito.' : 'Inclua mais remadas e puxadas.'}`, porque: 'Empurrar muito mais do que puxar está ligado a dores no ombro em quem faz musculação.', refs: ['kolber2010'], acao: { rotulo: 'Ajustar treino', rota: 'treinos' } });
+      add({ id: 'empurra-puxa', tom: 'ideia', icone: 'swap', p: 4, titulo: 'Equilibre peito e costas', texto: `${num1(g.peito)} séries de peito e ${num1(g.costas)} de costas por semana. ${st && st.trainer && st.trainer.answers && st.trainer.answers.local === 'corporal' ? 'Sem aparelhos, a opção é a puxada de bruços; ou faça menos séries de peito.' : 'Inclua mais remadas e puxadas.'}`, porque: 'O ombro é uma das regiões mais lesionadas na musculação, e o desequilíbrio entre os músculos é um dos fatores. Fortalecer as costas e os músculos da escápula faz parte da prevenção.', refs: ['bonilla2022'], acao: { rotulo: 'Ajustar treino', rota: 'treinos' } });
     }
     if (g.quadriceps >= 6 && g.posteriores + g.gluteos * 0.5 < g.quadriceps * 0.5) {
-      add({ id: 'frente-tras', tom: 'ideia', icone: 'swap', p: 5, titulo: 'Reforce a parte de trás da coxa', texto: `${num1(g.quadriceps)} séries de quadríceps e ${num1(g.posteriores)} de posteriores por semana.`, porque: 'Um programa equilibrado treina os músculos dos dois lados de cada articulação.', refs: ['acsm2009'], acao: { rotulo: 'Ajustar treino', rota: 'treinos' } });
+      add({ id: 'frente-tras', tom: 'ideia', icone: 'swap', p: 5, titulo: 'Reforce a parte de trás da coxa', texto: `${num1(g.quadriceps)} séries de quadríceps e ${num1(g.posteriores)} de posteriores por semana.`, porque: 'A recomendação para a saúde é fortalecer todos os grandes grupos musculares.', refs: ['oms2020'], acao: { rotulo: 'Ajustar treino', rota: 'treinos' } });
     }
   }
 
   // recuperação e rotina
   const sd = semDescansoDe(ss, agora);
   // não pede "descanse mais" para um grupo que está com poucas séries na semana
-  if (sd && !poucos.includes(sd.grupo)) add({ id: 'descanso', tom: 'ideia', icone: 'moon', p: 5, titulo: `Descanse mais: ${minusc(sd.grupo)}`, texto: `Treinado em dias seguidos ${sd.vezes} vezes. Dê 48 horas antes de repetir o mesmo músculo.`, porque: 'O músculo se recupera e cresce no intervalo entre os treinos. Em geral, 48 horas bastam.', refs: ['acsm2009'] });
+  if (sd && !poucos.includes(sd.grupo)) add({ id: 'descanso', tom: 'ideia', icone: 'moon', p: 5, titulo: `Descanse mais: ${minusc(sd.grupo)}`, texto: `Treinado em dias seguidos ${sd.vezes} vezes. Deixe um dia de descanso antes de repetir o mesmo músculo.`, porque: 'O músculo se recupera e cresce no intervalo entre os treinos: evite treinar forte o mesmo grupo em dias seguidos.', refs: ['acsm2009'] });
   const feito = concluidasDe(ss);
   if (feito != null && feito < 0.75) add({ id: 'incompleto', tom: 'ideia', icone: 'timer', p: 5, titulo: 'Séries ficando para trás', texto: `Você concluiu ${Math.round(feito * 100)}% das séries nos últimos treinos. Um plano mais curto pode servir melhor.`, porque: 'Um treino que cabe na rotina e é feito por inteiro rende mais do que um treino longo feito pela metade.', refs: ['acsm2026'], acao: { rotulo: 'Abrir o Treinador', rota: 'treinador' } });
   const dur = duracaoDe(ss);
-  if (dur != null && dur > 90) add({ id: 'duracao', tom: 'ideia', icone: 'timer', p: 6, titulo: 'Treinos longos', texto: `Média de ${dur} min. Descansos de 1 a 3 minutos entre as séries costumam bastar.`, porque: 'Descansos muito longos alongam o treino sem melhorar o resultado na maioria dos exercícios.', refs: ['acsm2009'] });
+  if (dur != null && dur > 90) add({ id: 'duracao', tom: 'ideia', icone: 'timer', p: 6, titulo: 'Treinos longos', texto: `Média de ${dur} min. Descansos de 1 a 3 minutos entre as séries costumam bastar.`, porque: 'Para ganhar massa, descansar mais de 90 segundos não traz ganho apreciável; para força, 2 a 3 minutos nos exercícios principais bastam.', refs: ['singer2024', 'grgic2018', 'acsm2009'] });
   if (['saude', 'emagrecimento', 'resistencia'].includes(objetivo)) {
     const cardio = cardioDe(ss, agora);
     if (cardio < 75) add({ id: 'cardio', tom: 'ideia', icone: 'heart', p: 7, titulo: 'Pouco aeróbico registrado', texto: `${cardio} min por semana. A OMS recomenda de 150 a 300 min de atividade moderada.`, porque: 'Caminhada, bicicleta e outras atividades feitas fora do app também contam para essa meta.', refs: ['oms2020'] });

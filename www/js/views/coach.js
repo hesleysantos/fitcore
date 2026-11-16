@@ -38,7 +38,10 @@ export function interview({ perguntas, respostas, onDone, onCancel, avatar = 'co
       if (p === v2.length - 1) { for (const x of perguntas) if (x.se && !x.se(a)) delete a[x.k]; onDone(a); } else { i = p + 1; draw(); window.scrollTo(0, 0); }
     }, 'primary lg grow');
     const sync = () => { next.disabled = !valida(q); };
-    if (q.tipo === 'numero') {
+    if (q.tipo === 'numero' && q.formato === 'tempo') {
+      if (typeof a[q.k] !== 'number') a[q.k] = q.padrao;
+      root.appendChild(h('div', { class: 'card center col' }, tempoHMS({ minutos: a[q.k], min: q.min, max: q.max, rotulo: q.titulo, onChange: (v) => { a[q.k] = v; sync(); } })));
+    } else if (q.tipo === 'numero') {
       if (typeof a[q.k] !== 'number') a[q.k] = q.padrao;
       root.appendChild(h('div', { class: 'card center col' }, stepper({ value: a[q.k], min: q.min, max: q.max, step: q.passo || 1, decimals: q.dec || 0, label: q.titulo, onChange: (v) => { a[q.k] = v; sync(); } }), h('div', { class: 'muted', text: q.un })));
     } else {
@@ -78,6 +81,32 @@ export function interview({ perguntas, respostas, onDone, onCancel, avatar = 'co
   function bar(f) { const el = h('i'); el.style.width = Math.round(f * 100) + '%'; return el; }
   draw();
   return root;
+}
+
+// Tempo em horas, minutos e segundos, como no relógio (nada de "27,5 minutos"). O valor da resposta continua em minutos
+// (27 min 30 s = 27,5), que é o que a lógica usa. Fora da faixa da pergunta, a tela diz a faixa e não deixa continuar.
+const p2 = (n) => String(n).padStart(2, '0');
+const hms = (min) => { const s = Math.round(min * 60); const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60; return [hh ? `${hh} h` : '', mm || (hh && ss) ? `${mm} min` : '', ss ? `${ss} s` : ''].filter(Boolean).join(' ') || '0 min'; };
+function tempoHMS({ minutos, min, max, rotulo, onChange }) {
+  let seg = Math.max(0, Math.round(minutos * 60));
+  const campo = (nome, tam) => h('input', { type: 'text', inputmode: 'numeric', maxlength: String(tam), autocomplete: 'off', 'aria-label': `${rotulo} ${nome}` });
+  const cH = campo('Horas', 1), cM = campo('Minutos', 3), cS = campo('Segundos', 2);
+  const num = (c) => { const n = parseInt(c.value.replace(/\D/g, ''), 10); return Number.isFinite(n) ? n : 0; };
+  const faixa = h('p', { class: 'small', role: 'status' });
+  const avisar = () => { const fora = seg < min * 60 || seg > max * 60; faixa.className = 'small ' + (fora ? 'danger' : 'muted'); faixa.textContent = fora ? `Informe um tempo entre ${hms(min)} e ${hms(max)}.` : `Tempo: ${hms(seg / 60)}.`; };
+  // "90" nos segundos vale 1 min 30 s; "75" nos minutos vale 1 h 15 min
+  const mostrar = () => { cH.value = String(Math.floor(seg / 3600)); cM.value = p2(Math.floor((seg % 3600) / 60)); cS.value = p2(seg % 60); };
+  const ler = () => { seg = num(cH) * 3600 + num(cM) * 60 + num(cS); avisar(); onChange(seg / 60); };
+  for (const c of [cH, cM, cS]) {
+    c.addEventListener('focus', () => c.select());
+    c.addEventListener('input', ler); // enquanto digita, o valor já vale; o campo só é reescrito ao sair dele
+    c.addEventListener('change', () => { ler(); mostrar(); });
+  }
+  mostrar(); avisar();
+  return h('div', { class: 'col gap-s center' },
+    h('div', { class: 'tempo-hms', role: 'group', 'aria-label': rotulo },
+      h('label', null, cH, h('span', { text: 'h' })), h('label', null, cM, h('span', { text: 'min' })), h('label', null, cS, h('span', { text: 's' }))),
+    faixa);
 }
 
 // Abas do Treinador: musculação e corrida. Cada uma tem a sua tela (rotas "treinador" e "corrida").

@@ -16,12 +16,13 @@ test('perguntas completas e validação', () => {
 
 test('equação de Mifflin-St Jeor confere com o cálculo manual', () => {
   const r = calcular({ ...base, objetivo: 'manter' });
-  const tmb = 10 * 80 + 6.25 * 178 - 5 * 30 + 5; // 1767,5
+  const tmb = 9.99 * 80 + 6.25 * 178 - 4.92 * 30 + 5; // 1769,1 (coeficientes como em ruiz2011)
   assert.equal(r.tmb, Math.round(tmb / 10) * 10);
-  assert.equal(r.gasto, Math.round((tmb * 1.375) / 10) * 10); // sedentário + 3 treinos
+  assert.equal(r.gasto, Math.round((tmb * 1.54) / 10) * 10); // sentado a maior parte do dia (PAL 1,45 da FAO) + 3 treinos (+0,09)
+  assert.equal(r.fator, 1.54);
   assert.equal(r.kcal, r.gasto);
   const f = calcular({ ...base, sexo: 'f', peso: 60, altura: 165, idade: 40, objetivo: 'manter' });
-  assert.equal(f.tmb, Math.round((10 * 60 + 6.25 * 165 - 5 * 40 - 161) / 10) * 10);
+  assert.equal(f.tmb, Math.round((9.99 * 60 + 6.25 * 165 - 4.92 * 40 - 161) / 10) * 10);
 });
 
 test('metas dentro das faixas das diretrizes para centenas de perfis', () => {
@@ -278,8 +279,8 @@ test('corrida: sem o resumo nada muda; com ele, energia e carboidrato acompanham
   assert.equal(pouco.kcal, sem.kcal);
   assert.equal(pouco.corrida.kcalDia, 150);
   const muito = calcular(a, { kmSemana: 70, minSemana: 420, sessoesSemana: 6, longoMin: 180, longoKm: 30 });
-  const tmb = 10 * 70 + 6.25 * 175 - 5 * 30 + 5;
-  assert.equal(muito.gasto, Math.round((tmb * 1.2 + 700) / 10) * 10);
+  const tmb = 9.99 * 70 + 6.25 * 175 - 4.92 * 30 + 5;
+  assert.equal(muito.gasto, Math.round((tmb * 1.45 + 700) / 10) * 10);   // dia a dia sem treino (PAL 1,45) + 1 kcal por kg por km
   assert.ok(muito.kcal > sem.kcal && muito.fator <= 2.4);
   assert.ok(calcular(a, { kmSemana: 300, minSemana: 3000, sessoesSemana: 14 }).fator <= 2.4, 'teto do gasto');
   // carboidrato: faixas por minutos de corrida por dia (Burke 2011) e meta dentro da faixa quando as calorias permitem
@@ -319,7 +320,7 @@ test('corrida: orientação por distância de prova, com travas de segurança', 
   const mar = orientacaoCorrida(calcular(a, resumo(42.195, '2026-11-14')), hoje);
   assert.ok(/A prova é amanhã/.test(mar.prova.linhas[0]) && /1 litro por hora/.test(mar.prova.linhas.join(' ')));
   assert.ok(/hiponatremia/.test(texto(mar).join(' ')) && /bananas-prata/.test(texto(mar).join(' ')), 'alternativas caseiras e alerta de hiponatremia');
-  // bebida caseira: 0,5 a 0,7 g de sódio por litro = cerca de 1,5 g de sal (um quarto de colher de chá), não meia colher
+  // bebida caseira: 0,5 a 0,9 g de sódio por litro nas esportivas; 1,5 g de sal dão 0,6 g (um quarto de colher de chá), não meia colher
   assert.ok(!/meia colher de chá de sal/.test(texto(mar).join(' ')));
   for (const s of texto(mar)) if (/Bebida caseira/.test(s)) assert.ok(s.includes('açúcar (60 g), um quarto de colher de chá de sal (1,5 g)'), s);
   assert.ok(/já passou/.test(orientacaoCorrida(calcular(a, resumo(10, '2026-11-01')), hoje).prova.linhas[0]));
@@ -403,7 +404,7 @@ test('emagrecer só com indicação: perto do piso de IMC e depois dos 65 anos s
   // ganhar massa continua com o ritmo esperado
   assert.ok(/Ritmo esperado: ganhar de/.test(textosDoPeso(calcular({ ...b, objetivo: 'ganhar' })).ritmo));
   assert.deepEqual(textosDoPeso(calcular({ ...b, idade: 15 })), { ritmo: null, linhas: [] });
-  for (const k of ['jensen2013', 'volkert2022', 'hall2008', 'helms2014']) assert.ok(REFS[k], k);
+  for (const k of ['jensen2013', 'volkert2022', 'helms2014']) assert.ok(REFS[k], k);
 });
 
 test('"mais baratos": nenhum alimento caro quando há um mais barato no mesmo grupo, inclusive no vegano', () => {

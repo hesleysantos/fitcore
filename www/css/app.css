@@ -294,6 +294,13 @@ textarea.input { min-height: 84px; resize: vertical; }
 .opt .tick { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border); flex: none; display: flex; align-items: center; justify-content: center; color: transparent; }
 .opt.on .tick { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .opt .tick .ic { width: 14px; height: 14px; stroke-width: 3.4; }
+/* tempo em horas, minutos e segundos (entrevista da corrida) */
+.tempo-hms { display: inline-flex; align-items: baseline; justify-content: center; align-self: center; gap: 10px; }
+.tempo-hms label { display: inline-flex; align-items: baseline; gap: 4px; }
+.tempo-hms input { width: 58px; height: 48px; border: 0; border-bottom: 2px solid var(--border); border-radius: 0; background: transparent; color: var(--text); text-align: center; font-weight: 700; font-size: 1.35rem; font-variant-numeric: tabular-nums; padding: 0; }
+.tempo-hms label:first-child input { width: 36px; }
+.tempo-hms input:focus { outline: none; border-bottom-color: var(--accent); }
+.tempo-hms span { color: var(--muted); font-size: 0.9rem; }
 .steps { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 .steps > i { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.2s; }
 

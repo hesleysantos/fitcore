@@ -10,7 +10,7 @@ import { REFS_SONO } from '../data/sono.js';
 import { cancelarAviso, avisoDisponivel, avisoPermitido, pedirPermissaoDeAviso, telaLigadaDisponivel } from '../device.js';
 import { canSuggestInstall, openInstall, isIos } from '../install.js';
 
-export const APP_VERSAO = '1.2.0';
+export const APP_VERSAO = '1.3.0';
 
 // ---------- Minha academia ----------
 export function gymView() {

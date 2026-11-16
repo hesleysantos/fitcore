@@ -36,7 +36,7 @@ export const PERGUNTAS = [
     ],
   },
   {
-    // tempo parado antes de voltar: muda a dose do plano e as orientações de carga (refs bosquet2013, caterisano2019).
+    // tempo parado antes de voltar: muda a dose do plano e as orientações de carga (ref caterisano2019).
     // Opcional para não invalidar entrevistas salvas antes desta pergunta existir; não aparece para quem nunca treinou.
     k: 'pausa', tipo: 'um', opcional: true, se: (a) => a.experiencia !== 'nunca', titulo: 'Há quanto tempo você está sem treinar?',
     ajuda: 'A volta depois de uma pausa pede menos carga e menos séries no começo.',
@@ -147,7 +147,7 @@ const OPC = { objetivo: opcoes('objetivo'), local: opcoes('local'), extras: opco
 const lista = (x, validas) => (Array.isArray(x) ? [...new Set(x.filter((y) => typeof y === 'string' && (!validas || validas.has(y))))] : []);
 const numero = (v, padrao) => (typeof v === 'number' && Number.isFinite(v) ? v : padrao);
 const TEMPOS = [30, 45, 60, 75];
-// objetivos em que o aeróbico faz parte do plano (OMS 2020; Donnelly 2009 — refs oms2020, donnelly2009)
+// objetivos em que o aeróbico faz parte do plano (refs oms2020, swift2014, oppert2021)
 const AEROBIO = new Set(['emagrecimento', 'saude', 'resistencia']);
 
 export function perfil(respostas) {
@@ -158,7 +158,7 @@ export function perfil(respostas) {
   const lim = lista(a.limitacoes, OPC.limitacoes).filter((x) => x !== 'nenhuma');
   const nivelBase = a.experiencia === 'avancado' ? 3 : a.experiencia === 'intermediario' ? 2 : 1;
   const nunca = a.experiencia === 'nunca';
-  // tempo parado antes de voltar (faixas em logic/pausa.js; refs bosquet2013, caterisano2019): a partir de 3 meses
+  // tempo parado antes de voltar (faixas em logic/pausa.js; ref caterisano2019): a partir de 3 meses
   // o plano desce um nível; depois de 6 meses, recomeça com a dose de iniciante
   const retorno = nunca ? 0 : FAIXA_DA_RESPOSTA[a.pausa] || 0;
   const nivel = retorno >= 4 ? 1 : retorno === 3 ? Math.max(1, nivelBase - 1) : nivelBase;
@@ -169,13 +169,13 @@ export function perfil(respostas) {
   const pressao = cond.includes('hipertensao') || cond.includes('cardiaco');
   // Diabetes: 2 a 3 sessões de força por semana em dias não consecutivos, 1 a 3 séries de 10 a 15 repetições, progredindo
   // para 8 a 10 (refs colberg2016, kanaley2022). Doença cardiovascular, metabólica ou renal em quem já é ativo: segue em
-  // intensidade moderada sem liberação, mas precisa dela antes do esforço vigoroso (ref riebe2015, lido em whitfield2017);
+  // intensidade moderada sem liberação, mas precisa dela antes do esforço vigoroso (algoritmo de triagem do ACSM de 2015, lido inteiro em whitfield2017 — ref whitfield2017);
   // nas diretrizes de diabetes, treino de força "vigoroso" é o de 6 a 8 repetições. Por isso, com diabetes ou outra doença
   // crônica, o plano fica em 8 repetições ou mais e até 3 séries por exercício.
   const diabetes = cond.includes('diabetes');
   const cronica = cond.includes('cronica');
   const gestante = cond.includes('gestante');
-  // triagem pré-participação (Riebe 2015 — ref riebe2015): sintomas, doença do coração, gestação, ou sedentário com doença crônica
+  // triagem pré-participação (algoritmo do ACSM de 2015 — ref whitfield2017): sintomas, doença do coração, gestação, ou sedentário com doença crônica
   const liberacao = tri.length > 0 || cond.includes('cardiaco') || gestante || (inativo && (cond.includes('diabetes') || cond.includes('cronica') || cond.includes('hipertensao')));
   // enquanto não há liberação médica, e sempre com pressão alta ou gestação: cargas leves a moderadas (AHA 2024; ACOG 804 — refs aha2024, acog804)
   const cautela = pressao || gestante || liberacao;
@@ -283,13 +283,14 @@ function divisoes(pf) {
   // Menores de 18: 2 a 3 treinos de força por semana em dias não seguidos (refs faigenbaum2009, lloyd2014). Diabetes: 2 a
   // 3 sessões de força em dias não consecutivos (refs colberg2016, kanaley2022). Os dias que sobram viram cardio.
   if (pf.jovem || pf.diabetes) return [D_BASE[d]];
-  // Iniciantes: 2 a 3 treinos de força por semana, até 4 em divisão (ref acsm2009).
+  // Iniciantes: a recomendação é de 2 a 3 treinos de força por semana, de corpo inteiro (ref acsm2009). Quem pede mais
+  // dias recebe o corpo dividido, com o mesmo teto de séries por semana, e o plano diz qual é a recomendação.
   if (pf.nivel === 1) return d === 4 ? [D_SUPINF, D_BASE[4]] : [D_BASE[d]];
   if (d === 3) return pf.nivel === 3 ? [D_PPL, D_FULL3] : [D_FULL3];
   if (d === 4) return [D_SUPINF, D_BASE[4]];
-  // Emagrecimento, saúde e resistência: 4 treinos de força + cardio (OMS 2020; Donnelly 2009 — refs oms2020, donnelly2009).
+  // Emagrecimento, saúde e resistência: 4 treinos de força + cardio (refs oms2020, swift2014, oppert2021).
   if (AEROBIO.has(pf.objetivoDose)) return [D_SUPINF_CARDIO[d], D_BASE[d]];
-  // Hipertrofia e força: cada grupo 2 vezes por semana (Schoenfeld 2016 — ref schoenfeld2016freq).
+  // Hipertrofia: cada grupo pelo menos 2 vezes por semana (ref schoenfeld2016freq); a mesma divisão vale para o objetivo força.
   return [d === 5 ? { dias: ['push', 'pull', 'legs', 'supB', 'infB'] } : { dias: ['push', 'pull', 'legs', 'push', 'pull', 'legs'] }, D_SUPINF_CARDIO[d], D_BASE[d]];
 }
 const N_EXERCICIOS = { 30: 4, 45: 6, 60: 7, 75: 9 };
@@ -323,15 +324,16 @@ function disponivel(ex, pf, gym) {
 // 1) SÓ MANUAL — nunca entram em plano automático, para ninguém:
 //    • exercícios de potência, saltos e levantamentos explosivos (grupo "funcional": burpee, salto na caixa,
 //      agachamento e afundo com salto, clean, thruster, kettlebell swing, levantamento turco...): pliometria só para
-//      quem já tem força alta e domina os exercícios simples (itens 5 e 10 do posicionamento da NSCA — ref nsca1993);
+//      quem já tem base de força e a técnica dos exercícios simples: a falta de força de base é a contraindicação mais
+//      importante, e a progressão vai dos saltos baixos aos altos (ref davies2015);
 //      em jovens, só com competência técnica e supervisão qualificada (refs lloyd2014, faigenbaum2009); na gestação,
 //      levantamentos olímpicos devem ser evitados (ref mottola2018);
 //    • movimentos que o gerador não usa: remada alta (elevar os cotovelos acima de 90° está associado a sinais de
-//      impacto no ombro — ref kolber2014), mergulhos, carregar peso e exercícios de corpo inteiro;
+//      impacto no ombro — ref schoenfeld2011upright), mergulhos, carregar peso e exercícios de corpo inteiro;
 //    • a lista SO_MANUAL, abaixo, com o motivo e a fonte de cada um.
 // 2) POR PERFIL (função permitido):
 //    • impacto (cardio com corrida ou salto): só para quem já treina, sem dose conservadora e com IMC abaixo de 30.
-//      Saltos pedem base de força e exercícios simples dominados (ref nsca1993); com IMC acima de 30 é razoável
+//      Saltos pedem base de força e exercícios simples dominados (ref davies2015); com IMC acima de 30 é razoável
 //      limitar o exercício de impacto e preferir bicicleta (ref esc2020); nos idosos, só "se as articulações
 //      tolerarem" (ref izquierdo2021); nos jovens, competência técnica (ref lloyd2014);
 //    • barra livre em exercício composto (agachamento, terra, supino, desenvolvimento, remada curvada), por perfil:
@@ -344,10 +346,10 @@ function disponivel(ex, pf, gym) {
 //        com barra; a dose segue a diretriz brasileira: 10 a 15 repetições, carga moderada (ref sbc_has2020);
 //      – 60 anos ou mais: as máquinas são o ponto de partida e os pesos livres vêm depois, na progressão (ref
 //        fragala2019); sem alguém para avaliar a função da pessoa, o plano fica no ponto de partida;
-//      – triagem positiva: a regra do ACSM é liberação médica antes de qualquer exercício (ref riebe2015); o plano
+//      – triagem positiva: a regra do ACSM é liberação médica antes de qualquer exercício (ref whitfield2017); o plano
 //        só é aceito depois de a pessoa confirmar que vai procurá-la, e fica na dose mais leve;
 //      – em todos: a maioria das lesões que chegam ao pronto-socorro envolve pesos livres, quase sempre um peso que
-//        caiu sobre a pessoa (ref kerr2010). Iniciantes já não recebem esses exercícios pelo nível;
+//        caiu sobre a pessoa (ref gray2015). Iniciantes já não recebem esses exercícios pelo nível;
 //    • instabilidade (bola suíça, fitas de suspensão e exercícios de perna em um pé só, sem máquina): fora para 60+
 //      e gestantes — equilíbrio se treina com apoio e em ambiente seguro (refs fragala2019, izquierdo2021) e a gestante
 //      deve evitar risco de queda (refs acog804, mottola2018, sbc_gestacao2021);
@@ -358,15 +360,15 @@ function disponivel(ex, pf, gym) {
 //      Isometria moderada, como a prancha, não é proibida por nenhuma diretriz (o aperto de mão isométrico até baixa
 //      a pressão — ref sbc_has2020); ela fica de fora porque é um exercício em que é fácil prender a respiração.
 //      Cabeça abaixo do coração: nenhuma diretriz trata disso; a inversão do corpo elevou a pressão em pessoas com
-//      pressão normal, e os autores sugerem que hipertensos a evitem (ref haskvitz1986); posturas de cabeça baixa
+//      pressão normal, e as posturas invertidas são contraindicadas na hipertensão (ref joshi2024, revisão); posturas de cabeça baixa
 //      elevam a pressão dentro do olho (ref jasien2015);
 //    • nível: iniciantes só recebem exercícios de nível 1; perfis conservadores, até o nível 2.
 // 3) Entre exercícios equivalentes (mesma nota), vence o mais estável e mais simples (função maisEstavel).
 const SO_MANUAL = {
-  'remada-invertida-sob-mesa': 'a pessoa se pendura na borda de uma mesa da casa. Não há estudo sobre exercícios apoiados em móveis; a única orientação publicada que achei é jornalística (a mesa precisa ser firme e pesada para não virar sobre a pessoa — Coach, 3/5/2019). O risco é do mesmo tipo que causa a maioria das lesões do treino de força: um objeto pesado caindo sobre a pessoa (ref kerr2010), mais grave em casa e sem supervisão (ref faigenbaum2010)',
+  'remada-invertida-sob-mesa': 'a pessoa se pendura na borda de uma mesa da casa. Não há estudo sobre exercícios apoiados em móveis; a única orientação publicada que achei é jornalística (a mesa precisa ser firme e pesada para não virar sobre a pessoa — Coach, 3/5/2019). O risco é do mesmo tipo de uma das principais causas das lesões de academia que chegam ao pronto-socorro: um objeto pesado caindo sobre a pessoa (ref gray2015), mais grave em casa e sem supervisão (ref faigenbaum2010)',
   'bom-dia-barra': 'barra nas costas com o tronco inclinado à frente: com apenas 25% do peso do corpo na barra, o momento na coluna lombar (L4/L5) já é igual ao do levantamento terra, e os autores pedem muito cuidado com a estabilidade do tronco com cargas maiores (ref schellenberg2013); a lombar não fica neutra, flexiona cerca de 25° (ref vigotsky2015). Nenhuma fonte o proíbe: fica só para a escolha manual por ser carga sobre a coluna sem ninguém para corrigir a técnica',
   'agachamento-hack-invertido': 'agachamento na hack de frente para o encosto: só há uma descrição de técnica publicada (um site de musculação), sem estudo nem guia de entidade profissional, e na plataforma inclinada os calcanhares sobem no fundo do movimento. Sem ninguém para corrigir a técnica, fica só para a escolha manual; o agachamento hack comum e o articulado fazem o mesmo movimento',
-  'hiit-bicicleta': 'treino intervalado de alta intensidade: com sobrepeso ou obesidade, só depois de avaliação do risco cardiovascular e com supervisão (ref oppert2021); em quem tem doença do coração, só em pacientes estáveis (ref esc2020); todos os estudos de segurança foram supervisionados, e o intervalado sem supervisão não foi avaliado (ref wewege2018); na gestação não há dados suficientes (ref sbc_gestacao2021). Adultos saudáveis e já ativos podem fazer esforço vigoroso (ref riebe2015), mas o aplicativo não tem como conferir isso',
+  'hiit-bicicleta': 'treino intervalado de alta intensidade: com sobrepeso ou obesidade, só depois de avaliação do risco cardiovascular e com supervisão (ref oppert2021); em quem tem doença do coração, só em pacientes estáveis (ref esc2020); todos os estudos de segurança foram supervisionados, e o intervalado sem supervisão não foi avaliado (ref wewege2018); na gestação não há dados suficientes (ref sbc_gestacao2021). Adultos saudáveis e já ativos podem fazer esforço vigoroso (ref whitfield2017), mas o aplicativo não tem como conferir isso',
 };
 export const soManual = (id) => Object.prototype.hasOwnProperty.call(SO_MANUAL, id);
 const FORA_DO_GERADOR = new Set(['remada_alta', 'mergulho', 'total', 'carregar']);
@@ -376,9 +378,9 @@ const instavel = (ex) => ex.equip.includes('bola_suica') || ex.equip.includes('t
 const barraComposto = (ex) => ex.modalidade === 'barra' && ex.tipo === 'composto';
 // Pendurado na barra fixa ou apoiado nas paralelas: a carga é o peso do corpo inteiro e não dá para reduzi-la. Fica fora
 // para quem precisa de cargas leves a moderadas e não pode prender a respiração — pressão alta, coração, gestação e
-// triagem positiva (refs aha2024, acog804, riebe2015, esc2020, sbc_gestacao2021); para 60 anos ou mais, em que as
+// triagem positiva (refs aha2024, acog804, whitfield2017, esc2020, sbc_gestacao2021); para 60 anos ou mais, em que as
 // máquinas são o ponto de partida e soltar a barra é queda (refs fragala2019, izquierdo2021); e com IMC de 30 ou mais,
-// em que o exercício não tem como começar leve e progredir (refs oppert2021, esc2020). A barra com apoio (gráviton) é
+// em que o exercício não tem como começar leve e progredir (cautela do plano, sem fonte direta). A barra com apoio (gráviton) é
 // máquina e continua valendo.
 const pendurado = (ex) => ex.equip.includes('barra_fixa') || ex.equip.includes('paralelas');
 // estabilidade do exercício, para desempatar: máquina > guiado e cabos > halteres e peso do corpo > barra e kettlebell
@@ -421,7 +423,7 @@ function nota(ex, slot, pf) {
   if (ex.nivel === 1 && simples) n += 2;
   if (pf.local === 'corporal' || pf.local === 'halteres') {
     n += ex.registro === 'reps' || ex.registro === 'peso_reps' ? 1 : 0;
-    // Sem carga para aumentar, a progressão vem de variações mais difíceis (ACSM 2009 — ref acsm2009): quem já treina
+    // Sem carga para aumentar, a progressão vem de variações mais difíceis (critério do plano, limitado pelo nível): quem já treina
     // recebe primeiro as versões de nível mais alto que o perfil permite; iniciantes ficam com as mais simples (acima).
     if (!simples && ex.registro === 'reps') n += (ex.nivel - 1) * (pf.local === 'corporal' ? 2 : 1);
   }
@@ -480,9 +482,13 @@ function listasDoPerfil(pf, gym) {
 // Faixas por objetivo (ACSM 2009; Schoenfeld 2021; Grgic 2018; Singer 2024 — refs acsm2009, schoenfeld2021, grgic2018, singer2024):
 //   força: cargas altas (3 a 6 repetições) e 2 a 3 min de descanso nos principais; iniciantes ficam em 8 a 12;
 //   hipertrofia: 8 a 15 repetições, 1 a 2 min; emagrecimento: 10 a 15, até 90 s; saúde: 2 séries de 10 a 15;
-//   resistência: 15 a 20 repetições com até 1 min de descanso.
+//   (o que é de cada fonte, lida inteira: ACSM 2009 — iniciante 8 a 12 repetições e 1 a 3 séries; força 1 a 6 repetições com 2 a
+//   3 min; hipertrofia 8 a 12 com 1 a 2 min; 10 a 15 repetições com até 1 min; 15 a 20 com 1 a 2 min. As 10 a 15 repetições
+//   do objetivo saúde são as das diretrizes de hipertensão e de diabetes — refs sbc_has2020, colberg2016. Os exercícios de
+//   uma articulação só ficam em 10 a 15: a massa cresce numa faixa ampla de cargas — ref schoenfeld2021.)
+//   resistência: 15 a 20 repetições com 1 min de descanso (o ACSM indica 1 a 2 min nessa faixa de repetições).
 // Exercícios com dose própria, tirada dos protocolos publicados (não seguem a faixa do objetivo):
-//  • flexão nórdica: o protocolo de 10 semanas começa com 2 séries de 5 e vai a 3 séries de 12, 10 e 8 (ref petersen2011,
+//  • flexão nórdica: o protocolo de 10 semanas começa com 2 séries de 5 e vai a 3 séries de 12, 10 e 8 (protocolo de Petersen 2011,
 //    tabela lida em zein2022); o FIFA 11+ usa de 3–5 a 12–15 repetições conforme o nível (ref soligard2008); volumes
 //    baixos dão o mesmo ganho de força, e a dor muscular das primeiras semanas pede entrada gradual (ref cuthbert2020).
 //    Aqui: 2 séries de 6 a 8, com 2 min de descanso, e no máximo 3 séries.
@@ -515,14 +521,14 @@ function dose(ex, slot, pf) {
       : { main: pf.nivel === 2 ? [4, '4-6', 180] : [4, '3-5', 180], aux: [3, '6-10', 120], iso: [3, '8-12', 75] },
     emagrecimento: { main: [3, '10-12', 90], aux: [3, '12-15', 60], iso: [2, '12-15', 60] },
     saude: { main: [2, '10-12', 90], aux: [2, '10-12', 75], iso: [2, '12-15', 60] },
-    resistencia: { main: [3, '15-20', 60], aux: [2, '15-20', 45], iso: [2, '15-20', 45] },
+    resistencia: { main: [3, '15-20', 60], aux: [2, '15-20', 60], iso: [2, '15-20', 60] },
   }[obj] || {};
   let [series, reps, descanso] = T[tipo] || [3, '10-12', 90];
   // exercício com o peso do corpo (fora barra fixa e paralelas) não tem como ficar "pesado": a faixa mínima é 8 a 12
   if (ex.registro === 'reps' && Number(reps.split('-')[0]) < 8 && !ex.equip.includes('barra_fixa') && !ex.equip.includes('paralelas')) { reps = '8-12'; descanso = Math.min(descanso, 120); }
   if (pf.nunca && series > 2) series = 2;                  // primeiras semanas: 1 a 3 séries bastam (ACSM/AHA)
   if (pf.idoso) { series = Math.min(series, 2 + (pf.nivel > 1 ? 1 : 0)); reps = '10-12'; descanso = Math.max(descanso, 90); }
-  if (pf.retorno >= 3) series = Math.min(series, 3);       // volta de 3 meses ou mais parado: até 3 séries (ref caterisano2019)
+  if (pf.retorno >= 3) series = Math.min(series, 3);       // volta de 3 meses ou mais parado: até 3 séries (cautela do plano; o consenso limita o volume pela conta séries × repetições × carga, sem fixar séries — ref caterisano2019)
   if (pf.jovem) { reps = iso ? '12-15' : '10-15'; series = Math.min(series, 3); }
   // pressão alta, coração, gestação ou triagem positiva: nada de cargas altas (AHA 2024; ACOG 804; Riebe 2015)
   if (pf.cautela) { const lo = Number(reps.split('-')[0]); if (lo < 10) reps = '10-15'; descanso = Math.max(descanso, 90); series = Math.min(series, 3); }
@@ -559,7 +565,7 @@ function caberNoTempo(itens, pf) {
   const piso = (it) => {
     if (suave) return it._tipo === 'main' ? 90 : it._tipo === 'aux' ? 75 : 60;
     if (obj === 'forca' && pf.nivel > 1) return it._tipo === 'main' ? 120 : it._tipo === 'aux' ? 90 : 60;
-    if (obj === 'resistencia') return it._tipo === 'main' ? 45 : 30;
+    if (obj === 'resistencia') return 60; // séries de 15 a 20 repetições: 1 a 2 min de descanso (ref acsm2009)
     return it._tipo === 'iso' ? 45 : 60;
   };
   const aux = (it) => !it._main && !it._cardio;
@@ -1068,7 +1074,8 @@ function seriesDiretas(dias) {
   return v;
 }
 // Quanto a prioridade pode somar ao músculo, em séries por semana, sobre o plano equilibrado. O único aumento testado
-// com vantagem foi de 20% sobre o volume habitual (ref scarpelli2022); aumentos de 30% a 120% não renderam mais em 8
+// com vantagem foi de 20% sobre o volume habitual (ref scarpelli2022; o posicionamento da IUSCA, lido inteiro, também fala em até cerca de
+// 20% a mais por ciclo de 4 semanas nos músculos em atraso — ref iusca2021); aumentos de 30% a 120% não renderam mais em 8
 // semanas (refs barsuhn2025, camargo2026); e a meta-regressão de Pelland estima em cerca de 6 séries (quem faz de 5 a
 // 10) o acréscimo que dá ganho perceptível (ref pelland2026). Por isso: até 6 séries a mais, sempre dentro do teto.
 const FOCO_MAIS = 6;
@@ -1153,7 +1160,7 @@ function ajustarVolume(dias, pf, tetoFoco = {}) {
     if (!n && travou) motivos[g] = travou;
   }
   // Equilíbrio entre empurrar e puxar: muito mais séries de peito do que de costas está ligado a dor no ombro em quem faz
-  // musculação (ref kolber2010); a tela Evolução avisa quando as costas ficam abaixo de dois terços do peito. O plano do
+  // musculação (ref bonilla2022); a tela Evolução avisa quando as costas ficam abaixo de dois terços do peito. O plano do
   // Treinador nunca sai assim: primeiro tenta somar séries de costas; se não der (em casa quase não há como puxar), tira
   // séries de peito, dos auxiliares primeiro.
   for (let k = 0; k < 60; k++) {
@@ -1193,8 +1200,10 @@ function avisos(pf) {
       3: `Volta depois de 3 a 6 meses parado: ${pf.nivel < pf.nivelBase ? 'montei o plano um nível abaixo da sua experiência, com menos séries' : 'montei o plano com menos séries'}. Nas duas primeiras semanas o treino começa com ainda menos séries e mais descanso, e o cardio volta aos poucos, em quatro semanas. Comece com cerca de 30% menos carga do que usava. Quem já treinou recupera a força mais depressa do que ganhou da primeira vez. Depois de 4 a 6 semanas treinando, refaça a entrevista para receber o plano completo do seu nível.`,
       4: 'Volta depois de mais de 6 meses parado: montei um plano de recomeço, com a dose de quem está começando. Nas duas primeiras semanas o treino começa com ainda menos séries e mais descanso, e o cardio volta aos poucos, em quatro semanas. Comece com metade da carga que usava, ou menos. Quem já treinou recupera a força mais depressa do que ganhou da primeira vez. Depois de 6 a 8 semanas treinando, refaça a entrevista para receber o plano do seu nível.',
     }[pf.retorno];
-    a.push({ tipo: 'info', texto: t + (pf.idade >= 65 ? ' Depois dos 65 anos a perda de força na pausa é maior: volte com ainda mais calma.' : '') });
+    a.push({ tipo: 'info', texto: t + (pf.idade >= 65 ? ' Depois dos 65 anos, volte com ainda mais calma.' : '') });
   }
+  // iniciante que pediu 4 dias ou mais: a recomendação é de 2 a 3 treinos de corpo inteiro (ref acsm2009); o plano diz
+  if (pf.nivel === 1 && !pf.jovem && !pf.diabetes && pf.dias >= 4) a.push({ tipo: 'info', texto: 'Para quem está começando, a recomendação é de 2 a 3 treinos de força por semana, de corpo inteiro. Com ' + pf.dias + ' dias, dividi o corpo e mantive baixo o total de séries da semana.' });
   if (pf.jovem) a.push({ tipo: 'info', texto: 'Menores de 18 anos devem treinar com supervisão de um profissional, priorizando aprender a técnica com cargas leves.' });
   if (pf.idoso) a.push({ tipo: 'info', texto: 'Aos 60 anos ou mais, a musculação é especialmente indicada. Priorizei máquinas e exercícios estáveis, com progressão gradual e sem levar as séries até a falha.' });
   if (pf.limitacoes.length) a.push({ tipo: 'info', texto: 'Evitei os exercícios marcados como de cuidado para: ' + pf.limitacoes.map((x) => CUIDADOS[x] || x).join(', ') + '. Se algum movimento causar dor (não o cansaço normal do músculo), pare e troque o exercício. Dor que persiste precisa de avaliação profissional.' });
@@ -1229,10 +1238,10 @@ function orientacoes(pf, estadoCardio = 'ok', focoCorrida = '') {
   o.push(['Cardio', estadoCardio === 'corrida' && (pf.objetivo === 'hipertrofia' || pf.objetivo === 'forca') && !pf.gestante ? 'O seu cardio é o plano de corrida. ' + (focoCorrida === 'musculacao' ? 'Com prioridade na musculação, a corrida se ajusta para não tirar a recuperação.' : 'Ele não atrapalha o ganho de força nem de massa em quem treina por lazer.') : cardio]);
   if (focoCorrida) {
     const txt = focoCorrida === 'musculacao' ? 'No dia com os dois treinos, faça a musculação antes da corrida, ou deixe 6 horas entre eles. A corrida forte e o longo ficam melhor longe do treino de pernas.'
-      : 'Treino de pernas e corrida forte ficam a 24 horas ou mais um do outro. No mesmo dia, corra primeiro e treine pelo menos 3 horas depois; se a corrida for leve, tanto faz a ordem.' + (pf.nivel === 1 ? ' Nas primeiras semanas de musculação, as pernas demoram até 48 horas para render de novo na corrida.' : '');
+      : 'Treino de pernas e corrida forte ficam a 24 horas ou mais um do outro. No mesmo dia, corra primeiro e treine pelo menos 3 horas depois; se a corrida for leve, tanto faz a ordem.' + (pf.nivel === 1 ? ' Nas primeiras semanas de musculação, as pernas demoram pelo menos 48 horas para render de novo na corrida.' : '');
     o.push(['Corrida e musculação', txt]);
   }
-  o.push(['Descanso', 'Durma bem e deixe pelo menos 48 horas antes de treinar forte o mesmo grupo muscular de novo.']);
+  o.push(['Descanso', 'Durma bem e não treine forte o mesmo grupo muscular em dias seguidos.']);
   o.push(['Troca de exercícios', `Mantenha os exercícios principais por 8 a 12 semanas para evoluir neles. A cada ${semanasRevisao(pf)} semanas eu sugiro trocar 1 ou 2 exercícios auxiliares por treino, para variar o estímulo sem perder o progresso. Você decide se aceita.`]);
   return o;
 }
@@ -1295,9 +1304,9 @@ export function alternativas(ex, pf, gymBruta, excluir = new Set()) {
 //    cai na mesma sessão e não cai com 3 horas ou mais de intervalo (ref schumann2022). Por isso o plano de musculação não
 //    perde exercícios nem séries por causa da corrida: o que muda é o encaixe na semana e o esforço nas pernas.
 //  • Força de pernas → corrida forte: pelo menos 24 horas; no mesmo dia, a corrida intensa vem antes e a força, mais de 3
-//    horas depois (ref blagrove2018). Em quem é novo na musculação, a corrida fica prejudicada por até 48 horas depois de um
-//    treino pesado de pernas (ref doma2017). Não há estudo sobre o treino longo: vale a mesma regra, por analogia.
-//  • Corrida intensa → força: evitar menos de 6 horas (ref robineau2016); no mesmo dia, a força feita antes rende mais nas
+//    horas depois (ref blagrove2018). Em quem é novo na musculação, a corrida fica prejudicada por pelo menos 48 horas
+//    depois dos primeiros treinos pesados de pernas (ref doma2017: tempo até a exaustão 12 a 20% menor às 24 e às 48 h). Não há estudo sobre o treino longo: vale a mesma regra, por analogia.
+//  • Corrida intensa → força: deixar de 6 a 24 horas entre os dois (ref methenitis2018, revisão); no mesmo dia, a força feita antes rende mais nas
 //    pernas (ref eddens2018).
 //  • Para quem corre, treinar pernas até a falha é desnecessário, e os exercícios multiarticulares são a base (ref
 //    blagrove2018). Nenhuma fonte dá um número de séries de pernas por prioridade: o volume do plano não muda.
@@ -1377,8 +1386,8 @@ const ehDiaDePernas = (d) => d.itens.filter((it) => { const ex = EX_POR_ID.get(i
 // Dia de descanso: o encaixe nunca pode custar o último dia sem treino da semana. Semana com corrida ou musculação
 // nos 7 dias custa 80 (mais do que qualquer ganho de afastar as pernas): a musculação vai antes para um dia de corrida
 // leve. O consenso europeu e americano sobre excesso de treino recomenda pelo menos um dia de descanso passivo por
-// semana (ref meeusen2013, escrito para atletas e conferido por fontes secundárias; aqui vale como teto para todos); para
-// menores de 18, pelo menos 1 a 2 dias de folga por semana (refs valovichmcleod2011, brenner2024). Por isso, para
+// semana (ref meeusen2013, lido inteiro; escrito para atletas, aqui vale como teto para todos); para
+// menores de 18, pelo menos 1 a 2 dias de folga por semana (ref valovichmcleod2011). Por isso, para
 // menores de 18 — e, por cautela, sem fonte direta, para 60 anos ou mais e iniciantes —, ficar com um dia só custa 12:
 // mais do que deixar um treino de pernas na véspera da corrida forte (que sai com o aviso de ir mais leve).
 function encaixarNaCorrida(dias, pf, corr) {
@@ -1427,7 +1436,7 @@ function encaixarNaCorrida(dias, pf, corr) {
 }
 // O que a escolha do foco muda na musculação, em até 3 linhas curtas (para a folha da pergunta).
 export function efeitoDoFoco(foco, st) {
-  const refs = ['blagrove2018', 'schumann2022', 'petre2021', 'eddens2018', 'robineau2016'];
+  const refs = ['blagrove2018', 'schumann2022', 'petre2021', 'eddens2018', 'methenitis2018'];
   if (foco === 'corrida') return { linhas: ['Musculação: os treinos de pernas ficam a 24 horas ou mais da corrida forte e do longo.', 'Pernas sem ir até a falha; os exercícios e as séries continuam os mesmos.', 'O plano de musculação fica sem cardio: a corrida já cobre.'], refs };
   if (foco === 'musculacao') return { linhas: ['Musculação: o plano fica completo, nos dias de sempre.', 'No dia com os dois treinos, a musculação vem antes da corrida, ou com 6 horas de intervalo.'], refs };
   if (foco === 'equilibrio') return { linhas: ['Musculação: pernas a 24 horas ou mais da corrida forte e do longo.', 'No dia com os dois treinos, separe-os por 6 horas ou mais.'], refs };
@@ -1636,18 +1645,18 @@ export function outraVersao(respostas, gymBruta, versaoAtual = 0, opc = {}) {
 // A pessoa conta a dor (logic/dor.js): local, tipo (muscular / articulação ou tendão / forte ou repentina), intensidade
 // de 1 a 10 e quando aparece. Aqui ficam as regras do que a musculação faz com ela. Resumo, com as fontes:
 //  • Dor de alerta (definida em logic/dor.js: forte ou repentina, 7 ou mais, ou em repouso): a região não é treinada
-//    e a orientação é procurar avaliação; o resto do corpo continua (refs dubois2020, verhagen2016, cheung2003). Na
+//    e a orientação é procurar avaliação; o resto do corpo continua (refs dubois2020, verhagen2016). Na
 //    gestação, dor no abdômen ou na panturrilha também é alerta (ref acog804). Dor no peito que não é muscular é
-//    sempre alerta (ref riebe2015).
+//    sempre alerta (ref whitfield2017).
 //  • Dor muscular depois do treino (começa em 12 a 24 h, pico entre 24 e 72 h, some em 5 a 7 dias — ref hody2019):
 //    o plano não muda; enquanto o músculo estiver dolorido, menos intensidade e menos duração nele, ou treinar outras
-//    partes do corpo (ref cheung2003). Nenhuma fonte dá um número de dor a partir do qual reduzir: por isso a regra
+//    partes do corpo (ref hody2019: evitar esforço de alta intensidade no músculo dolorido). Nenhuma fonte dá um número de dor a partir do qual reduzir: por isso a regra
 //    vale para qualquer intensidade abaixo do alerta. Esforço intenso no músculo dolorido aumenta o risco de lesão
 //    (ref hody2019).
 //  • Dor em articulação ou tendão: modelo de monitoramento da dor — até 2, zona segura; de 3 a 5, aceitável; acima
 //    de 5, risco alto; e a dor tem de voltar ao normal até a manhã seguinte (refs silbernagel2007, silbernagel2020,
 //    ageberg2010). O teto de dor aceitável durante o exercício depende de onde ele foi testado:
-//      – até 5: ombro (refs holmgren2012, maenhout2013), tendão de Aquiles (ref silbernagel2007), quadril e glúteo
+//      – até 5: ombro (refs holmgren2012, larsson2019), tendão de Aquiles (ref silbernagel2007), quadril e glúteo
 //        (ref ageberg2010, artrose de quadril);
 //      – até 3: joelho (tendão patelar — ref breda2021), cotovelo (sem consenso; a proposta mais baixa é menos de 4 —
 //        ref bateman2021), lombar (o modelo não foi testado ali — ref jorgensen2018) e todas as regiões sem ensaio;
@@ -1655,7 +1664,7 @@ export function outraVersao(respostas, gymBruta, versaoAtual = 0, opc = {}) {
 //        todos os ensaios que aceitaram dor até 5 tinham fisioterapeuta acompanhando, e os próprios limites vêm da
 //        prática clínica, sem avaliação formal (ref raulline2025); sem supervisão, vale o limite mais baixo com fonte.
 //    Até 2: treino normal. De 3 até o teto: dá preferência a exercícios que poupam a região e, nos demais, menos
-//    carga e amplitude (refs fragala2019, powers2014, diercks2014, cook2009). Acima do teto: saem os exercícios que
+//    carga e amplitude (refs fragala2019, jospt2014, diercks2014, cook2009). Acima do teto: saem os exercícios que
 //    sobrecarregam a região.
 // Regiões: carrega uma região o exercício marcado em `cuidado` no catálogo, o que tem um músculo dela como principal
 // (ou auxiliar, quando a dor é de alerta) e o que a carrega pela mecânica — movimento, postura e apoio (ver MECANICA).
@@ -1817,9 +1826,9 @@ function avisosDeDor(dores, pf) {
 }
 function refsDaDor(d, pf, classe) {
   if (classe === 'volta') return ['dubois2020', 'caterisano2019', 'silbernagel2007'];
-  if (classe === 'alerta') return [...new Set(['dubois2020', d.onde === 'lombar' ? 'verhagen2016' : '', pf.gestante ? 'acog804' : '', d.onde === 'peito' ? 'riebe2015' : ''].filter(Boolean))];
-  if (d.tipo === 'muscular') return ['hody2019', 'cheung2003', 'herbert2011'];
-  const regiao = { lombar: ['george2021', 'jorgensen2018'], ombro: ['holmgren2012', 'diercks2014'], joelho: ['breda2021', 'powers2014'], aquiles: ['cook2009'], cotovelo: ['bateman2021'], quadril: ['ageberg2010'], gluteo: ['ageberg2010'] }[d.onde] || [];
+  if (classe === 'alerta') return [...new Set(['dubois2020', d.onde === 'lombar' ? 'verhagen2016' : '', pf.gestante ? 'acog804' : '', d.onde === 'peito' ? 'whitfield2017' : ''].filter(Boolean))];
+  if (d.tipo === 'muscular') return ['hody2019', 'afonso2021'];
+  const regiao = { lombar: ['george2021', 'jorgensen2018'], ombro: ['holmgren2012', 'diercks2014'], joelho: ['breda2021', 'jospt2014'], aquiles: ['cook2009'], cotovelo: ['bateman2021'], quadril: ['ageberg2010'], gluteo: ['ageberg2010'] }[d.onde] || [];
   return ['silbernagel2007', 'silbernagel2020', 'smith2017', ...regiao, ...(pf.conservador || pf.nivel === 1 ? ['raulline2025'] : []), ...(pf.idoso ? ['fragala2019'] : [])];
 }
 // ---------- dores para o Treinador: ativas, pendentes de resposta e em volta gradual ----------
@@ -1968,7 +1977,7 @@ export function ajustesPorDor(plan, respostas, gymBruta, doresBrutas) {
       const alt = a.d.tipo === 'muscular' ? null : alternativas(ex, pf, gym, noPlano).find((c) => !avaliarDor(c, dores, pf));
       if (alt) { noPlano.add(alt.id); out.push({ ...base, tipo: 'trocar', para: alt.id, motivo: `Poupa a região da dor ${onde}.` }); return; }
       if (a.grau === 3) out.push({ ...base, tipo: 'pular', motivo: `Sem equivalente que poupe a região da dor ${onde}: fica de fora até melhorar.` });
-      else out.push({ ...base, tipo: 'aliviar', motivo: a.d.tipo === 'muscular' ? 'Músculo dolorido: mais leve por 1 a 2 dias.' : `Dor ${onde}: menos carga e só a amplitude sem dor.` });
+      else out.push({ ...base, tipo: 'aliviar', motivo: a.d.tipo === 'muscular' ? 'Músculo dolorido: mais leve enquanto doer.' : `Dor ${onde}: menos carga e só a amplitude sem dor.` });
     });
   }
   return out;

@@ -28,8 +28,13 @@ export default async (page) => {
   const diaTxt = (k) => `${DIAS[wd(k)]}, ${Number(k.slice(8, 10))}/${k.slice(5, 7)}`;
   const noiteTxt = (k) => `Noite de ${entreDias(k)}, ${Number(k.slice(8, 10))}/${k.slice(5, 7)}`;
   const segunda = diaMenos((wd(hojeKey) + 6) % 7); // segunda-feira desta semana
-  // dentro de `escopo`, toca n vezes em − ou + das horas
-  const horas = (escopo, delta) => page.eval(`const b = document.querySelector(${JSON.stringify(escopo)} + ' .sono-passo button[aria-label="${delta < 0 ? 'Menos' : 'Mais'} 15 minutos de sono"]'); if (!b) return false; for (let i = 0; i < ${Math.abs(delta)}; i++) b.click(); return document.querySelector(${JSON.stringify(escopo)} + ' .sono-passo output').textContent;`);
+  // o tempo que os campos de horas e minutos mostram dentro de `escopo`, escrito como a tela escreve ("7 h 30", "8 h")
+  const LER_TEMPO = `const lerTempo = (raiz) => { const c = raiz.querySelectorAll('.sono-passo .sono-tempo input'); const m = Number(c[0].value) * 60 + Number(c[1].value); return m % 60 ? Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') : (m / 60) + ' h'; };`;
+  // dentro de `escopo`, anda `delta` quartos de hora com − ou + (cada toque vale 5 minutos: 3 toques por quarto de hora)
+  const horas = (escopo, delta) => page.eval(`${LER_TEMPO} const raiz = document.querySelector(${JSON.stringify(escopo)}); const b = raiz && raiz.querySelector('.sono-passo button[aria-label="${delta < 0 ? 'Menos' : 'Mais'} 5 minutos de sono"]'); if (!b) return false; for (let i = 0; i < ${Math.abs(delta) * 3}; i++) b.click(); return lerTempo(raiz);`);
+  // digita em um campo da folha de cima (pelo rótulo) e sai dele
+  const digitar = (rotulo, valor) => page.eval(`const f = [...document.querySelectorAll('.sheet')].pop(); const i = f && f.querySelector('input[aria-label=${JSON.stringify(rotulo)}]'); if (!i) return false; i.focus(); i.value = ${JSON.stringify(valor)}; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); return true;`);
+  const tempoDaFolha = () => page.eval(`${LER_TEMPO} return lerTempo([...document.querySelectorAll('.sheet')].pop());`);
   const nota = (escopo, n) => page.eval(`const c = [...document.querySelectorAll(${JSON.stringify(escopo)} + ' .chips .chip')].find((e) => e.textContent === '${n}'); if (!c) return false; c.focus(); c.click(); return document.activeElement === c && c.getAttribute('aria-pressed') === 'true';`);
   // botão do rodapé da folha que está por cima
   const naFolha = (rotulo) => page.eval(`const f = [...document.querySelectorAll('.sheet')].pop(); const b = f && [...f.querySelectorAll('.sheet-ft .btn')].find((e) => e.textContent.trim() === ${JSON.stringify(rotulo)}); if (!b) return false; b.click(); return true;`);
@@ -73,7 +78,7 @@ export default async (page) => {
   ok(t.toLowerCase().includes(`meta desta noite · ${DIAS[wd(hojeKey)]} para ${DIAS[(wd(hojeKey) + 1) % 7]}`), 'a meta diz de que noite é (de hoje para amanhã)');
   ok(t.includes('Aos 34 anos, os consensos de sono recomendam de 7 a 9 h por noite.') && t.includes('Idade: 34 anos, informada aqui.'), 'a meta explica o porquê e de onde veio a idade');
   await page.eval(`document.querySelector('#sono-meta details.pq summary').click(); return true;`); await page.sleep(150);
-  ok((await page.eval(`return document.querySelector('#sono-meta details.pq').textContent;`)).includes('Hirshkowitz M') && (await page.eval(`return document.querySelector('#sono-meta details.pq').textContent;`)).includes('Watson NF'), 'as fontes da meta abrem ao toque');
+  ok((await page.eval(`return document.querySelector('#sono-meta details.pq').textContent;`)).includes('Chaput JP') &&(await page.eval(`return document.querySelector('#sono-meta details.pq').textContent;`)).includes('Watson NF'), 'as fontes da meta abrem ao toque');
   ok((await estado('s.sono.idade')) === 34, 'idade gravada');
   await foto('2-meta');
 
@@ -144,11 +149,38 @@ export default async (page) => {
   ok((await horas('#sono-noite', 0)) === '8 h', 'só com uma noite de 0 h registrada, o registro abre no alvo (8 h), não em 0 h');
   await page.eval(`const st = await import('/js/store.js'); const lg = await import('/js/logic/sono.js'); st.update((s) => { lg.apagarNoite(s.sono, '${diaMenos(5)}'); for (const [d, h, q] of [['${diaMenos(3)}', 8], ['${diaMenos(2)}', 6.5], ['${diaMenos(1)}', 6, 2], ['${hojeKey}', 7.75, 4]]) lg.gravarNoite(s.sono, { data: d, horas: h, ...(q ? { qualidade: q } : {}) }); }); return true;`); await redesenhar(); await page.sleep(300);
 
+  console.log('6a. Tempo real: ao minuto, digitando ou pelos horários de dormir e acordar');
+  await page.click('Corrigir'); await comFolhas(1);
+  ok((await page.eval(`const e = document.getElementById('sono-intervalo'); return e ? e.textContent : '';`)).startsWith('Opcional: informe os dois horários'), 'a folha oferece os horários de dormir e acordar');
+  await digitar('Hora em que você dormiu', '23:10'); await digitar('Hora em que você acordou', '06:33');
+  ok((await tempoDaFolha()) === '7 h 23', 'das 23:10 às 06:33 a tela calcula 7 h 23');
+  ok((await page.eval(`return document.getElementById('sono-intervalo').textContent;`)).startsWith('Das 23:10 às 06:33 são 7 h 23.'), 'e explica a conta');
+  await naFolha('Salvar'); await comFolhas(0); await page.sleep(300);
+  let real = await estado(`s.sono.registros.find((r) => r.data === '${hojeKey}')`);
+  ok(Math.round(real.horas * 60) === 443 && real.dormiu === '23:10' && real.acordou === '06:33' && real.qualidade === 4, 'noite gravada com 7 h 23 (443 minutos) e os horários: ' + JSON.stringify(real));
+  t = await texto();
+  ok(t.includes('7 h 23') && t.includes('Das 23:10 às 06:33') && t.includes('6 h 58'), 'a tela mostra 7 h 23, os horários e a média ao minuto (6 h 58)');
+  await page.click('Corrigir'); await comFolhas(1);
+  ok((await tempoDaFolha()) === '7 h 23' && (await page.eval(`return [...document.querySelectorAll('.sheet input[type="time"]')].slice(0, 2).map((i) => i.value).join();`)) === '23:10,06:33', 'a correção abre com o tempo e os horários gravados');
+  await digitar('Tempo dormido: horas', '6'); await digitar('Tempo dormido: minutos', '52');
+  ok((await tempoDaFolha()) === '6 h 52', 'digitando 6 e 52, o tempo fica 6 h 52 (dormiu menos que o intervalo)');
+  ok((await horas('.sheet', 0)) === '6 h 52' && (await page.eval(`const f = [...document.querySelectorAll('.sheet')].pop(); f.querySelector('.sono-passo button[aria-label="Mais 5 minutos de sono"]').click(); return true;`)) && (await tempoDaFolha()) === '6 h 55', 'o + para no múltiplo de 5 seguinte (6 h 55)');
+  await digitar('Tempo dormido: minutos', '52');
+  await naFolha('Salvar'); await comFolhas(0); await page.sleep(300);
+  real = await estado(`s.sono.registros.find((r) => r.data === '${hojeKey}')`);
+  ok(Math.round(real.horas * 60) === 412 && real.dormiu === '23:10', 'gravou 6 h 52 (412 minutos), mantendo os horários');
+  await page.click('Corrigir'); await comFolhas(1);
+  await digitar('Tempo dormido: horas', '99');
+  ok((await tempoDaFolha()) === '16 h', 'o tempo não passa de 16 h');
+  await naFolha('Salvar'); ok(await comFolhas(0), 'a folha fecha ao salvar');
+  // volta ao estado de antes (7 h 45, sem horários) para as conferências seguintes
+  await page.eval(`const st = await import('/js/store.js'); const lg = await import('/js/logic/sono.js'); st.update((s) => { lg.gravarNoite(s.sono, { data: '${hojeKey}', horas: 7.75, qualidade: 4 }); }); return true;`); await redesenhar(); await page.sleep(300);
+
   await avisos('6');
   console.log('6b. Cochilos: registrar, corrigir, apagar (com confirmação) e como entram na semana');
   const cochilos = () => estado('s.sono.cochilos');
   // na folha de cima, toca n vezes em − ou + dos minutos do cochilo
-  const minutos = (delta) => page.eval(`const f = [...document.querySelectorAll('.sheet')].pop(); const b = f && f.querySelector('.sono-passo button[aria-label="${delta < 0 ? 'Menos' : 'Mais'} 5 minutos de cochilo"]'); if (!b) return false; for (let i = 0; i < ${Math.abs(delta)}; i++) b.click(); return f.querySelector('.sono-passo output').textContent;`);
+  const minutos = (delta) => page.eval(`const f = [...document.querySelectorAll('.sheet')].pop(); const b = f && f.querySelector('.sono-passo button[aria-label="${delta < 0 ? 'Menos' : 'Mais'} 5 minutos de cochilo"]'); if (!b) return false; for (let i = 0; i < ${Math.abs(delta)}; i++) b.click(); const v = Number(f.querySelector('.sono-passo .sono-tempo input').value); return v < 60 ? v + ' min' : (v % 60 ? Math.floor(v / 60) + ' h ' + String(v % 60).padStart(2, '0') : (v / 60) + ' h');`);
   const botaoCochilo = (escopo) => page.eval(`const e = document.querySelector(${JSON.stringify(escopo)}); const b = e && [...e.querySelectorAll('.btn')].find((x) => /Registrar cochilo|Outro cochilo/.test(x.textContent)); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true;`);
   t = await texto();
   ok(t.includes(`Cochilos de hoje, ${DIAS[wd(hojeKey)]}`) && t.includes('Para adultos, a meta é a da noite. O cochilo aparece à parte'), 'a tela tem o cartão dos cochilos e diz como eles contam para o adulto');
@@ -156,6 +188,14 @@ export default async (page) => {
   ok((await page.eval(`const e = document.getElementById('sono-folha-cochilo'); return e ? e.textContent : '';`)) === `Cochilo de ${diaTxt(hojeKey)}`, 'a folha diz de que dia é o cochilo: ' + diaTxt(hojeKey));
   ok((await minutos(2)) === '30 min', 'dois toques em + levam de 20 para 30 minutos');
   await page.eval(`const i = document.querySelector('.sheet input[aria-label="Hora em que o cochilo começou"]'); i.value = '14:10'; i.dispatchEvent(new Event('change', { bubbles: true })); return true;`);
+  // tempo real do cochilo: o fim acompanha a duração; mudando o fim, a duração é a conta; e dá para digitar os minutos
+  const fimDoCochilo = () => page.eval(`return document.querySelector('.sheet input[aria-label="Hora em que o cochilo terminou"]').value;`);
+  await minutos(0);
+  ok((await digitar('Duração do cochilo, em minutos', '23')) && (await fimDoCochilo()) === '14:33', 'digitando 23 minutos com início às 14:10, o fim vai para 14:33');
+  await digitar('Hora em que o cochilo terminou', '14:52');
+  ok((await minutos(0)) === '42 min' && (await page.eval(`return document.getElementById('sono-cochilo-intervalo').textContent;`)) === 'Das 14:10 às 14:52: 42 min.', 'mudando o fim para 14:52, a duração vira 42 min');
+  await digitar('Hora em que o cochilo terminou', '14:40');
+  ok((await minutos(0)) === '30 min', 'e com o fim às 14:40 volta a 30 min');
   await naFolha('Salvar'); await comFolhas(0); await page.sleep(300);
   let ck = await cochilos();
   ok(ck.length === 1 && ck[0].data === hojeKey && ck[0].min === 30 && ck[0].inicio === '14:10', 'cochilo gravado no dia de hoje: ' + JSON.stringify(ck));
@@ -173,7 +213,10 @@ export default async (page) => {
   // cochilo de ontem, pela folha do dia
   await page.eval(`const b = document.querySelector('.sono-dia[data-dia="${diaMenos(1)}"]'); b.scrollIntoView({ block: 'center' }); b.click(); return true;`); await comFolhas(1);
   ok((await texto()).includes(`Cochilos de ${DIAS[wd(diaMenos(1))]}`), 'a folha do dia mostra os cochilos daquele dia');
-  await botaoCochilo('.sheet'); await page.sleep(500);
+  await botaoCochilo('.sheet');
+  // a folha do dia fecha e a do cochilo abre: espera a troca terminar (com a máquina ocupada, tempo fixo não basta)
+  for (let i = 0; i < 50; i++) { if (await page.eval(`return document.querySelectorAll('.sheet').length === 1 && !!document.getElementById('sono-folha-cochilo');`)) break; await page.sleep(100); }
+  await page.sleep(200);
   ok((await folhas()) === 1 && (await page.eval(`const e = document.getElementById('sono-folha-cochilo'); return e ? e.textContent : '';`)) === `Cochilo de ${diaTxt(diaMenos(1))}`, 'da folha do dia abre a do cochilo, com a data certa');
   ok((await minutos(8)) === '1 h', '60 minutos aparecem como 1 h');
   await naFolha('Salvar'); await comFolhas(0); await page.sleep(300);

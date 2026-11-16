@@ -53,13 +53,29 @@ export function respostasCompletas(a) {
   });
 }
 
-const FATOR = [1.2, 1.375, 1.465, 1.55, 1.64, 1.725, 1.9];
+// Nível de atividade física (PAL = gasto do dia ÷ gasto em repouso), do relatório FAO/OMS/UNU "Human energy
+// requirements" (2004), capítulo 5, lido inteiro (ref fao2004):
+//   estilo de vida sedentário ou de atividade leve: PAL de 1,40 a 1,69; ativo ou moderadamente ativo: 1,70 a 1,99;
+//   vigoroso: 2,00 a 2,40. Abaixo de 1,40 não é compatível com saúde a longo prazo; acima de 2,40 não se sustenta.
+//   As tabelas do relatório usam os degraus 1,45, 1,60, 1,75, 1,90, 2,05 e 2,20.
+// Correspondência com a pergunta "Como é o seu dia a dia, fora os treinos?":
+//   "Fico sentado a maior parte do dia" → 1,45 e "Fico em pé ou caminho parte do dia" → 1,60 (os dois degraus do estilo
+//   sedentário ou leve: trabalho de pouco esforço, uso de veículo, lazer sentado ou em pé);
+//   "Trabalho em movimento na maior parte do dia" → 1,75 e "Faço trabalho braçal pesado" → 1,90 (os dois degraus do
+//   estilo ativo: o relatório dá pedreiros e operários da construção como exemplo dessa categoria; o estilo vigoroso,
+//   de 2,00 para cima, é o de quem faz trabalho extenuante por várias horas todos os dias, como a lavoura sem máquinas).
+// Treino: 1 hora por dia de exercício moderado a vigoroso leva o PAL de 1,55 para 1,75 (+0,20). Com 1 hora por treino,
+// somam-se 0,20 × dias de treino ÷ 7: 1 a 2 dias, +0,04; 3 dias, +0,09; 4 a 5 dias, +0,13; 6 a 7 dias, +0,19.
+// O PAL nunca passa de 2,40 (o maior que o relatório considera sustentável), com ou sem plano de corrida.
+export const PAL_DIA = [1.45, 1.6, 1.75, 1.9];
+export const PAL_TREINO = { 0: 0, 2: 0.04, 3: 0.09, 4: 0.13, 6: 0.19 };
+export const PAL_MAX = 2.4;
 const r5 = (n) => Math.round(n / 5) * 5;
 const r10 = (n) => Math.round(n / 10) * 10;
 
 // ---------- cálculo ----------
 const PISO = { m: 1500, f: 1200 };   // abaixo disso, só com acompanhamento profissional (AHA/ACC/TOS 2013 — ref jensen2013)
-const GASTO_MIN = 1000;              // estimativa abaixo disso: fora da faixa em que a fórmula é confiável (ref frankenfield2005)
+const GASTO_MIN = 1000;              // estimativa abaixo disso: fora do que a fórmula cobre (derivada de 498 adultos de 19 a 78 anos — ref ruiz2011)
 const numero = (v, min, max, padrao) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : padrao);
 
 // O que as OUTRAS entrevistas dizem e que muda a segurança da Nutricionista: a idade informada ao Treinador, ao
@@ -125,17 +141,19 @@ export function calcular(respostas, corrida = null, contexto = null) {
   const rest = lista(a.restricoes).filter((x) => x !== 'nenhuma');
   const sexo = a.sexo === 'm' ? 'm' : 'f';
   const imc = peso / ((alt / 100) ** 2);
-  const tmb = 10 * peso + 6.25 * alt - 5 * idade + (sexo === 'm' ? 5 : -161); // Mifflin-St Jeor (ref mifflin1990)
+  // Mifflin-St Jeor, com os coeficientes como aparecem em ruiz2011 (texto completo, apud Mifflin 1990):
+  // 9,99 × peso + 6,25 × altura − 4,92 × idade + 166 (homens) − 161. Nos estudos, acerta dentro de 10% do gasto medido
+  // em 45% a 75% das pessoas, conforme o grupo, e erra para mais depois de uma dieta (refs ruiz2011, amaro2019).
+  const tmb = 9.99 * peso + 6.25 * alt - 4.92 * idade + (sexo === 'm' ? 5 : -161);
   const iAtiv = { sedentario: 0, leve: 1, moderado: 2, intenso: 3 }[a.atividade] ?? 0;
-  const iTreino = { 0: 0, 2: 1, 3: 1, 4: 2, 6: 3 }[a.treinos] ?? 0;
-  const fator = FATOR[Math.min(6, iAtiv + iTreino)];
+  const fator = Math.min(PAL_MAX, PAL_DIA[iAtiv] + (Object.prototype.hasOwnProperty.call(PAL_TREINO, String(a.treinos)) ? PAL_TREINO[a.treinos] : 0));
   let gasto = tmb * fator;
   // Corrida: o gasto nunca fica abaixo do dia a dia (sem treino) mais o custo da corrida, cerca de 1 kcal por quilo por
-  // quilômetro, qualquer que seja o ritmo (Margaria 1963 — ref margaria1963; conferido em rapoport2010, de acesso aberto:
-  // maratona de quem pesa 70 kg ≈ 2.950 kcal). Quem já respondeu que treina muitos dias não é contado duas vezes.
+  // quilômetro, qualquer que seja o ritmo (ref rapoport2010, texto completo, apud Margaria 1963: maratona de quem pesa
+  // 70 kg ≈ 2.950 kcal). Quem já respondeu que treina muitos dias não é contado duas vezes.
   const cor = limparCorrida(corrida);
   const kcalCorrida = cor ? (cor.kmSemana * peso) / 7 : 0;
-  if (cor) gasto = Math.min(tmb * 2.4, Math.max(gasto, tmb * FATOR[iAtiv] + kcalCorrida));
+  if (cor) gasto = Math.min(tmb * PAL_MAX, Math.max(gasto, tmb * PAL_DIA[iAtiv] + kcalCorrida));
   const treina = Number(a.treinos) >= 2 || (!!cor && cor.sessoesSemana >= 2);
   const avisos = [];
   // piso da faixa saudável de IMC: 18,5 (OMS) e, a partir dos 60 anos, 22 (Lipschitz, a faixa usada pelo SUS — imcFaixa)
@@ -143,10 +161,10 @@ export function calcular(respostas, corrida = null, contexto = null) {
   const baixoPeso = imc < imcPiso;
   const kgPiso = Math.ceil(imcPiso * ((alt / 100) ** 2));          // peso, em quilos inteiros, que não fica abaixo do piso
   const obeso = imc >= 30;
-  // Acima do IMC 25, as contas por quilo usam o peso de IMC 25: o quilo a mais é quase todo gordura e não aumenta a
-  // necessidade de proteína nem de água. É o "peso ajustado" que a literatura recomenda na obesidade: 1,8 g por kg de
-  // IMC 25 = 1,5 g por kg de IMC 30, dentro de 1,0–1,5 g/kg de peso ajustado e acima do mínimo de 1,2 g/kg com o peso
-  // limitado ao de IMC 30 (Weijs 2025 — ref weijs2025). O corte único no IMC 25 evita o degrau que havia no IMC 30.
+  // Acima do IMC 25, a proteína por quilo usa o peso de IMC 25: o quilo a mais é quase todo gordura e não aumenta a
+  // necessidade. Na obesidade a literatura limita o peso da conta — na perda de peso, pelo menos 1,2 g/kg com o peso
+  // limitado ao de IMC 30 (ref weijs2025, texto completo) —, e 1,8 g por kg de IMC 25 = 1,5 g por kg de IMC 30 fica
+  // acima desse mínimo. O corte único no IMC 25 evita o degrau que havia no IMC 30.
   const pesoRef = Math.min(peso, 25 * ((alt / 100) ** 2));
   const piso = PISO[sexo];
   const objetivo = ['emagrecer', 'ganhar', 'manter'].includes(a.objetivo) ? a.objetivo : 'manter';
@@ -190,24 +208,26 @@ export function calcular(respostas, corrida = null, contexto = null) {
   if (modo !== 'educativo' && imc >= 40) avisos.push({ tipo: 'info', texto: 'Com IMC de 40 ou mais, o tratamento do peso deve ser acompanhado por médico e nutricionista. Use estes números só como referência inicial.' });
   if (cond.includes('hipertensao')) avisos.push({ tipo: 'info', texto: 'Pressão alta: limite o sal a 5 g por dia (1 colher de chá, contando o sal dos alimentos prontos), evite ultraprocessados e embutidos, e coma frutas, verduras, legumes, feijões e laticínios magros todos os dias (padrão DASH). Não use cafeína como suplemento.' });
   if (cond.includes('outra')) avisos.push({ tipo: 'info', texto: 'Com doença crônica, confirme estas orientações com seu médico ou nutricionista antes de mudar a alimentação.' });
-  if (rest.includes('vegano')) avisos.push({ tipo: 'info', texto: 'Alimentação vegana bem planejada é adequada para adultos, mas a vitamina B12 precisa ser suplementada. Combine feijões com cereais e varie as fontes de proteína (soja, tofu, lentilha, grão-de-bico). Atenção também a ferro, cálcio, zinco, iodo e ômega-3.' });
+  if (rest.includes('vegano')) avisos.push({ tipo: 'info', texto: 'Alimentação vegana bem planejada atende a quem treina, mas a vitamina B12 precisa ser suplementada. Combine feijões com cereais e varie as fontes de proteína (soja, tofu, lentilha, grão-de-bico). Atenção também a ferro, cálcio, zinco, iodo, vitamina D e ômega-3.' });
   if (rest.includes('sem_gluten')) avisos.push({ tipo: 'info', texto: 'Doença celíaca: a exclusão de trigo, centeio, cevada (e aveia não certificada) deve ser total. Cuidado com a contaminação cruzada em utensílios, óleo de fritura e alimentos a granel. Confira sempre o rótulo.' });
   if (rest.includes('sem_lactose')) avisos.push({ tipo: 'info', texto: 'Intolerância à lactose: o cardápio de exemplo não usa leite, iogurte nem queijo comuns. Se quiser, inclua as versões sem lactose desses alimentos.' });
 
   const out = { modo, imc, baixoPeso, tmb: r10(tmb), gasto: r10(gasto), fator: Math.round((gasto / tmb) * 1000) / 1000, pesoRef, avisos, restricoes: rest, condicoes: cond, peso, treina, objetivo, refeicoes: [3, 4, 5, 6].includes(Number(a.refeicoes)) ? Number(a.refeicoes) : 4, horario: a.horario || 'varia', sexo, idade };
   out.preco = a.preco === 'barato' ? 'barato' : 'tanto_faz';
   if (protecoes.length) out.protecoes = protecoes;
-  // Água TOTAL do dia (bebidas + a água dos alimentos), em litros: 35 mL por quilo (regra prática da nutrição clínica),
-  // nunca abaixo da ingestão adequada da EFSA — 2,0 L (mulheres) e 2,5 L (homens), para clima ameno e atividade moderada
-  // — nem acima de 4 L (percentil 95 da EFSA para homens). Ref efsa2010, conferida no relatório-resumo oficial (efsa2017);
-  // o IOM (2005) chega a 2,7 e 3,7 L (ref iom2005).
-  // Cerca de 80% disso vem das bebidas (EFSA: 70–80%; IOM: 81%; ESPEN: 1,6 L e 2,0 L em bebidas — ref volkert2022).
-  // Calor e treino pedem mais, e não há fórmula única: a perda de suor varia de 0,3 a 2,4 L por hora (ref rodriguez2009).
-  out.agua = Math.round(Math.min(4000, Math.max(sexo === 'm' ? 2500 : 2000, pesoRef * 35)) / 100) / 10;
-  out.aguaBebidas = Math.round(out.agua * 8) / 10;
+  // Água TOTAL do dia (bebidas + a água dos alimentos), em litros: a ingestão adequada da EFSA — 2,0 L (mulheres) e
+  // 2,5 L (homens), para clima ameno e atividade moderada (ref efsa2017, relatório oficial lido inteiro). Em bebidas:
+  // 1,6 L e 2,0 L, os mesmos valores que a ESPEN usa (ref volkert2022). A antiga regra de "35 mL por quilo" saiu: não
+  // há fonte lida inteira que a sustente. Calor e treino pedem mais, e não há fórmula única: a perda de suor varia de
+  // 0,3 a 2,4 L por hora (ref rodriguez2009); o guia é a sede.
+  // O valor é o de adultos, inclusive idosos. Gestantes (+0,3 L), lactantes (+0,7 L) e menores têm outros valores no
+  // mesmo relatório, e na doença renal quem define os líquidos é o médico: como todos esses perfis ficam no modo
+  // educativo, nele o aplicativo não dá número de água nenhum (nem a dose de antes do treino, que é de adultos).
+  out.agua = modo === 'educativo' ? null : sexo === 'm' ? 2.5 : 2.0;
+  out.aguaBebidas = modo === 'educativo' ? null : sexo === 'm' ? 2.0 : 1.6;
   // antes do treino: 5 a 10 mL por quilo, nas 2 a 4 h antes — conferido no texto integral da posição conjunta de 2016
   // (Thomas, Erdman e Burke — ref thomas2016); a de 2009 dizia 5 a 7 mL/kg, 4 h antes (ref rodriguez2009)
-  out.aguaPre = [Math.max(150, Math.round(pesoRef * 5 / 50) * 50), Math.max(300, Math.round(pesoRef * 10 / 50) * 50)];
+  out.aguaPre = modo === 'educativo' ? null : [Math.max(150, Math.round(pesoRef * 5 / 50) * 50), Math.max(300, Math.round(pesoRef * 10 / 50) * 50)];
   if (modo === 'educativo') { if (cor) out.corrida = { ...cor }; return out; }
 
   // meta de energia
@@ -220,7 +240,7 @@ export function calcular(respostas, corrida = null, contexto = null) {
     kcal = gasto - Math.min(idade >= 65 ? 500 : 750, gasto * 0.2, peso * 11);
     if (idade >= 65) avisos.push({ tipo: 'warn', texto: 'Depois dos 65 anos, emagrecer pede cuidado para não perder músculo: decida com seu médico ou nutricionista, perca devagar e faça treino de força. Por isso a redução de calorias aqui é moderada.' });
     else if (imc < (idade >= 60 ? 27.05 : 25)) avisos.push({ tipo: 'info', texto: `Seu peso está na faixa saudável: perder peso não é uma necessidade de saúde. Se for perder, vá devagar e não baixe de ${kgPiso} kg.` });
-    if (gasto <= piso) { kcal = gasto; avisos.push({ tipo: 'warn', texto: 'Seu gasto estimado já é baixo. Não sugiro comer menos do que isso sem acompanhamento: para emagrecer com segurança, aumente a atividade física e procure um nutricionista.' }); }
+    if (r10(gasto) <= piso) { kcal = gasto; avisos.push({ tipo: 'warn', texto: 'Seu gasto estimado já é baixo. Não sugiro comer menos do que isso sem acompanhamento: para emagrecer com segurança, aumente a atividade física e procure um nutricionista.' }); }
     else if (kcal < piso) { kcal = piso; avisos.push({ tipo: 'warn', texto: `Ajustei a meta para ${piso} kcal, o mínimo que este aplicativo sugere sem acompanhamento profissional. Dietas mais restritas só com nutricionista ou médico.` }); }
   } else if (obj === 'ganhar') {
     kcal = gasto + Math.min(500, gasto * 0.1);                       // superávit ≈ 10% (Iraki 2019; Slater 2019 — refs iraki2019, slater2019)
@@ -230,10 +250,10 @@ export function calcular(respostas, corrida = null, contexto = null) {
   out.objetivoCalc = obj;
   out.kcal = r10(kcal);
   out.piso = piso;
-  // Perda esperada: sai do déficit que a meta realmente tem (gasto − meta, já arredondados), a 7.700 kcal por quilo
-  // (32,2 MJ/kg — Hall 2008, ref hall2008: a regra vale bem para quem tem mais gordura; quem tem menos perde um pouco
-  // mais com o mesmo déficit). Sem déficit, não há ritmo a mostrar. O teto saudável é 1% do peso por semana, até 1 kg
-  // (refs helms2014, jensen2013).
+  // Perda esperada: sai do déficit que a meta realmente tem (gasto − meta, já arredondados), a 7.700 kcal por quilo de
+  // gordura (3.500 kcal por libra: 500 kcal a menos por dia ≈ meio quilo por semana — ref helms2014, texto completo, que
+  // avisa: a conta é estática, o corpo se adapta e a perda real tende a ser menor). Sem déficit, não há ritmo a mostrar.
+  // O teto saudável é 1% do peso por semana, até 1 kg (refs helms2014, jensen2013).
   if (obj === 'emagrecer') {
     out.deficit = Math.max(0, out.gasto - out.kcal);
     if (out.deficit >= 50) { out.perdaSemana = Math.round(((out.deficit * 7) / 7700) * 100) / 100; out.perdaMax = Math.min(1, Math.round(peso * 0.01 * 10) / 10); }
@@ -243,30 +263,34 @@ export function calcular(respostas, corrida = null, contexto = null) {
   //   quem treina: ISSN 2017 — 1,4 a 2,0 para quem se exercita, mais em déficit (ref jager2017); Morton 2018 — o ganho
   //   de massa para de crescer em 1,62 (IC 95%: 1,03 a 2,20) (ref morton2018); Helms 2014 — parte alta em déficit.
   //   Daí 1,8 para emagrecer ou ganhar e 1,6 para manter.
-  //   quem ainda não treina: 1,0 para manter (acima do mínimo de 0,8 da RDA); 1,5 para emagrecer — dietas com 1,2 a 1,6
-  //   protegem os músculos e a saciedade (Leidy 2015 — ref leidy2015); 1,6 para ganhar (acima disso não há ganho extra).
-  //   65 anos ou mais: pelo menos 1,2 (PROT-AGE: 1,0–1,2; 1,2 ou mais para quem é ativo — ref bauer2013; ESPEN — ref deutz2014).
+  //   quem ainda não treina: 1,0 para manter (acima do mínimo de 0,8 da RDA — ref dri_canada); 1,5 para emagrecer — na
+  //   perda de peso a necessidade sobe para pelo menos 1,2 g/kg, com o peso limitado ao de IMC 30 (ref weijs2025), e 1,5
+  //   por quilo de peso de IMC 25 nunca fica abaixo disso; 1,6 para ganhar (acima disso não há ganho extra — morton2018).
+  //   65 anos ou mais: pelo menos 1,2 (ESPEN: 1,0 a 1,2 para idosos saudáveis; 1,2 a 1,5 com doença — ref deutz2014).
   // Gestantes, menores de 18 e doença renal não chegam aqui (modo educativo): na doença renal o alvo é cerca de
   // 0,8 g/kg, sem passar de 1,3 (KDIGO 2024 — ref kdigo2024), e quem define é o médico.
   let gkg = treina ? (obj === 'manter' ? 1.6 : 1.8) : obj === 'emagrecer' ? 1.5 : obj === 'ganhar' ? 1.6 : 1.0;
   if (idade >= 65) gkg = Math.max(gkg, 1.2);
   if (rest.includes('vegano')) gkg = Math.min(2.0, gkg + 0.2);
   let prot = gkg * pesoRef;
-  // faixa aceitável: 10 a 35% das calorias (AMDR das DRI; a RDA é 0,8 g/kg — ref dri2005), sem passar de 2,2 g por quilo de
+  // faixa aceitável: 10 a 35% das calorias (AMDR das DRI; a RDA é 0,8 g/kg — ref dri_canada), sem passar de 2,2 g por quilo de
   // peso (Morton 2018 — ref morton2018). A posição conjunta de 2016 dá 1,2 a 2,0 g/kg para quem treina (ref thomas2016).
   prot = Math.min(Math.max(prot, (kcal * 0.1) / 4), 2.2 * peso, (kcal * 0.35) / 4);
-  let gord = Math.max((kcal * 0.28) / 9, 0.6 * pesoRef);            // 20–35% das calorias; nunca abaixo de ~0,6 g/kg
+  // gordura: 28% das calorias, dentro da faixa de 20 a 35% (refs dri_canada, efsa2017, iraki2019), e nunca abaixo de
+  // 0,5 g por quilo — o piso da faixa de 0,5 a 1,5 g/kg que iraki2019 (texto completo) dá como equivalente a 20–35%
+  let gord = Math.max((kcal * 0.28) / 9, 0.5 * pesoRef);
   let carb = (kcal - prot * 4 - gord * 9) / 4;
   if (carb < 2 * pesoRef) { gord = Math.max((kcal * 0.22) / 9, 0.5 * pesoRef); carb = (kcal - prot * 4 - gord * 9) / 4; }
-  // a gordura não passa de 35% das calorias (OMS — ref oms_dieta); o que sobra vai para o carboidrato
+  // a gordura não passa de 35% das calorias (faixa de 20 a 35% das DRI e da EFSA — refs dri_canada, efsa2017; a OMS
+  // sugere até 30% para evitar ganho de peso — ref oms_dieta); o que sobra vai para o carboidrato
   if (gord * 9 > kcal * 0.35) { gord = (kcal * 0.35) / 9; carb = (kcal - prot * 4 - gord * 9) / 4; }
   out.prot = r5(prot); out.gord = r5(gord);
   // o carboidrato fecha a conta das calorias com os valores já arredondados
   out.carb = Math.max(0, r5((out.kcal - out.prot * 4 - out.gord * 9) / 4));
   out.gkg = Math.round((out.prot / peso) * 10) / 10;
   // Corrida: carboidrato do dia pela carga de treino — atividade leve, 3 a 5 g por quilo; cerca de 1 h por dia, 5 a 7;
-  // de 1 a 3 h, 6 a 10; mais de 4 a 5 h, 8 a 12 (Burke 2011, na Tabela 2 da posição conjunta de 2016, lida na íntegra
-  // — refs burke2011, thomas2016). Se a meta ficou abaixo
+  // de 1 a 3 h, 6 a 10; mais de 4 a 5 h, 8 a 12 (Tabela 2 da posição conjunta de 2016, lida na íntegra — ref thomas2016,
+  // apud Burke 2011). Se a meta ficou abaixo
   // do início da faixa, a gordura cede espaço (sem cair de 20% das calorias); em déficit pode não chegar lá, e a tela avisa.
   if (cor) {
     const faixaCarb = faixaCarboidrato(cor.minSemana);
@@ -278,8 +302,9 @@ export function calcular(respostas, corrida = null, contexto = null) {
     }
     out.corrida = { ...cor, kcalDia: r10(kcalCorrida), faixaCarb, carbKg: Math.round((out.carb / pesoRef) * 10) / 10 };
   }
-  out.fibra = Math.min(50, Math.max(25, Math.round((kcal / 1000) * 14)));   // 14 g/1000 kcal (IOM); mínimo de 25 g (OMS — ref oms_dieta)
-  out.protRefeicao = [Math.round(0.25 * pesoRef), Math.round(0.4 * pesoRef)]; // por refeição (Schoenfeld & Aragon 2018 — ref schoenfeld2018)
+  out.fibra = Math.min(50, Math.max(25, Math.round((kcal / 1000) * 14)));   // 14 g por 1.000 kcal (DRI — ref dri_canada); mínimo de 25 g (OMS — ref oms_dieta)
+  // por refeição: 0,25 a 0,40 g/kg, a cada 3 a 4 h (refs jager2017, kerksick2017); 0,4 g/kg em 4 refeições dão 1,6 g/kg (ref schoenfeld2018)
+  out.protRefeicao = [Math.round(0.25 * pesoRef), Math.round(0.4 * pesoRef)];
   return out;
 }
 
@@ -815,6 +840,8 @@ function aproximarCarboidrato(refs, res) {
   const espaco = (it) => {
     const f = FOOD.get(it.id);
     if (!(CARB_SET.has(f.id) || CAFE_CARBO_SET.has(f.id) || LEGUM_SET.has(f.id) || f.papel === 'fruta')) return 0;
+    // com a proteína do dia já acima da meta, o feijão não sobe mais (ele traz proteína junto): o carboidrato vem do resto
+    if (LEGUM_SET.has(f.id) && soma(refs, 'p') > res.prot * 1.1) return 0;
     // fruta: até uma porção e meia, sem passar de 10 unidades na medida caseira
     const unidades = Number((/^(\d+)/.exec(f.porcao.desc) || [0, 1])[1]) || 1;
     const mx = f.papel === 'fruta' ? Math.floor((f.porcao.g * Math.max(1, Math.min(1.5, 10 / unidades))) / 5) * 5 : lim(f.id, CARB_SET.has(f.id) ? [50, 300, 10] : LEGUM_SET.has(f.id) ? [50, 200, 10] : [40, 200, 10])[1];
@@ -932,7 +959,7 @@ export function faixaCarboidrato(minSemana) {
   const porDia = minSemana / 7;
   return porDia < 30 ? [3, 5] : porDia < 60 ? [5, 7] : porDia < 180 ? [6, 10] : [8, 12];
 }
-// Carboidrato durante a corrida, pela duração (Jeukendrup 2014; Burke 2011 — refs jeukendrup2014, burke2011): até 45 min,
+// Carboidrato durante a corrida, pela duração (refs jeukendrup2014 e thomas2016, textos completos): até 45 min,
 // nada; de 45 a 75 min, pouco (ou só bochecho); de 75 min a 2 h 30, 30 a 60 g por hora; acima disso, até 90 g por hora,
 // misturando glicose e frutose, para quem treinou isso. A recomendação é em gramas por hora, não por quilo.
 export function carboidratoNaCorrida(min, semNumeros = false) {
@@ -972,8 +999,9 @@ export function orientacaoCorrida(res, hoje = new Date()) {
   const ritmo = Math.min(12, Math.max(3, cor.longoKm > 0 && cor.longoMin > 0 ? cor.longoMin / cor.longoKm : cor.proxima && cor.proxima.distKm > 0 && cor.proxima.durMin > 0 ? cor.proxima.durMin / cor.proxima.distKm : 6.5));
   const longo = cor.longoMin || (cor.longoKm ? cor.longoKm * ritmo : 0);
   const lanches = trintaGramas();
-  // Bebida caseira na mesma concentração das esportivas: 6% de carboidrato (60 g de açúcar por litro) e 0,5 a 0,7 g de
-  // sódio por litro, ou seja, 1,25 a 1,75 g de sal — um quarto de colher de chá (1 colher de chá de sal tem cerca de 6 g).
+  // Bebida caseira na concentração das esportivas (ficha "Sports drinks" do Australian Institute of Sport, lida inteira —
+  // ref ais_bebida): 6 a 8% de carboidrato (60 g de açúcar por litro) e, nas bebidas comuns, de 0,46 a 0,92 g de sódio
+  // por litro (20 a 40 mmol/L). 1,5 g de sal — um quarto de colher de chá — dão 0,6 g de sódio.
   const caseira = 'Bebida caseira: 1 litro de água, 4 colheres de sopa de açúcar (60 g), um quarto de colher de chá de sal (1,5 g) e suco de 1 limão.';
   const blocos = [];
   // dia a dia
@@ -991,7 +1019,7 @@ export function orientacaoCorrida(res, hoje = new Date()) {
   const linhasDurante = [longo ? `No treino mais longo da semana (cerca de ${Math.round(longo)} min): ${durante.texto.charAt(0).toLowerCase() + durante.texto.slice(1)}` : durante.texto];
   if (durante.gHora && lanches.length) linhasDurante.push(`Um gel tem de 20 a 30 g de carboidrato. Mais barato, 30 g são ${lanches.slice(0, 3).join(', ')}.`);
   linhasDurante.push('Água: beba conforme a sede, sem forçar. Beber além da sede dilui o sódio do sangue (hiponatremia); se você termina a corrida mais pesado do que começou, bebeu demais.');
-  if (longo > 120 && !semNumeros) linhasDurante.push('Acima de 2 horas ou com muito calor, use também bebida com sódio (as esportivas têm de 0,5 a 0,7 g por litro). ' + caseira + (cond.includes('hipertensao') ? ' Com pressão alta, combine o uso de sal com o seu médico.' : ''));
+  if (longo > 120 && !semNumeros) linhasDurante.push('Acima de 2 horas ou com muito calor, use também bebida com sódio (as esportivas têm de 0,5 a 0,9 g por litro). ' + caseira + (cond.includes('hipertensao') ? ' Com pressão alta, combine o uso de sal com o seu médico.' : ''));
   const depois = [semNumeros ? 'Coma uma refeição com carboidrato e proteína nas 2 horas seguintes.' : `Refeição com carboidrato e ${Math.round(Math.min(40, Math.max(20, peso * 0.3)) / 5) * 5} g de proteína nas 2 horas seguintes.`,
     'Se for treinar de novo em menos de 8 horas, reponha o carboidrato logo: de 1 a 1,2 g por quilo por hora nas primeiras 4 horas.',
     'Reponha o líquido aos poucos: para cada quilo perdido na corrida, cerca de 1 litro e meio.'];
@@ -1006,7 +1034,8 @@ export function orientacaoCorrida(res, hoje = new Date()) {
     const dias = d && !Number.isNaN(d.getTime()) && hoje instanceof Date && !Number.isNaN(hoje.getTime()) ? Math.round((d - hoje) / 86400000) : Math.round(cor.prova.semanasAte * 7);
     const nome = DISTANCIAS.find(([km]) => cor.prova.distKm <= km)[1];
     const minProva = cor.prova.distKm * ritmo;
-    // com diabetes, mudar o carboidrato da véspera e da prova mexe na glicemia e na dose dos remédios (ref scott2019):
+    // com diabetes, o exercício pede ajuste da dose de insulina e do carboidrato para evitar hipoglicemia (ref scott2019,
+    // texto completo); mexer por conta própria no carboidrato da véspera e da prova é arriscado:
     // o bloco da prova não traz gramas e manda combinar o plano com o médico ou nutricionista
     const diabetes = cond.includes('diabetes');
     const semGramas = semNumeros || diabetes;
@@ -1031,7 +1060,7 @@ export function orientacaoCorrida(res, hoje = new Date()) {
     prova = { titulo: `Sua prova: ${nome}`, dias, minutos: Math.round(minProva), linhas };
   }
   // "mais de 1 litro por hora": os rins eliminam no máximo de 0,7 a 1,0 L por hora (efsa2017; hewbutler2017)
-  return { semNumeros, blocos, prova, refs: ['thomas2016', 'burke2011', 'jeukendrup2014', 'ais_gel', 'hewbutler2017', 'efsa2017', 'guest2021'] };
+  return { semNumeros, blocos, prova, refs: ['thomas2016', 'jeukendrup2014', 'ais_gel', 'ais_bebida', 'hewbutler2017', 'efsa2017', 'guest2021'] };
 }
 export const fmtDuracao = (min) => { const m = Math.round(min / 5) * 5; return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + String(m % 60).padStart(2, '0') : ''); };
 
@@ -1077,10 +1106,12 @@ export function emVoltaDoTreino(res, treinoForte = false) {
       ? 'Treino ao acordar: com diabetes, não treine em jejum sem orientação médica. Coma algo leve 30 a 60 minutos antes e tome o café completo depois.'
       : horario + ' Com diabetes, não treine em jejum sem orientação médica.';
   }
-  const aguaPre = Array.isArray(res.aguaPre) ? res.aguaPre : [350, 700];
+  // no modo educativo (menores, gestação e amamentação, doença renal...) não há dose de água: só a sede como guia
+  const aguaPre = res.modo === 'educativo' ? null : Array.isArray(res.aguaPre) ? res.aguaPre : [350, 700];
   return {
     carbPre, protPos, pre, pos, horario, semNumeros: res.modo === 'educativo',
-    agua: `Água: ${aguaPre[0]} a ${aguaPre[1]} mL nas 2 a 4 horas antes do treino, e mais durante e depois.`,
+    agua: aguaPre ? `Água: ${aguaPre[0]} a ${aguaPre[1]} mL nas 2 a 4 horas antes do treino, e mais durante e depois.`
+      : cond.includes('renal') ? 'Água: com doença nos rins, a quantidade de líquidos é a que o seu médico indicar.' : 'Água: beba conforme a sede antes, durante e depois do treino; no calor, você precisa de mais.',
   };
 }
 
@@ -1098,7 +1129,7 @@ export function imcFaixa(imc, idade) {
 // transtorno alimentar (modo educativo) não veem dose nenhuma; com pressão alta, a de cafeína não aparece.
 // Creatina: segura em adultos saudáveis; com doença renal, só com o médico (ISSN 2017 — ref kreider2017). Cafeína: até
 // 200 mg por vez e 400 mg por dia em adultos; gestantes, até 200 mg por dia de todas as fontes; para menores não há
-// dose de suplemento (EFSA 2015 — ref efsa2015; ISSN 2021 — ref guest2021).
+// dose de suplemento (resumo oficial da EFSA, de 2015, lido inteiro — ref efsa2015; ISSN 2021 — ref guest2021).
 export function suplementos(res) {
   const cond = res && Array.isArray(res.condicoes) ? res.condicoes : [];
   const aviso = 'Não use sem orientação médica se você está grávida ou amamentando, tem menos de 18 anos, doença nos rins ou no fígado, pressão alta ou arritmia, ou usa remédios de uso contínuo. Este aplicativo não prescreve suplementos.';

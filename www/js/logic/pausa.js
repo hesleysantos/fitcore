@@ -11,8 +11,8 @@
 // - pausas curtas (1 a 4 semanas) tiram pouca força; pausas longas tiram bem mais; quem já treinou recupera depressa,
 //   porque os núcleos ganhos pelas fibras musculares se mantêm mesmo com a perda de massa.
 // O consenso NÃO fixa um corte de carga para a musculação. O corte de carga do primeiro treino (CORTE das faixas abaixo)
-// é uma escolha conservadora deste aplicativo, coerente com a perda de força crescer com o tempo parado
-// (Bosquet 2013 — ref bosquet2013). "Inatividade longa" também não tem prazo no consenso: aqui são 3 meses.
+// é uma escolha conservadora deste aplicativo, coerente com o que o próprio consenso descreve (pausas curtas tiram
+// pouca força; pausas longas, bem mais). "Inatividade longa" também não tem prazo no consenso: aqui são 3 meses.
 export const DIA = 86400000;
 export const PAUSA_MINIMA = 14;   // dias parado a partir dos quais valem as regras da volta
 export const PAUSA_LONGA = 90;    // dias parado a partir dos quais a transição dura 4 semanas

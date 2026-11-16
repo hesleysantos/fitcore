@@ -15,7 +15,8 @@
 //     contagem desencadearam ou pioraram os sintomas — fixação em números, culpa com o aviso de "passou do limite" e
 //     satisfação em ficar abaixo dele (eikey2021). Por isso: quem marcou transtorno alimentar não recebe o diário; a
 //     comparação com a meta não usa cor de erro nem palavra de culpa; e o "faltam" não é tratado como conquista.
-//   - menores de 18 anos: a orientação é hábito saudável, não peso nem dieta (golden2016); o aplicativo já não calcula
+//   - menores de 18 anos: o uso de aplicativos de dieta e exercício na adolescência foi associado a mais comportamentos
+//     de transtorno alimentar no início da vida adulta, e quase não há estudo nessa idade (moody2025); o aplicativo já não calcula
 //     calorias para eles, e o diário mostra só os alimentos, sem calorias.
 //   - gestantes, lactantes, doença renal e estimativa de gasto não confiável (modo educativo): o diário soma as
 //     calorias, mas não compara com meta (não há meta para comparar).
@@ -241,7 +242,7 @@ const mil = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 const r10 = (n) => Math.round(n / 10) * 10 || 0;   // sem zero negativo
 // Comparação do dia com a meta. Com meta: quanto falta ou quanto passou, em calorias (arredondado a 10) e em proteína
 // (a 1 g). As frases não julgam: "passou" é só a conta — e vem com o tamanho real da diferença, a 7.700 kcal por quilo
-// (ref hall2008). Sem meta, `frase` diz só o total (ou nada, no modo 'alimentos').
+// de gordura (ref helms2014; conta teórica). Sem meta, `frase` diz só o total (ou nada, no modo 'alimentos').
 // `st` (opcional) é o estado: com ele, o modo considera a idade e as condições das outras entrevistas.
 export function compararComMeta(tot, res, st = null) {
   const modo = modoDoDiario(res, st);
@@ -258,7 +259,7 @@ export function compararComMeta(tot, res, st = null) {
   out.difProt = Math.round(res.prot) - out.prot;
   out.fraseProt = out.difProt > 1 ? `Proteína: faltam ${out.difProt} g.` : out.difProt === 1 ? 'Proteína: falta 1 g.' : 'Proteína: meta do dia atingida.';
   // o tamanho real de passar da meta: 7.700 kcal equivalem a cerca de 1 kg
-  if (out.estado === 'passou' && -out.difKcal >= 100) out.equivale = `Isso equivale a cerca de ${r10((-out.difKcal / 7700) * 1000)} g de peso.`;
+  if (out.estado === 'passou' && -out.difKcal >= 100) out.equivale = `Na conta teórica, isso equivale a cerca de ${r10((-out.difKcal / 7700) * 1000)} g de gordura.`;
   return out;
 }
 // Semana: os 7 dias que terminam em `hoje`. Média só dos dias com registro; `difMedia` = meta − média (com meta).
@@ -336,4 +337,4 @@ export function buscarAlimentos(termo, max = 40) {
 }
 // Uma linha com os limites do registro (a tela mostra junto dos totais).
 export const AVISO_DO_REGISTRO = 'Use os números como guia, não como conta exata: quem anota o que come costuma registrar menos do que comeu (de 11% a 41% nos estudos), e as calorias dos alimentos são médias de tabela.';
-export const REFS_DO_DIARIO = ['burrows2019', 'taco', 'hall2008', 'eikey2021', 'golden2016'];
+export const REFS_DO_DIARIO = ['burrows2019', 'taco', 'helms2014', 'eikey2021', 'moody2025'];

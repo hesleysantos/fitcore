@@ -3,8 +3,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ALIMENTOS } from '../www/js/data/foods.js';
-import { REFS } from '../www/js/data/knowledge.js';
-import { PERGUNTAS, calcular, cardapio, proximaSemente, assinatura, orientacaoCorrida, emVoltaDoTreino, imcFaixa, textosDoPeso, suplementos, fmtDuracao } from '../www/js/logic/nutrition.js';
+import { REFS, FAQ_NUTRI } from '../www/js/data/knowledge.js';
+import { PERGUNTAS, calcular, cardapio, proximaSemente, assinatura, orientacaoCorrida, emVoltaDoTreino, imcFaixa, textosDoPeso, suplementos, fmtDuracao, PAL_DIA, PAL_TREINO, PAL_MAX } from '../www/js/logic/nutrition.js';
 
 const FOOD = new Map(ALIMENTOS.map((f) => [f.id, f]));
 function semente(s) {
@@ -46,17 +46,21 @@ function validarMetas(a, F) {
   const imc = a.peso / (h * h);
   const pesoRef = Math.min(a.peso, 25 * h * h);   // acima do IMC 25, as contas por quilo usam o peso de IMC 25
   // campos sempre presentes
-  for (const k of ['imc', 'tmb', 'gasto', 'fator', 'agua', 'peso', 'idade']) if (!(Number.isFinite(r[k]) && r[k] > 0)) F.add(`campo ${k} inválido`, `${rot}: ${r[k]}`);
+  for (const k of ['imc', 'tmb', 'gasto', 'fator', 'peso', 'idade']) if (!(Number.isFinite(r[k]) && r[k] > 0)) F.add(`campo ${k} inválido`, `${rot}: ${r[k]}`);
   if (Math.abs(r.imc - imc) > 1e-9) F.add('IMC errado', rot);
-  const tmb = 10 * a.peso + 6.25 * a.altura - 5 * a.idade + (a.sexo === 'm' ? 5 : -161);
+  const tmb = 9.99 * a.peso + 6.25 * a.altura - 4.92 * a.idade + (a.sexo === 'm' ? 5 : -161);   // coeficientes como em ruiz2011
   if (Math.abs(r.tmb - tmb) > 5.01) F.add('Mifflin-St Jeor não confere', `${rot}: ${r.tmb} vs ${tmb}`);
-  if (r.fator < 1.2 || r.fator > 1.9) F.add('fator de atividade fora de 1,2–1,9', `${rot}: ${r.fator}`);
-  // água total: do piso da EFSA (2,0 L mulheres; 2,5 L homens) a 4 L; cerca de 80% em bebidas; antes do treino, 150 mL a 1,5 L
-  const pisoAgua = a.sexo === 'm' ? 2.5 : 2.0;
-  if (r.agua < pisoAgua || r.agua > 4) F.add('água total fora do piso da EFSA–4 L', `${rot}: ${r.agua}`);
-  if (Math.abs(r.agua - Math.min(4, Math.max(pisoAgua, (pesoRef * 35) / 1000))) > 0.051) F.add('água diferente de 35 mL/kg com piso e teto', `${rot}: ${r.agua}`);
-  if (Math.abs(r.aguaBebidas - r.agua * 0.8) > 0.051 || r.aguaBebidas < (a.sexo === 'm' ? 2.0 : 1.6)) F.add('água em bebidas fora de 80% do total', `${rot}: ${r.aguaBebidas}`);
-  if (!(Array.isArray(r.aguaPre) && r.aguaPre[0] >= 150 && r.aguaPre[0] < r.aguaPre[1] && r.aguaPre[1] <= 1500)) F.add('água pré-treino implausível', `${rot}: ${r.aguaPre}`);
+  // nível de atividade (PAL) do relatório FAO/OMS/UNU: dia a dia de 1,45 a 1,90, mais 0,20 por hora diária de treino, até 2,40
+  const pal = Math.min(PAL_MAX, PAL_DIA[ATIV.indexOf(a.atividade)] + PAL_TREINO[a.treinos]);
+  if (Math.abs(r.fator - pal) > 0.0015 || r.fator < 1.4 || r.fator > 2.4) F.add('fator de atividade diferente do PAL da FAO (1,40 a 2,40)', `${rot}: ${r.fator} vs ${pal}`);
+  // água total: a ingestão adequada da EFSA (2,0 L mulheres; 2,5 L homens), com 1,6 e 2,0 L em bebidas; antes do treino, 150 mL a 1,5 L
+  // no modo educativo (menores, gestação e amamentação, doença renal...) não há número de água nenhum: os valores são de adultos
+  if (r.modo === 'educativo') { if (r.agua !== null || r.aguaBebidas !== null || r.aguaPre !== null) F.add('modo educativo com número de água', rot); if (/[0-9]/.test(emVoltaDoTreino(r).agua)) F.add('modo educativo com dose de água no treino', rot); }
+  else {
+    if (r.agua !== (a.sexo === 'm' ? 2.5 : 2.0)) F.add('água total diferente da ingestão adequada da EFSA', `${rot}: ${r.agua}`);
+    if (r.aguaBebidas !== (a.sexo === 'm' ? 2.0 : 1.6)) F.add('água em bebidas diferente de 1,6 L / 2,0 L', `${rot}: ${r.aguaBebidas}`);
+    if (!(Array.isArray(r.aguaPre) && r.aguaPre[0] >= 150 && r.aguaPre[0] < r.aguaPre[1] && r.aguaPre[1] <= 1500)) F.add('água pré-treino implausível', `${rot}: ${r.aguaPre}`);
+  }
   for (const av of r.avisos) { if (!['danger', 'warn', 'info'].includes(av.tipo)) F.add('tipo de aviso desconhecido', rot); if (!semLixo(av.texto)) F.add('aviso com valor inválido', `${rot}: ${av.texto}`); if (av.texto.length > 330) F.add('aviso longo demais', av.texto); }
   const aviso = (re) => r.avisos.some((x) => re.test(x.texto));
   if (cond.includes('hipertensao') && !aviso(/sal a 5 g/)) F.add('pressão alta sem orientação de sal', rot);
@@ -232,7 +236,8 @@ function validarCardapio(a, r, seed, F, { metas = true } = {}) {
   // quem não come carne tem poucas fontes de proteína na tabela: soja, tofu e leguminosas podem aparecer duas vezes
   // (em metas extremas de calorias, os acompanhamentos se repetem por necessidade: aí vale só o limite de 2 vezes por alimento)
   // (acima de 3.600 kcal também: frutas e acompanhamentos entram duas vezes para fechar a energia)
-  if (metas && r.kcal <= 3600 && repetidos.length > (rest.includes('vegano') ? 5 : rest.includes('vegetariano') ? 4 : 3)) F.add('muitos alimentos repetidos no dia', `${rot}: ${repetidos}`);
+  // (vale o mesmo quando a meta passa de 900 kcal por refeição, a mesma régua que o montador usa para "meta alta")
+  if (metas && r.kcal <= 3600 && !(r.kcal / c.refeicoes.length > 900) && repetidos.length > (rest.includes('vegano') ? 5 : rest.includes('vegetariano') ? 4 : 3)) F.add('muitos alimentos repetidos no dia', `${rot}: ${repetidos}`);
   if (noDia.size < 8) F.add('pouca variedade (menos de 8 alimentos no dia)', `${rot}: ${noDia.size}`);
   if (![...noDia.keys()].some((id) => FOOD.get(id).papel === 'fruta')) F.add('dia sem fruta', rot);
   if ([...noDia.keys()].filter((id) => FOOD.get(id).papel === 'vegetal').length < 2) F.add('dia com menos de 2 verduras/legumes', rot);
@@ -360,22 +365,28 @@ test('travas de segurança: menores, gestantes, doença renal, transtorno alimen
   assert.equal(mini.modo, 'educativo'); assert.equal(mini.kcal, undefined);
   assert.ok(mini.avisos.some((x) => /não é confiável/.test(x.texto)));
   // pisos: 1200 (mulheres) e 1500 (homens) quando a meta de déficit cairia abaixo
-  const f = calcular({ ...base, sexo: 'f', idade: 45, peso: 62, altura: 158, treinos: '0' });
-  assert.equal(f.objetivoCalc, 'emagrecer'); assert.equal(f.kcal, 1200); assert.ok(f.avisos.some((x) => /1200 kcal/.test(x.texto)));
-  const m = calcular({ ...base, sexo: 'm', idade: 55, peso: 62, altura: 165, treinos: '0' });
-  assert.equal(m.objetivoCalc, 'emagrecer'); assert.equal(m.kcal, 1500);
+  // (perfis leves e sedentários: com o nível de atividade da FAO, de 1,45, o gasto fica em 1.390 e 1.760 kcal)
+  const f = calcular({ ...base, sexo: 'f', idade: 55, peso: 45, altura: 150, treinos: '0' });
+  assert.equal(f.objetivoCalc, 'emagrecer'); assert.equal(f.kcal, 1200); assert.ok(f.gasto > 1200 && f.avisos.some((x) => /1200 kcal/.test(x.texto)));
+  const m = calcular({ ...base, sexo: 'm', idade: 59, peso: 50, altura: 160, treinos: '0' });
+  assert.equal(m.objetivoCalc, 'emagrecer'); assert.equal(m.kcal, 1500); assert.ok(m.gasto > 1500);
   // meta presa no piso: a perda mostrada é a do déficit que sobrou, e o texto não manda reduzir mais
   assert.ok(Math.abs(m.perdaSemana - ((m.gasto - 1500) * 7) / 7700) < 0.006);
   assert.ok(/já está no mínimo de 1\.500 kcal/.test(textosDoPeso(m).linhas.join(' ')) && !/reduza/.test(textosDoPeso(m).linhas.join(' ')));
   // o mesmo homem aos 70 anos (IMC 22,8): depois dos 65, sem obesidade, não há déficit
   const m70 = calcular({ ...base, sexo: 'm', idade: 70, peso: 62, altura: 165, treinos: '0' });
+  // nível de atividade: os valores do relatório FAO/OMS/UNU para cada resposta, somados ao treino, sem passar de 2,40
+  assert.deepEqual(['sedentario', 'leve', 'moderado', 'intenso'].map((atividade) => calcular({ ...base, atividade, treinos: '0', objetivo: 'manter' }).fator), [1.45, 1.6, 1.75, 1.9]);
+  assert.deepEqual(['0', '2', '3', '4', '6'].map((treinos) => calcular({ ...base, atividade: 'sedentario', treinos, objetivo: 'manter' }).fator), [1.45, 1.49, 1.54, 1.58, 1.64]);
+  assert.equal(calcular({ ...base, atividade: 'intenso', treinos: '6', objetivo: 'manter' }).fator, 2.09);
+  assert.equal(calcular({ ...base, atividade: 'lixo', treinos: 'lixo', objetivo: 'manter' }).fator, 1.45, 'resposta inválida vale o menor nível');
   assert.equal(m70.objetivoCalc, 'manter'); assert.equal(m70.kcal, m70.gasto); assert.ok(m70.avisos.some((x) => x.tipo === 'warn' && /mínimo saudável|Depois dos 65 anos, sem obesidade/.test(x.texto)));
   // água e fibras nos extremos
-  assert.equal(calcular({ ...base, peso: 250, altura: 220 }).agua, 4);
-  assert.equal(calcular({ ...base, peso: 30, altura: 150, objetivo: 'manter' }).agua, 2.5);                 // piso da EFSA para homens
-  assert.equal(calcular({ ...base, sexo: 'f', peso: 30, altura: 150, objetivo: 'manter' }).agua, 2.0);     // e para mulheres
-  assert.equal(calcular({ ...base, sexo: 'f', peso: 30, altura: 150, objetivo: 'manter' }).aguaBebidas, 1.6);
-  assert.equal(calcular({ ...base, peso: 80, altura: 180 }).agua, 2.8);                                    // 35 mL × 80 kg
+  // a água é a ingestão adequada da EFSA, igual para qualquer peso: 2,5 L (homens) e 2,0 L (mulheres); em bebidas, 2,0 e 1,6 L
+  for (const [peso, altura] of [[250, 220], [30, 150], [80, 180]]) {
+    assert.equal(calcular({ ...base, peso, altura, objetivo: 'manter' }).agua, 2.5); assert.equal(calcular({ ...base, peso, altura, objetivo: 'manter' }).aguaBebidas, 2.0);
+    assert.equal(calcular({ ...base, sexo: 'f', peso, altura, objetivo: 'manter' }).agua, 2.0); assert.equal(calcular({ ...base, sexo: 'f', peso, altura, objetivo: 'manter' }).aguaBebidas, 1.6);
+  }
   // sem degrau no IMC 30: 1 kg a mais não muda a meta de proteína nem a de água (antes caía 25 g)
   // ("ganhar" fica de fora: no IMC 30 ele vira manutenção de propósito)
   for (const objetivo of ['emagrecer', 'manter']) { const x = calcular({ ...base, objetivo, peso: 86, altura: 170 }), y = calcular({ ...base, objetivo, peso: 87, altura: 170 }); assert.ok(Math.abs(x.prot - y.prot) <= 5, `degrau na proteína (${objetivo}): ${x.prot} → ${y.prot}`); assert.equal(x.agua, y.agua); }
@@ -389,7 +400,8 @@ test('robustez: respostas fora da faixa, vazias ou de tipo errado não geram NaN
     let r;
     assert.doesNotThrow(() => { r = calcular(a); }, JSON.stringify(a));
     TOTAL++;
-    for (const k of ['imc', 'tmb', 'gasto', 'agua']) assert.ok(Number.isFinite(r[k]) && r[k] > 0, `${k} em ${JSON.stringify(a)}`);
+    for (const k of ['imc', 'tmb', 'gasto']) assert.ok(Number.isFinite(r[k]) && r[k] > 0, `${k} em ${JSON.stringify(a)}`);
+    assert.ok(r.modo === 'educativo' ? r.agua === null : r.agua > 0, `agua em ${JSON.stringify(a)}`);
     if (r.modo !== 'educativo') for (const k of ['kcal', 'prot', 'carb', 'gord']) assert.ok(Number.isFinite(r[k]) && r[k] > 0, `${k} em ${JSON.stringify(a)}`);
     for (const seed of [0, -1, 2.7, 1e12, NaN, undefined, null, '3', Infinity]) {
       let c;
@@ -535,7 +547,9 @@ test('em volta do treino: exemplos coerentes com cada restrição, horário e co
       if (/em jejum só se você se sente bem/.test(t.horario)) F.add('diabetes com sugestão de treino em jejum', `${rot}: ${t.horario}`);
     }
     if (horario === 'noite' && !/cafeína/.test(t.horario)) F.add('treino à noite sem lembrar da cafeína', rot);
-    if (!/\d+ a \d+ mL/.test(t.agua)) F.add('texto da água mal formado', `${rot}: ${t.agua}`);
+    // adultos com meta: a dose de antes do treino; no modo educativo (gestação, doença renal, menores), nenhum número
+    if (res.modo === 'educativo' ? /[0-9]/.test(t.agua) || !/^Água: /.test(t.agua) : !/\d+ a \d+ mL/.test(t.agua)) F.add('texto da água mal formado', `${rot}: ${t.agua}`);
+    if (condicoes.includes('renal') && !/médico/.test(t.agua)) F.add('doença renal sem remeter os líquidos ao médico', `${rot}: ${t.agua}`);
   }
   // faixas de IMC
   for (let imc = 10; imc <= 80; imc += 0.5) for (const idade of [18, 59, 60, 99]) assert.ok(semLixo(imcFaixa(imc, idade)));
@@ -642,8 +656,14 @@ test('corrida: 4.000 perfis com plano de corrida sorteado — metas coerentes, c
 });
 
 test('referências citadas existem e a contagem de perfis passa de 40 mil', () => {
-  for (const k of ['weijs2025', 'leidy2015', 'deutz2014', 'iom2005', 'volkert2022', 'rodriguez2009', 'burke2011', 'jeukendrup2014', 'hewbutler2017', 'scott2019', 'margaria1963', 'rapoport2010', 'efsa2017', 'hall2008', 'ais_gel', 'precos2026']) assert.ok(REFS[k], k);
-  for (const k of ['mifflin1990', 'frankenfield2005', 'jensen2013', 'helms2014', 'iraki2019', 'slater2019', 'jager2017', 'morton2018', 'bauer2013', 'schoenfeld2018', 'thomas2016', 'efsa2010', 'oms_dieta', 'kdigo2024', 'raj2025']) assert.ok(REFS[k], k);
+  for (const k of ['weijs2025', 'deutz2014', 'volkert2022', 'rodriguez2009', 'jeukendrup2014', 'hewbutler2017', 'scott2019', 'rapoport2010', 'efsa2017', 'ais_gel', 'ais_bebida', 'dri_canada', 'fao2004', 'precos2026']) assert.ok(REFS[k], k);
+  for (const k of ['ruiz2011', 'amaro2019', 'jensen2013', 'helms2014', 'iraki2019', 'slater2019', 'jager2017', 'morton2018', 'schoenfeld2018', 'thomas2016', 'oms_dieta', 'kdigo2024', 'rogerson2017', 'moody2025']) assert.ok(REFS[k], k);
+  // fontes que só abriam no resumo saíram: nada na Nutricionista nem no diário cita uma delas
+  for (const k of ['mifflin1990', 'frankenfield2005', 'bauer2013', 'leidy2015', 'iom2005', 'dri2005', 'efsa2010', 'burke2011', 'margaria1963', 'hall2008', 'golden2016', 'raj2025']) {
+    assert.equal(REFS[k], undefined, 'referência sem texto completo ainda na lista: ' + k);
+    for (const x of FAQ_NUTRI) assert.ok(!x.f.includes(k), `"${x.q}" ainda cita ${k}`);
+  }
+  for (const x of FAQ_NUTRI) assert.ok(!x.f.includes('garthe2011'), 'Garthe 2011 não foi lido inteiro');
   assert.ok(TOTAL >= 40000, 'perfis: ' + TOTAL);
   assert.ok(CARDAPIOS >= 15000, 'cardápios: ' + CARDAPIOS);
   console.log(`   Nutricionista: ${TOTAL} perfis calculados e ${CARDAPIOS} cardápios conferidos`);

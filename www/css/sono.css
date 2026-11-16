@@ -3,8 +3,14 @@
 .sono-alvo.m { font-size: 1.6rem; }
 .sono-motivos { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
 .sono-motivos li + li { margin-top: 0; }
-.sono-passo output { display: block; min-width: 84px; padding: 0 4px; text-align: center; font-weight: 700; font-size: 1.05rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.sono-passo.sm output { min-width: 72px; font-size: 0.98rem; }
+/* tempo ao minuto: campos de horas e minutos que se digitam, entre o − e o + */
+.sono-passo .sono-tempo { display: flex; align-items: baseline; gap: 2px; padding: 0 2px; }
+.sono-passo .sono-tempo input { width: 34px; font-variant-numeric: tabular-nums; border-bottom: 2px solid var(--border); border-radius: 0; height: 34px; }
+.sono-passo .sono-tempo input:focus { border-bottom-color: var(--accent); outline: none; }
+.sono-passo.so-min .sono-tempo input { width: 46px; }
+.sono-passo .sono-tempo span { font-size: 0.8rem; color: var(--muted); margin-right: 5px; }
+.sono-passo .sono-tempo span:last-child { margin-right: 2px; }
+.sono-passo.sm .sono-tempo input { width: 32px; height: 30px; font-size: 1rem; } /* 16 px: abaixo disso o iPhone dá zoom ao tocar */
 .input.sono-hora { width: auto; min-width: 118px; flex: none; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
 .sono-graf .bar.dentro { fill: var(--ok); }
 .sono-graf .bar.abaixo { fill: var(--warn); }
@@ -34,4 +40,4 @@ a.sono-convite { text-decoration: none; }
 .sono-sinais li + li { margin-top: 0; }
 /* linha "horas + Registrar": cabe no cartão em telas de 360 px */
 .sono-passo + .btn { white-space: nowrap; padding: 0 12px; flex: 0 1 auto; min-width: 0; }
-@media (max-width: 380px) { .sono-passo output { min-width: 70px; } .sono-passo.sm output { min-width: 62px; } }
+@media (max-width: 380px) { .sono-passo.sm button { width: 34px; } }

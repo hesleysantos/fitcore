@@ -625,7 +625,7 @@ test('perguntas frequentes: corrida com musculação e fortalecimento têm respo
   assert.ok(corre && fort);
   for (const x of [corre, fort]) { assert.ok(x.f.length >= 4 && x.f.every((k) => REFS[k])); assert.ok(x.a.every((t) => t.length < 520)); }
   assert.match(fort.a.join(' '), /já faz musculação/); assert.match(fort.a.join(' '), /não faz musculação/);
-  for (const k of ['blagrove2018', 'petre2021', 'eddens2018', 'robineau2016', 'doma2017', 'ronnestad2014', 'leppanen2024', 'wu2024', 'toresdahl2020', 'hamner2013']) assert.ok(REFS[k], k);
+  for (const k of ['blagrove2018', 'petre2021', 'eddens2018', 'methenitis2018', 'doma2017', 'ronnestad2014', 'leppanen2024', 'wu2024', 'toresdahl2020', 'hamner2013']) assert.ok(REFS[k], k);
 });
 
 test('outra versão e trocas continuam valendo para quem corre', () => {
@@ -689,7 +689,7 @@ test('descanso semanal: a prioridade na corrida nunca tira o último dia sem tre
   assert.ok(n >= 1400);
   assert.equal(zero, 0, 'com até 6 dias de corrida e de musculação, sempre sobra um dia de descanso');
   assert.equal(piorVul, 0, 'menor de 18, 60+ ou iniciante com menos descanso por causa da prioridade na corrida');
-  for (const k of ['meeusen2013', 'valovichmcleod2011', 'brenner2024']) assert.ok(REFS[k], k);
+  for (const k of ['meeusen2013', 'valovichmcleod2011', 'valovichmcleod2011']) assert.ok(REFS[k], k);
 });
 
 test('limitação da entrevista pela mecânica: o que usa a região fica por último e, se entra, o plano avisa (quadril, tornozelo e as outras)', () => {

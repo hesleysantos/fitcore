@@ -180,7 +180,7 @@ export default async (page) => {
   await abrirAdicionar(); await page.click('Não achei na lista'); await page.sleep(200);
   await campo('Nome do alimento', 'Rodízio de pizza'); await campo('Calorias', String(extra)); await refeicao('jantar'); await naFolha('Adicionar'); await comFolhas(0);
   ok((await noDiario('#diario-frase')) === 'Você passou 250 kcal da meta do dia.', 'depois: ' + (await noDiario('#diario-frase')));
-  ok((await noDiario('#diario-equivale')).startsWith('Isso equivale a cerca de 30 g de peso.'), 'a frase diz o tamanho real da diferença, sem julgamento');
+  ok((await noDiario('#diario-equivale')).startsWith('Na conta teórica, isso equivale a cerca de 30 g de gordura.'), 'a frase diz o tamanho real da diferença, sem julgamento');
   ok(await page.eval(`const c = document.getElementById('diario'); return !c.querySelector('.danger, .note.warn, .note.danger') && !/exager|estour|culpa/i.test(c.textContent);`), 'sem cor de erro nem palavra de culpa quando passa da meta');
   ok((await botoesDe('jantar')) === 'Comi isso|Comi outra coisa', 'o alimento avulso no jantar não tira o "Comi isso" do jantar');
   let ini = await resumoInicio();

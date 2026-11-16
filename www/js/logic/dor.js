@@ -81,5 +81,7 @@ export function doresAtivas(st, hoje) {
   return out.sort((a, b) => b.nivel - a.nivel || a.dias - b.dias);
 }
 // Sinal de alerta: pede avaliação de um profissional antes de treinar a região.
-// O corte em 7 vem da escala numérica de dor: 1 a 4 leve, 5 a 6 moderada, 7 a 10 intensa (Serlin et al., Pain 1995;61:277-84).
+// O corte em 7 vem da classificação da escala numérica de dor feita em dor de câncer: 1 a 4 leve, 5 a 6 moderada, 7 a 10
+// intensa (Serlin 1995, lida na tabela reproduzida em Boonstra 2016 — ref boonstra2016, texto completo). Em dor
+// musculoesquelética crônica, Boonstra estimou "intensa" a partir de 8; o aplicativo fica com 7, o corte mais cauteloso.
 export const dorDeAlerta = (d) => !!d && (d.tipo === 'aguda' || d.nivel >= 7 || d.quando === 'repouso');

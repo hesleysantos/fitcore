@@ -179,9 +179,9 @@ test('comparação com a meta: faltam, chegou e passou, nos limites', () => {
   assert.equal(c.fraseProt, 'Proteína: meta do dia atingida.');
   // passou 250 kcal: a frase não julga e diz o tamanho real (7.700 kcal por quilo)
   c = com(r.kcal + 250, r.prot);
-  assert.equal(c.frase, 'Você passou 250 kcal da meta do dia.'); assert.equal(c.equivale, 'Isso equivale a cerca de 30 g de peso.');
+  assert.equal(c.frase, 'Você passou 250 kcal da meta do dia.'); assert.equal(c.equivale, 'Na conta teórica, isso equivale a cerca de 30 g de gordura.');
   assert.equal(c.pct, Math.round(((r.kcal + 250) / r.kcal) * 100));
-  c = com(r.kcal + 1540, r.prot); assert.ok(/cerca de 200 g de peso/.test(c.equivale));
+  c = com(r.kcal + 1540, r.prot); assert.ok(/cerca de 200 g de gordura/.test(c.equivale));
   for (const k of [0, 500, r.kcal, r.kcal * 3]) { const x = com(k, 50); finito(x); for (const s of [x.frase, x.fraseProt, x.equivale]) { assert.ok(semLixo(s) && s.length <= 120); assert.ok(!/exager|estour|culpa|falh|errad|ruim|cuidado|atenção|perigo/i.test(s), 'frase com julgamento: ' + s); } }
   // totais ausentes ou estranhos: zeros, sem erro
   for (const t of [null, undefined, {}, 'x']) { const x = compararComMeta(t, r); assert.equal(x.kcal, 0); assert.equal(x.estado, 'falta'); finito(x); }
@@ -221,7 +221,7 @@ test('segurança: quem não recebe meta nem contagem', () => {
   // o aviso do registro e as fontes
   assert.ok(/11% a 41%/.test(AVISO_DO_REGISTRO) && /médias de tabela/.test(AVISO_DO_REGISTRO) && AVISO_DO_REGISTRO.length <= 200);
   for (const k of REFS_DO_DIARIO) assert.ok(REFS[k], k);
-  for (const k of ['burrows2019', 'eikey2021', 'golden2016']) assert.ok(REFS_DO_DIARIO.includes(k));
+  for (const k of ['burrows2019', 'eikey2021', 'moody2025', 'helms2014']) assert.ok(REFS_DO_DIARIO.includes(k));
   const faq = FAQ_NUTRI.find((x) => /diário de alimentação/.test(x.q));
   assert.ok(faq && faq.f.every((k) => REFS[k]) && /11% a 41%/.test(faq.a.join(' ')));
 });

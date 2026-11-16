@@ -2,14 +2,18 @@
 // Puro: sem DOM e sem importar o estado. As citações completas estão em data/sono.js (REFS_SONO).
 //
 // O que as fontes dão e o que é conta do aplicativo:
-// - FAIXA de horas por idade: National Sleep Foundation (hirshkowitz2015) e Academia Americana de Medicina do Sono
-//   (watson2015 para adultos de 18 a 60 anos: 7 horas ou mais; paruthi2016 para 6 a 18 anos). Onde os dois consensos
-//   dão faixas diferentes, o aplicativo usa a parte em que eles concordam (ver FAIXAS).
+// Todas as fontes citadas aqui foram lidas em texto completo (ver as notas em data/sono.js).
+// - FAIXA de horas por idade: Academia Americana de Medicina do Sono (watson2015 para adultos de 18 a 60 anos: 7 horas
+//   ou mais; paruthi2016 para 6 a 18 anos) e diretrizes canadenses de 24 horas (csep2016: 5 a 13 anos, 9 a 11 h; 14 a 17,
+//   8 a 10 h; csep2020: 18 a 64, 7 a 9 h; 65 ou mais, 7 a 8 h), que coincidem com as faixas da National Sleep
+//   Foundation reproduzidas em chaput2018. Onde as recomendações dão faixas diferentes, o aplicativo usa a parte em que
+//   elas concordam (ver FAIXAS). O relatório original da National Sleep Foundation é fechado e não foi lido: por isso
+//   os limites de "não recomendado" que só ele traz saíram do aplicativo.
 // - ALVO dentro da faixa: as fontes não dão um número único. O aplicativo usa o MEIO da faixa (conta do aplicativo).
 // - Quem treina: não existe faixa própria. O consenso sobre sono do atleta (walsh2021) diz que a necessidade pode subir
 //   com a carga de treino e sugere dormir mais antes de uma competição; os estudos apontam para mais de 8 horas
-//   (roberts2019; sargent2021: 8,3 h; mah2011: cerca de 8,5 h). Por isso, com carga alta de treino ou na semana de uma
-//   prova, o alvo sobe MEIA HORA, sem sair da faixa da idade. O corte de "carga alta" (treinar em 5 ou mais dias da
+//   (mah2011: cerca de 8,5 h; ciclistas com cerca de 8,4 h, citados em walsh2021). Por isso, com carga alta de treino
+//   ou na semana de uma prova, o alvo sobe MEIA HORA, sem sair da faixa da idade. O corte de "carga alta" (treinar em 5 ou mais dias da
 //   semana) e a meia hora são escolhas do aplicativo. "Prova" é só a do plano de corrida com objetivo de prova: teste
 //   de ritmo e desafio de distância não são competição, e a fonte fala em competição importante.
 // - Gestação: não há faixa própria nas fontes; vale a da idade, sem ajuste para cima.
@@ -17,8 +21,8 @@
 //   noite na comparação com a faixa. Para adultos, a recomendação é de horas POR NOITE (watson2015): a meta continua
 //   sendo a da noite e o cochilo aparece à parte, como complemento de uma noite curta (sletten2023, walsh2021).
 //   Cochilo e saúde: em adultos, cochilar 60 minutos ou mais por dia esteve associado a mais doença cardiovascular,
-//   morte e diabetes; menos de 60 minutos, não (yamada2015, yamada2016, pan2020). É associação: o cochilo longo pode ser
-//   consequência de noite ruim, apneia ou doença (yamada2016). Quantos dias na semana disparam cada dica é escolha do
+//   morte e diabetes; menos de 60 minutos, não (yamada2015, yamada2016). É associação: o cochilo longo pode ser
+//   consequência de noite ruim, apneia ou doença (yamada2015, yamada2016). Quantos dias na semana disparam cada dica é escolha do
 //   aplicativo. Essas dicas não aparecem para menores (os estudos são com adultos) nem para gestantes (não há estudo).
 // - Não há "saldo" de sono a pagar: 1 hora em falta levou 4 dias para ser recuperada (kitamura2016) e o consenso de
 //   regularidade diz que a recuperação na folga é só parcial (sletten2023). O acompanhamento é pela média de 7 dias,
@@ -29,7 +33,7 @@ import { DICAS_SONO } from '../data/sono.js';
 
 export const MAX_NOITES = 1500;  // cerca de 4 anos de registros
 export const HORAS_MAX = 16;     // teto do que se pode registrar em uma noite
-export const PASSO = 0.25;       // os registros andam de 15 em 15 minutos
+export const PASSO_MIN = 5;      // minutos que os botões − e + andam; o tempo digitado vale minuto a minuto
 export const IDADE_MIN = 6;      // mínimo único (tela, lógica e perguntas): é onde começam as faixas das fontes
 export const IDADE_MAX = 99;
 export const CARGA_ALTA = 5;     // dias de treino na semana (musculação ou corrida) a partir dos quais o alvo sobe: escolha do aplicativo
@@ -37,11 +41,12 @@ export const FALTA_MINIMA = 15;  // minutos que a média precisa ficar abaixo do
 export const ANO_MIN = 2000;     // noites com data anterior a este ano são recusadas
 // cochilos
 export const MAX_COCHILOS = 3000;     // registros guardados
-export const COCHILO_PASSO = 5;       // os cochilos andam de 5 em 5 minutos
+export const COCHILO_PASSO = 5;       // minutos que os botões − e + do cochilo andam; o tempo digitado vale minuto a minuto
+export const COCHILO_MIN = 1;         // menor cochilo que se pode registrar (minutos)
 export const COCHILO_MAX = 240;       // minutos: acima disso não é cochilo
 export const COCHILOS_POR_DIA = 4;    // registros por dia
 export const SOMA_24H_ATE = 18;       // até esta idade a recomendação é de sono em 24 horas (paruthi2016): o cochilo soma
-export const COCHILO_LONGO = 60;      // minutos por dia a partir dos quais os estudos viram mais risco (yamada2015, yamada2016, pan2020)
+export const COCHILO_LONGO = 60;      // minutos por dia a partir dos quais os estudos viram mais risco (yamada2015, yamada2016)
 export const COCHILO_TARDE = '16:00'; // fim da janela indicada para cochilar, das 13 h às 16 h (walsh2021, lastella2021)
 export const MADRUGADA_ATE = '05:00'; // cochilo que começa da meia-noite até esta hora conta como tarde (continuação do dia anterior): escolha do aplicativo
 export const DIAS_COCHILO_LONGO = 3;     // dias com cochilo longo, em 7, para a dica aparecer: escolha do aplicativo
@@ -50,19 +55,22 @@ export const COCHILOS_TARDIOS = 2;       // cochilos depois das 16 h, em 7 dias,
 export const AJUSTE = 0.5;       // quanto o alvo sobe com carga alta ou na semana da prova (horas): escolha do aplicativo
 export const NOITES_PARA_REGULARIDADE = 5; // noites registradas, em 7, para medir a variação: escolha do aplicativo
 
-// Faixas por idade. min–max = recomendado; pouco/muito = limites do "não recomendado" da National Sleep Foundation
-// (menos que `pouco` ou mais que `muito`). Onde NSF e AASM diferem, vale a interseção: de 6 a 12 anos (9–11 em vez de
-// 9–12), aos 13 (9–10), aos 18 (8–9) e nos adultos (7–9: a AASM diz "7 ou mais", sem teto). O consenso de adultos da
-// AASM vale de 18 a 60 anos: acima disso a única fonte é a NSF (ver refsDaFaixa).
+// Faixas por idade: min–max = recomendado. Onde a AASM e a diretriz canadense diferem, vale a interseção: de 6 a 12
+// anos (9–11 em vez de 9–12), aos 13 (9–10), aos 18 (8–9) e nos adultos (7–9: a AASM diz "7 ou mais", sem teto). O
+// consenso de adultos da AASM vale de 18 a 60 anos: acima disso ficam a diretriz canadense e a NSF (ver refsDaFaixa).
+// A NSF entra pelas faixas reproduzidas em chaput2018, que são as mesmas da diretriz canadense.
 const FAIXAS = [
-  { id: 'crianca', de: 6, ate: 12, min: 9, max: 11, pouco: 7, muito: 12, refs: ['hirshkowitz2015', 'paruthi2016'] },     // NSF 9–11; AASM 9–12
-  { id: 'treze', de: 13, ate: 13, min: 9, max: 10, pouco: 7, muito: 12, refs: ['hirshkowitz2015', 'paruthi2016'] },      // NSF (6–13) 9–11; AASM (13–18) 8–10
-  { id: 'adolescente', de: 14, ate: 17, min: 8, max: 10, pouco: 7, muito: 11, refs: ['hirshkowitz2015', 'paruthi2016'] }, // os dois: 8–10
-  { id: 'dezoito', de: 18, ate: 18, min: 8, max: 9, pouco: 6, muito: 11, refs: ['hirshkowitz2015', 'paruthi2016'] },     // NSF (18–25) 7–9; AASM (13–18) 8–10
-  { id: 'jovem-adulto', de: 19, ate: 25, min: 7, max: 9, pouco: 6, muito: 11, refs: ['hirshkowitz2015', 'watson2015'] }, // NSF 7–9; AASM 7 ou mais
-  { id: 'adulto', de: 26, ate: 64, min: 7, max: 9, pouco: 6, muito: 10, refs: ['hirshkowitz2015', 'watson2015'] },
-  { id: 'idoso', de: 65, ate: 130, min: 7, max: 8, pouco: 5, muito: 9, refs: ['hirshkowitz2015'] },                      // NSF 7–8 (o consenso da AASM vai até 60 anos)
+  { id: 'crianca', de: 6, ate: 12, min: 9, max: 11, refs: ['paruthi2016', 'csep2016', 'chaput2018'] },      // AASM (6–12) 9–12; Canadá (5–13) e NSF (6–13) 9–11
+  { id: 'treze', de: 13, ate: 13, min: 9, max: 10, refs: ['paruthi2016', 'csep2016', 'chaput2018'] },       // Canadá (5–13) e NSF (6–13) 9–11; AASM (13–18) 8–10
+  { id: 'adolescente', de: 14, ate: 17, min: 8, max: 10, refs: ['paruthi2016', 'csep2016', 'chaput2018'] }, // os três: 8–10
+  { id: 'dezoito', de: 18, ate: 18, min: 8, max: 9, refs: ['paruthi2016', 'csep2020', 'chaput2018'] },      // Canadá (18–64) e NSF (18–25) 7–9; AASM (13–18) 8–10
+  { id: 'jovem-adulto', de: 19, ate: 25, min: 7, max: 9, refs: ['watson2015', 'csep2020', 'chaput2018'] },  // Canadá e NSF 7–9; AASM 7 ou mais
+  { id: 'adulto', de: 26, ate: 64, min: 7, max: 9, refs: ['watson2015', 'csep2020', 'chaput2018'] },
+  { id: 'idoso', de: 65, ate: 130, min: 7, max: 8, refs: ['csep2020', 'chaput2018'] },                      // Canadá e NSF 7–8 (o consenso da AASM vai até 60 anos)
 ];
+// Avisos de média muito fora da faixa: 1 hora ou mais abaixo do mínimo ou acima do máximo. A folga de 1 hora é escolha
+// do aplicativo (os limites de "não recomendado" da National Sleep Foundation só estão no relatório que não foi lido).
+export const FOLGA_DO_AVISO = 1;
 const ADULTO_AASM = 60; // watson2015 vale para adultos de 18 a 60 anos
 const refsDaFaixa = (f, idade) => (idade > ADULTO_AASM ? f.refs.filter((k) => k !== 'watson2015') : f.refs);
 // Variação da duração do sono na semana (desvio-padrão, em minutos): faixas do estudo MESA (huang2020). O risco só foi
@@ -109,12 +117,14 @@ export function fmtHoras(horas) {
 export const fmtFaixa = (min, max) => (Number.isInteger(min) && Number.isInteger(max) ? `${min} a ${max} h` : `${fmtHoras(min)} a ${fmtHoras(max)}`);
 
 // ---------- estado e validação ----------
-// state.sono = { acordar: 'HH:MM' | '', idade: número | null, registros: [{ data, horas, qualidade? }], cochilos: [{ data, min, inicio? }] }
+// state.sono = { acordar: 'HH:MM' | '', idade: número | null, registros: [{ data, horas, qualidade?, dormiu?, acordou? }], cochilos: [{ data, min, inicio? }] }
 // - acordar: hora em que a pessoa costuma acordar (para sugerir a hora de dormir);
 // - idade: só é usada quando nenhuma entrevista (Treinador, Nutricionista, corrida) informou a idade;
-// - registros: uma noite por dia; `data` é o dia em que a pessoa ACORDOU; `horas` de 0 a 16, de 15 em 15 minutos;
-//   `qualidade` (opcional) de 1 (acordei muito cansado) a 5 (acordei bem descansado);
-// - cochilos: até 4 por dia; `data` é o dia do cochilo; `min` de 5 a 240, de 5 em 5 minutos; `inicio` (opcional) 'HH:MM'.
+// - registros: uma noite por dia; `data` é o dia em que a pessoa ACORDOU; `horas` de 0 a 16, com precisão de 1 minuto
+//   (7 h 23 fica 443/60); `qualidade` (opcional) de 1 (acordei muito cansado) a 5 (acordei bem descansado); `dormiu` e
+//   `acordou` (opcionais, sempre os dois) 'HH:MM': os horários daquela noite, quando a pessoa os informou. As horas
+//   dormidas podem ser menores que o intervalo entre eles (quem demorou a dormir ou acordou no meio da noite);
+// - cochilos: até 4 por dia; `data` é o dia do cochilo; `min` de 1 a 240, minuto a minuto; `inicio` (opcional) 'HH:MM'.
 export const sonoPadrao = () => ({ acordar: '', idade: null, registros: [], cochilos: [] });
 
 // Uma noite validada ou null. Datas antes de ANO_MIN ou depois de amanhã (`hoje` + 1 dia, pela diferença de fuso entre
@@ -126,9 +136,10 @@ function noiteValida(raw, teto) {
   const h = numero(raw.horas);
   if (!data || h == null || h < 0 || h > HORAS_MAX) return null;
   if (data < ANO_MIN + '-01-01' || data > teto) return null;
-  const out = { data, horas: Math.round(h / PASSO) * PASSO };
+  const out = { data, horas: Math.round(h * 60) / 60 }; // o tempo real, ao minuto
   const q = tem(raw, 'qualidade') ? numero(raw.qualidade) : null;
   if (q != null && Math.round(q) >= 1 && Math.round(q) <= 5) out.qualidade = Math.round(q);
+  if (tem(raw, 'dormiu') && tem(raw, 'acordou') && horaValida(raw.dormiu) && horaValida(raw.acordou)) { out.dormiu = raw.dormiu; out.acordou = raw.acordou; }
   return out;
 }
 const porData = (a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0);
@@ -151,8 +162,8 @@ function cochiloValido(raw, teto) {
   const data = dia(raw.data);
   const m = numero(raw.min);
   if (!data || m == null) return null;
-  const min = Math.round(m / COCHILO_PASSO) * COCHILO_PASSO;
-  if (min < COCHILO_PASSO || min > COCHILO_MAX) return null;
+  const min = Math.round(m); // o tempo real, ao minuto
+  if (min < COCHILO_MIN || min > COCHILO_MAX) return null;
   if (data < ANO_MIN + '-01-01' || data > teto) return null;
   const out = { data, min };
   if (tem(raw, 'inicio') && horaValida(raw.inicio)) out.inicio = raw.inicio;
@@ -209,6 +220,18 @@ export function apagarNoite(sono, data) {
 }
 
 const minutosDe = (hhmm) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+// Minutos entre dois horários 'HH:MM', passando pela meia-noite quando o fim é menor que o início (23:10 → 06:35 = 445).
+// Horários iguais ou inválidos: null.
+export function minutosEntre(inicio, fim) {
+  if (!horaValida(inicio) || !horaValida(fim) || inicio === fim) return null;
+  return (minutosDe(fim) - minutosDe(inicio) + 1440) % 1440;
+}
+// 'HH:MM' de um horário mais `min` minutos (dá a volta na meia-noite). Entrada inválida: ''.
+export function horaMais(hhmm, min) {
+  if (!horaValida(hhmm) || numero(min) == null) return '';
+  const t = (((minutosDe(hhmm) + Math.round(min)) % 1440) + 1440) % 1440;
+  return `${p2(Math.floor(t / 60))}:${p2(t % 60)}`;
+}
 // Cochilo fora da janela indicada (13 h às 16 h) pelo lado de tarde: TERMINA depois das 16 h (início + duração) ou começa
 // de madrugada. Um cochilo das 15:40 às 16:00 está dentro; das 15:30 às 17:00, das 16:00 em diante, às 23:30 ou à 00:30,
 // não. Sem hora de início não há como saber: não conta. Cochilo de manhã não é "tarde".
@@ -217,7 +240,7 @@ export function cochiloTardio(c) {
   const ini = minutosDe(c.inicio);
   return ini < minutosDe(MADRUGADA_ATE) || ini + c.min > minutosDe(COCHILO_TARDE);
 }
-const cochilosValidos = (st) => (isObj(st) && isObj(st.sono) && Array.isArray(st.sono.cochilos) ? st.sono.cochilos.filter((c) => isObj(c) && dia(c.data) && numero(c.min) != null && c.min >= COCHILO_PASSO && c.min <= COCHILO_MAX) : []);
+const cochilosValidos = (st) => (isObj(st) && isObj(st.sono) && Array.isArray(st.sono.cochilos) ? st.sono.cochilos.filter((c) => isObj(c) && dia(c.data) && numero(c.min) != null && c.min >= COCHILO_MIN && c.min <= COCHILO_MAX) : []);
 // Cochilos de um dia, na ordem em que a tela mostra (o índice nessa lista é o que gravarCochilo e apagarCochilo usam).
 export const cochilosDe = (st, data) => cochilosValidos(st).filter((c) => c.data === data).sort(porCochilo);
 // Soma dos cochilos de um dia, em minutos.
@@ -341,13 +364,14 @@ function metaCom(p) {
         : `Aos ${p.idade} anos, os consensos de sono recomendam de ${fmtFaixa(f.min, f.max)} por noite.${concordam}`,
     refs: refsDaFaixa(f, p.idade),
   });
-  if (p.gestante) motivos.push({ texto: 'Na gestação vale a faixa da idade. Dormir pouco foi associado a mais diabetes gestacional.', refs: ['reutrakul2018', 'lu2021'] });
-  if (sobe && p.cargaAlta) motivos.push({ texto: `Você treina em ${p.diasDeTreino} dias nesta semana: o alvo sobe meia hora. Quem treina muito tende a precisar de mais sono para se recuperar.`, refs: ['walsh2021', 'sargent2021', 'roberts2019'] });
+  if (p.gestante) motivos.push({ texto: 'Na gestação vale a faixa da idade. Dormir pouco foi associado a mais diabetes gestacional.', refs: ['wang2022'] });
+  if (sobe && p.cargaAlta) motivos.push({ texto: `Você treina em ${p.diasDeTreino} dias nesta semana: o alvo sobe meia hora. Quem treina muito tende a precisar de mais sono para se recuperar.`, refs: ['walsh2021', 'mah2011'] });
   if (sobe && p.semanaDeProva) motivos.push({ texto: `${p.prova.dias === 1 ? 'Sua prova é amanhã' : `Sua prova é em ${p.prova.dias} dias`}: ${p.cargaAlta ? 'dormir' : 'o alvo sobe meia hora, porque dormir'} mais nos dias anteriores ajuda, mesmo que a véspera seja ruim.`, refs: ['walsh2021'] });
   // objetivo, dores e condições de saúde não mudam a meta: viram dicas (dicasDeSono)
   const avisos = [];
-  if (p.gestante) avisos.push({ tipo: 'warn', texto: 'Ronco frequente ou pausas na respiração durante a gestação: conte ao seu obstetra.', refs: ['pamidi2014'] });
-  return { idade: p.idade, faixa: f.id, min: f.min, max: f.max, base, ajuste: alvo - base, alvo, pouco: f.pouco, muito: f.muito, soma24h, motivos, avisos };
+  if (p.gestante) avisos.push({ tipo: 'warn', texto: 'Ronco frequente ou pausas na respiração durante a gestação: conte ao seu obstetra.', refs: ['li2018'] });
+  // pouco/muito: a partir de onde a média da semana gera aviso (1 hora fora da faixa: FOLGA_DO_AVISO)
+  return { idade: p.idade, faixa: f.id, min: f.min, max: f.max, base, ajuste: alvo - base, alvo, pouco: f.min - FOLGA_DO_AVISO, muito: f.max + FOLGA_DO_AVISO, soma24h, motivos, avisos };
 }
 
 // Hora de dormir para acordar em `acordar` ('HH:MM') tendo dormido `alvoHoras`. '' se algo for inválido.
@@ -423,9 +447,11 @@ function semanaCom(st, hoje, meta) {
   out.faltou = !!meta && n >= NOITES_PARA_REGULARIDADE && out.faltaMin >= FALTA_MINIMA;
   // avisos só com pelo menos 5 noites registradas na semana: uma ou duas noites não dizem como a pessoa dorme
   if (meta && n >= NOITES_PARA_REGULARIDADE) {
-    const refsIdade = meta.idade < 18 ? ['hirshkowitz2015', 'paruthi2016'] : meta.idade <= ADULTO_AASM ? ['hirshkowitz2015', 'watson2015'] : ['hirshkowitz2015'];
-    if (mediaDaMeta < meta.pouco) out.avisos.push({ tipo: 'warn', texto: `Sua média ficou abaixo de ${meta.pouco} horas, o que não é recomendado para a sua idade. Se você tem tempo para dormir e mesmo assim não consegue, procure avaliação médica.`, refs: [...refsIdade, 'schutte2008'] });
-    else if (mediaDaMeta > meta.muito) out.avisos.push({ tipo: 'info', texto: `Sua média passou de ${meta.muito} horas. Se isso é frequente e você ainda acorda cansado, vale conversar com um médico.`, refs: refsIdade });
+    // quem se preocupa por dormir de menos ou demais deve procurar um profissional: paruthi2016 (até 18 anos) e
+    // watson2015 (18 a 60 anos); acima disso, a faixa da diretriz canadense. A diretriz de insônia (schutte2008) é de adultos.
+    const refsIdade = meta.idade < 18 ? ['paruthi2016'] : meta.idade <= ADULTO_AASM ? ['watson2015'] : ['csep2020'];
+    if (mediaDaMeta < meta.pouco) out.avisos.push({ tipo: 'warn', texto: `Sua média ficou abaixo de ${meta.pouco} horas, mais de 1 hora abaixo do mínimo da sua faixa. Se você tem tempo para dormir e mesmo assim não consegue, procure avaliação médica.`, refs: meta.idade < 18 ? refsIdade : [...refsIdade, 'schutte2008'] });
+    else if (mediaDaMeta > meta.muito) out.avisos.push({ tipo: 'info', texto: `Sua média passou de ${meta.muito} horas, mais de 1 hora acima da sua faixa. Se isso é frequente e você ainda acorda cansado, vale conversar com um médico.`, refs: refsIdade });
   }
   if (cansado >= 3) out.avisos.push({ tipo: 'warn', texto: `Você acordou cansado em ${cansado} noites desta semana. Se isso dura um mês ou mais, ou se há ronco com pausas na respiração, procure avaliação médica.`, refs: ['schutte2008', 'kapur2017'] });
   return out;
@@ -435,12 +461,15 @@ function semanaCom(st, hoje, meta) {
 const GERAIS = ['cafeina', 'telas', 'quarto', 'horario', 'alcool'];
 export const CAFE_HORAS = 8.8; // horas antes de deitar para uma xícara de café não tirar sono (gardiner2023)
 const CAFE_MIN = Math.round(CAFE_HORAS * 60);
+export const CAFE_ATE = 65;    // os estudos do corte de cafeína são com adultos de 18 a 65 anos (gardiner2023): acima disso a dica não aparece
+export const ALCOOL_ATE = 70;  // os estudos de álcool e sono são com adultos de 18 a 70 anos (gardiner2025): acima disso a dica não aparece
 // De 3 a 4 dicas: primeiro as que os registros e o perfil pedem (até 3), depois as gerais, que se revezam a cada dia.
 // O que muda a meta (idade, gestação, carga de treino, prova) está nos motivos da meta; aqui fica o resto do perfil.
 // Cada dica só aparece para quem as fontes dela estudaram:
-// - menores de 18: sem álcool; a dica de cafeína é a da Academia Americana de Pediatria (aap2011), sem horário de corte;
-//   sem as dicas de treino à noite, emagrecimento e músculo (estudos com adultos);
+// - menores de 18: sem álcool; a dica de cafeína é a posição da Academia Americana de Pediatria (citada em temple2017),
+//   sem horário de corte; sem as dicas de treino à noite, emagrecimento e músculo (estudos com adultos);
 // - gestantes: sem álcool e sem a dica de emagrecimento;
+// - corte de cafeína: só de 18 a 65 anos; álcool: só de 18 a 70 anos (a idade de quem os estudos incluíram);
 // - dor e pressão/diabetes/coração: só de 18 a 60 anos, a faixa do consenso de adultos (watson2015);
 // - TODAS as dicas de cochilo (sugestão de cochilo curto, cochilo longo, quase todo dia, depois das 16 h, "não repõe a
 //   noite" e "evite o cochilo"): só adultos a partir de 19 anos (a meta deles é a da noite) e não gestantes. As fontes
@@ -490,7 +519,8 @@ function dicasCom(p, sem, hoje) {
   for (let i = 0; i < GERAIS.length && ids.length < total; i++) {
     let id = GERAIS[(inicio + i) % GERAIS.length];
     if (id === 'horario' && ids.includes('irregular')) continue; // as duas dizem a mesma coisa
-    if (id === 'alcool' && (!p.adulto || p.gestante)) continue;
+    if (id === 'alcool' && (!p.adulto || p.gestante || p.idade > ALCOOL_ATE)) continue;
+    if (id === 'cafeina' && p.idade > CAFE_ATE) continue;
     if (id === 'cafeina' && !p.adulto) id = 'cafeinaJovem';
     add(id);
   }

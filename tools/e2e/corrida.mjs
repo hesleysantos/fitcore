@@ -25,7 +25,12 @@ export default async (page) => {
       if (!q) break;
       const chave = Object.keys(respostas).find((k) => q.toLowerCase().includes(k.toLowerCase()));
       const v = chave ? respostas[chave] : undefined;
-      if (typeof v === 'number') {
+      if (typeof v === 'number' && (await page.eval(`return !!document.querySelector('.tempo-hms');`))) {
+        // tempo em horas, minutos e segundos (o roteiro informa em minutos: 104.5 = 1 h 44 min 30 s)
+        const s = Math.round(v * 60);
+        const pos = await page.eval(`const c = document.querySelectorAll('.tempo-hms input'); if (c.length !== 3) return false; const v = [${Math.floor(s / 3600)}, ${Math.floor((s % 3600) / 60)}, ${s % 60}]; c.forEach((i, n) => { i.value = String(v[n]); i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); }); return [...c].map((i) => i.getAttribute('inputmode')).join() === 'numeric,numeric,numeric';`);
+        if (!pos) falhas.push('campos de horas, minutos e segundos não encontrados: ' + q);
+      } else if (typeof v === 'number') {
         const pos = await page.eval(`const i = document.querySelector('.stepper input'); if (!i) return false; i.value = ${JSON.stringify(String(v).replace('.', ','))}; i.dispatchEvent(new Event('change', { bubbles: true })); return true;`);
         if (!pos) falhas.push('campo numérico não encontrado: ' + q);
       } else if (v !== undefined) {
@@ -33,7 +38,7 @@ export default async (page) => {
           const achou = await page.eval(`const alvo = ${JSON.stringify(alvo)}; const o = [...document.querySelectorAll('.opt')].find((e) => e.querySelector('.o-t').textContent.trim() === alvo) || [...document.querySelectorAll('.opt')].find((e) => e.textContent.includes(alvo)); if (!o) return false; if (o.getAttribute('aria-checked') !== 'true') o.click(); return true;`);
           if (!achou) falhas.push('opção não encontrada: ' + q + ' -> ' + alvo);
         }
-      } else if (!(await page.eval(`return !!document.querySelector('.stepper input');`))) falhas.push('pergunta sem resposta no roteiro: ' + q);
+      } else if (!(await page.eval(`return !!document.querySelector('.stepper input, .tempo-hms input');`))) falhas.push('pergunta sem resposta no roteiro: ' + q);
       await page.sleep(100);
       const avancou = await page.eval(`const b = [...document.querySelectorAll('button.btn.primary')].find((e) => /Continuar|Concluir/.test(e.textContent)); if (!b || b.disabled) return false; b.click(); return true;`);
       if (!avancou) { falhas.push('não avançou na pergunta: ' + q); break; }
@@ -269,7 +274,7 @@ export default async (page) => {
   await entrevista({
     'Como é a sua corrida': 'Treino há anos, com bom volume', 'quilômetros você corre': 58, 'corrida mais longa': 24, 'maior prova': 'Maratona', 'sem correr': 'Estou correndo',
     'objetivo na corrida': 'Preparar uma prova com data', 'Qual distância': 'Maratona', 'quantas semanas': 16, 'tempo em mente': 'Sim', 'tempo-alvo': 225,
-    'resultado recente': 'Meia maratona', 'quanto tempo, em minutos': 104.5, 'quais dias': [dia(0), dia(1), dia(2), dia(3), dia(5), dia(6)], 'melhor dia para o treino mais longo': dia(6),
+    'resultado recente': 'Meia maratona', 'Em quanto tempo?': 104.5, 'quais dias': [dia(0), dia(1), dia(2), dia(3), dia(5), dia(6)], 'melhor dia para o treino mais longo': dia(6),
     'tempo você tem por treino': 'Até 1h30', 'treino mais longo': 'Até 3 horas', 'mede as suas corridas': 'Relógio ou aplicativo com GPS', 'Onde você corre': 'Rua, parque ou calçadão',
     anos: 38, peso: 68, altura: 176, 'lesão nos últimos': 'Não', 'dor em alguma': 'Nenhuma', condições: 'Nenhuma', sinais: 'Nenhum deles',
   });

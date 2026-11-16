@@ -1603,11 +1603,11 @@ test('em casa com itens extras: sem marcar, nada além do que a opção diz; mar
 });
 
 test('referências citadas existem e a contagem de perfis passa de 30 mil', () => {
-  for (const k of ['acsm2009', 'acsm2026', 'oms2020', 'aha2024', 'schoenfeld2017vol', 'bazvalle2022', 'schoenfeld2021', 'grgic2018', 'singer2024', 'iversen2021', 'fragala2019', 'faigenbaum2009', 'donnelly2009', 'acog804', 'riebe2015', 'kolber2010', 'schumann2022',
-    'pelland2026', 'scarpelli2022', 'barsuhn2025', 'camargo2026', 'bickel2011', 'spiering2021', 'hody2019', 'cheung2003', 'herbert2011', 'dupuy2018', 'silbernagel2007', 'silbernagel2020', 'smith2017', 'cook2009', 'dubois2020', 'verhagen2016', 'george2021', 'nice_ng59', 'diercks2014', 'powers2014', 'lloyd2014', 'izquierdo2021', 'mottola2018', 'keogh2017', 'kerr2010', 'kolber2014',
-    'nsca1993', 'esc2020', 'sbc_has2020', 'sbc_reab2020', 'sbc_gestacao2021', 'oppert2021', 'wewege2018', 'faigenbaum2010', 'schellenberg2013', 'vigotsky2015', 'haskvitz1986', 'jasien2015',
-    'ageberg2010', 'holmgren2012', 'maenhout2013', 'breda2021', 'bateman2021', 'jorgensen2018', 'raulline2025', 'schoenfeld2019vol', 'hackett2013', 'nuckols2025',
-    'colberg2016', 'kanaley2022', 'sbd2023', 'whitfield2017', 'petersen2011', 'zein2022', 'soligard2008', 'cuthbert2020', 'compendio2024']) assert.ok(REFS[k], k);
+  for (const k of ['acsm2009', 'acsm2026', 'oms2020', 'aha2024', 'schoenfeld2017vol', 'bazvalle2022', 'schoenfeld2021', 'grgic2018', 'singer2024', 'iversen2021', 'fragala2019', 'faigenbaum2009', 'swift2014', 'acog804', 'whitfield2017', 'bonilla2022', 'schumann2022',
+    'pelland2026', 'scarpelli2022', 'barsuhn2025', 'camargo2026', 'bickel2011', 'spiering2021', 'hody2019', 'afonso2021', 'boonstra2016', 'dupuy2018', 'silbernagel2007', 'silbernagel2020', 'smith2017', 'cook2009', 'dubois2020', 'verhagen2016', 'george2021', 'verhagen2016', 'diercks2014', 'jospt2014', 'lloyd2014', 'izquierdo2021', 'mottola2018', 'keogh2017', 'gray2015', 'schoenfeld2011upright',
+    'davies2015', 'esc2020', 'sbc_has2020', 'sbc_reab2020', 'sbc_gestacao2021', 'oppert2021', 'wewege2018', 'faigenbaum2010', 'schellenberg2013', 'vigotsky2015', 'joshi2024', 'jasien2015',
+    'ageberg2010', 'holmgren2012', 'larsson2019', 'breda2021', 'bateman2021', 'jorgensen2018', 'raulline2025', 'schoenfeld2019vol', 'hackett2013', 'nuckols2025',
+    'colberg2016', 'kanaley2022', 'sbd2023', 'whitfield2017', 'gray2015', 'zein2022', 'soligard2008', 'cuthbert2020', 'compendio2024']) assert.ok(REFS[k], k);
   // toda referência citada nos comentários do gerador ("ref xxx" ou "refs xxx, yyy") existe na base
   const fonte = fs.readFileSync(new URL('../www/js/logic/trainer.js', import.meta.url), 'utf8');
   const citadas = new Set();

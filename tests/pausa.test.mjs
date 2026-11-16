@@ -184,7 +184,8 @@ test('Evolução: o tempo parado antes de voltar entra nas dicas', () => {
   assert.deepEqual(r, { dias: 45, faixa: 2, ha: 5, treinos: 3 });
   let d = dica(st, 'retomada');
   assert.ok(d); assert.match(d.titulo, /6 semanas/); assert.match(d.texto, /20% menos/);
-  assert.deepEqual(d.refs, ['bosquet2013', 'caterisano2019']);
+  // (Bosquet 2013 só foi lido no resumo: a dica cita só o consenso, lido inteiro)
+  assert.deepEqual(d.refs, ['caterisano2019']);
   assert.equal(dica(st, 'frequencia'), undefined); assert.equal(dica(st, 'parado'), undefined);
   assert.equal(analisar(st, AGORA).resumo.retomada.dias, 45);
   // a carga mais baixa na volta não vira "queda" nem "travou"
@@ -211,7 +212,7 @@ test('Evolução: o tempo parado antes de voltar entra nas dicas', () => {
   assert.match(parado(400).texto, /metade da carga/); assert.equal(parado(400).acao.rota, 'treinador');
   for (const dd of [11, 20, 45, 120, 400]) { const p = parado(dd); assert.ok(p.texto.length <= 140 && p.porque.length <= 190 && p.titulo.length <= 60); for (const k of p.refs) assert.ok(REFS[k]); }
   // base de conhecimento
-  assert.ok(REFS.bosquet2013 && REFS.caterisano2019);
+  assert.ok(REFS.caterisano2019); assert.equal(REFS.bosquet2013, undefined, 'fonte lida só no resumo não fica na base');
   const faq = FAQ_TREINO.find((x) => /parado/.test(x.q));
   assert.ok(faq && faq.f.every((k) => REFS[k]));
 });

@@ -6,13 +6,16 @@
 //  • séries por semana em cada grupo: cerca de 4 já dão resultado (ref iversen2021); 10 ou mais para ganhar massa (ref
 //    schoenfeld2017vol); teto de 12, 16 ou 20 séries diretas conforme o nível (ref bazvalle2022); o músculo principal de
 //    um exercício conta 1 série e o auxiliar, meia (ref pelland2026);
-//  • para que o treino serve, pela faixa de repetições: até 6, força; de 6 a 15, ganho de massa; 15 ou mais, resistência
-//    muscular (refs acsm2009, schoenfeld2021). "Definição" não é um tipo de treino: vem de comer menos do que se gasta,
-//    mantendo a musculação para preservar os músculos (refs helms2014, donnelly2009);
-//  • equilíbrio: empurrar muito mais do que puxar está ligado a dor no ombro (ref kolber2010); um programa equilibrado
-//    treina os dois lados de cada articulação e os grandes grupos do corpo todo (refs acsm2009, oms2020);
+//  • para que o treino serve, pela faixa de repetições: até 6, força (1 a 6 repetições máximas — ref acsm2009); 15 ou
+//    mais, resistência muscular; entre as duas, a faixa média, a mais prática para ganhar massa. A massa cresce numa faixa
+//    ampla de cargas, a partir de cerca de 30% da carga máxima, e não há "zona ideal" de hipertrofia (ref schoenfeld2021). "Definição" não é um tipo de treino: vem de comer menos do que se gasta,
+//    mantendo a musculação para preservar os músculos (déficit: ref helms2014; treino de força para limitar a perda de
+//    massa magra no emagrecimento: ref oppert2021);
+//  • equilíbrio: o desequilíbrio entre os músculos do ombro é um dos fatores das lesões de ombro na musculação (ref
+//    bonilla2022); um programa equilibrado
+//    treina os grandes grupos do corpo todo (ref oms2020); os cortes numéricos de equilíbrio são critério deste aplicativo;
 //  • perfil: as regras de segurança do Treinador (trainer.js, função motivosContra) e as doses por condição — sem cargas
-//    altas com pressão alta, coração, gestação ou triagem positiva (refs aha2024, acog804, riebe2015); 8 repetições ou
+//    altas com pressão alta, coração, gestação ou triagem positiva (refs aha2024, acog804, whitfield2017); 8 repetições ou
 //    mais com diabetes ou outra doença crônica (ref colberg2016); 10 a 15 repetições para menores de 18 (ref
 //    faigenbaum2009); até 3 treinos de força por semana em dias não seguidos para menores de 18 e para quem tem diabetes
 //    (refs lloyd2014, colberg2016); 1 a 3 séries por exercício para quem está começando (ref acsm2009);
@@ -77,7 +80,7 @@ function tipoDoTreino(itens) {
   const curto = id === 'forca' && descansoForca / cont.forca < 120;
   const texto = {
     forca: 'Força: poucas repetições com carga alta.' + (curto ? ' Para isso, descanse de 2 a 3 minutos entre as séries.' : ''),
-    hipertrofia: 'Ganho de massa: repetições médias (6 a 15), perto do limite.',
+    hipertrofia: 'Ganho de massa: faixa média de repetições, perto do limite. Outras faixas também dão massa; esta é a mais prática.',
     resistencia: 'Resistência muscular: muitas repetições com carga leve.',
     misto: 'Misto: junta séries pesadas, médias e leves.',
   }[id];
@@ -197,7 +200,7 @@ export function avaliarDia(dia, contexto) {
   return {
     vazio: false, foco: { grupos: focoGrupos, texto: focoTexto, padroes }, mais, menos, volume: vol, diretas: dir, tipo, definicao: DEFINICAO,
     duracaoMin: duracao, exercicios: itens.length, series: itens.reduce((t, it) => t + it.series, 0), sobra, repetidos: rep, perfil: p, semPerfil: !c.pf,
-    conclusao: partes.join(' '), refs: ['iversen2021', 'bazvalle2022', 'pelland2026', 'acsm2009', 'schoenfeld2021', 'helms2014'],
+    conclusao: partes.join(' '), refs: ['iversen2021', 'bazvalle2022', 'pelland2026', 'acsm2009', 'schoenfeld2021', 'helms2014', 'oppert2021'],
   };
 }
 
@@ -273,6 +276,6 @@ export function avaliarPlano(plano, contexto) {
   return {
     vazio: false, treinos: semana.length, grupos, mais, menos, volume: vol, diretas: dir, teto, tipo, definicao: DEFINICAO, equilibrio, falta, sobra,
     duracaoMin: { menor: Math.min(...duracoes), maior: Math.max(...duracoes) }, corrida, perfil: p, semPerfil: !c.pf,
-    conclusao: partes.join(' '), refs: ['iversen2021', 'schoenfeld2017vol', 'bazvalle2022', 'pelland2026', 'acsm2009', 'schoenfeld2021', 'kolber2010', 'helms2014', ...(c.corrida ? ['blagrove2018'] : [])],
+    conclusao: partes.join(' '), refs: ['iversen2021', 'schoenfeld2017vol', 'bazvalle2022', 'pelland2026', 'acsm2009', 'schoenfeld2021', 'bonilla2022', 'helms2014', 'oppert2021', ...(c.corrida ? ['blagrove2018'] : [])],
   };
 }

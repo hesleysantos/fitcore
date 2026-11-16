@@ -132,11 +132,11 @@ function resultado() {
         h('div', { class: 'row between' }, h('span', { text: 'Água (bebidas + alimentos)' }), h('span', { class: 'bold', text: `${dec(r.agua)} L · ${dec(r.aguaBebidas)} L em bebidas` })),
         h('div', { class: 'row between' }, h('span', { text: 'Proteína por refeição' }), h('span', { class: 'bold', text: `${r.protRefeicao[0]} a ${r.protRefeicao[1]} g` }))),
       peso.ritmo ? h('p', { class: 'small', text: peso.ritmo }) : null));
-    const linhas = [`Você gasta cerca de ${fmtInt(r.gasto)} kcal por dia (${fmtInt(r.tmb)} em repouso). A fórmula tem margem de erro de uns 10%: acompanhe o peso por 2 a 3 semanas e ajuste.`];
+    const linhas = [`Você gasta cerca de ${fmtInt(r.gasto)} kcal por dia (${fmtInt(r.tmb)} em repouso). A fórmula é uma estimativa e pode errar 10% ou mais: acompanhe o peso por 2 a 3 semanas e ajuste.`];
     linhas.push(...peso.linhas);
     linhas.push(`Água: os ${dec(r.agua)} L somam o que você bebe e a água da comida; cerca de ${dec(r.aguaBebidas)} L vêm de água e outras bebidas. No calor e nos dias de treino você precisa de mais: beba conforme a sede e observe a urina, que deve ficar clara.`);
     linhas.push(r.imc > 25
-      ? 'Proteína e água são calculadas pelo peso que você teria com IMC 25: o peso acima disso é quase todo gordura e não aumenta essas necessidades.'
+      ? 'A proteína é calculada pelo peso que você teria com IMC 25: o peso acima disso é quase todo gordura e não aumenta essa necessidade.'
       : 'Proteína: a meta por quilo depende do objetivo e de você treinar ou não. A partir dos 65 anos, nunca fica abaixo de 1,2 g por quilo.');
     linhas.push(`IMC: ${dec(r.imc)} (${imcFaixa(r.imc, r.idade)}). É só uma referência: não distingue músculo de gordura.`);
     body.push(acc('Entenda os números', linhas));

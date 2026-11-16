@@ -21,7 +21,7 @@ Aplicativo de academia que funciona **100% offline**:
 - **diário alimentar**: “Comi isso” ou “Comi outra coisa” em cada refeição, alimentos anotados ao longo do dia com as calorias de cada um e quanto falta (ou passou) da meta. Menores de 18 e quem informou transtorno alimentar não recebem contagem de calorias;
 - **cochilos**: registro dos cochilos do dia; até 18 anos somam à meta de sono (recomendação em 24 horas) e, para adultos, aparecem à parte, com dicas quando são longos, frequentes ou tarde;
 - **uma resposta de saúde vale para tudo**: idade, gestação e doenças informadas a um dos treinadores protegem também as metas da Nutricionista e o diário (vale sempre a resposta mais protegida);
-- tudo baseado em diretrizes e estudos publicados (341 referências listadas em *Sobre → Referências científicas*).
+- tudo baseado em diretrizes e estudos publicados (293 referências; as que só abriam no resumo foram trocadas por fontes lidas em texto completo ou retiradas; listadas em *Sobre → Referências científicas*).
 
 Os dados ficam **somente no aparelho**. Não há servidor, cadastro, anúncios nem rastreadores.
 
