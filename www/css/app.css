@@ -412,3 +412,34 @@ details.acc > div > ul { margin: 0; }
 .sec-rot { display: flex; align-items: center; gap: 6px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .sec-rot > span { flex: 1 1 auto; }
 .chip.sm { min-height: 32px; padding: 4px 10px; font-size: 0.8rem; flex: 0 0 auto; }
+
+/* Nutrição: o dia de hoje no alto, o cardápio com o que foi comido em cada refeição, a semana e a lista de compras.
+   Botões da tela com pelo menos 44 px de altura (alvo de toque). */
+.btn.alvo, .chip.alvo, .diario-acoes .btn, .seg.alvo button { min-height: 44px; }
+.nutri-topo { display: flex; align-items: center; gap: 8px; margin-bottom: -4px; }
+.nutri-topo .avatar { width: 30px; height: 30px; border-radius: 9px; }
+#hoje-nutri { gap: 8px; }
+#hoje-nutri .stats { gap: 6px; }
+#hoje-nutri .stat { padding: 8px 6px; }
+#hoje-nutri .stat b { font-size: 1.08rem; }
+#hoje-nutri details.acc { border: 0; background: var(--surface-2); }
+#hoje-nutri details.acc > summary { min-height: 44px; padding: 10px 12px; }
+#hoje-nutri details.acc > div { padding: 0 12px 12px; }
+#hoje-nutri h3 { font-size: 0.94rem; margin-top: 4px; }
+.card.refeicao { display: flex; flex-direction: column; gap: 6px; padding: 12px 12px 10px; }
+.refeicao .ref-hd { display: flex; align-items: center; gap: 8px; }
+.refeicao .ref-hd h3 { font-size: 1rem; }
+.refeicao .itens .kv { padding: 6px 0; font-size: 0.92rem; }
+.refeicao .itens .kv > :first-child { min-width: 0; }
+.refeicao .itens .kv > :last-child { font-weight: 500; color: var(--muted); font-size: 0.84rem; white-space: nowrap; }
+.refeicao .comido-rot { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ok); margin-top: 2px; }
+.refeicao .diario-item { min-height: 52px; padding: 8px 10px; }
+.refeicao details.sugestao > summary { min-height: 44px; display: flex; align-items: center; color: var(--accent); font-size: 0.88rem; font-weight: 650; cursor: pointer; list-style: none; }
+.refeicao details.sugestao > summary::-webkit-details-marker { display: none; }
+.semana-dia { display: flex; flex-direction: column; gap: 8px; }
+.semana-dia .treino-dia { font-size: 0.86rem; }
+.semana-dia details.acc > summary { min-height: 48px; padding: 10px 12px; }
+.semana-dia details.acc > summary .grow { min-width: 0; }
+.semana-dia .resumo { font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.compras h3 { margin-top: 6px; }
+.compras .kv > :first-child { min-width: 0; }

@@ -12,7 +12,8 @@ export default async (page) => {
   const pergunta = () => page.eval(`const h2 = document.querySelector('.bubble h2'); return h2 ? h2.textContent : '';`);
   const marcada = () => page.eval(`const o = document.querySelector('.opt[aria-checked=true]'); return o ? o.querySelector('.o-t').textContent : '';`);
   const escolher = (rotulo) => page.eval(`const o = [...document.querySelectorAll('.opt')].find((e) => e.querySelector('.o-t') && e.querySelector('.o-t').textContent === ${JSON.stringify(rotulo)}); if (!o) return false; o.click(); return true;`);
-  const avancar = () => page.eval(`const b = [...document.querySelectorAll('button.btn.primary')].find((e) => /^(Continuar|Concluir)$/.test(e.textContent.trim())); if (!b || b.disabled) return false; b.click(); return true;`);
+  // (número com o valor de partida — idade, peso, altura —: a pessoa confirma em "Está certo" antes de continuar)
+  const avancar = () => page.eval(`const c = [...document.querySelectorAll('[data-informar] button')].find((e) => e.textContent.trim() === 'Está certo'); if (c) { c.click(); await new Promise((r) => setTimeout(r, 60)); } const b = [...document.querySelectorAll('button.btn.primary')].find((e) => /^(Continuar|Concluir)$/.test(e.textContent.trim())); if (!b || b.disabled) return false; b.click(); return true;`);
   // segue a entrevista até o fim, respondendo só as perguntas indicadas; devolve os títulos das perguntas vistas
   async function entrevista(respostas = {}) {
     const vistas = [];
@@ -24,7 +25,8 @@ export default async (page) => {
       if (k && !(await escolher(respostas[k]))) falhas.push(`opção não encontrada: ${q} -> ${respostas[k]}`);
       await page.sleep(120);
       // pergunta nova, que o usuário de exemplo ainda não respondeu: escolhe a primeira opção, como a pessoa teria de fazer
-      if (!k) await page.eval(`const b = [...document.querySelectorAll('button.btn.primary')].find((e) => /^(Continuar|Concluir)$/.test(e.textContent.trim())); if (b && b.disabled) { const o = document.querySelector('.opt'); if (o) o.click(); }`);
+      // (nas de várias escolhas, a última opção é o "Nenhum"/"Nenhuma": é o que o usuário de exemplo responde)
+      if (!k) await page.eval(`const b = [...document.querySelectorAll('button.btn.primary')].find((e) => /^(Continuar|Concluir)$/.test(e.textContent.trim())); if (b && b.disabled) { const l = [...document.querySelectorAll('.opt')]; const o = document.querySelector('.opts[role=group]') ? l[l.length - 1] : l[0]; if (o) o.click(); }`);
       await page.sleep(80);
       if (!(await avancar())) { falhas.push('não avançou na pergunta: ' + q); break; }
       await page.sleep(250);
@@ -84,7 +86,9 @@ export default async (page) => {
   ok(e.t === 'hipertrofia' && e.n === 'ganhar' && e.ok === '', 'alimentação passou a ser para ganhar massa');
   await page.goto(B + '#/nutricao', 1200);
   t = await texto();
-  ok(t.includes('Ganhar massa muscular') && !t.includes('Objetivos diferentes'), 'Nutrição recalculada para ganhar massa');
+  // o objetivo fica em "Suas metas e como foram calculadas", que abre ao toque
+  const metas = await page.eval(`const d = [...document.querySelectorAll('details')].find((x) => /Suas metas/.test(x.querySelector('summary') ? x.querySelector('summary').textContent : '')); return d ? d.textContent : '';`);
+  ok(metas.includes('Ganhar massa muscular') && !t.includes('Objetivos diferentes'), 'Nutrição recalculada para ganhar massa');
 
   console.log('5. Tempo parado no plano do Treinador');
   e = await estado();

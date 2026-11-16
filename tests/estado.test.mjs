@@ -238,13 +238,13 @@ test('sanitize: Treinador de corrida (run) e corridas registradas (runs)', () =>
   assert.equal(s.run.pausadoEm, '');
   assert.deepEqual(s.runs.map((r) => r.id), ['r3', 'r1', 'r6'], 'ids repetidos, datas impossíveis, ritmos impossíveis e registros vazios saem; ordem por data');
   const r1 = s.runs[1];
-  assert.deepEqual(Object.keys(r1).sort(), ['data', 'distKm', 'dor', 'durMin', 'id', 'nota', 'planejado', 'pse', 'tipo']);
-  assert.deepEqual(r1.dor, { onde: 'joelho', nivel: 3 });
+  assert.deepEqual(Object.keys(r1).sort(), ['data', 'distKm', 'dores', 'durMin', 'id', 'nota', 'planejado', 'pse', 'tipo']);
+  assert.deepEqual(r1.dores, [{ onde: 'joelho', nivel: 3, tipo: 'articular' }], 'a dor única dos registros antigos vira uma lista');
   assert.equal(r1.nota.length, 200); assert.equal(r1.planejado.length, 160);
   const r3 = s.runs[0];
-  assert.equal(r3.tipo, 'livre'); assert.equal(r3.distKm, 120); assert.equal(r3.durMin, 0); assert.equal(r3.pse, null); assert.equal(r3.dor, null);
+  assert.equal(r3.tipo, 'livre'); assert.equal(r3.distKm, 120); assert.equal(r3.durMin, 0); assert.equal(r3.pse, null); assert.deepEqual(r3.dores, []);
   const r6 = s.runs[2];
-  assert.equal(r6.distKm, 0, 'texto no lugar de número não vale'); assert.equal(Math.round(r6.durMin * 60), 2476, 'tempo guardado com precisão de 1 segundo'); assert.equal(r6.pse, 6); assert.equal(r6.dor, null);
+  assert.equal(r6.distKm, 0, 'texto no lugar de número não vale'); assert.equal(Math.round(r6.durMin * 60), 2476, 'tempo guardado com precisão de 1 segundo'); assert.equal(r6.pse, 6); assert.deepEqual(r6.dores, []);
   // sem aceite válido, não há início nem pausa
   const semAceite = store.sanitize({ run: { answers: {}, aceitoEm: 'x', inicio: '2026-11-02', pausadoEm: '2026-11-03T10:00:00.000Z' } });
   assert.deepEqual(semAceite.run, { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [], mostrados: [], degrau: null });
@@ -275,4 +275,24 @@ test('relógio do aparelho atrasado: o que já estava guardado no aparelho não 
   // lixo continua sendo recusado nos dois caminhos
   const lixo = store.sanitize({ sono: { registros: [{ data: '2031-02-31', horas: 7 }, { data: '2031-05-10', horas: -3 }] }, diario: { dias: [{ data: 'amanhã', itens: [] }] } }, { doAparelho: true });
   assert.equal(lixo.sono.registros.length, 0); assert.equal(lixo.diario.dias.length, 0);
+});
+
+test('sanitize: perguntas de saúde novas — remédios, alergias e a data da liberação médica', () => {
+  const s = store.sanitize({
+    trainer: { answers: { triagem: ['palpitacao', 'xpto', 'nenhum'], remedios: ['pulso', 'aspirina', 7], liberado: 'sim', liberadoEm: '2026-10-01', liberadoEm2: 'x' } },
+    run: { answers: { condicoes: ['renal'], remedios: 'glicose', liberado: 'sim', liberadoEm: '01/10/2026' } },
+    nutri: { answers: { alergias: ['amendoim', 'gluten', 'leite'], condicoes: ['cardiaco', 'pulmao'] } },
+  });
+  assert.deepEqual(s.trainer.answers.triagem, ['palpitacao', 'nenhum'], 'só as opções que existem (o "nenhum" junto é resolvido na entrevista)');
+  assert.deepEqual(s.trainer.answers.remedios, ['pulso']);
+  assert.equal(s.trainer.answers.liberadoEm, '2026-10-01');
+  assert.equal(s.trainer.answers.liberadoEm2, undefined);
+  assert.equal(s.run.answers.remedios, undefined, 'remédios só como lista');
+  assert.equal(s.run.answers.liberado, 'sim');
+  assert.equal(s.run.answers.liberadoEm, undefined, 'data fora do formato AAAA-MM-DD não entra');
+  assert.deepEqual(s.nutri.answers.alergias, ['amendoim', 'leite']);
+  assert.deepEqual(s.nutri.answers.condicoes, ['cardiaco']);
+  // sem "sim", a data não fica
+  assert.equal(store.sanitize({ trainer: { answers: { liberado: 'nao', liberadoEm: '2026-10-01' } } }).trainer.answers.liberadoEm, undefined);
+  assert.equal(store.sanitize({ trainer: { answers: { liberadoEm: '2026-10-01' } } }).trainer.answers.liberadoEm, undefined);
 });

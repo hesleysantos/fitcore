@@ -40,6 +40,8 @@ export default async (page) => {
         }
       } else if (!(await page.eval(`return !!document.querySelector('.stepper input, .tempo-hms input');`))) falhas.push('pergunta sem resposta no roteiro: ' + q);
       await page.sleep(100);
+      // número com o valor de partida que o roteiro não mudou: confirma em "Está certo"
+      await page.eval(`const c = [...document.querySelectorAll('[data-informar] button')].find((e) => e.textContent.trim() === 'Está certo'); if (c) c.click(); return !!c;`);
       const avancou = await page.eval(`const b = [...document.querySelectorAll('button.btn.primary')].find((e) => /Continuar|Concluir/.test(e.textContent)); if (!b || b.disabled) return false; b.click(); return true;`);
       if (!avancou) { falhas.push('não avançou na pergunta: ' + q); break; }
       await page.sleep(200);
@@ -74,7 +76,7 @@ export default async (page) => {
   await entrevista({
     'Como é a sua corrida': 'Nunca corri', 'objetivo na corrida': 'Começar a correr', 'quais dias': [dia(0), dia(2), dia(4)], 'melhor dia para o treino mais longo': 'Tanto faz',
     'tempo você tem por treino': 'Cerca de 45 minutos', 'mede as suas corridas': 'Relógio ou aplicativo com GPS', 'Onde você corre': 'Rua, parque ou calçadão',
-    anos: 41, peso: 92, altura: 168, 'lesão nos últimos': 'Não', 'dor em alguma': 'Nenhuma', condições: 'Nenhuma', sinais: 'Nenhum deles',
+    anos: 41, peso: 92, altura: 168, 'lesão nos últimos': 'Não', 'dor em alguma': 'Nenhuma', condições: 'Nenhuma', sinais: 'Nenhum deles', 'remédio de uso contínuo': 'Nenhum',
   });
   t = await texto();
   ok(t.includes('Montei um plano de 14 semanas') && t.includes('3 corridas por semana'), 'proposta: 14 semanas, 3 corridas por semana (começo mais lento pelo IMC)');
@@ -127,14 +129,25 @@ export default async (page) => {
   ok(await page.eval(`return !!document.querySelector('[aria-label="Tipo de corrida"] .chip.on') && !document.querySelector('[aria-label="Esforço percebido"] .chip.on');`), 'o formulário oferece o tipo da corrida, e o esforço começa sem nada marcado');
   await page.eval(`document.querySelector('[aria-label="Esforço percebido"] .chip:nth-child(5)').click(); return true;`); await page.sleep(100);
   await page.eval(`const sw = document.querySelector('input[aria-label="Senti dor"]'); sw.click(); return true;`); await page.sleep(200);
-  await page.eval(`const c = [...document.querySelectorAll('[aria-label="Onde doeu"] .chip')].find((e) => e.textContent === 'Joelho'); c.click(); return true;`); await page.sleep(150);
-  await page.click('Aumentar Intensidade da dor'); await page.sleep(100);
+  // duas regiões: joelho (dor em um ponto, 4) e coxa de trás (músculo dolorido, 2); o joelho não oferece "músculo"
+  const regiao = (nome) => page.eval(`const c = [...document.querySelectorAll('[aria-label="Onde doeu"] .chip')].find((e) => e.textContent === ${JSON.stringify(nome)}); c.click(); return true;`);
+  const tipoDor = (onde, rotulo) => page.eval(`const c = [...document.querySelectorAll('.dor-reg[data-onde="${onde}"] .chip')].find((e) => e.textContent === ${JSON.stringify(rotulo)}); if (!c) return false; c.click(); return true;`);
+  await regiao('Joelho'); await page.sleep(150); await regiao('Coxa (atrás)'); await page.sleep(150);
+  ok((await page.eval(`return document.querySelectorAll('.dor-reg').length;`)) === 2 && (await page.eval(`return !!document.getElementById('guia-dor-muscular');`)), 'marca duas regiões, cada uma com a sua intensidade, e mostra como reconhecer a dor muscular comum');
+  ok(!(await tipoDor('joelho', 'Músculo cansado ou dolorido')), 'no joelho não há a opção de dor muscular');
+  await page.eval(`const b = [...document.querySelectorAll('#registro .btn.primary')][0]; b.click(); return true;`); await page.sleep(300);
+  const aviso0 = await page.eval(`return [...document.querySelectorAll('.toast')].map((e) => e.textContent).join(' | ');`);
+  // (a corrida já pode estar gravada só com o tempo do cronômetro: o que não pode é gravar as dores sem o tipo)
+  const n0 = await estado('s.runs.length ? s.runs[0].dores.length : 0'); ok(n0 === 0 && /Diga como foi a dor/.test(aviso0), 'sem dizer como foi cada dor, não grava, e avisa: ' + aviso0);
+  await tipoDor('joelho', 'Dor em um ponto ou na articulação'); await tipoDor('coxa-tras', 'Músculo cansado ou dolorido');
+  await page.click('Aumentar Intensidade da dor: Joelho'); await page.sleep(100);
+  await page.click('Diminuir Intensidade da dor: Coxa (atrás)'); await page.sleep(100);
   await preencher('Observação', 'Primeira corrida <b>do plano</b>');
   await page.eval(`const b = [...document.querySelectorAll('#registro .btn.primary')][0]; b.click(); return true;`); await page.sleep(600);
   const r1 = await estado(`{ n: s.runs.length, r: s.runs[0], dores: s.dores.map((d) => [d.onde, d.nivel, d.tipo]) }`);
-  ok(r1.n === 1 && r1.r.distKm === 2.6 && r1.r.durMin === 28.5 && r1.r.pse === 5 && r1.r.dor && r1.r.dor.onde === 'joelho' && r1.r.dor.nivel === 4, 'corrida gravada com distância, tempo, esforço e dor: ' + JSON.stringify(r1.r).slice(0, 160));
+  ok(r1.n === 1 && r1.r.distKm === 2.6 && r1.r.durMin === 28.5 && r1.r.pse === 5 && JSON.stringify(r1.r.dores) === JSON.stringify([{ onde: 'joelho', nivel: 4, tipo: 'articular' }, { onde: 'coxa-tras', nivel: 2, tipo: 'muscular' }]), 'corrida gravada com distância, tempo, esforço e as duas dores: ' + JSON.stringify(r1.r).slice(0, 220));
+  ok(JSON.stringify(r1.dores) === JSON.stringify([['joelho', 4, 'articular'], ['coxa-tras', 2, 'muscular']]), 'cada dor vira um relato de dor, com o tipo certo: ' + JSON.stringify(r1.dores));
   ok(r1.r.tipo === 'corrida_caminhada' && r1.r.planejado.includes('Corrida e caminhada'), 'registro guarda o tipo e o que estava no plano');
-  ok(r1.dores.length === 1 && r1.dores[0][0] === 'joelho' && r1.dores[0][1] === 4, 'a dor da corrida virou um relato de dor para os dois treinadores');
   ok((await estado('s.run.cron')) === null, 'corrida registrada: o cronômetro do dia não fica guardado');
   t = await texto();
   ok(t.includes('registrada') && t.includes('2,6 km') && t.includes('Primeira corrida <b>do plano</b>') && !(await page.eval(`return !!document.querySelector('main b:not(.stat b)') && [...document.querySelectorAll('main b')].some((b) => b.textContent === 'do plano');`)), 'registro aparece na tela e o texto digitado não vira HTML');
@@ -149,7 +162,7 @@ export default async (page) => {
   ok(t.includes('O que ajustei no plano') && t.includes('Joelho:'), 'painel explica o ajuste feito por causa da dor no joelho');
   ok(t.includes('Sua evolução') && t.includes('corrida registrada') && t.includes('Constância'), 'evolução mostra volume, corridas e constância');
   ok(t.includes('Como foram os seus treinos') && (await page.eval(`return document.querySelectorAll('#como-foram .item').length === 1;`)), 'painel resume como foram os treinos, com o selo de cada corrida');
-  ok(t.includes('Dor que você contou') && t.includes('Feita'), 'cartão de dores e treino marcado como feito');
+  ok(t.includes('Dores que você contou') && t.includes('Feita'), 'cartão de dores e treino marcado como feito');
   await page.eval(`const d = [...document.querySelectorAll('details.pq summary')].find((e) => e.textContent === 'Por quê?'); d.click(); return true;`); await page.sleep(150);
   ok((await texto()).includes('Você contou dor de intensidade 4'), 'o motivo do ajuste abre ao toque, com as fontes');
   await foto('7-ajuste');
@@ -175,7 +188,7 @@ export default async (page) => {
   await page.reload(1800); await page.goto(B + '#/corrida', 900);
   t = await texto();
   const st2 = await estado(`{ runs: s.runs.length, dores: s.dores.length, aceito: !!s.run.aceitoEm, respostas: Object.keys(s.run.answers).length }`);
-  ok(st2.runs === 1 && st2.dores === 2 && st2.aceito && st2.respostas >= 12 && t.includes('Semana 1 de 14'), 'plano, registro e dores continuam depois de recarregar: ' + JSON.stringify(st2));
+  ok(st2.runs === 1 && st2.dores === 3 && st2.aceito && st2.respostas >= 12 && t.includes('Semana 1 de 14'), 'plano, registro e dores continuam depois de recarregar: ' + JSON.stringify(st2));
   // editar e apagar o registro
   await page.eval(`[...document.querySelectorAll('.item')].find((e) => e.textContent.includes('Feita')).click(); return true;`); await page.sleep(600);
   await page.click('Editar'); await page.sleep(300);
@@ -223,6 +236,10 @@ export default async (page) => {
   ok(t.includes('sem regularidade') && t.includes('3 corridas por semana') && t.includes('tempo e esforço') && !/\d:\d\d a \d\d?:\d\d por km/.test(t), 'corredor irregular: 3 corridas por semana, por tempo e esforço, com a explicação');
   // a opção aparece na entrevista
   await page.click('Mudar respostas'); await page.sleep(400);
+  // a entrevista começa pela idade e pelas perguntas de segurança (ordem do PAR-Q+); a experiência vem depois delas
+  ok((await page.eval(`return document.querySelector('.bubble h2').textContent;`)) === 'Quantos anos você tem?', 'a entrevista da corrida começa pela idade');
+  // (a pergunta dos remédios entrou depois: sem resposta guardada, a pessoa marca "Nenhum", a última opção)
+  for (let n = 0; n < 8 && !(await texto()).includes('Como é a sua corrida'); n++) { await page.eval(`const b = [...document.querySelectorAll('button.btn.primary')].find((e) => /Continuar/.test(e.textContent)); if (b && b.disabled) { const o = [...document.querySelectorAll('.opt')].pop(); if (o) o.click(); await new Promise((r) => setTimeout(r, 80)); } if (b && !b.disabled) b.click(); return true;`); await page.sleep(250); }
   ok((await texto()).includes('Corro de vez em quando, devagar'), 'a entrevista oferece a opção de quem corre de vez em quando, devagar');
   await page.reload(1200);
 
@@ -272,11 +289,11 @@ export default async (page) => {
   await page.click('Agora não');
   await page.click('Começar'); await page.sleep(400);
   await entrevista({
-    'Como é a sua corrida': 'Treino há anos, com bom volume', 'quilômetros você corre': 58, 'corrida mais longa': 24, 'maior prova': 'Maratona', 'sem correr': 'Estou correndo',
+    'Como é a sua corrida': 'Treino há anos, com bom volume', 'quilômetros você corre': 58, 'corrida mais longa': 24, 'completou uma maratona': 'Sim, já completei uma maratona', 'sem correr': 'Estou correndo',
     'objetivo na corrida': 'Preparar uma prova com data', 'Qual distância': 'Maratona', 'quantas semanas': 16, 'tempo em mente': 'Sim', 'tempo-alvo': 225,
     'resultado recente': 'Meia maratona', 'Em quanto tempo?': 104.5, 'quais dias': [dia(0), dia(1), dia(2), dia(3), dia(5), dia(6)], 'melhor dia para o treino mais longo': dia(6),
     'tempo você tem por treino': 'Até 1h30', 'treino mais longo': 'Até 3 horas', 'mede as suas corridas': 'Relógio ou aplicativo com GPS', 'Onde você corre': 'Rua, parque ou calçadão',
-    anos: 38, peso: 68, altura: 176, 'lesão nos últimos': 'Não', 'dor em alguma': 'Nenhuma', condições: 'Nenhuma', sinais: 'Nenhum deles',
+    anos: 38, peso: 68, altura: 176, 'lesão nos últimos': 'Não', 'dor em alguma': 'Nenhuma', condições: 'Nenhuma', sinais: 'Nenhum deles', 'remédio de uso contínuo': 'Nenhum',
   });
   t = await texto();
   ok(t.includes('Montei um plano de 16 semanas') && t.includes('maratona') && t.includes('6 corridas por semana') && t.includes('A prova fica em'), 'proposta de 16 semanas para a maratona, 6 corridas por semana, com a data da prova');

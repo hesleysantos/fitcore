@@ -8,6 +8,7 @@ import { MUSCULOS, GRUPOS, PADROES, CUIDADOS } from '../data/muscles.js';
 import { LOCAIS_DOR, TIPOS_DOR, DIAS_ATIVA, dorDeAlerta, doresAtivas } from './dor.js';
 import { planoDaSemana, planoDaSemanaEm } from './corrida.js';
 import { limparCombo, FOCOS, FORTALECIMENTOS } from './combinado.js';
+import { perguntaCondicoes, perguntaTriagem, perguntaRemedios, perguntaLiberado, condicoesDe, sinaisDe, remediosDe, soComSupervisao, respostasProtegidas } from './saude.js';
 
 // ---------- perguntas ----------
 export const PERGUNTAS = [
@@ -22,9 +23,14 @@ export const PERGUNTAS = [
       ['resistencia', 'Resistência e condicionamento', 'Aguentar mais esforço, cansar menos'],
     ],
   },
-  { k: 'idade', tipo: 'numero', titulo: 'Quantos anos você tem?', ajuda: 'A idade muda a dose e os cuidados do treino.', min: 10, max: 99, un: 'anos', padrao: 30 },
-  { k: 'peso', tipo: 'numero', titulo: 'Qual é o seu peso?', ajuda: 'Uma estimativa já serve.', min: 30, max: 250, un: 'kg', padrao: 70, passo: 0.5, dec: 1 },
-  { k: 'altura', tipo: 'numero', titulo: 'Qual é a sua altura?', ajuda: 'Em centímetros.', min: 120, max: 220, un: 'cm', padrao: 170 },
+  // `informar`: o valor de partida não vale como resposta — a pessoa ajusta ou confirma (um menor de 14 anos que só tocasse
+  // em Continuar receberia plano de adulto)
+  { k: 'idade', tipo: 'numero', informar: true, titulo: 'Quantos anos você tem?', ajuda: 'A idade muda a dose e os cuidados do treino.', min: 10, max: 99, un: 'anos', padrao: 30 },
+  // Perguntas de segurança logo no começo, na ordem do PAR-Q+ (ref parq2023): condições, sinais e remédios. As opções e a
+  // regra estão em logic/saude.js (as mesmas do Treinador de corrida).
+  perguntaCondicoes(),
+  perguntaTriagem(),
+  perguntaRemedios(),
   {
     k: 'experiencia', tipo: 'um', titulo: 'Qual é a sua experiência com musculação?',
     ajuda: 'Conte o tempo em que você treinou, mesmo que esteja parado agora.',
@@ -48,6 +54,11 @@ export const PERGUNTAS = [
       ['mais6m', 'Mais de 6 meses', ''],
     ],
   },
+  // Liberação médica: só aparece quando a triagem a pede (precisaLiberacao). "Um médico disse que só com supervisão" não tem
+  // saída por aqui: o treino é supervisionado (ver perfil).
+  perguntaLiberado((a) => precisaLiberacao(a) && !soComSupervisao(a), 'Um médico já liberou você para treinar musculação?'),
+  { k: 'peso', tipo: 'numero', informar: true, titulo: 'Qual é o seu peso?', ajuda: 'Uma estimativa já serve.', min: 30, max: 250, un: 'kg', padrao: 70, passo: 0.5, dec: 1 },
+  { k: 'altura', tipo: 'numero', informar: true, titulo: 'Qual é a sua altura?', ajuda: 'Em centímetros.', min: 120, max: 220, un: 'cm', padrao: 170 },
   {
     k: 'dias', tipo: 'um', titulo: 'Quantos dias por semana você consegue treinar?',
     ajuda: 'Seja realista: o melhor treino é o que você consegue manter.',
@@ -73,37 +84,18 @@ export const PERGUNTAS = [
     k: 'extras', tipo: 'varios', opcional: true, se: (a) => a.local === 'halteres' || a.local === 'corporal', titulo: 'Tem mais algum destes em casa?',
     ajuda: 'Só uso o que você marcar. Dá mais variedade ao treino.', nenhum: 'nenhum',
     op: [
-      ['nenhum', 'Nenhum destes', ''], ['elastico', 'Elástico ou mini band', ''], ['bola_suica', 'Bola suíça', ''],
+      ['elastico', 'Elástico ou mini band', ''], ['bola_suica', 'Bola suíça', ''],
       ['caixa', 'Degrau ou caixa firme', 'Que não escorrega nem vira'], ['banco_inclinado', 'Banco regulável', 'Com encosto que inclina'],
       ['barra_fixa', 'Barra fixa', 'De porta ou de parede, bem presa'], ['kettlebell', 'Kettlebell', ''], ['trx', 'Fita de suspensão', 'Presa em ponto firme'],
-      ['corda_pular', 'Corda de pular', ''], ['bicicleta', 'Bicicleta ergométrica', ''], ['esteira', 'Esteira', ''],
+      ['corda_pular', 'Corda de pular', ''], ['bicicleta', 'Bicicleta ergométrica', ''], ['esteira', 'Esteira', ''], ['nenhum', 'Nenhum destes', ''],
     ],
   },
   {
     k: 'limitacoes', tipo: 'varios', titulo: 'Você tem dor ou lesão em alguma região?',
     ajuda: 'Vou evitar ou adaptar os exercícios que sobrecarregam essa região.', nenhum: 'nenhuma',
     op: [
-      ['nenhuma', 'Nenhuma', ''], ['ombro', 'Ombro', ''], ['joelho', 'Joelho', ''], ['lombar', 'Lombar (parte baixa das costas)', ''],
-      ['cervical', 'Pescoço', ''], ['cotovelo', 'Cotovelo', ''], ['punho', 'Punho', ''], ['quadril', 'Quadril', ''], ['tornozelo', 'Tornozelo', ''],
-    ],
-  },
-  {
-    k: 'condicoes', tipo: 'varios', titulo: 'Alguma destas condições se aplica a você?', nenhum: 'nenhuma',
-    op: [
-      ['nenhuma', 'Nenhuma', ''], ['hipertensao', 'Pressão alta', ''], ['cardiaco', 'Problema no coração', ''],
-      ['diabetes', 'Diabetes', ''], ['gestante', 'Gestação', ''], ['cronica', 'Outra doença crônica', ''],
-    ],
-  },
-  {
-    k: 'triagem', tipo: 'varios', titulo: 'Antes de começar: você tem algum destes sinais?',
-    ajuda: 'São perguntas de segurança usadas antes de iniciar exercícios.', nenhum: 'nenhum',
-    op: [
-      ['nenhum', 'Nenhum deles', ''],
-      ['dor_peito', 'Dor ou pressão no peito, em repouso ou ao fazer esforço', ''],
-      ['tontura', 'Tontura com perda de equilíbrio ou desmaio nos últimos 12 meses', ''],
-      ['falta_ar', 'Falta de ar fora do normal ou palpitações', ''],
-      ['osseo', 'Problema nos ossos ou articulações que pode piorar com exercício', ''],
-      ['medico', 'Um médico já disse que só devo me exercitar com supervisão', ''],
+      ['ombro', 'Ombro', ''], ['joelho', 'Joelho', ''], ['lombar', 'Lombar (parte baixa das costas)', ''],
+      ['cervical', 'Pescoço', ''], ['cotovelo', 'Cotovelo', ''], ['punho', 'Punho', ''], ['quadril', 'Quadril', ''], ['tornozelo', 'Tornozelo', ''], ['nenhuma', 'Nenhuma', ''],
     ],
   },
   {
@@ -112,13 +104,19 @@ export const PERGUNTAS = [
     // Até dois músculos por vez — ver limiteFoco().
     k: 'foco', tipo: 'varios', max: 2, titulo: 'Quer dar prioridade a algum músculo?',
     ajuda: 'Os escolhidos ganham mais séries por semana; o resto do corpo continua sendo treinado.', nenhum: 'equilibrado',
+    // na tela: "Coxas inteiras" e "Braços inteiros" contam como dois e substituem os músculos que já incluem; o limite
+    // é o que cabe no tempo de treino da pessoa (limiteFoco), para ela não escolher algo que o plano não vai usar.
+    // (O id continua "pernas", para não invalidar respostas salvas; o nome dizia "Pernas" e sugeria glúteos e panturrilhas,
+    // que não entram.)
+    inclui: { pernas: ['quadriceps', 'posteriores'], bracos: ['biceps', 'triceps'] }, vale: { pernas: 2, bracos: 2 },
+    maxDe: (a) => limiteFoco(perfil(a)), unidade: ['músculo', 'músculos'],
     op: [
-      ['equilibrado', 'Não, quero um treino equilibrado', ''],
       ['quadriceps', 'Quadríceps', 'Frente da coxa'], ['posteriores', 'Posteriores de coxa', 'Parte de trás da coxa'], ['gluteos', 'Glúteos', ''],
       ['panturrilhas', 'Panturrilhas', ''], ['peito', 'Peito', ''], ['costas', 'Costas', 'Dorsais e meio das costas'], ['ombros', 'Ombros', ''],
       ['biceps', 'Bíceps', ''], ['triceps', 'Tríceps', ''], ['abdomen', 'Abdômen', ''],
       // áreas da versão anterior: continuam válidas e valem pelos dois músculos
-      ['pernas', 'Pernas inteiras', 'Vale por dois: quadríceps e posteriores'], ['bracos', 'Braços inteiros', 'Vale por dois: bíceps e tríceps'],
+      ['pernas', 'Coxas inteiras', 'Vale por dois: quadríceps e posteriores (sem glúteos e panturrilhas)'], ['bracos', 'Braços inteiros', 'Vale por dois: bíceps e tríceps'],
+      ['equilibrado', 'Não, quero um treino equilibrado', ''],
     ],
   },
 ];
@@ -150,11 +148,26 @@ const TEMPOS = [30, 45, 60, 75];
 // objetivos em que o aeróbico faz parte do plano (refs oms2020, swift2014, oppert2021)
 const AEROBIO = new Set(['emagrecimento', 'saude', 'resistencia']);
 
+// Quem não treina com regularidade há 3 meses ou mais conta como sedentário na triagem (Riebe 2015; no algoritmo do ACSM,
+// "se exercita" = 30 minutos de exercício moderado em 3 dias por semana nos últimos 3 meses — ref whitfield2017).
+const inativoDe = (a) => !a.experiencia || a.experiencia === 'nunca' || (FAIXA_DA_RESPOSTA[a.pausa] || 0) >= 3;
+// Liberação médica antes de qualquer treino (algoritmo do ACSM de 2015, lido inteiro em whitfield2017; PAR-Q+ 2023 — ref
+// parq2023): qualquer sinal da triagem; doença do coração, da circulação ou AVC; gestação e parto nos últimos 6 meses
+// (parq2023: conversar com o profissional de saúde antes; goom2019, deering2024 para o pós-parto); diabetes ou doença nos
+// rins em quem não se exercita. Quem já se exercita e tem diabetes ou doença nos rins segue em intensidade moderada sem
+// liberação (whitfield2017) — e o plano fica em 8 repetições ou mais (ver `moderado`).
+export function precisaLiberacao(respostas) {
+  const a = respostas && typeof respostas === 'object' ? respostas : {};
+  const cond = condicoesDe(a);
+  return sinaisDe(a).length > 0 || cond.includes('cardiaco') || cond.includes('gestante') || cond.includes('posparto') || (inativoDe(a) && (cond.includes('diabetes') || cond.includes('renal')));
+}
 export function perfil(respostas) {
   const a = respostas && typeof respostas === 'object' ? respostas : {};
   const idade = numero(a.idade, 30);
-  const cond = lista(a.condicoes, OPC.condicoes);
-  const tri = lista(a.triagem, OPC.triagem).filter((x) => x !== 'nenhum');
+  // condições já com o que os remédios dizem (insulina → diabetes; remédio contínuo sem condição → doença crônica): saude.js
+  const cond = condicoesDe(a);
+  const tri = sinaisDe(a);
+  const remedios = remediosDe(a);
   const lim = lista(a.limitacoes, OPC.limitacoes).filter((x) => x !== 'nenhuma');
   const nivelBase = a.experiencia === 'avancado' ? 3 : a.experiencia === 'intermediario' ? 2 : 1;
   const nunca = a.experiencia === 'nunca';
@@ -163,20 +176,31 @@ export function perfil(respostas) {
   const retorno = nunca ? 0 : FAIXA_DA_RESPOSTA[a.pausa] || 0;
   const nivel = retorno >= 4 ? 1 : retorno === 3 ? Math.max(1, nivelBase - 1) : nivelBase;
   // quem não treina com regularidade há 3 meses ou mais conta como sedentário na triagem (Riebe 2015)
-  const inativo = nunca || retorno >= 3;
+  const inativo = inativoDe(a);
   const idoso = idade >= 60;
   const jovem = idade < 18;
   const pressao = cond.includes('hipertensao') || cond.includes('cardiaco');
   // Diabetes: 2 a 3 sessões de força por semana em dias não consecutivos, 1 a 3 séries de 10 a 15 repetições, progredindo
   // para 8 a 10 (refs colberg2016, kanaley2022). Doença cardiovascular, metabólica ou renal em quem já é ativo: segue em
   // intensidade moderada sem liberação, mas precisa dela antes do esforço vigoroso (algoritmo de triagem do ACSM de 2015, lido inteiro em whitfield2017 — ref whitfield2017);
-  // nas diretrizes de diabetes, treino de força "vigoroso" é o de 6 a 8 repetições. Por isso, com diabetes ou outra doença
-  // crônica, o plano fica em 8 repetições ou mais e até 3 séries por exercício.
+  // nas diretrizes de diabetes, treino de força "vigoroso" é o de 6 a 8 repetições. Por isso, com diabetes, doença nos rins
+  // ou outra doença crônica, o plano fica em 8 repetições ou mais e até 3 séries por exercício.
   const diabetes = cond.includes('diabetes');
+  const renal = cond.includes('renal');
   const cronica = cond.includes('cronica');
   const gestante = cond.includes('gestante');
-  // triagem pré-participação (algoritmo do ACSM de 2015 — ref whitfield2017): sintomas, doença do coração, gestação, ou sedentário com doença crônica
-  const liberacao = tri.length > 0 || cond.includes('cardiaco') || gestante || (inativo && (cond.includes('diabetes') || cond.includes('cronica') || cond.includes('hipertensao')));
+  const posparto = cond.includes('posparto') && !gestante;
+  // Triagem pré-participação (algoritmo do ACSM de 2015 — ref whitfield2017; PAR-Q+ 2023 — ref parq2023).
+  //  • precisaLiberacao: sem liberação médica, NÃO há plano (a mesma regra do Treinador de corrida);
+  //  • supervisao: "um médico disse que só com supervisão" — nunca há plano sem supervisão, mesmo com liberação;
+  //  • liberacao: a triagem pede liberação (as situações acima, e também sedentário com pressão alta ou outra doença
+  //    crônica): o plano fica em cargas leves a moderadas. Nestes dois últimos casos (que o algoritmo não lista entre as
+  //    doenças que pedem liberação) o plano sai com o aviso e a confirmação de leitura, como antes.
+  const precisa = precisaLiberacao(a);
+  const supervisao = tri.includes('medico');
+  const liberado = a.liberado === 'sim';
+  const liberacao = precisa || (inativo && (cronica || cond.includes('hipertensao')));
+  const bloqueio = idade < 14 ? 'idade' : supervisao ? 'supervisao' : precisa && !liberado ? 'liberacao' : '';
   // enquanto não há liberação médica, e sempre com pressão alta ou gestação: cargas leves a moderadas (AHA 2024; ACOG 804 — refs aha2024, acog804)
   const cautela = pressao || gestante || liberacao;
   const conservador = idoso || jovem || cautela;
@@ -198,8 +222,9 @@ export function perfil(respostas) {
   const focoMax = limiteFoco({ dias, tempo, nivel, conservador });
   const foco = focoPedido.slice(0, focoMax);
   return {
-    objetivo, idade, nivel, nivelBase, retorno, inativo, nunca, idoso, jovem, pressao, gestante, liberacao, cautela, conservador, imc,
-    diabetes, cronica, moderado: diabetes || cronica,
+    objetivo, idade, nivel, nivelBase, retorno, inativo, nunca, idoso, jovem, pressao, gestante, posparto, liberacao, cautela, conservador, imc,
+    precisaLiberacao: precisa, supervisao, liberado, bloqueio, condicoes: cond, remedios,
+    diabetes, renal, cronica, moderado: diabetes || renal || cronica,
     // na gestação a dose segue a de saúde, qualquer que seja o objetivo marcado (ACOG 804 — ref acog804)
     objetivoDose: gestante ? 'saude' : objetivo,
     obeso: imc != null && imc >= 30,
@@ -208,7 +233,7 @@ export function perfil(respostas) {
     local: OPC.local.has(a.local) ? a.local : 'completa',
     // itens extras em casa: só valem para os locais de casa e só os que existem na pergunta
     extras: a.local === 'halteres' || a.local === 'corporal' ? lista(a.extras, OPC.extras).filter((x) => x !== 'nenhum' && Object.prototype.hasOwnProperty.call(EQUIPAMENTOS, x)) : [],
-    limitacoes: lim, cuidados, triagem: tri, foco, focoPedido, focoMax, bloqueado: idade < 14,
+    limitacoes: lim, cuidados, triagem: tri, foco, focoPedido, focoMax, bloqueado: !!bloqueio,
     // regiões das limitações, para reconhecer pela mecânica os exercícios que usam a região sem estarem marcados
     regioesLim: lim.map((x) => LIM_REGIAO[x]).filter(Boolean),
   };
@@ -1186,9 +1211,16 @@ function semanasRevisao(pf) { return pf.nivel === 1 ? 8 : 6; }
 // ---------- textos de orientação ----------
 function avisos(pf) {
   const a = [];
-  if (pf.liberacao) a.push({ tipo: 'danger', texto: 'Pelas suas respostas, procure um médico e peça liberação antes de começar ou aumentar a intensidade dos treinos. Até lá, o treino abaixo usa só cargas leves a moderadas. Se sentir dor ou pressão no peito, tontura, falta de ar fora do normal ou palpitações, pare o exercício e procure atendimento.' });
-  if (pf.gestante) a.push({ tipo: 'warn', texto: 'Gestação: treine só com liberação do seu obstetra. Deixei de fora exercícios deitada de barriga para cima ou de bruços, com impacto e com muita pressão no abdômen. Mantenha intensidade leve a moderada (dá para conversar durante o esforço). Nesta fase o treino é para manter a saúde, não para emagrecer nem bater recordes de carga.' });
+  const pare = 'Se sentir dor ou pressão no peito, tontura, falta de ar fora do normal ou palpitações, pare o exercício e procure atendimento.';
+  if (pf.precisaLiberacao) a.push({ tipo: 'danger', texto: `Você informou que tem liberação médica. Mesmo assim, o treino abaixo usa só cargas leves a moderadas. A liberação vale por 12 meses e deixa de valer se a sua saúde mudar. ${pare}` });
+  else if (pf.liberacao) a.push({ tipo: 'danger', texto: `Pelas suas respostas, procure um médico e peça liberação antes de começar ou aumentar a intensidade dos treinos. Até lá, o treino abaixo usa só cargas leves a moderadas. ${pare}` });
+  if (pf.gestante) a.push({ tipo: 'warn', texto: 'Gestação: siga a liberação e as orientações do seu obstetra. Deixei de fora exercícios deitada de barriga para cima ou de bruços, com impacto e com muita pressão no abdômen. Mantenha intensidade leve a moderada (dá para conversar durante o esforço). Nesta fase o treino é para manter a saúde, não para emagrecer nem bater recordes de carga.' });
+  // pós-parto (refs goom2019, deering2024): a volta é a que o médico ou a fisioterapeuta pélvica liberou
+  if (pf.posparto) a.push({ tipo: 'warn', texto: 'Pós-parto: siga o que o médico ou a fisioterapeuta pélvica orientou, comece leve e suba aos poucos. Se houver escape de urina, peso ou pressão na vagina ou dor pélvica, pare e procure uma fisioterapeuta pélvica.' });
   if (pf.pressao) a.push({ tipo: 'warn', texto: 'Pressão alta ou problema no coração: use cargas leves a moderadas com mais repetições, nunca prenda a respiração (solte o ar na fase de esforço) e não treine se a pressão estiver acima de 160 por 105 mmHg.' });
+  // remédio que segura o pulso (betabloqueador): o esforço do cardio vai pela fala, não pelos batimentos (refs sbc2020, pescatello2004)
+  if (pf.remedios.includes('pulso')) a.push({ tipo: 'warn', texto: 'Remédio que deixa o pulso mais baixo (como betabloqueador): os batimentos não servem para medir o esforço. No cardio, guie-se pela fala (dá para conversar) e pelo cansaço, e tenha cuidado extra no calor.' });
+  // insulina ou remédio que baixa o açúcar sem diabetes marcado não acontece (o remédio já conta como diabetes: saude.js)
   if (pf.retorno) {
     // Regras da volta: consenso CSCCa/NSCA de 2019 (ref caterisano2019), resumidas em logic/pausa.js. O corte de carga é
     // uma escolha conservadora do aplicativo; o consenso limita o volume, a frequência e o descanso.
@@ -1208,10 +1240,25 @@ function avisos(pf) {
   if (pf.idoso) a.push({ tipo: 'info', texto: 'Aos 60 anos ou mais, a musculação é especialmente indicada. Priorizei máquinas e exercícios estáveis, com progressão gradual e sem levar as séries até a falha.' });
   if (pf.limitacoes.length) a.push({ tipo: 'info', texto: 'Evitei os exercícios marcados como de cuidado para: ' + pf.limitacoes.map((x) => CUIDADOS[x] || x).join(', ') + '. Se algum movimento causar dor (não o cansaço normal do músculo), pare e troque o exercício. Dor que persiste precisa de avaliação profissional.' });
   if (pf.diabetes) a.push({ tipo: 'warn', texto: 'Diabetes: a musculação ajuda a controlar a glicose. O plano fica em 8 repetições ou mais, com a força em dias alternados; antes de treinos mais pesados, peça liberação médica. Se usa insulina ou sulfonilureia, meça a glicemia antes: abaixo de 90 mg/dL, coma 15 a 30 g de carboidrato; acima de 250 com cetonas, não treine. Com retinopatia ou doença nos rins, evite carga máxima, prender a respiração e ficar de cabeça baixa.' });
+  if (pf.renal) a.push({ tipo: 'warn', texto: 'Doença nos rins: quem já treina pode seguir em intensidade moderada; antes de treinos pesados, peça liberação médica. O plano fica em 8 repetições ou mais e até 3 séries por exercício. Com sintoma novo (dor no peito, falta de ar, inchaço, tontura), pare e procure um médico.' });
   if (pf.cronica) a.push({ tipo: 'info', texto: 'Doença crônica: quem já treina pode seguir em intensidade moderada; antes de treinos pesados, peça liberação médica. O plano fica em 8 repetições ou mais e até 3 séries por exercício. Com sintoma novo (dor no peito, falta de ar, tontura, palpitações), pare e procure um médico.' });
   if (pf.obeso) a.push({ tipo: 'info', texto: 'Para proteger as articulações no começo, prefira máquinas e cardio de baixo impacto (bicicleta, elíptico, caminhada).' });
   if (pf.baixoPeso && pf.objetivo === 'emagrecimento') a.push({ tipo: 'warn', texto: 'Seu peso já está abaixo da faixa considerada saudável para a sua altura. Não busque perder mais peso: use o treino para ganhar força e converse com um médico ou nutricionista.' });
   return a;
+}
+// Por que não há plano (para a tela explicar): [{ tipo, texto, refs }]. Lista vazia = há plano.
+export function avisosBloqueio(respostas) {
+  const pf = perfil(respostas);
+  if (pf.bloqueio === 'idade') return [{ tipo: 'danger', texto: 'Para menores de 14 anos, a musculação deve ser orientada presencialmente por um profissional de educação física, com liberação do pediatra. Não monto treinos pelo aplicativo nessa faixa de idade.', refs: ['faigenbaum2009', 'lloyd2014'] }];
+  if (pf.bloqueio === 'supervisao') return [{ tipo: 'danger', texto: 'Um médico já disse que você só deve se exercitar com supervisão. Então o treino tem de ser feito com um profissional ao seu lado, seguindo o que o médico indicou. Não monto treino para fazer sozinho, mesmo com liberação.', refs: ['parq2023'] }];
+  if (pf.bloqueio !== 'liberacao') return [];
+  const out = [];
+  if (pf.triagem.length) out.push({ tipo: 'danger', texto: 'Você marcou um sinal de alerta. Com dor ou pressão no peito, falta de ar com pouco esforço, tontura ou desmaio, palpitações, inchaço nos tornozelos, dor na perna ao caminhar ou cansaço fora do comum, a recomendação é procurar um médico antes de qualquer exercício. Não monto o treino até você ter essa liberação.', refs: ['whitfield2017', 'parq2023'] });
+  if (pf.gestante) out.push({ tipo: 'danger', texto: 'Na gestação, o exercício é recomendado, mas depende de avaliação: converse com o seu obstetra antes de começar ou de mudar os treinos. Com a liberação, refaça a entrevista: o treino sai adaptado para a gestação.', refs: ['parq2023', 'acog804'] });
+  if (pf.posparto) out.push({ tipo: 'danger', texto: 'Depois do parto, a volta à musculação começa com a avaliação de um médico ou fisioterapeuta pélvica, que olha o assoalho pélvico e o abdômen. Com a liberação, refaça a entrevista.', refs: ['goom2019', 'deering2024'] });
+  if (pf.condicoes.includes('cardiaco')) out.push({ tipo: 'danger', texto: 'Com doença do coração, da circulação ou AVC, a recomendação é ter liberação médica antes de começar a musculação. Com a liberação, refaça a entrevista.', refs: ['whitfield2017'] });
+  if (pf.inativo && (pf.diabetes || pf.renal)) out.push({ tipo: 'danger', texto: 'Quem tem diabetes ou doença nos rins e não se exercita com regularidade precisa de liberação médica antes de começar. Com a liberação, refaça a entrevista.', refs: ['whitfield2017'] });
+  return out;
 }
 function orientacoes(pf, estadoCardio = 'ok', focoCorrida = '') {
   const o = [];
@@ -1461,13 +1508,14 @@ export function efeitoDoFoco(foco, st) {
 // pelo menos um dia entre eles. Sem dia livre para o segundo, fica um treino por semana (dose de manutenção).
 const FORT_A = [S('agachar', { main: 1 }), S(['dobradica_quadril', 'extensao_quadril'], { main: 1, ordem: 1 }), S('afundo'), S('flexao_plantar'), S('abducao'), S('anti_extensao', { core: true })];
 const FORT_B = [S(['afundo', 'agachar'], { main: 1, ordem: 1 }), S(['extensao_quadril', 'dobradica_quadril'], { main: 1, ordem: 1 }), S(['flexao_joelho', 'extensao_quadril']), S('flexao_plantar', { alt: 1 }), S(['abducao', 'aducao'], { alt: 1 }), S(['rotacao', 'anti_extensao', 'flexao_tronco'], { core: true })];
-// respostas para o perfil: as da corrida (idade, limitações, condições, triagem) mais as do Treinador, se existirem
-function respostasDoCorredor(st, local) {
+// Respostas para o perfil: as da corrida (idade, limitações) mais as do Treinador, se existirem. Condições, sinais da
+// triagem, remédios e a liberação médica vêm da união das entrevistas (logic/saude.js), pelo lado mais protegido: a
+// liberação só vale dentro dos 12 meses e se foi dada sabendo de tudo o que as entrevistas dizem. `hoje` = 'AAAA-MM-DD'.
+function respostasDoCorredor(st, local, hoje = '') {
   const t = st.trainer && respostasCompletas(st.trainer.answers || {}) ? st.trainer.answers : null;
-  const r = st.run && st.run.answers && typeof st.run.answers === 'object' ? st.run.answers : {};
+  const r = respostasProtegidas('corrida', st, hoje).respostas;
   const num = (k, padrao) => (typeof r[k] === 'number' && Number.isFinite(r[k]) ? r[k] : t && typeof t[k] === 'number' ? t[k] : padrao);
   const LIM = { joelho: 'joelho', canela: 'tornozelo', aquiles: 'tornozelo', pe: 'tornozelo', quadril: 'quadril', lombar: 'lombar' };
-  const COND = { hipertensao: 'hipertensao', cardiaco: 'cardiaco', diabetes: 'diabetes', gestante: 'gestante', cronica: 'cronica', renal: 'cronica', posparto: 'cronica' };
   const junta = (a, b, mapa, nenhum) => { const out = new Set(); for (const x of Array.isArray(a) ? a : []) if (tem(mapa, x)) out.add(mapa[x]); for (const x of Array.isArray(b) ? b : []) if (typeof x === 'string' && x !== nenhum) out.add(x); return out.size ? [...out] : [nenhum]; };
   const emCasa = local === 'casa';
   const casaDoTreinador = t && (t.local === 'halteres' || t.local === 'corporal');
@@ -1476,8 +1524,10 @@ function respostasDoCorredor(st, local) {
     experiencia: t ? t.experiencia : 'nunca', pausa: t ? t.pausa : undefined, dias: '2', tempo: '30',
     local: emCasa ? (casaDoTreinador ? t.local : 'corporal') : st.gym && st.gym.all === false ? 'minha' : 'completa',
     extras: emCasa && casaDoTreinador ? t.extras : undefined,
-    limitacoes: junta(r.limitacoes, t ? t.limitacoes : [], LIM, 'nenhuma'), condicoes: junta(r.condicoes, t ? t.condicoes : [], COND, 'nenhuma'),
-    triagem: junta([], [...(Array.isArray(r.triagem) ? r.triagem : []), ...(t && Array.isArray(t.triagem) ? t.triagem : [])], {}, 'nenhum'), foco: ['equilibrado'],
+    limitacoes: junta(r.limitacoes, t ? t.limitacoes : [], LIM, 'nenhuma'),
+    condicoes: condicoesDe(r).length ? condicoesDe(r) : ['nenhuma'], triagem: sinaisDe(r).length ? sinaisDe(r) : ['nenhum'], remedios: remediosDe(r),
+    // a liberação para correr ou a liberação para a musculação (as duas valem para o fortalecimento)
+    liberado: r.liberado === 'sim' || (t && respostasProtegidas('treinador', st, hoje).respostas.liberado === 'sim') ? 'sim' : r.liberado, foco: ['equilibrado'],
   };
 }
 function doseDoFortalecimento(ex, slot, pf, emCasa) {
@@ -1503,11 +1553,13 @@ export function planoFortalecimento(st, opcoes = {}) {
   const emCasa = o.local === 'casa';
   const hoje = typeof o.hoje === 'string' ? o.hoje : '';
   const run = st.run && st.run.answers && typeof st.run.answers === 'object' ? st.run.answers : {};
-  const respostas = respostasDoCorredor(st, emCasa ? 'casa' : 'academia');
+  const respostas = respostasDoCorredor(st, emCasa ? 'casa' : 'academia', hoje);
   const pf = perfil(respostas);
   // Antes dos 14 anos o treino de força é seguro e faz bem, mas com supervisão qualificada e ensino da técnica (refs
   // faigenbaum2009, lloyd2014): sem um profissional ao lado, o aplicativo não monta (a mesma regra do Treinador).
-  if (pf.bloqueado) return semPlanoDeFortalecimento('idade', 'Antes dos 14 anos, o treino de força faz bem, mas precisa de um profissional ao lado para ensinar e corrigir os movimentos. Por isso o aplicativo não monta esse treino.', ['faigenbaum2009', 'lloyd2014']);
+  if (pf.bloqueio === 'idade') return semPlanoDeFortalecimento('idade', 'Antes dos 14 anos, o treino de força faz bem, mas precisa de um profissional ao lado para ensinar e corrigir os movimentos. Por isso o aplicativo não monta esse treino.', ['faigenbaum2009', 'lloyd2014']);
+  // a triagem pede liberação médica (ou supervisão) e ela não está dada: nada de plano (a mesma regra do Treinador)
+  if (pf.bloqueado) { const b = avisosBloqueio(respostas); return semPlanoDeFortalecimento('saude', b.map((x) => x.texto).join(' '), [...new Set(b.flatMap((x) => x.refs))]); }
   // Parto nos últimos 6 meses: a volta ao exercício é avaliada por médico ou fisioterapeuta pélvica (refs goom2019,
   // deering2024, as mesmas do plano de corrida). Sem essa avaliação, o aplicativo não escolhe exercícios de força e de
   // abdômen para essa fase.
@@ -1579,7 +1631,8 @@ export function planoFortalecimento(st, opcoes = {}) {
     if (nomes.length) avisos.push({ tipo: 'info', lim: r, texto: textoDaLimitacao(r, nomes) });
   }
   for (const x of avisosDeDor(dores, pf)) avisos.push(x);
-  if (pf.liberacao) avisos.push({ tipo: 'danger', texto: 'Pelas suas respostas, procure um médico e peça liberação antes de começar. Até lá, use só cargas leves.' });
+  if (pf.precisaLiberacao) avisos.push({ tipo: 'danger', texto: 'Você informou que tem liberação médica. Mesmo assim, use só cargas leves a moderadas e pare se sentir dor ou pressão no peito, tontura, falta de ar fora do normal ou palpitações.' });
+  else if (pf.liberacao) avisos.push({ tipo: 'danger', texto: 'Pelas suas respostas, procure um médico e peça liberação antes de começar. Até lá, use só cargas leves.' });
   const nomes = escolhidos.slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((w) => DIAS_NOME[w]).join(' e ');
   return {
     nome: 'Fortalecimento para corrida', dias: final, agenda,
@@ -1891,12 +1944,16 @@ export function doresDoTreino(st, hoje, respostas = null) {
 }
 // Respostas para os avisos de dor no treino em andamento: as do Treinador, se completas; senão, um perfil equivalente
 // montado com as respostas da corrida (idade, gestação, condições, limitações); sem nenhuma das duas, null.
-export function respostasParaAvisos(st) {
+// As condições, sinais e remédios marcados em qualquer entrevista entram pelo lado mais protegido (logic/saude.js).
+export function respostasParaAvisos(st, hoje = '') {
   if (!st || typeof st !== 'object') return null;
-  if (st.trainer && respostasCompletas(st.trainer.answers || {})) return st.trainer.answers;
+  if (st.trainer && respostasCompletas(st.trainer.answers || {})) return respostasProtegidas('treinador', st, hoje).respostas;
   const r = st.run && st.run.answers && typeof st.run.answers === 'object' ? st.run.answers : null;
-  return r && Object.keys(r).length ? respostasDoCorredor(st, 'academia') : null;
+  return r && Object.keys(r).length ? respostasDoCorredor(st, 'academia', hoje) : null;
 }
+// Respostas do Treinador para montar o plano, com a proteção das outras entrevistas: { respostas, avisos, liberacao,
+// renovar, deFora } (ver respostasProtegidas em logic/saude.js).
+export const saudeDoTreinador = (st, hoje) => respostasProtegidas('treinador', st, hoje);
 
 // Orientação curta sobre uma dor, para o cartão de dores: { classe, alerta, texto, refs }. null se a dor é inválida.
 export function orientacaoDaDor(dor, respostas) {

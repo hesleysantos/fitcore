@@ -3,12 +3,12 @@
 const B = 'http://localhost:5173/';
 const PERFIS = {
   1: {
-    treino: { 'principal objetivo': 'Ganhar massa muscular', experiência: 'Menos de 6 meses de treino', 'sem treinar': 'De 1 a 3 meses', 'dias por semana': '3 dias', 'tempo você tem': 'Cerca de 1 hora', 'Onde você vai treinar': 'Academia completa', 'dor ou lesão': 'Nenhuma', condições: 'Nenhuma', sinais: 'Nenhum deles', 'prioridade a algum músculo': 'Não, quero um treino equilibrado' },
-    nutri: { 'objetivo com a alimentação': 'Ganhar massa muscular', 'alimentos mais baratos': 'Sim, priorize os mais baratos', 'sexo biológico': 'Masculino', 'dia a dia': 'Fico sentado a maior parte do dia', 'dias por semana você treina': '3 dias', horário: 'À noite', refeições: '4 refeições', 'restrição alimentar': 'Nenhuma', situações: 'Nenhuma' },
+    treino: { 'principal objetivo': 'Ganhar massa muscular', experiência: 'Menos de 6 meses de treino', 'sem treinar': 'De 1 a 3 meses', 'dias por semana': '3 dias', 'tempo você tem': 'Cerca de 1 hora', 'Onde você vai treinar': 'Academia completa', 'dor ou lesão': 'Nenhuma', condições: 'Nenhuma', sinais: 'Nenhum deles', 'remédio de uso contínuo': 'Nenhum', 'prioridade a algum músculo': 'Não, quero um treino equilibrado' },
+    nutri: { 'objetivo com a alimentação': 'Ganhar massa muscular', 'alimentos mais baratos': 'Sim, priorize os mais baratos', 'sexo biológico': 'Masculino', 'dia a dia': 'Fico sentado a maior parte do dia', 'dias por semana você treina': '3 dias', horário: 'À noite', refeições: '4 refeições', 'alergia a algum': 'Nenhuma', 'restrição alimentar': 'Nenhuma', situações: 'Nenhuma' },
   },
   2: {
-    treino: { 'principal objetivo': 'Emagrecer', experiência: 'Nunca treinei', 'dias por semana': '2 dias', 'tempo você tem': 'Cerca de 30 minutos', 'Onde você vai treinar': 'Em casa, com halteres e banco', 'mais algum destes': 'Nenhum destes', 'dor ou lesão': 'Joelho', condições: 'Pressão alta', sinais: 'Nenhum deles', 'prioridade a algum músculo': 'Glúteos' },
-    nutri: { 'objetivo com a alimentação': 'Emagrecer', 'alimentos mais baratos': 'Tanto faz', 'sexo biológico': 'Feminino', 'dia a dia': 'Fico em pé ou caminho parte do dia', 'dias por semana você treina': '1 a 2 dias', horário: 'De manhã', refeições: '3 refeições', 'restrição alimentar': 'Vegetariano', situações: 'Pressão alta' },
+    treino: { 'principal objetivo': 'Emagrecer', experiência: 'Nunca treinei', 'dias por semana': '2 dias', 'tempo você tem': 'Cerca de 30 minutos', 'Onde você vai treinar': 'Em casa, com halteres e banco', 'mais algum destes': 'Nenhum destes', 'dor ou lesão': 'Joelho', condições: 'Pressão alta', sinais: 'Nenhum deles', 'remédio de uso contínuo': 'Nenhum', 'prioridade a algum músculo': 'Glúteos' },
+    nutri: { 'objetivo com a alimentação': 'Emagrecer', 'alimentos mais baratos': 'Tanto faz', 'sexo biológico': 'Feminino', 'dia a dia': 'Fico em pé ou caminho parte do dia', 'dias por semana você treina': '1 a 2 dias', horário: 'De manhã', refeições: '3 refeições', 'alergia a algum': 'Nenhuma', 'restrição alimentar': 'Vegetariano', situações: 'Pressão alta' },
   },
 };
 
@@ -29,6 +29,8 @@ export default async (page) => {
         if (!achou) falhas.push('opção não encontrada: ' + q + ' -> ' + respostas[chave]);
       }
       await page.sleep(120);
+      // número com o valor de partida (idade, peso, altura): a pessoa confirma tocando em "Está certo"
+      await page.eval(`const c = [...document.querySelectorAll('[data-informar] button')].find((e) => e.textContent.trim() === 'Está certo'); if (c) c.click(); return !!c;`);
       const avancou = await page.eval(`const b = [...document.querySelectorAll('button.btn.primary')].find((e) => /Continuar|Concluir/.test(e.textContent)); if (!b || b.disabled) return false; b.click(); return true;`);
       if (!avancou) { falhas.push('não avançou na pergunta: ' + q); break; }
       await page.sleep(250);
@@ -115,10 +117,15 @@ export default async (page) => {
   await page.click('Começar'); await page.sleep(500);
   await entrevista(perfil.nutri);
   t = await texto();
-  ok(/kcal/.test(t) && (t.includes('Suas metas diárias') || t.includes('Como comer bem')), 'Nutricionista mostrou o resultado');
-  const refeicoes = await page.eval(`return document.querySelectorAll('details.refeicao').length;`);
-  console.log('     refeições no cardápio de exemplo: ' + refeicoes + ' · avisos: ' + (await page.eval(`return [...document.querySelectorAll('.note.warn, .note.danger')].map((n) => n.innerText.trim().slice(0, 90)).join(' | ');`) || 'nenhum'));
-  if (refeicoes) { await page.eval(`document.querySelector('details.refeicao summary').click(); return true;`); await page.sleep(200); ok(await page.eval(`return document.querySelector('details.refeicao').open && document.querySelectorAll('details.refeicao[open] .kv').length > 1;`), 'refeição abre e mostra as quantidades'); }
+  ok(/kcal/.test(t) && t.includes('Cardápio de hoje') && !!(await page.eval(`return document.getElementById('hoje-nutri');`)), 'Nutricionista mostrou o resultado: o dia de hoje e o cardápio');
+  const refeicoes = await page.eval(`return document.querySelectorAll('.card.refeicao').length;`);
+  console.log('     refeições no cardápio de hoje: ' + refeicoes + ' · avisos: ' + (await page.eval(`return [...document.querySelectorAll('.note.warn, .note.danger')].map((n) => n.innerText.trim().slice(0, 90)).join(' | ');`) || 'nenhum'));
+  ok(refeicoes === Number(perfil.nutri.refeições.slice(0, 1)), `o cardápio tem as ${perfil.nutri.refeições.slice(0, 1)} refeições pedidas`);
+  ok(await page.eval(`return [...document.querySelectorAll('.card.refeicao')].every((c) => c.querySelectorAll('.itens .kv').length > 1 && /\\d+ g/.test(c.querySelector('.itens').textContent));`), 'cada refeição já mostra os alimentos e as quantidades, sem precisar abrir');
+  // o dia de hoje: com o treino aceito (3 dias por semana), é dia de treino ou de descanso, nunca os dois
+  const hojeNutri = await page.eval(`const c = document.getElementById('hoje-nutri'); return { titulo: c.querySelector('h2').textContent, tipo: c.dataset.treino, antes: !!c.querySelector('#hoje-treino') };`);
+  ok(hojeNutri.tipo === 'sim' ? hojeNutri.titulo.startsWith('Hoje: musculação') && hojeNutri.antes : hojeNutri.titulo === 'Hoje: descanso' && !hojeNutri.antes && !/antes do treino/i.test(await page.eval(`return document.getElementById('hoje-nutri').textContent;`)), `bloco do dia coerente: ${hojeNutri.titulo}`);
+  ok(await page.eval(`const pos = (s) => document.querySelector(s).getBoundingClientRect().top; return pos('#hoje-nutri') < pos('.card.refeicao') && pos('.card.refeicao') < pos('#metas') && pos('#metas') < pos('#diario-dias');`), 'ordem da tela: hoje → cardápio → metas em detalhe → diário dos outros dias');
 
   console.log('7. Ajustes e backup');
   await page.goto(B + '#ajustes', 900);

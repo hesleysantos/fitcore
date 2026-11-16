@@ -7,6 +7,10 @@
 .cron.caminhar .cron-fase, .cron.trote .cron-fase, .cron.aquecer .cron-fase, .cron.desaquecer .cron-fase { color: var(--ok); }
 .blocos { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 6px; font-size: 0.94rem; }
 .blocos li + li { margin-top: 0; }
+/* proposta: dias da semana 1 que já passaram; registro: uma linha por região dolorida */
+#corrida-semana1 .row.passou { opacity: 0.55; }
+.dor-reg { padding: 12px; background: var(--surface-2); }
+#guia-dor-muscular ul { margin: 4px 0 8px; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 3px; }
 .dia-wd { width: 40px; flex: none; text-align: center; font-weight: 750; font-size: 0.78rem; color: var(--muted); text-transform: uppercase; }
 .item.hoje { border-color: var(--accent); }
 .item .s { white-space: normal; }

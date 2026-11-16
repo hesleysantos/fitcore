@@ -1,30 +1,65 @@
 // Entrevista em formato de conversa, usada pelo Treinador e pela Nutricionista.
-import { h, btn, icon, stepper, note, sheet, toast } from '../ui.js';
+import { h, btn, icon, stepper, note, sheet, toast, dateKey } from '../ui.js';
+import { estadoLiberacao, textoDaLiberacao } from '../logic/saude.js';
 import { state, update } from '../store.js';
 import { go, refresh } from '../router.js';
 import { situacao, alinhar, manterDiferentes, nutriPara, treinoPara } from '../logic/objetivos.js';
 import { ROTULO as ROT_T } from '../logic/trainer.js';
 import { ROTULO as ROT_N } from '../logic/nutrition.js';
+import { marcar, limiteDe, somaDe, dicaVarios } from '../logic/escolhas.js';
 const FAQ_INICIAL = 4;
 import { REFS, buscarFaq } from '../data/knowledge.js';
 
-export function interview({ perguntas, respostas, onDone, onCancel, avatar = 'coach', nutri = false, notas = null }) {
+// `base` (opcional): as respostas guardadas desta entrevista, quando `respostas` traz também o que veio de outras
+// entrevistas. Serve para saber se as condições ou a triagem mudaram (aí a liberação médica dada antes deixa de valer).
+// Regras de saúde das perguntas (logic/saude.js):
+//  • `informar` (pergunta de número): o valor de partida não vale como resposta; a pessoa ajusta ou toca em “Está certo”.
+//    Respostas já guardadas, ou trazidas de outra entrevista, contam como informadas;
+//  • `limpa: [chaves]`: se a resposta ficar diferente da guardada, as chaves listadas (a liberação) são apagadas;
+//  • `dataEm`: a resposta "sim" guarda a data do dia; liberação de mais de 12 meses (ou sem data) é pedida de novo.
+export function interview({ perguntas, respostas, onDone, onCancel, avatar = 'coach', nutri = false, notas = null, base = null }) {
   const a = { ...respostas };
-  let i = 0;
-  // começa na primeira pergunta ainda não respondida
+  const guardadas = base && typeof base === 'object' ? base : respostas || {};
+  const hoje = dateKey(new Date());
+  // números que a pessoa já informou (guardados ou trazidos de outra entrevista)
+  const informados = new Set(perguntas.filter((q) => q.tipo === 'numero' && typeof a[q.k] === 'number').map((q) => q.k));
+  // liberação: vencida ou sem data, a resposta é pedida de novo; com condições ou triagem diferentes das guardadas, também
+  const mesmo = (x, y) => { const l = (v) => (Array.isArray(v) ? [...new Set(v)].sort().join('|') : ''); return l(x) === l(y); };
+  const conferirLiberacao = () => {
+    for (const q of perguntas) {
+      if (!Array.isArray(q.limpa)) continue;
+      const igual = mesmo(a[q.k], guardadas[q.k]);
+      for (const k of q.limpa) {
+        const ql = perguntas.find((x) => x.k === k);
+        if (!igual) { delete a[k]; if (ql && ql.dataEm) delete a[ql.dataEm]; }
+      }
+    }
+    // tudo igual ao guardado: volta a liberação guardada (se ainda vale)
+    if (perguntas.filter((q) => Array.isArray(q.limpa)).every((q) => mesmo(a[q.k], guardadas[q.k]))) {
+      for (const q of perguntas) if (q.dataEm && guardadas[q.k] != null && a[q.k] == null) { a[q.k] = guardadas[q.k]; if (guardadas[q.dataEm]) a[q.dataEm] = guardadas[q.dataEm]; }
+    }
+    for (const q of perguntas) if (q.dataEm && a[q.k] === 'sim' && estadoLiberacao({ liberado: a[q.k], liberadoEm: a[q.dataEm] }, hoje) !== 'valida') { delete a[q.k]; delete a[q.dataEm]; }
+  };
+  conferirLiberacao();
   const valida = (q) => {
     const v = a[q.k];
+    if (q.tipo === 'numero' && q.informar && !informados.has(q.k)) return false;
     if (q.tipo === 'numero') return typeof v === 'number' && v >= q.min && v <= q.max;
-    if (q.tipo === 'um') return typeof v === 'string' && q.op.some((o) => o[0] === v);
-    return Array.isArray(v) && v.length > 0;
+    if (q.tipo === 'um') return typeof v === 'string' && q.op.some((o) => o[0] === v && (typeof o[3] !== 'function' || o[3](a)));
+    if (!Array.isArray(v) || !v.length) return false;
+    // respostas antigas (ou de antes de mudar o tempo de treino) que passam do limite: a pessoa ajusta antes de seguir
+    const max = limiteDe(q, a);
+    return !max || somaDe(q, v) <= max;
   };
   const root = h('div', { class: 'col gap-l' });
+  // começa sempre na primeira pergunta: a pessoa revê tudo (as respostas guardadas já vêm marcadas)
+  let i = 0;
 
   function draw() {
     while (root.firstChild) root.removeChild(root.firstChild);
     // perguntas com condição (campo `se`) só aparecem quando ela vale; a resposta de uma pergunta escondida é descartada
     const visiveis = () => perguntas.filter((x) => !x.se || x.se(a));
-    for (const x of perguntas) if (x.se && !x.se(a)) delete a[x.k];
+    for (const x of perguntas) if (x.se && !x.se(a)) { delete a[x.k]; if (x.dataEm) delete a[x.dataEm]; }
     const vis = visiveis();
     if (i >= vis.length) i = vis.length - 1;
     const q = vis[i];
@@ -35,7 +70,12 @@ export function interview({ perguntas, respostas, onDone, onCancel, avatar = 'co
       // a resposta dada agora pode mostrar ou esconder a pergunta seguinte
       const v2 = visiveis();
       const p = v2.indexOf(q);
-      if (p === v2.length - 1) { for (const x of perguntas) if (x.se && !x.se(a)) delete a[x.k]; onDone(a); } else { i = p + 1; draw(); window.scrollTo(0, 0); }
+      if (p === v2.length - 1) {
+        for (const x of perguntas) if (x.se && !x.se(a)) { delete a[x.k]; if (x.dataEm) delete a[x.dataEm]; }
+        // a data da liberação só existe com a resposta "sim"
+        for (const x of perguntas) if (x.dataEm) { if (a[x.k] !== 'sim') delete a[x.dataEm]; else if (!a[x.dataEm]) a[x.dataEm] = hoje; }
+        onDone(a);
+      } else { i = p + 1; draw(); window.scrollTo(0, 0); }
     }, 'primary lg grow');
     const sync = () => { next.disabled = !valida(q); };
     if (q.tipo === 'numero' && q.formato === 'tempo') {
@@ -43,26 +83,33 @@ export function interview({ perguntas, respostas, onDone, onCancel, avatar = 'co
       root.appendChild(h('div', { class: 'card center col' }, tempoHMS({ minutos: a[q.k], min: q.min, max: q.max, rotulo: q.titulo, onChange: (v) => { a[q.k] = v; sync(); } })));
     } else if (q.tipo === 'numero') {
       if (typeof a[q.k] !== 'number') a[q.k] = q.padrao;
-      root.appendChild(h('div', { class: 'card center col' }, stepper({ value: a[q.k], min: q.min, max: q.max, step: q.passo || 1, decimals: q.dec || 0, label: q.titulo, onChange: (v) => { a[q.k] = v; sync(); } }), h('div', { class: 'muted', text: q.un })));
+      // número que ainda não foi informado: ajustar o valor ou tocar em "Está certo" libera o Continuar
+      const confirma = q.informar && !informados.has(q.k)
+        ? h('div', { class: 'col gap-s center', 'data-informar': q.k }, h('p', { class: 'small muted', text: 'Ajuste o valor ou toque em “Está certo” para continuar.' }),
+          btn('Está certo', () => { informados.add(q.k); confirma.remove(); sync(); }, 'ghost sm', 'check'))
+        : null;
+      root.appendChild(h('div', { class: 'card center col' }, stepper({ value: a[q.k], min: q.min, max: q.max, step: q.passo || 1, decimals: q.dec || 0, label: q.titulo, onChange: (v) => { a[q.k] = v; informados.add(q.k); if (confirma) confirma.remove(); sync(); } }), h('div', { class: 'muted', text: q.un }), confirma));
     } else {
       const opts = h('div', { class: 'opts', role: q.tipo === 'um' ? 'radiogroup' : 'group', 'aria-label': q.titulo });
       const drawOpts = () => {
         while (opts.firstChild) opts.removeChild(opts.firstChild);
-        for (const [val, titulo, sub] of q.op) {
+        for (const [val, titulo, sub, mostrar] of q.op) {
+          // opção com condição (4º item): só aparece quando ela vale
+          if (typeof mostrar === 'function' && !mostrar(a)) continue;
           const on = q.tipo === 'um' ? a[q.k] === val : Array.isArray(a[q.k]) && a[q.k].includes(val);
           opts.appendChild(h('button', {
             class: 'opt' + (on ? ' on' : ''), type: 'button', role: q.tipo === 'um' ? 'radio' : 'checkbox', 'aria-checked': on ? 'true' : 'false',
             onClick: () => {
-              if (q.tipo === 'um') a[q.k] = val;
-              else {
-                let cur = Array.isArray(a[q.k]) ? a[q.k].slice() : [];
-                if (val === q.nenhum) cur = [val];
-                else {
-                  cur = cur.filter((x) => x !== q.nenhum);
-                  if (cur.includes(val)) cur = cur.filter((x) => x !== val);
-                  else { cur.push(val); if (q.max && cur.length > q.max) cur.shift(); }
-                }
-                a[q.k] = cur;
+              if (q.tipo === 'um') {
+                a[q.k] = val;
+                // liberação médica dada agora: vale a partir de hoje
+                if (q.dataEm) { if (val === 'sim') a[q.dataEm] = hoje; else delete a[q.dataEm]; }
+              } else {
+                const r = marcar(q, a, val);
+                a[q.k] = r.valor;
+                if (r.aviso) toast(r.aviso);
+                // condições, sinais ou remédios diferentes dos guardados: a liberação dada antes deixa de valer
+                if (Array.isArray(q.limpa)) conferirLiberacao();
               }
               drawOpts(); sync();
             },
@@ -71,7 +118,7 @@ export function interview({ perguntas, respostas, onDone, onCancel, avatar = 'co
       };
       drawOpts();
       root.appendChild(opts);
-      if (q.tipo === 'varios') root.appendChild(h('p', { class: 'tiny muted', text: q.max ? `Você pode marcar até ${q.max}.` : 'Você pode marcar mais de uma opção.' }));
+      if (q.tipo === 'varios') root.appendChild(h('p', { class: 'tiny muted', id: 'dica-varios', text: dicaVarios(q, a) }));
     }
     root.appendChild(h('div', { class: 'row' },
       btn(i === 0 ? 'Cancelar' : 'Voltar', () => { if (i === 0) onCancel(); else { i--; draw(); window.scrollTo(0, 0); } }, 'ghost lg'),
@@ -81,6 +128,18 @@ export function interview({ perguntas, respostas, onDone, onCancel, avatar = 'co
   function bar(f) { const el = h('i'); el.style.width = Math.round(f * 100) + '%'; return el; }
   draw();
   return root;
+}
+
+// Liberação médica guardada que não vale mais (logic/saude.js → respostasProtegidas): a tela pede de novo. Vencida ou sem
+// data: a pessoa confirma que renovou (vale de hoje em diante) ou diz que não tem; dada antes do que outra entrevista
+// contou: refaz a entrevista. Devolve null quando não há o que pedir.
+export function cartaoLiberacao({ estado, aoRenovar, aoNegar, aoRefazer }) {
+  const texto = textoDaLiberacao(estado);
+  if (!texto) return null;
+  const botoes = estado === 'nao_cobre'
+    ? [btn('Responder de novo', aoRefazer, 'primary block', 'edit')]
+    : [btn('Um médico me liberou nos últimos 12 meses', aoRenovar, 'primary block', 'check'), btn('Ainda não tenho a liberação', aoNegar, 'block ghost')];
+  return h('div', { class: 'card hl col gap-s', 'data-liberacao': estado }, h('h3', { text: 'Confirme a liberação médica' }), h('p', { class: 'small', text: texto }), ...botoes);
 }
 
 // Tempo em horas, minutos e segundos, como no relógio (nada de "27,5 minutos"). O valor da resposta continua em minutos

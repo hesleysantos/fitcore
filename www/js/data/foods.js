@@ -684,11 +684,64 @@ export const RECEITAS = {
 };
 // preço de compra pesquisado de um alimento da tabela (R$ por quilo ou litro, como é vendido)
 export const precoDeCompra = (id) => PRECO_REF[id][0];
+// rendimento da tabela acima: quilos de alimento pronto que saem de 1 kg comprado (1 quando não há registro). A lista de
+// compras do cardápio da semana usa para converter o arroz cozido em arroz cru, a carne grelhada em carne crua etc.
+export const rendimentoDeCompra = (id) => (Object.prototype.hasOwnProperty.call(PRECO_REF, id) && PRECO_REF[id][1] > 0 ? PRECO_REF[id][1] : 1);
 export const custoDaReceita = (id) => {
   const r = RECEITAS[id];
   return Math.round((r.ing.reduce((soma, [k, kg]) => soma + kg * (INSUMOS[k] ?? precoDeCompra(k)), 0) / r.rende) * 100) / 100;
 };
 for (const id of Object.keys(RECEITAS)) PRECO_REF[id] = [custoDaReceita(id), 1, 'RC'];
+
+// ---------- alergia alimentar ----------
+// Os grupos de alergênicos da lista oficial da Anvisa (RDC 26/2015, mantida no Anexo III da RDC 727/2022 — ref
+// anvisa_alergenicos): amendoim; castanhas (amêndoa, avelã, castanha-de-caju, castanha-do-pará, macadâmia, nozes, pecã,
+// pistache, pinoli e castanhas); peixes; crustáceos (aqui junto com os peixes, como "frutos do mar"); ovos; leite de todos
+// os mamíferos; e soja. (Trigo, centeio, cevada e aveia já são tratados pela restrição "sem glúten".)
+// Quais alimentos da tabela têm cada um, pela composição usual (conservador: o que costuma ter, ou que a indústria
+// costuma avisar que "pode conter", entra). O rótulo de cada produto é o que vale — por isso a tela sempre pede para ler.
+//  • leite: tudo o que não tem a etiqueta 'sem_lactose' (laticínios, embutidos, bolos, pães e biscoitos industriais,
+//    chocolates, margarina, whey, pratos com queijo ou creme de leite); a intolerância à lactose não é alergia, mas
+//    nenhum alimento sem a etiqueta é livre de leite;
+//  • peixe e frutos do mar: a categoria 'peixes' (inclui o camarão);
+//  • os outros, na lista abaixo;
+//  • pratos prontos (RECEITAS): herdam os alergênicos dos ingredientes — o feijão-tropeiro leva ovos, o baião de dois e o
+//    estrogonofe levam queijo ou creme de leite. O óleo do preparo não conta: pode ser outro óleo.
+export const ALERGIAS = ['amendoim', 'castanhas', 'peixe', 'ovo', 'leite', 'soja'];
+export const NOME_ALERGIA = { amendoim: 'amendoim', castanhas: 'castanhas e nozes', peixe: 'peixes e frutos do mar', ovo: 'ovo', leite: 'leite', soja: 'soja' };
+const LISTA_ALERGENICOS = {
+  // granola: costuma levar castanhas e pode conter amendoim
+  amendoim: ['pasta-de-amendoim', 'amendoim-torrado-salgado', 'amendoim-cru', 'pacoca', 'pe-de-moleque', 'granola'],
+  castanhas: ['castanha-do-para', 'castanha-de-caju', 'amendoa', 'nozes', 'granola'],
+  // massas e pães com ovo na receita usual; empanados e salgados (a massa ou o empanado levam ovo)
+  ovo: ['ovo-cozido', 'clara-de-ovo-cozida', 'ovo-frito', 'omelete-de-queijo', 'ovo-de-codorna', 'maionese', 'pao-de-queijo-assado', 'bolo-de-milho', 'bolo-de-chocolate',
+    'lasanha-massa-cozida', 'nhoque-de-batata-cozido', 'file-de-frango-a-milanesa', 'almondegas-fritas', 'coxinha-de-frango', 'pastel-de-carne-frito', 'pao-de-forma', 'pao-de-forma-integral',
+    'biscoito-maisena', 'biscoito-recheado', 'macarrao-instantaneo'],
+  // grão, bebida, tofu e proteína de soja; óleo de soja; e os industriais em que soja (proteína ou lecitina) é comum
+  soja: ['soja-cozida', 'tofu', 'proteina-de-soja-texturizada', 'leite-de-soja', 'oleo-de-soja', 'margarina-com-sal', 'chocolate-ao-leite', 'chocolate-meio-amargo', 'chocolate-amargo-70',
+    'achocolatado-em-po', 'biscoito-recheado', 'biscoito-maisena', 'biscoito-cream-cracker', 'pao-de-forma', 'pao-de-forma-integral', 'salsicha', 'mortadela', 'hamburguer-bovino-grelhado',
+    'macarrao-instantaneo', 'whey-protein'],
+};
+const OLEOS = new Set(['oleo-de-soja', 'oleo-de-girassol', 'oleo-de-milho', 'oleo-de-canola', 'azeite-de-oliva']);
+const ALERG = new Map(ALIMENTOS.map((f) => [f.id, new Set()]));
+for (const f of ALIMENTOS) {
+  if (!f.tags.includes('sem_lactose')) ALERG.get(f.id).add('leite');
+  if (f.cat === 'peixes') ALERG.get(f.id).add('peixe');
+}
+for (const [al, idsAl] of Object.entries(LISTA_ALERGENICOS)) for (const id of idsAl) if (ALERG.has(id)) ALERG.get(id).add(al);
+// pratos prontos: os alergênicos dos ingredientes (sem o óleo do preparo); insumos sem tabela: o queijo coalho é leite
+const INSUMO_ALERG = { 'queijo-coalho': ['leite'] };
+for (const [id, r] of Object.entries(RECEITAS)) {
+  if (!ALERG.has(id)) continue;
+  for (const [ing] of r.ing) {
+    if (OLEOS.has(ing)) continue;
+    for (const al of ALERG.has(ing) ? ALERG.get(ing) : INSUMO_ALERG[ing] || []) ALERG.get(id).add(al);
+  }
+}
+// alergênicos de um alimento da tabela (lista vazia se não tem nenhum dos grupos ou se o id não existe)
+export const alergenosDe = (id) => (ALERG.has(id) ? ALERGIAS.filter((a) => ALERG.get(id).has(a)) : []);
+// o alimento tem algum dos alergênicos da lista `alergias`?
+export const temAlergeno = (id, alergias) => Array.isArray(alergias) && alergias.some((a) => ALERG.has(id) && ALERG.get(id).has(a));
 
 // Critério da faixa (o mesmo para todos os alimentos, com limites fixos):
 //   1. três medidas, sempre do alimento pronto para comer:

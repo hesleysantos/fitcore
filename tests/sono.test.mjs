@@ -636,6 +636,7 @@ function respostasCorrida(r) {
     if (q.se && !q.se(a)) continue;
     if (q.k === 'condicoes') a[q.k] = ['nenhuma'];
     else if (q.k === 'triagem') a[q.k] = ['nenhum'];
+    else if (q.k === 'remedios') a[q.k] = ['nenhum'];
     else if (q.k === 'limitacoes') a[q.k] = ['nenhuma'];
     else if (q.k === 'dias') a[q.k] = um(r, [['1', '3', '5'], ['2', '4', '6', '0'], ['1', '2', '3', '4', '5', '6'], ['6', '0']]);
     else if (q.k === 'idade') a[q.k] = inteiro(r, 12, 80);

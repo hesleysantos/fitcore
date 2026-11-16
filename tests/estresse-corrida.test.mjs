@@ -33,7 +33,8 @@ function respostas(r, fixo = {}) {
   if (corre) {
     a.kmSemana = a.experiencia === 'iniciante' ? inteiro(r, 0, 15) : a.experiencia === 'regular' ? inteiro(r, 5, 45) : inteiro(r, 15, 110);
     a.longoAtual = Math.max(1, Math.min(40, Math.round(a.kmSemana * (0.25 + r() * 0.3))));
-    if (a.experiencia !== 'iniciante') a.provas = um(r, op('provas'));
+    // (a pergunta das provas só aparece para a maratona: ver abaixo; às vezes fica a resposta antiga, de antes dessa regra)
+    if (a.experiencia !== 'iniciante' && r() < 0.3) a.provas = um(r, op('provas'));
     if (r() < 0.75) a.pausa = r() < 0.6 ? 'treinando' : um(r, PAUSA);
     a.resultado = r() < 0.4 ? 'nao' : um(r, RES);
     if (a.resultado !== 'nao') { const d = a.resultado === '3' ? 3 : KM[a.resultado]; a.resultadoMin = Math.max(8, Math.min(420, Math.round(d * (3.2 + r() * 6.5) * 2) / 2)); }
@@ -42,6 +43,7 @@ function respostas(r, fixo = {}) {
   if (['distancia', 'ritmo', 'prova'].includes(a.objetivo)) {
     a.distancia = fixo.distancia || um(r, DISTS);
     a.tempoLongo = um(r, TLONGO);
+    if (corre && a.distancia === '42') a.provas = um(r, op('provas'));
   }
   if (a.objetivo === 'prova') a.semanasProva = um(r, [1, 2, 3, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 30, 40, 52]);
   if (a.objetivo === 'prova' || a.objetivo === 'ritmo') { a.temAlvo = r() < 0.5 ? 'sim' : 'nao'; if (a.temAlvo === 'sim') a.alvoMin = Math.max(12, Math.min(420, Math.round(KM[a.distancia] * (3 + r() * 5)))); }
@@ -55,7 +57,10 @@ function respostas(r, fixo = {}) {
   a.limitacoes = r() < 0.75 ? ['nenhuma'] : [um(r, LIM)];
   a.condicoes = fixo.condicoes || (r() < 0.7 ? ['nenhuma'] : [um(r, COND)]);
   a.triagem = fixo.triagem || (r() < 0.9 ? ['nenhum'] : [um(r, TRI)]);
-  if (a.condicoes[0] !== 'nenhuma' || a.triagem[0] !== 'nenhum') a.liberado = fixo.liberado || (r() < 0.7 ? 'sim' : 'nao');
+  // remédios (pergunta opcional): às vezes sem resposta, como nas entrevistas antigas
+  // (quem fixa as condições quer um perfil sem doença: aí não sorteia remédio)
+  if (fixo.remedios || (!fixo.condicoes && r() < 0.2)) a.remedios = fixo.remedios || [um(r, op('remedios'))];
+  if (a.condicoes[0] !== 'nenhuma' || a.triagem[0] !== 'nenhum' || (a.remedios || []).some((x) => x === 'glicose' || x === 'outro')) a.liberado = fixo.liberado || (r() < 0.7 ? 'sim' : 'nao');
   return a;
 }
 
@@ -330,7 +335,10 @@ test('estresse: bloqueios de segurança (idade, sinais de alerta, gestação, p�
     const pf = perfil(a);
     const p = gerarPlano(a);
     const semLib = a.liberado !== 'sim';
-    const deve = a.idade < 12 || (semLib && (a.triagem[0] !== 'nenhum' || ['gestante', 'posparto', 'cardiaco', 'renal', 'diabetes'].some((k) => a.condicoes.includes(k))));
+    // "só com supervisão" bloqueia sempre, mesmo com liberação (parq2023)
+    // (insulina ou remédio que baixa o açúcar vale como diabetes)
+    const cond = [...a.condicoes, ...((a.remedios || []).includes('glicose') ? ['diabetes'] : [])];
+    const deve = a.idade < 12 || a.triagem.includes('medico') || (semLib && (a.triagem[0] !== 'nenhum' || ['gestante', 'posparto', 'cardiaco', 'renal', 'diabetes'].some((k) => cond.includes(k))));
     void pf;
     assert.equal(p === null, deve, JSON.stringify(a));
     if (p === null) assert.ok(avisosBloqueio(a).every((x) => x.tipo === 'danger' && x.texto.length > 40 && x.refs.every((k) => REFS_CORRIDA[k])));
@@ -389,14 +397,14 @@ test('estresse: sanitização rejeita lixo e mantém os limites', () => {
     const x = limparRegistro(raw);
     if (x === null) continue;
     // `plan` (o treino que estava no plano) só existe quando é válido
-    assert.deepEqual(Object.keys(x).filter((k) => k !== 'plan').sort(), ['data', 'distKm', 'dor', 'durMin', 'id', 'nota', 'planejado', 'pse', 'tipo']);
+    assert.deepEqual(Object.keys(x).filter((k) => k !== 'plan').sort(), ['data', 'distKm', 'dores', 'durMin', 'id', 'nota', 'planejado', 'pse', 'tipo']);
     if ('plan' in x) assert.ok(TIPOS_TREINO[x.plan.tipo] && Object.keys(x.plan).length === 6 && ['t', 'd'].includes(x.plan.un) && x.plan.durMin >= 0 && x.plan.durMin <= 900 && x.plan.distKm >= 0 && x.plan.distKm <= 120 && (x.plan.ritmo === null || (x.plan.ritmo.length === 2 && x.plan.ritmo.every(Number.isInteger))) && (x.plan.pse === null || x.plan.pse.every((n) => Number.isInteger(n) && n >= 0 && n <= 10)));
     assert.match(x.id, /^[A-Za-z0-9_-]{1,40}$/); assert.notEqual(x.id, '__proto__'); assert.notEqual(x.id, 'constructor');
     assert.match(x.data, /^\d{4}-\d{2}-\d{2}$/);
     assert.ok(x.distKm >= 0 && x.distKm <= 120 && x.durMin >= 0 && x.durMin <= 900 && (x.distKm > 0 || x.durMin > 0));
     if (x.distKm && x.durMin) assert.ok((x.durMin * 60) / x.distKm >= 110, 'ritmo impossível aceito');
     assert.ok(x.pse === null || (Number.isInteger(x.pse) && x.pse >= 1 && x.pse <= 10));
-    assert.ok(x.dor === null || (Object.keys(x.dor).length === 2 && LOCAIS_DOR[x.dor.onde] && Number.isInteger(x.dor.nivel) && x.dor.nivel >= 1 && x.dor.nivel <= 10));
+    assert.ok(Array.isArray(x.dores) && x.dores.length <= 6 && new Set(x.dores.map((d) => d.onde)).size === x.dores.length && x.dores.every((d) => Object.keys(d).length === 3 && LOCAIS_DOR[d.onde] && Number.isInteger(d.nivel) && d.nivel >= 1 && d.nivel <= 10 && ['muscular', 'articular', 'aguda'].includes(d.tipo)));
     assert.ok(TIPOS_TREINO[x.tipo] && x.tipo !== 'descanso');
     assert.ok(typeof x.nota === 'string' && x.nota.length <= 200 && typeof x.planejado === 'string' && x.planejado.length <= 160);
   }
@@ -550,7 +558,7 @@ test('estresse: análise do treino feito — selo coerente, excesso nunca tranqu
   const F = coletor();
   const r = semente(909);
   const inicio = '2026-09-07';
-  const reg = (id, data, tipo, distKm, durMin, pse) => ({ id, data, tipo, distKm, durMin, pse, dor: null, nota: '', planejado: '' });
+  const reg = (id, data, tipo, distKm, durMin, pse) => ({ id, data, tipo, distKm, durMin, pse, dores: [], nota: '', planejado: '' });
   const corr = (d) => d.tipo !== 'caminhada' && d.tipo !== 'descanso';
   const estado = (a) => ({ run: limparCorrida({ answers: a, aceitoEm: inicio + 'T12:00:00.000Z', inicio }), runs: [], dores: [], plans: [], activePlan: '' });
   // 1) pares planejado × feito sorteados

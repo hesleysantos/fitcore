@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { EXERCICIOS, EX_POR_ID } from '../www/js/data/exercises.js';
 import { EQUIPAMENTOS } from '../www/js/data/equipment.js';
 import { REFS, FAQ_TREINO } from '../www/js/data/knowledge.js';
-import { PERGUNTAS, ROTULO, gerarPlano, perfil, permitido, pesosDoExercicio, tetoSeries, duracaoEstimada, alertaDoExercicio, orientacaoDaDor, outraVersao, sugerirTrocas, alternativas, soManual, resumoCombinado, efeitoDoFoco, planoFortalecimento, motivosContra } from '../www/js/logic/trainer.js';
+import { PERGUNTAS, ROTULO, gerarPlano, perfil, avisosBloqueio, permitido, pesosDoExercicio, tetoSeries, duracaoEstimada, alertaDoExercicio, orientacaoDaDor, outraVersao, sugerirTrocas, alternativas, soManual, resumoCombinado, efeitoDoFoco, planoFortalecimento, motivosContra } from '../www/js/logic/trainer.js';
 import { LOCAIS_DOR, TIPOS_DOR, QUANDO_DOR, dorDeAlerta } from '../www/js/logic/dor.js';
 import { doresDoTreino, doresPendentes, respostasParaAvisos, volumeSemanal, ajustesPorDor } from '../www/js/logic/trainer.js';
 import { doresAtivas, DIAS_ATIVA } from '../www/js/logic/dor.js';
@@ -34,18 +34,24 @@ const todosDiferentes = (lista, rot) => { const s = new Set(lista); assert.equal
 const p0 = gerarPlano(base, GYM, 0);
 
 test('todas as perguntas da entrevista estão cobertas por este arquivo', () => {
-  assert.deepEqual(PERGUNTAS.map((q) => q.k), ['objetivo', 'idade', 'peso', 'altura', 'experiencia', 'pausa', 'dias', 'tempo', 'local', 'extras', 'limitacoes', 'condicoes', 'triagem', 'foco'], 'pergunta nova na entrevista: acrescente o teste de sensibilidade dela');
+  assert.deepEqual(PERGUNTAS.map((q) => q.k), ['objetivo', 'idade', 'condicoes', 'triagem', 'remedios', 'experiencia', 'pausa', 'liberado', 'peso', 'altura', 'dias', 'tempo', 'local', 'extras', 'limitacoes', 'foco'], 'pergunta nova na entrevista: acrescente o teste de sensibilidade dela');
   assert.deepEqual(opcoes('objetivo'), ['hipertrofia', 'emagrecimento', 'forca', 'saude', 'resistencia']);
   assert.deepEqual(opcoes('experiencia'), ['nunca', 'iniciante', 'intermediario', 'avancado']);
   assert.deepEqual(opcoes('pausa'), ['treinando', '2a4s', '1a3m', '3a6m', 'mais6m']);
   assert.deepEqual(opcoes('dias'), ['2', '3', '4', '5', '6']);
   assert.deepEqual(opcoes('tempo'), ['30', '45', '60', '75']);
   assert.deepEqual(opcoes('local'), ['completa', 'minha', 'halteres', 'corporal']);
-  assert.deepEqual(opcoes('extras'), ['nenhum', 'elastico', 'bola_suica', 'caixa', 'banco_inclinado', 'barra_fixa', 'kettlebell', 'trx', 'corda_pular', 'bicicleta', 'esteira']);
-  assert.deepEqual(opcoes('limitacoes'), ['nenhuma', 'ombro', 'joelho', 'lombar', 'cervical', 'cotovelo', 'punho', 'quadril', 'tornozelo']);
-  assert.deepEqual(opcoes('condicoes'), ['nenhuma', 'hipertensao', 'cardiaco', 'diabetes', 'gestante', 'cronica']);
-  assert.deepEqual(opcoes('triagem'), ['nenhum', 'dor_peito', 'tontura', 'falta_ar', 'osseo', 'medico']);
-  assert.deepEqual(opcoes('foco'), ['equilibrado', 'quadriceps', 'posteriores', 'gluteos', 'panturrilhas', 'peito', 'costas', 'ombros', 'biceps', 'triceps', 'abdomen', 'pernas', 'bracos']);
+  assert.deepEqual(opcoes('extras'), ['elastico', 'bola_suica', 'caixa', 'banco_inclinado', 'barra_fixa', 'kettlebell', 'trx', 'corda_pular', 'bicicleta', 'esteira', 'nenhum']);
+  assert.deepEqual(opcoes('limitacoes'), ['ombro', 'joelho', 'lombar', 'cervical', 'cotovelo', 'punho', 'quadril', 'tornozelo', 'nenhuma']);
+  assert.deepEqual(opcoes('condicoes'), ['hipertensao', 'cardiaco', 'diabetes', 'renal', 'gestante', 'posparto', 'cronica', 'nenhuma']);
+  assert.deepEqual(opcoes('triagem'), ['dor_peito', 'falta_ar', 'falta_ar_deitado', 'palpitacao', 'tontura', 'tornozelos', 'perna', 'sopro', 'cansaco', 'osseo', 'medico', 'nenhum']);
+  assert.deepEqual(opcoes('remedios'), ['pulso', 'glicose', 'outro', 'nenhum']);
+  assert.deepEqual(opcoes('liberado'), ['sim', 'nao']);
+  assert.deepEqual(opcoes('foco'), ['quadriceps', 'posteriores', 'gluteos', 'panturrilhas', 'peito', 'costas', 'ombros', 'biceps', 'triceps', 'abdomen', 'pernas', 'bracos', 'equilibrado']);
+  // "Nenhum"/"Nenhuma" sempre por último nas listas
+  for (const q of PERGUNTAS) if (q.nenhum) assert.equal(q.op[q.op.length - 1][0], q.nenhum, 'nenhum por último: ' + q.k);
+  // as perguntas de segurança vêm logo depois de objetivo e idade (ordem do PAR-Q+)
+  assert.deepEqual(PERGUNTAS.slice(0, 5).map((q) => q.k), ['objetivo', 'idade', 'condicoes', 'triagem', 'remedios']);
   assert.deepEqual(Object.keys(TIPOS_DOR), ['muscular', 'articular', 'aguda']);
   assert.deepEqual(Object.keys(QUANDO_DOR), ['durante', 'depois', 'repouso']);
   assert.equal(Object.keys(LOCAIS_DOR).length, 20);
@@ -268,9 +274,10 @@ test('condições de saúde: cada opção muda a dose, os exercícios ou a seman
   assert.ok(comPeso(semCond).some((it) => lo(it) < 10), 'o plano sem pressão alta deveria ter séries de menos de 10 repetições');
   assert.ok(itens(has).every((it) => !exDe(it).cuidado.includes('hipertensao') && !barraComposta(exDe(it))));
   assert.ok(tem(has, /Pressão alta/, 'warn'));
-  // coração: o mesmo, mais o pedido de liberação médica
-  const card = com('cardiaco');
-  assert.ok(card.perfil.liberacao && tem(card, /médico/, 'danger'));
+  // coração: sem liberação médica, não há plano; com ela, o mesmo da pressão alta, com o aviso da liberação
+  assert.equal(com('cardiaco'), null);
+  const card = com('cardiaco', { liberado: 'sim' });
+  assert.ok(card.perfil.liberacao && tem(card, /liberação médica/, 'danger'));
   assert.ok(comPeso(card).every((it) => lo(it) >= 10 && it.series <= 3) && itens(card).every((it) => !exDe(it).cuidado.includes('hipertensao')));
   // diabetes: até 3 treinos de força em dias não seguidos, 8 repetições ou mais, até 3 séries
   const diab = com('diabetes', { objetivo: 'forca' });
@@ -279,35 +286,89 @@ test('condições de saúde: cada opção muda a dose, os exercícios ou a seman
   assert.ok(comPeso(diab).every((it) => lo(it) >= 8 && it.series <= 3));
   assert.ok(tem(diab, /Diabetes/, 'warn'));
   assert.ok(comPeso(gerarPlano({ ...base, dias: '5', objetivo: 'forca' }, GYM, 0)).some((it) => lo(it) < 8), 'o plano de força sem diabetes deveria ter séries pesadas');
-  // gestação: dose de saúde, sem os exercícios marcados para gestantes, sem instáveis, com liberação
-  const gest = com('gestante');
+  // gestação: sem liberação, nada (parq2023); com ela, dose de saúde, sem os exercícios marcados para gestantes, sem instáveis
+  assert.equal(com('gestante'), null);
+  assert.match(avisosBloqueio({ ...base, condicoes: ['gestante'] }).map((x) => x.texto).join(' '), /obstetra/);
+  const gest = com('gestante', { liberado: 'sim' });
   assert.ok(gest.perfil.gestante && gest.perfil.liberacao && gest.perfil.objetivoDose === 'saude');
   assert.ok(itens(gest).every((it) => !exDe(it).cuidado.includes('gestante') && !exDe(it).cuidado.includes('hipertensao') && !barraComposta(exDe(it))));
-  assert.ok(tem(gest, /Gestação/, 'warn') && tem(gest, /médico/, 'danger'));
+  assert.ok(tem(gest, /Gestação/, 'warn') && tem(gest, /liberação médica/, 'danger'));
+  // parto nos últimos 6 meses: sem liberação, nada (goom2019, deering2024); com ela, cargas leves a moderadas e o aviso
+  assert.equal(com('posparto'), null);
+  assert.match(avisosBloqueio({ ...base, condicoes: ['posparto'] })[0].texto, /fisioterapeuta pélvica/);
+  const pos = com('posparto', { liberado: 'sim' });
+  assert.ok(pos.perfil.posparto && pos.perfil.cautela && tem(pos, /Pós-parto/, 'warn'));
+  assert.ok(comPeso(pos).every((it) => lo(it) >= 10 && it.series <= 3));
+  // doença nos rins: como a doença crônica (8 repetições ou mais, até 3 séries), com o próprio aviso; sedentário, liberação antes
+  const ren = com('renal', { objetivo: 'forca' });
+  assert.ok(ren.perfil.renal && ren.perfil.moderado && !ren.perfil.bloqueado);
+  assert.ok(comPeso(ren).every((it) => lo(it) >= 8 && it.series <= 3));
+  assert.ok(tem(ren, /Doença nos rins/, 'warn'));
+  assert.equal(gerarPlano({ ...base, experiencia: 'nunca', condicoes: ['renal'] }, GYM, 0), null);
+  assert.equal(gerarPlano({ ...base, experiencia: 'nunca', condicoes: ['diabetes'] }, GYM, 0), null);
+  assert.ok(gerarPlano({ ...base, experiencia: 'nunca', condicoes: ['renal'], liberado: 'sim' }, GYM, 0));
   // outra doença crônica: 8 repetições ou mais, até 3 séries, com aviso
   const cron = com('cronica', { objetivo: 'forca' });
   assert.ok(cron.perfil.cronica && cron.perfil.moderado);
   assert.ok(comPeso(cron).every((it) => lo(it) >= 8 && it.series <= 3));
   assert.ok(tem(cron, /Doença crônica/));
-  for (const [nome, p] of [['hipertensao', has], ['cardiaco', card], ['gestante', gest]]) assert.notEqual(dose(p), dose(semCond), nome + ' não mudou o plano');
+  for (const [nome, p] of [['hipertensao', has], ['cardiaco', card], ['gestante', gest], ['posparto', pos]]) assert.notEqual(dose(p), dose(semCond), nome + ' não mudou o plano');
   assert.notEqual(dose(diab), dose(gerarPlano({ ...base, dias: '5', objetivo: 'forca' }, GYM, 0)));
   assert.notEqual(dose(cron), dose(gerarPlano({ ...base, dias: '5', objetivo: 'forca' }, GYM, 0)));
-  todosDiferentes([has, card, com('diabetes'), gest, com('cronica')].map((p) => JSON.stringify(p.avisos.map((x) => x.texto))), 'avisos por condição');
+  assert.notEqual(dose(ren), dose(gerarPlano({ ...base, dias: '5', objetivo: 'forca' }, GYM, 0)));
+  todosDiferentes([has, card, com('diabetes'), com('renal'), gest, pos, com('cronica')].map((p) => JSON.stringify(p.avisos.map((x) => x.texto))), 'avisos por condição');
 });
 
-test('triagem: qualquer resposta positiva pede liberação médica e põe o plano em cargas leves a moderadas', () => {
+test('triagem: qualquer sinal bloqueia sem liberação; com ela, plano em cargas leves a moderadas', () => {
   const planos = [];
-  for (const t of opcoes('triagem').filter((x) => x !== 'nenhum')) {
-    const p = gerarPlano({ ...base, objetivo: 'forca', triagem: [t] }, GYM, 0);
+  for (const t of opcoes('triagem').filter((x) => x !== 'nenhum' && x !== 'medico')) {
+    // sem liberação médica, não há plano (whitfield2017: com sintoma, liberação antes de qualquer intensidade)
+    assert.equal(gerarPlano({ ...base, objetivo: 'forca', triagem: [t] }, GYM, 0), null, 'plano sem liberação: ' + t);
+    assert.ok(avisosBloqueio({ ...base, triagem: [t] }).some((x) => /sinal de alerta/.test(x.texto)), t);
+    const p = gerarPlano({ ...base, objetivo: 'forca', triagem: [t], liberado: 'sim' }, GYM, 0);
     assert.ok(p.perfil.liberacao && p.perfil.cautela && p.perfil.conservador, t);
-    assert.ok(tem(p, /procure um médico/i, 'danger'), 'sem aviso de liberação: ' + t);
+    assert.ok(tem(p, /liberação médica/i, 'danger'), 'sem aviso de liberação: ' + t);
     assert.ok(comPeso(p).every((it) => lo(it) >= 10 && it.series <= 3), 'carga alta com triagem positiva: ' + t);
     assert.ok(itens(p).every((it) => !exDe(it).cuidado.includes('hipertensao') && !barraComposta(exDe(it)) && exDe(it).nivel <= 2));
     planos.push(dose(p));
   }
-  // as cinco respostas têm o mesmo efeito (a triagem do ACSM trata qualquer sinal do mesmo jeito: liberação antes)
+  // todos os sinais têm o mesmo efeito (a triagem do ACSM trata qualquer sinal do mesmo jeito: liberação antes)
   assert.equal(new Set(planos).size, 1);
   assert.notEqual(planos[0], dose(gerarPlano({ ...base, objetivo: 'forca' }, GYM, 0)));
+  // "só com supervisão": nenhum plano, com ou sem liberação, e a pergunta da liberação nem aparece
+  for (const liberado of [undefined, 'sim']) assert.equal(gerarPlano({ ...base, triagem: ['medico'], liberado }, GYM, 0), null);
+  assert.ok(!P('liberado').se({ ...base, triagem: ['medico'] }) && P('liberado').se({ ...base, triagem: ['tontura'] }));
+});
+
+test('liberação médica: só aparece quando a triagem pede, e "sim" e "não" mudam o plano', () => {
+  const q = P('liberado');
+  assert.ok(!q.se(base), 'sem motivo, a pergunta não aparece');
+  for (const motivo of [{ triagem: ['dor_peito'] }, { condicoes: ['cardiaco'] }, { condicoes: ['gestante'] }, { condicoes: ['posparto'] }, { experiencia: 'nunca', condicoes: ['diabetes'] }, { remedios: ['glicose'], experiencia: 'nunca' }]) {
+    const a = { ...base, ...motivo };
+    assert.ok(q.se(a), JSON.stringify(motivo));
+    assert.equal(gerarPlano({ ...a, liberado: 'nao' }, GYM, 0), null);
+    assert.ok(gerarPlano({ ...a, liberado: 'sim' }, GYM, 0));
+  }
+  // quem já treina e tem diabetes segue em intensidade moderada sem liberação (whitfield2017): a pergunta não aparece
+  assert.ok(!q.se({ ...base, condicoes: ['diabetes'] }));
+});
+
+test('remédios: cada opção muda o plano ou os avisos', () => {
+  const sem = gerarPlano(base, GYM, 0);
+  // remédio que segura o pulso: o cardio vai pela fala (sbc2020, pescatello2004)
+  const pulso = gerarPlano({ ...base, remedios: ['pulso'] }, GYM, 0);
+  assert.ok(tem(pulso, /pulso mais baixo/, 'warn') && !tem(sem, /pulso mais baixo/));
+  // insulina ou remédio que baixa o açúcar: vale como diabetes (dose moderada e o aviso da hipoglicemia — colberg2016)
+  const gli = gerarPlano({ ...base, objetivo: 'forca', remedios: ['glicose'] }, GYM, 0);
+  assert.ok(gli.perfil.diabetes && tem(gli, /insulina/) && comPeso(gli).every((it) => lo(it) >= 8));
+  // outro remédio de uso contínuo, sem condição marcada: vale como outra doença crônica (parq2023, perguntas 4 e 5)
+  const outro = gerarPlano({ ...base, objetivo: 'forca', remedios: ['outro'] }, GYM, 0);
+  assert.ok(outro.perfil.cronica && tem(outro, /Doença crônica/));
+  // com uma condição marcada, "outro remédio" é o da condição: não soma doença crônica
+  assert.ok(!perfil({ ...base, condicoes: ['hipertensao'], remedios: ['outro'] }).cronica);
+  // "nenhum" e a resposta ausente (entrevistas antigas) são iguais ao plano sem remédio
+  assert.equal(dose(gerarPlano({ ...base, remedios: ['nenhum'] }, GYM, 0)), dose(sem));
+  todosDiferentes([sem, pulso, gli, outro].map((p) => JSON.stringify(p.avisos.map((x) => x.texto))), 'avisos por remédio');
 });
 
 test('prioridade de músculo: cada opção aumenta as séries do músculo ou diz por que não aumentou', () => {
@@ -399,7 +460,7 @@ test('prioridade corrida × musculação × os dois: cada opção tem o efeito d
     for (const a of [base, { ...base, objetivo: 'emagrecimento', dias: '5' }]) { const p = gerarPlano(a, GYM, 0, null, lixo); assert.equal(doseEAgenda(p), doseEAgenda(gerarPlano(a, GYM, 0)), JSON.stringify(lixo)); assert.equal(p.combinado, null); }
   }
   let n = 0, mudouAgenda = 0;
-  for (const objetivo of opcoes('objetivo')) for (const experiencia of opcoes('experiencia')) for (const dias of opcoes('dias')) for (const extra of [{}, { idade: 16 }, { condicoes: ['diabetes'] }, { local: 'halteres' }, { tempo: '30' }])
+  for (const objetivo of opcoes('objetivo')) for (const experiencia of opcoes('experiencia')) for (const dias of opcoes('dias')) for (const extra of [{}, { idade: 16 }, { condicoes: ['diabetes'], liberado: 'sim' }, { local: 'halteres' }, { tempo: '30' }])
     for (const semana of [{ fortes: [3], longo: 0, dias: [1, 3, 5, 0] }, { fortes: [2, 4], longo: 6, dias: [2, 4, 6] }, { fortes: [], longo: 0, dias: [3, 0] }, { fortes: [2], longo: null, dias: [2, 5] }, { fortes: [], longo: null, dias: [1, 4] }]) {
       const a = { ...base, objetivo, experiencia, dias, ...extra };
       const sem = gerarPlano(a, GYM, 0);
@@ -458,7 +519,7 @@ test('fortalecimento dentro da musculação: "sim" garante panturrilha, abdutore
   const ORCAMENTO = { 30: 35, 45: 50, 60: 65, 75: 90 };
   const PADROES = { panturrilha: ['flexao_plantar'], 'abdutores do quadril': ['abducao'], 'um pé só': ['afundo'], core: ['anti_extensao', 'flexao_tronco', 'rotacao', 'flexao_quadril'] };
   let n = 0, completos = 0, semEspaco = 0, semUmPe = 0;
-  for (const objetivo of opcoes('objetivo')) for (const experiencia of opcoes('experiencia')) for (const dias of opcoes('dias')) for (const tempo of opcoes('tempo')) for (const extra of [{}, { local: 'halteres' }, { local: 'corporal' }, { idade: 67 }, { limitacoes: ['joelho'] }, { condicoes: ['gestante'] }]) {
+  for (const objetivo of opcoes('objetivo')) for (const experiencia of opcoes('experiencia')) for (const dias of opcoes('dias')) for (const tempo of opcoes('tempo')) for (const extra of [{}, { local: 'halteres' }, { local: 'corporal' }, { idade: 67 }, { limitacoes: ['joelho'] }, { condicoes: ['gestante'], liberado: 'sim' }]) {
     const a = { ...base, objetivo, experiencia, dias, tempo, ...extra };
     const rot = JSON.stringify({ objetivo, experiencia, dias, tempo, ...extra });
     const nao = gerarPlano(a, GYM, 0, null, corrida('corrida', 'nao'));
@@ -530,7 +591,9 @@ test('plano de fortalecimento para quem só corre: academia e casa, por perfil, 
   let n = 0, nulos = 0, um = 0;
   const assin = (f) => JSON.stringify(f.dias.map((d) => d.itens.map((i) => [i.ex, i.series, i.reps, i.descanso])));
   const dor = (onde, tipo, nivel) => ({ id: 'd' + onde, data: '2026-11-12', onde, lado: '', tipo, quando: 'durante', nivel, nota: '', fim: '', dias: 4 });
-  for (const run of [{}, { idade: 16 }, { idade: 68 }, { limitacoes: ['joelho'] }, { limitacoes: ['aquiles', 'lombar'] }, { condicoes: ['hipertensao'] }, { condicoes: ['diabetes'] }, { condicoes: ['gestante'] }, { triagem: ['dor_peito'] }, { peso: 110, altura: 165 }, { dias: ['1', '2', '3', '4', '5', '6'] }, { dias: ['3', '0'] }])
+  // (diabetes, gestação e sinal da triagem: com a liberação para correr, dada hoje — sem ela, não há plano: teste abaixo)
+  const lib = { liberado: 'sim', liberadoEm: HOJE };
+  for (const run of [{}, { idade: 16 }, { idade: 68 }, { limitacoes: ['joelho'] }, { limitacoes: ['aquiles', 'lombar'] }, { condicoes: ['hipertensao'] }, { condicoes: ['diabetes'], ...lib }, { condicoes: ['gestante'], ...lib }, { triagem: ['dor_peito'], ...lib }, { peso: 110, altura: 165 }, { dias: ['1', '2', '3', '4', '5', '6'] }, { dias: ['3', '0'] }])
     for (const treinador of [null, { ...base, experiencia: 'avancado' }, { ...base, experiencia: 'iniciante', local: 'halteres', extras: ['elastico'] }])
       for (const dores of [[], [dor('joelho', 'articular', 8)], [dor('panturrilha', 'muscular', 4)], [dor('lombar', 'aguda', 5), dor('quadril', 'articular', 4)]])
         for (const ocupados of [[], [1, 3, 5], [0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4, 5, 6]]) for (const local of ['academia', 'casa']) {
@@ -587,7 +650,7 @@ test('plano de fortalecimento para quem só corre: academia e casa, por perfil, 
           // as respostas da corrida entram no perfil
           if (run.limitacoes) assert.ok(pf.cuidados.length > 0, rot);
           if (run.condicoes || run.triagem) assert.ok(pf.cautela || pf.moderado, rot);
-          if (pf.liberacao) assert.ok(f.avisos.some((x) => x.tipo === 'danger' && /médico/.test(x.texto)), rot);
+          if (pf.liberacao) assert.ok(f.avisos.some((x) => x.tipo === 'danger' && /médic/.test(x.texto)), rot);
           for (const d of dores) if (orientacaoDaDor(d, pf).classe === 'alerta') assert.ok(f.avisos.some((x) => x.dor === d.onde && /Dor de alerta/.test(x.texto)), 'dor de alerta sem aviso: ' + rot);
           assert.ok(f.info.length > 40 && f.info.length < 320 && !/undefined|null|NaN/.test(f.info));
           assert.ok(f.avisos.every((x) => ['info', 'warn', 'danger'].includes(x.tipo) && x.texto.length > 10) && f.refs.every((k) => REFS[k]));
@@ -719,7 +782,7 @@ test('limitação da entrevista pela mecânica: o que usa a região fica por úl
 test('pendurados (barra fixa e paralelas): fora do plano de gestante, pressão alta, coração, triagem positiva, 60+ e IMC de 30 ou mais', () => {
   const pend = (ex) => ex.equip.includes('barra_fixa') || ex.equip.includes('paralelas');
   let comBarra = 0, n = 0;
-  for (const [nome, extra, risco] of [['gestante', { condicoes: ['gestante'] }, true], ['IMC 36', { peso: 110 }, true], ['pressão alta', { condicoes: ['hipertensao'] }, true], ['coração', { condicoes: ['cardiaco'] }, true], ['triagem', { triagem: ['tontura'] }, true], ['72 anos', { idade: 72 }, true], ['adulto saudável', {}, false]])
+  for (const [nome, extra, risco] of [['gestante', { condicoes: ['gestante'], liberado: 'sim' }, true], ['IMC 36', { peso: 110 }, true], ['pressão alta', { condicoes: ['hipertensao'] }, true], ['coração', { condicoes: ['cardiaco'], liberado: 'sim' }, true], ['triagem', { triagem: ['tontura'], liberado: 'sim' }, true], ['72 anos', { idade: 72 }, true], ['adulto saudável', {}, false]])
     for (const objetivo of opcoes('objetivo')) for (const experiencia of ['iniciante', 'intermediario', 'avancado']) for (const dias of ['3', '5']) for (const local of ['halteres', 'corporal', 'completa']) for (let v = 0; v < 4; v++) {
       const a = { ...base, ...extra, objetivo, experiencia, dias, local, extras: ['barra_fixa'] };
       const p = gerarPlano(a, GYM, v);
@@ -814,9 +877,23 @@ test('respostas para os avisos da sessão: as do Treinador; sem elas, um perfil 
   const dor = [{ id: 'x', data: '2026-11-15', onde: 'panturrilha', lado: '', tipo: 'articular', quando: 'durante', nivel: 3, nota: '', fim: '', dias: 1 }];
   assert.equal(alertaDoExercicio('panturrilha-em-pe-maquina', dor, r).nivel, 'evitar');
   assert.equal(alertaDoExercicio('panturrilha-em-pe-maquina', dor, null).nivel, 'leve');
-  // com as duas, valem as do Treinador
+  // com as duas, valem as do Treinador, mais o que a corrida marcou e o Treinador não (o lado mais protegido)
   const dois = estado({ condicoes: ['gestante'] }, { trainer: { answers: base } });
-  assert.equal(perfil(respostasParaAvisos(dois)).gestante, false);
+  assert.equal(perfil(respostasParaAvisos(dois)).gestante, true);
+  assert.equal(perfil(respostasParaAvisos(estado({}, { trainer: { answers: base } }))).gestante, false);
+});
+
+test('fortalecimento para quem só corre: sem a liberação que a triagem pede (ou vencida), não há plano', () => {
+  for (const run of [{ condicoes: ['diabetes'] }, { condicoes: ['gestante'] }, { triagem: ['dor_peito'] }, { triagem: ['palpitacao'] }, { condicoes: ['cardiaco'] }]) {
+    for (const lib of [{}, { liberado: 'nao' }, { liberado: 'sim' }, { liberado: 'sim', liberadoEm: '2025-10-01' }]) {
+      const f = planoFortalecimento(estado({ ...run, ...lib }), { local: 'academia', hoje: HOJE, ocupados: [] });
+      assert.ok(f && !f.dias.length && f.motivo === 'saude' && /liberação|médico/.test(f.texto), JSON.stringify({ run, lib }));
+    }
+    assert.ok(planoFortalecimento(estado({ ...run, liberado: 'sim', liberadoEm: '2026-06-01' }), { local: 'academia', hoje: HOJE, ocupados: [] }).dias.length, JSON.stringify(run));
+  }
+  // "só com supervisão": nunca
+  const sup = planoFortalecimento(estado({ triagem: ['medico'], liberado: 'sim', liberadoEm: HOJE }), { local: 'casa', hoje: HOJE, ocupados: [] });
+  assert.ok(!sup.dias.length && sup.motivo === 'saude' && /supervisão/.test(sup.texto));
 });
 
 test('robustez: item nulo ou torto em um treino não derruba duração, volume nem trocas', () => {

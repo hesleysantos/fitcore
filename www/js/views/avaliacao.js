@@ -4,7 +4,7 @@ import { h, btn, badge, dateKey } from '../ui.js';
 import { state } from '../store.js';
 import { go } from '../router.js';
 import { avaliarDia, avaliarPlano } from '../logic/avaliacao.js';
-import { resumoCombinado, doresDoTreino } from '../logic/trainer.js';
+import { resumoCombinado, doresDoTreino, saudeDoTreinador } from '../logic/trainer.js';
 
 const num = (v) => String(v).replace('.', ',');
 const series = (n) => `${num(n)} ${n === 1 ? 'série' : 'séries'}`;
@@ -14,7 +14,10 @@ function contexto() {
   let dores = [], corrida = null;
   try { dores = doresDoTreino(state, hoje, state.trainer.answers); } catch { dores = []; }
   try { corrida = resumoCombinado(state, hoje); } catch { corrida = null; }
-  return { respostas: state.trainer.answers, gym: state.gym, dores, corrida };
+  // condições, sinais e remédios de todas as entrevistas, pelo lado mais protegido (logic/saude.js)
+  let respostas = state.trainer.answers;
+  try { respostas = saudeDoTreinador(state, hoje).respostas; } catch { respostas = state.trainer.answers; }
+  return { respostas, gym: state.gym, dores, corrida };
 }
 const kv = (k, v) => h('div', { class: 'kv' }, h('span', { class: 'muted', text: k }), h('span', { text: v }));
 const linha = (texto, cls = 'small') => h('p', { class: cls, text: texto });

@@ -8,7 +8,7 @@ import { MUSCULOS } from '../www/js/data/muscles.js';
 import { EQUIPAMENTOS } from '../www/js/data/equipment.js';
 import { MODELOS } from '../www/js/data/templates.js';
 import { REFS, FAQ_TREINO } from '../www/js/data/knowledge.js';
-import { PERGUNTAS, gerarPlano, perfil, sugerirTrocas, alternativas, volumeSemanal, soManual, limiteFoco, outraVersao, alertaDoExercicio, ajustesPorDor, aplicarTrocasDor, voltasPorDor, aplicarVoltasDor, orientacaoDaDor } from '../www/js/logic/trainer.js';
+import { PERGUNTAS, gerarPlano, perfil, avisosBloqueio, sugerirTrocas, alternativas, volumeSemanal, soManual, limiteFoco, outraVersao, alertaDoExercicio, ajustesPorDor, aplicarTrocasDor, voltasPorDor, aplicarVoltasDor, orientacaoDaDor } from '../www/js/logic/trainer.js';
 import { LOCAIS_DOR, TIPOS_DOR, QUANDO_DOR, dorDeAlerta } from '../www/js/logic/dor.js';
 import { seriesPorGrupo, analisar } from '../www/js/logic/insights.js';
 
@@ -32,11 +32,14 @@ const OBJ = op('objetivo'), EXP = op('experiencia'), DIAS = op('dias'), TEMPO = 
 const LIM = op('limitacoes').filter((x) => x !== 'nenhuma');
 const COND = op('condicoes').filter((x) => x !== 'nenhuma');
 const TRI = op('triagem').filter((x) => x !== 'nenhum');
+const REM = op('remedios').filter((x) => x !== 'nenhum');
 const FOCO = op('foco').filter((x) => x !== 'equilibrado');
 const EXTRAS = op('extras').filter((x) => x !== 'nenhum');
 const EQUIP = Object.keys(EQUIPAMENTOS);
 const GYM_ALL = { all: true, has: {} };
-const base = { objetivo: 'hipertrofia', idade: 30, peso: 75, altura: 175, experiencia: 'intermediario', dias: '4', tempo: '60', local: 'completa', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'], foco: ['equilibrado'] };
+// (as respostas de base já trazem a liberação médica: sem motivo, ela não muda nada; o bloqueio sem liberação é conferido
+// nos testes de saúde, abaixo)
+const base = { objetivo: 'hipertrofia', idade: 30, peso: 75, altura: 175, experiencia: 'intermediario', dias: '4', tempo: '60', local: 'completa', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'], foco: ['equilibrado'], liberado: 'sim' };
 
 // ---------- regras conferidas de forma independente da lógica ----------
 // Em casa, a pessoa só tem o que a opção que ela escolheu na entrevista diz. O critério aqui não repete a lista do
@@ -215,6 +218,14 @@ function validar(a, gym, versao, F, rot, dores = null, corr = null) {
   try { p = gerarPlano(a, gym, versao, dores, corr); } catch (e) { F.add('lançou erro', `${rot}: ${e.message}`); return {}; }
   const pf = perfil(a);
   if (a.idade < 14) { if (p !== null) F.add('menor de 14 sem bloqueio', rot); return { p: null, pf }; }
+  // triagem que pede liberação médica sem ela, ou "só com supervisão": nenhum plano, sempre com a explicação
+  const semLib = ((a.triagem || []).some((x) => x !== 'nenhum') || (a.condicoes || []).some((c) => ['cardiaco', 'gestante', 'posparto'].includes(c))) && a.liberado !== 'sim';
+  if (semLib || (a.triagem || []).includes('medico')) {
+    if (p !== null) F.add('plano sem a liberação médica que a triagem pede', rot);
+    if (!pf.bloqueado || !avisosBloqueio(a).length) F.add('bloqueio sem explicação', rot);
+    return { p: null, pf };
+  }
+  if (pf.bloqueado) { if (p !== null) F.add('bloqueado com plano', rot); if (!avisosBloqueio(a).length) F.add('bloqueio sem explicação', rot); return { p: null, pf }; }
   if (!p) { F.add('plano não gerado', rot); return {}; }
 
   const extras = Array.isArray(a.extras) ? a.extras : [];
@@ -314,7 +325,7 @@ function validar(a, gym, versao, F, rot, dores = null, corr = null) {
   for (const t of textos) if (!semLixo(t)) F.add('texto vazio ou com valor inválido', `${rot}: ${t}`);
   for (const av of p.avisos) if (!['danger', 'warn', 'info'].includes(av.tipo)) F.add('tipo de aviso desconhecido', `${rot}: ${av.tipo}`);
   const tem = (tipo, re) => p.avisos.some((x) => (!tipo || x.tipo === tipo) && re.test(x.texto));
-  if (pf.liberacao && !tem('danger', /médico/i)) F.add('sem aviso de liberação médica', rot);
+  if (pf.liberacao && !tem('danger', /médic/i)) F.add('sem aviso de liberação médica', rot);
   if (!pf.liberacao && tem('danger', /liberação/i) && p.dias.length) F.add('aviso de liberação sem motivo', rot);
   if (pf.gestante && !tem('warn', /gesta/i)) F.add('sem aviso de gestação', rot);
   if (pf.pressao && !tem('warn', /pressão|coração/i)) F.add('sem aviso de pressão alta/coração', rot);
@@ -348,6 +359,13 @@ function validar(a, gym, versao, F, rot, dores = null, corr = null) {
   return { p, pf, vol, dir, poolForca, poolCardio };
 }
 
+// testes que precisam de um plano para conferir: a liberação médica dada e sem "só com supervisão" (o bloqueio é conferido
+// em validar e nos testes de saúde)
+function liberar(a) {
+  a.liberado = 'sim';
+  const t = (a.triagem || []).filter((x) => x !== 'medico');
+  a.triagem = t.length ? t : ['nenhum'];
+}
 function perfilAleatorio(r) {
   const idade = r() < 0.06 ? inteiro(r, 10, 13) : r() < 0.25 ? um(r, [14, 15, 17, 18, 59, 60, 61, 99]) : inteiro(r, 14, 99);
   const peso = r() < 0.15 ? um(r, [30, 30.5, 249.5, 250]) : Math.round((30 + r() * 220) * 2) / 2;
@@ -355,6 +373,9 @@ function perfilAleatorio(r) {
   const a = {
     objetivo: um(r, OBJ), idade, peso, altura, experiencia: um(r, EXP), dias: um(r, DIAS), tempo: um(r, TEMPO), local: um(r, LOCAL),
     limitacoes: varios(r, LIM, 'nenhuma'), condicoes: varios(r, COND, 'nenhuma'), triagem: varios(r, TRI, 'nenhum'), foco: varios(r, FOCO, 'equilibrado', 2),
+    remedios: r() < 0.7 ? varios(r, REM, 'nenhum') : undefined,
+    // liberação médica: quase sempre dada (para sobrar plano para conferir); às vezes "não" ou sem resposta (bloqueia)
+    liberado: r() < 0.8 ? 'sim' : r() < 0.5 ? 'nao' : undefined,
   };
   // em casa: às vezes sem a resposta (planos antigos), às vezes "nenhum", às vezes com itens extras
   if ((a.local === 'halteres' || a.local === 'corporal') && r() < 0.8) a.extras = varios(r, EXTRAS, 'nenhum');
@@ -371,7 +392,7 @@ const rotulo = (a, gym, v) => JSON.stringify({ ...a, gym: a.local === 'minha' ? 
 let TOTAL = 0;
 
 test('estresse: todas as perguntas têm cada opção coberta pelos geradores', () => {
-  assert.deepEqual([OBJ.length, EXP.length, DIAS.length, TEMPO.length, LOCAL.length, LIM.length, COND.length, TRI.length, FOCO.length], [5, 4, 5, 4, 4, 8, 5, 5, 12]);
+  assert.deepEqual([OBJ.length, EXP.length, DIAS.length, TEMPO.length, LOCAL.length, LIM.length, COND.length, TRI.length, REM.length, FOCO.length], [5, 4, 5, 4, 4, 8, 7, 11, 3, 12]);
 });
 
 test('estresse: grade completa objetivo × nível × dias × tempo × local × faixa de idade (4.800 perfis)', () => {
@@ -399,12 +420,12 @@ test('estresse: grade completa objetivo × nível × dias × tempo × local × f
 test('estresse: 10.000 perfis aleatórios (idades 10–99, pesos e alturas extremos, limitações, condições, triagem, foco, aparelhos sorteados)', () => {
   const F = new Falhas();
   const r = semente(20261111);
-  const visto = { objetivo: new Set(), experiencia: new Set(), dias: new Set(), tempo: new Set(), local: new Set(), limitacoes: new Set(), condicoes: new Set(), triagem: new Set(), foco: new Set() };
+  const visto = { objetivo: new Set(), experiencia: new Set(), dias: new Set(), tempo: new Set(), local: new Set(), limitacoes: new Set(), condicoes: new Set(), triagem: new Set(), remedios: new Set(), foco: new Set() };
   let bloqueados = 0, vazios = 0, gymVazia = 0;
   const N = 10000;
   for (let i = 0; i < N; i++) {
     const { a, gym, versao } = perfilAleatorio(r);
-    for (const k of Object.keys(visto)) for (const v of [].concat(a[k])) visto[k].add(v);
+    for (const k of Object.keys(visto)) for (const v of [].concat(a[k])) if (v !== undefined) visto[k].add(v);
     if (a.local === 'minha' && !gym.all && Object.keys(gym.has).length === 0) gymVazia++;
     const { p } = validar(a, gym, versao, F, rotulo(a, gym, versao));
     if (a.idade < 14) bloqueados++;
@@ -781,6 +802,7 @@ test('sugerir trocas: só equivalentes permitidos, disponíveis, do mesmo movime
   for (let i = 0; i < 2000; i++) {
     const { a, gym, versao } = perfilAleatorio(r);
     if (a.idade < 14) a.idade = 14 + (i % 60);
+    liberar(a);
     const rot = rotulo(a, gym, versao);
     const p = gerarPlano(a, gym, versao);
     TOTAL++;
@@ -1009,6 +1031,7 @@ test('outra versão com limitações, dores e prioridade: 1.500 perfis aleatóri
   for (let i = 0; i < 1500; i++) {
     const { a, gym, versao } = perfilAleatorio(r);
     if (a.idade < 14) a.idade = 14 + (i % 70);
+    liberar(a);
     const dores = i % 3 === 0 ? doresAleatorias(r, 2) : null;
     const rot = rotulo(a, gym, versao) + (dores ? ' dores ' + dores.map((d) => d.onde + d.nivel).join('+') : '');
     const atual = gerarPlano(a, gym, versao, dores);
@@ -1040,6 +1063,7 @@ test('dores: 6.000 combinações de perfil × dores × prioridade — plano adap
   for (let i = 0; i < N; i++) {
     const { a, gym, versao } = perfilAleatorio(r);
     if (a.idade < 14) a.idade = 14 + (i % 80);
+    liberar(a);
     const dores = doresAleatorias(r);
     const pf = perfil(a);
     for (const d of dores) { visto.onde.add(d.onde); visto.tipo.add(d.tipo); visto.classe.add(classeDor(d, pf)); }
@@ -1161,6 +1185,7 @@ test('dores no plano ATIVO: ajustes propostos (trocar, pular, aliviar), aplicar 
   for (let i = 0; i < 3000; i++) {
     const { a, gym, versao } = perfilAleatorio(r);
     if (a.idade < 14) a.idade = 14 + (i % 80);
+    liberar(a);
     const pf = perfil(a);
     const plano = gerarPlano(a, gym, versao); // plano aceito ANTES de a dor aparecer
     TOTAL++;
@@ -1409,6 +1434,7 @@ test('corrida + musculação: 5.000 perfis × semana de corrida × prioridade ×
   for (let i = 0; i < N; i++) {
     const { a, gym, versao } = perfilAleatorio(r);
     if (a.idade < 14) a.idade = 14 + (i % 80);
+    liberar(a);
     // semana de corrida: 2 a 6 dias, até 2 treinos fortes e, quase sempre, um longo
     const dias = [0, 1, 2, 3, 4, 5, 6].sort(() => r() - 0.5).slice(0, inteiro(r, 2, 6));
     const longo = r() < 0.85 ? dias[0] : null;
@@ -1469,6 +1495,7 @@ test('o plano não depende do que foi montado antes: 2.500 perfis em uma ordem e
   for (let i = 0; i < 2500; i++) {
     const { a, gym, versao } = perfilAleatorio(r);
     if (a.idade < 14) a.idade = 14 + (i % 80);
+    liberar(a);
     const dores = r() < 0.25 ? doresAleatorias(r, 2) : null;
     const corr = r() < 0.3 ? { foco: um(r, ['', 'corrida', 'musculacao', 'equilibrio']), fortalecimento: um(r, ['nao', 'sim']), fortes: [inteiro(r, 0, 6)], longo: inteiro(r, 0, 6), dias: [1, 3, 5, 0] } : null;
     casos.push({ a, gym, versao, dores, corr });
@@ -1538,7 +1565,7 @@ test('em casa com itens extras: sem marcar, nada além do que a opção diz; mar
   // a pergunta vem logo depois do local, só aparece para quem treina em casa, e as chaves são aparelhos do catálogo
   assert.equal(PERGUNTAS.indexOf(q), PERGUNTAS.findIndex((x) => x.k === 'local') + 1);
   assert.ok(q.se({ local: 'halteres' }) && q.se({ local: 'corporal' }) && !q.se({ local: 'completa' }) && !q.se({ local: 'minha' }));
-  assert.equal(q.op[0][0], 'nenhum'); assert.equal(q.nenhum, 'nenhum'); assert.ok(q.opcional);
+  assert.equal(q.op[q.op.length - 1][0], 'nenhum'); assert.equal(q.nenhum, 'nenhum'); assert.ok(q.opcional);
   for (const k of EXTRAS) assert.ok(EQUIPAMENTOS[k], 'item extra que não é aparelho do catálogo: ' + k);
   // resposta ausente = "nenhum": respostas antigas continuam completas e dão o mesmo plano
   for (const local of ['halteres', 'corporal']) {

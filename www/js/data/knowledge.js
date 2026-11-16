@@ -86,6 +86,11 @@ export const REFS = {
   kanaley2022: 'Kanaley JA et al. Exercise/physical activity in individuals with type 2 diabetes: a consensus statement from the American College of Sports Medicine. Med Sci Sports Exerc. 2022;54(2):353-368.',
   sbd2023: 'Silva Júnior WS et al. Atividade física e exercício no pré-diabetes e DM2. Diretriz Oficial da Sociedade Brasileira de Diabetes. 2023.',
   whitfield2017: 'Whitfield GP et al. Applying the ACSM preparticipation screening algorithm to U.S. adults: National Health and Nutrition Examination Survey 2001-2004. Med Sci Sports Exerc. 2017;49(10):2056-2063.',
+  // PAR-Q+ 2023, lido inteiro (PDF oficial, 4 páginas): as 7 perguntas gerais, as de acompanhamento e a validade de 12 meses
+  parq2023: 'Warburton DER, Jamnik VK, Bredin SSD, Gledhill N, PAR-Q+ Collaboration. The Physical Activity Readiness Questionnaire for Everyone (PAR-Q+), versão de 2023. Health Fit J Can. 2011;4(2):3-23 (formulário de 2023).',
+  // betabloqueador e esforço: os mesmos textos do Treinador de corrida (data/corrida.js)
+  sbc2020: 'Barroso WKS et al. Diretrizes Brasileiras de Hipertensão Arterial – 2020. Arq Bras Cardiol. 2021;116(3):516-658.',
+  pescatello2004: 'Pescatello LS et al. American College of Sports Medicine position stand: exercise and hypertension. Med Sci Sports Exerc. 2004;36(3):533-553.',
   // exercício nórdico
   zein2022: 'Zein MI et al. Study on Hamstring Re-injury Prevention (SHARP): protocol for an international multicentre, randomised controlled trial. BMJ Open. 2022;12(11):e065816.',
   soligard2008: 'Soligard T et al. Comprehensive warm-up programme to prevent injuries in young female footballers: cluster randomised controlled trial. BMJ. 2008;337:a2469.',
@@ -131,6 +136,9 @@ export const REFS = {
   gardner2018: 'Gardner CD et al. Effect of low-fat vs low-carbohydrate diet on 12-month weight loss in overweight adults (DIETFITS). JAMA. 2018;319(7):667-679.',
   cioffi2018: 'Cioffi I et al. Intermittent versus continuous energy restriction on weight loss and cardiometabolic outcomes: a systematic review and meta-analysis. J Transl Med. 2018;16:371.',
   lei8234: 'Brasil. Lei nº 8.234, de 17 de setembro de 1991 (regulamenta a profissão de nutricionista), art. 3º.',
+  // alergia alimentar: lido o texto inteiro da RDC 26/2015 (arts. 6 a 8 e anexo); a lista de alergênicos foi mantida no
+  // Anexo III da RDC 727/2022, que consolidou as regras de rotulagem
+  anvisa_alergenicos: 'Brasil. Anvisa. Resolução RDC nº 26, de 2 de julho de 2015: rotulagem obrigatória dos principais alimentos que causam alergias alimentares ("ALÉRGICOS: CONTÉM" e "ALÉRGICOS: PODE CONTER"). Lista mantida no Anexo III da RDC nº 727/2022.',
   // Nutrição — como cada fonte foi conferida (estado em novembro de 2026, depois da rodada "só texto completo"):
   // TODA referência citada pela Nutricionista e pelo diário está em TEXTO COMPLETO. O que só abria no resumo saiu, e a
   // regra passou a se apoiar numa fonte lida inteira (a original aparece, quando é o caso, só como "apud").

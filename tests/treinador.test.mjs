@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { EXERCICIOS, EX_POR_ID } from '../www/js/data/exercises.js';
 import { EQUIPAMENTOS } from '../www/js/data/equipment.js';
 import { MODELOS } from '../www/js/data/templates.js';
-import { PERGUNTAS, respostasCompletas, gerarPlano, perfil, sugerirTrocas, alternativas, volumeSemanal, limiteFoco, outraVersao, alertaDoExercicio, ajustesPorDor, aplicarTrocasDor, voltasPorDor, aplicarVoltasDor, orientacaoDaDor } from '../www/js/logic/trainer.js';
+import { PERGUNTAS, respostasCompletas, gerarPlano, perfil, sugerirTrocas, alternativas, volumeSemanal, limiteFoco, outraVersao, alertaDoExercicio, ajustesPorDor, aplicarTrocasDor, voltasPorDor, aplicarVoltasDor, orientacaoDaDor, avisosBloqueio } from '../www/js/logic/trainer.js';
 
 const GYM_ALL = { all: true, has: {} };
 const base = { objetivo: 'hipertrofia', idade: 30, peso: 75, altura: 175, experiencia: 'intermediario', dias: '4', tempo: '60', local: 'completa', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'], foco: ['equilibrado'] };
@@ -79,18 +79,30 @@ test('limitações: nenhum exercício contraindicado entra no plano', () => {
 });
 
 test('condições de saúde: modo conservador, avisos e liberação médica', () => {
-  for (const cond of ['hipertensao', 'cardiaco', 'gestante', 'diabetes', 'cronica']) {
+  for (const cond of ['hipertensao', 'cardiaco', 'gestante', 'posparto', 'diabetes', 'renal', 'cronica']) {
     for (const objetivo of OBJ) {
-      const { p, pf } = confere({ ...base, objetivo, condicoes: [cond], experiencia: 'avancado' }, GYM_ALL, `condição ${cond}/${objetivo}`);
-      if (['hipertensao', 'cardiaco', 'gestante'].includes(cond)) { assert.ok(pf.conservador); assert.ok(p.avisos.length >= 1, 'sem aviso: ' + cond); }
-      if (['cardiaco', 'gestante'].includes(cond)) assert.ok(pf.liberacao, 'deveria pedir liberação médica: ' + cond);
+      // coração, gestação e parto recente: sem liberação médica, não há plano (whitfield2017, parq2023)
+      const a = { ...base, objetivo, condicoes: [cond], experiencia: 'avancado' };
+      const bloqueia = ['cardiaco', 'gestante', 'posparto'].includes(cond);
+      if (bloqueia) {
+        assert.equal(gerarPlano(a, GYM_ALL, 0), null, 'sem liberação não há plano: ' + cond);
+        assert.ok(avisosBloqueio(a).length && avisosBloqueio(a).every((x) => x.tipo === 'danger'), 'bloqueio sem explicação: ' + cond);
+      }
+      const { p, pf } = confere(bloqueia ? { ...a, liberado: 'sim' } : a, GYM_ALL, `condição ${cond}/${objetivo}`);
+      if (['hipertensao', 'cardiaco', 'gestante', 'posparto'].includes(cond)) { assert.ok(pf.conservador); assert.ok(p.avisos.length >= 1, 'sem aviso: ' + cond); }
+      if (bloqueia) assert.ok(pf.liberacao && p.avisos.some((x) => x.tipo === 'danger' && /liberação/.test(x.texto)), 'deveria falar da liberação médica: ' + cond);
     }
   }
-  for (const sinal of ['dor_peito', 'tontura', 'falta_ar', 'osseo', 'medico']) {
-    const { p, pf } = confere({ ...base, triagem: [sinal] }, GYM_ALL, 'triagem ' + sinal);
-    assert.ok(pf.liberacao, 'triagem positiva deve pedir liberação: ' + sinal);
+  for (const sinal of ['dor_peito', 'falta_ar', 'falta_ar_deitado', 'palpitacao', 'tontura', 'tornozelos', 'perna', 'sopro', 'cansaco', 'osseo']) {
+    // qualquer sinal: sem liberação, nada de plano; com ela, plano leve com o aviso
+    assert.equal(gerarPlano({ ...base, triagem: [sinal] }, GYM_ALL, 0), null, 'triagem positiva sem liberação: ' + sinal);
+    const { p, pf } = confere({ ...base, triagem: [sinal], liberado: 'sim' }, GYM_ALL, 'triagem ' + sinal);
+    assert.ok(pf.liberacao && pf.cautela, 'triagem positiva deve pedir liberação: ' + sinal);
     assert.ok(p.avisos.some((x) => x.tipo === 'danger'));
   }
+  // "só com supervisão": nunca há plano, nem com liberação
+  for (const liberado of [undefined, 'sim', 'nao']) assert.equal(gerarPlano({ ...base, triagem: ['medico'], liberado }, GYM_ALL, 0), null);
+  assert.match(avisosBloqueio({ ...base, triagem: ['medico'] })[0].texto, /supervisão/);
   assert.ok(!perfil(base).liberacao);
 });
 

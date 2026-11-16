@@ -54,7 +54,7 @@ Abra `http://localhost:5173`. Requer Node.js 22 ou mais novo.
 npm test
 ```
 
-Roda 288 testes (centenas de milhares de perfis simulados no Treinador, na corrida, na Nutricionista e no sono; sensibilidade dos questionários, pergunta por pergunta; dores e limitações conferidas pela mecânica de cada exercício; corrida e musculação combinadas; avaliação de treino; diário alimentar; cochilos; armazenamento com o banco do aparelho falhando; validação de backup; catálogo com fontes; política de segurança) e três verificadores das 286 animações: física (ossos de comprimento fixo, articulações dentro do limite, nada atravessa o chão), postura e equilíbrio, e cabos (nenhum cabo atravessa o corpo).
+Roda 328 testes (centenas de milhares de perfis simulados no Treinador, na corrida, na Nutricionista e no sono; sensibilidade dos questionários, pergunta por pergunta; dores e limitações conferidas pela mecânica de cada exercício; corrida e musculação combinadas; avaliação de treino; diário alimentar; cochilos; armazenamento com o banco do aparelho falhando; validação de backup; catálogo com fontes; política de segurança) e três verificadores das 286 animações: física (ossos de comprimento fixo, articulações dentro do limite, nada atravessa o chão), postura e equilíbrio, e cabos (nenhum cabo atravessa o corpo).
 
 Teste de uso de ponta a ponta (clica no app como um usuário: entrevista, treino, evolução, nutrição, backup e uso sem internet). Deixe `npm start` rodando em outro terminal e execute:
 

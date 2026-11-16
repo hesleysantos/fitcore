@@ -2,7 +2,7 @@
 // Confere as metas (calorias, macros, água, fibras), as travas de segurança, o cardápio de exemplo e os textos.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ALIMENTOS } from '../www/js/data/foods.js';
+import { ALIMENTOS, alergenosDe, temAlergeno } from '../www/js/data/foods.js';
 import { REFS, FAQ_NUTRI } from '../www/js/data/knowledge.js';
 import { PERGUNTAS, calcular, cardapio, proximaSemente, assinatura, orientacaoCorrida, emVoltaDoTreino, imcFaixa, textosDoPeso, suplementos, fmtDuracao, PAL_DIA, PAL_TREINO, PAL_MAX } from '../www/js/logic/nutrition.js';
 
@@ -19,7 +19,7 @@ const REST = op('restricoes').filter((x) => x !== 'nenhuma');
 const COND = op('condicoes').filter((x) => x !== 'nenhuma');
 const subconjuntos = (l) => { const out = []; for (let m = 0; m < 1 << l.length; m++) out.push(l.filter((_, i) => m & (1 << i))); return out; };
 const TODAS_REST = subconjuntos(REST).map((x) => (x.length ? x : ['nenhuma']));   // 16 combinações
-const TODAS_COND = subconjuntos(COND).map((x) => (x.length ? x : ['nenhuma']));   // 64 combinações
+const TODAS_COND = subconjuntos(COND).map((x) => (x.length ? x : ['nenhuma']));   // 128 combinações
 const base = { objetivo: 'emagrecer', sexo: 'm', idade: 30, peso: 80, altura: 178, atividade: 'sedentario', treinos: '3', horario: 'noite', refeicoes: '4', restricoes: ['nenhuma'], condicoes: ['nenhuma'] };
 const PRECO = op('preco');
 // custo do dia nos preços de referência da pesquisa (R$): só para comparar cardápios entre si
@@ -67,7 +67,9 @@ function validarMetas(a, F) {
   if (cond.includes('outra') && !aviso(/médico ou nutricionista/)) F.add('doença crônica sem aviso', rot);
   if (rest.includes('vegano') && !aviso(/B12/)) F.add('vegano sem aviso de B12', rot);
   if (rest.includes('sem_gluten') && !aviso(/celíaca/)) F.add('sem glúten sem aviso', rot);
-  if (rest.includes('sem_lactose') && !aviso(/lactose/)) F.add('sem lactose sem aviso', rot);
+  // (com vegano o aviso da lactose seria repetido: o cardápio já não tem leite)
+  if (rest.includes('sem_lactose') && !rest.includes('vegano') && !aviso(/lactose/)) F.add('sem lactose sem aviso', rot);
+  if (rest.includes('sem_lactose') && rest.includes('vegano') && aviso(/Intolerância à lactose/)) F.add('aviso de lactose repetido para vegano', rot);
 
   // modos
   const deveEducar = a.idade < 18 || cond.some((c) => ['gestante', 'transtorno', 'renal'].includes(c));
@@ -273,7 +275,7 @@ test('estresse: grade completa de metas — objetivo × sexo × atividade × tre
   F.confere('grade de metas');
 });
 
-test('estresse: todas as 16 combinações de restrições × 64 de condições × objetivo × sexo (6.144 perfis)', () => {
+test('estresse: todas as 16 combinações de restrições × 128 de condições × objetivo × sexo (12.288 perfis)', () => {
   const F = new Falhas();
   let n = 0;
   for (const restricoes of TODAS_REST) for (const condicoes of TODAS_COND) for (const objetivo of OBJ) for (const sexo of SEXO) {
@@ -283,7 +285,7 @@ test('estresse: todas as 16 combinações de restrições × 64 de condições �
     if (r && r.modo !== 'educativo' && n % 3 === 0) validarCardapio(a, r, n % 11, F);
   }
   TOTAL += n;
-  assert.equal(n, 16 * 64 * 3 * 2);
+  assert.equal(n, 16 * 128 * 3 * 2);
   F.confere('restrições × condições');
 });
 
@@ -554,6 +556,64 @@ test('em volta do treino: exemplos coerentes com cada restrição, horário e co
   // faixas de IMC
   for (let imc = 10; imc <= 80; imc += 0.5) for (const idade of [18, 59, 60, 99]) assert.ok(semLixo(imcFaixa(imc, idade)));
   F.confere('em volta do treino');
+});
+
+test('alergia alimentar: as 64 combinações × restrições × objetivos × refeições — nenhum alimento com o alergênico no cardápio, nas trocas, em casa, nas sugestões nem nos exemplos', () => {
+  const F = new Falhas();
+  const ALG = op('alergias').filter((x) => x !== 'nenhuma');
+  const TODAS_ALG = subconjuntos(ALG);
+  // palavras dos exemplos de "em volta do treino" que indicam cada alergênico
+  const PALAVRA = { amendoim: /amendoim/i, castanhas: /castanha|nozes|amêndoa/i, peixe: /atum|peixe|sardinha|camarão/i, ovo: /ovo/i, leite: /iogurte|queijo|leite(?! de soja)|whey/i, soja: /soja|tofu/i };
+  const todos = ALIMENTOS.map((f) => f.id);
+  const r = semente(4321);
+  let n = 0, itens = 0;
+  for (const alergias of TODAS_ALG) for (const restricoes of [['nenhuma'], ['vegetariano'], ['vegano'], ['sem_lactose'], ['sem_gluten', 'vegano']]) for (const objetivo of OBJ) for (const refeicoes of ['3', '5']) {
+    const a = { ...base, objetivo, refeicoes, restricoes, alergias: alergias.length ? alergias : ['nenhuma'], preco: n % 2 ? 'barato' : 'tanto_faz' };
+    const res = calcular(a);
+    const rot = JSON.stringify({ alergias, restricoes, objetivo, refeicoes });
+    n++; TOTAL++;
+    if (JSON.stringify(res.alergias) !== JSON.stringify(alergias)) F.add('alergias não chegaram ao resultado', rot);
+    if (alergias.length && !res.avisos.some((x) => x.alergia && /rótulo/.test(x.texto) && /CONTÉM/.test(x.texto))) F.add('alergia sem o aviso de ler o rótulo', rot);
+    if (!alergias.length && res.avisos.some((x) => x.alergia)) F.add('aviso de alergia sem alergia', rot);
+    if (alergias.includes('leite') && res.avisos.some((x) => /versões sem lactose/.test(x.texto))) F.add('alergia ao leite com dica de produto sem lactose', rot);
+    const ferem = (id) => alergias.filter((al) => alergenosDe(id).includes(al));
+    const confere = (dia, onde) => { if (!dia) return; for (const ref of dia.refeicoes) for (const it of ref.itens) { itens++; const f = ferem(it.id); if (f.length) F.add(`alergênico no ${onde}`, `${rot}: ${it.id} (${f})`); } };
+    if (res.modo === 'educativo') continue;
+    const seed = inteiro(r, 0, 999);
+    const c = cardapio(res, seed);
+    confere(c, 'cardápio');
+    if (c && c.refeicoes.length && !c.refeicoes.every((ref) => ref.itens.length)) F.add('refeição vazia com alergia', rot);
+    // trocar uma refeição e "outra sugestão"
+    confere(cardapio(res, seed, { trocas: [2, 0, 1, 0, 0, 0].slice(0, Number(refeicoes)) }), 'cardápio trocado');
+    const prox = proximaSemente(res, seed);
+    if (prox != null) confere(cardapio(res, prox), 'outra sugestão');
+    // em casa, com a despensa sorteada (inclui alimentos com o alergênico): nada deles entra, nem nas sugestões de compra
+    const emCasa = [...new Set(Array.from({ length: inteiro(r, 5, 80) }, () => um(r, todos)))];
+    const cc = cardapio(res, seed, { emCasa });
+    confere(cc, 'cardápio de casa');
+    for (const f of cc.faltas) for (const s of f.sugestoes) if (ferem(s.id).length) F.add('sugestão de compra com alergênico', `${rot}: ${s.id}`);
+    // exemplos de antes e depois do treino
+    const t = emVoltaDoTreino(res, n % 2 === 0);
+    for (const s of [...t.pre, ...t.pos]) for (const al of alergias) if (PALAVRA[al].test(al === 'soja' ? s : s.replace(/bebida de soja|leite de soja/gi, ''))) F.add('exemplo com alergênico', `${rot}: ${al} em “${s}”`);
+    // suplementos: whey é leite
+    if (alergias.includes('leite') && suplementos(res).linhas.some((l) => /Whey protein: só uma forma prática/.test(l))) F.add('whey para alergia ao leite', rot);
+  }
+  assert.equal(n, 64 * 5 * 3 * 2);
+  assert.ok(itens > 10000, 'poucos alimentos conferidos: ' + itens);
+  F.confere('alergia alimentar');
+});
+
+test('alergia alimentar: a tabela de alergênicos cobre os alimentos e os pratos prontos', () => {
+  // exemplos conferidos à mão (composição usual) e os pratos prontos que herdam dos ingredientes (RECEITAS)
+  const tem = (id, al) => alergenosDe(id).includes(al);
+  for (const [id, al] of [['pasta-de-amendoim', 'amendoim'], ['pacoca', 'amendoim'], ['castanha-de-caju', 'castanhas'], ['nozes', 'castanhas'], ['camarao-cozido', 'peixe'], ['atum-em-conserva', 'peixe'], ['ovo-cozido', 'ovo'], ['maionese', 'ovo'], ['iogurte-natural', 'leite'], ['whey-protein', 'leite'], ['manteiga-com-sal', 'leite'], ['tofu', 'soja'], ['leite-de-soja', 'soja'],
+    ['feijao-tropeiro', 'ovo'], ['baiao-de-dois', 'leite'], ['estrogonofe-de-frango', 'leite'], ['estrogonofe-de-carne', 'leite'], ['omelete-de-queijo', 'ovo'], ['omelete-de-queijo', 'leite'], ['canjica-com-leite', 'leite']]) assert.ok(tem(id, al), `${id} deveria ter ${al}`);
+  for (const id of ['arroz-branco-cozido', 'feijao-carioca-cozido', 'banana-prata', 'peito-de-frango-grelhado', 'azeite-de-oliva', 'batata-doce-cozida']) assert.deepEqual(alergenosDe(id), [], id);
+  // o óleo do preparo não conta: a feijoada não vira "soja"
+  assert.ok(!tem('feijoada', 'soja'));
+  assert.ok(!temAlergeno('id-que-nao-existe', ['leite']) && !temAlergeno('ovo-cozido', null));
+  // vegano não tem leite nem ovo (a etiqueta e a tabela concordam)
+  for (const f of ALIMENTOS) if (f.tags.includes('vegano')) assert.ok(!tem(f.id, 'leite') && !tem(f.id, 'ovo'), f.id);
 });
 
 test('em casa: 3.000 despensas sorteadas — só o que foi marcado, restrições 100%, sem erro, faltas coerentes', () => {

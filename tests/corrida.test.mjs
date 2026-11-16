@@ -416,7 +416,7 @@ test('registros e estado: validação na fronteira', () => {
   assert.equal(limparRegistro({ id: 'a', data: '2026-11-01', tipo: 'leve', distKm: 5, durMin: 4 }), null, 'ritmo impossível');
   assert.equal(limparRegistro({ id: 'a b', data: '2026-11-01', tipo: 'leve', distKm: 5, durMin: 30 }), null);
   assert.equal(limparRegistro({ id: 'a', data: '2026-11-01', tipo: 'descanso', distKm: 5, durMin: 30 }).tipo, 'livre');
-  assert.deepEqual(limparRegistro({ id: 'a', data: '2026-11-01', tipo: 'longo', distKm: 12.345, durMin: 80.2501, pse: 5, dor: { onde: 'pe', nivel: 3 }, nota: 'ok', planejado: 'x' }), { id: 'a', data: '2026-11-01', tipo: 'longo', distKm: 12.35, durMin: 80.25, pse: 5, dor: { onde: 'pe', nivel: 3 }, nota: 'ok', planejado: 'x' });
+  assert.deepEqual(limparRegistro({ id: 'a', data: '2026-11-01', tipo: 'longo', distKm: 12.345, durMin: 80.2501, pse: 5, dor: { onde: 'pe', nivel: 3 }, nota: 'ok', planejado: 'x' }), { id: 'a', data: '2026-11-01', tipo: 'longo', distKm: 12.35, durMin: 80.25, pse: 5, dores: [{ onde: 'pe', nivel: 3, tipo: 'articular' }], nota: 'ok', planejado: 'x' });
   assert.deepEqual(limparCorrida({ answers: { ...base, extra: 1, idade: 500 }, aceitoEm: '2026-10-07T12:00:00.000Z', inicio: '2026-10-08' }).inicio, '2026-10-05');
   // cronômetro guardado: só números dentro dos limites, e só com plano aceito
   const cron = { data: '2026-10-08', i: 3, fim: 1791460000000, pausadoEm: 0, inicio: 1791459000000, parado: 0, inicioPasso: 1791459900000, terminado: 0, chave: 12345 };
@@ -1173,4 +1173,26 @@ test('A2, A3, A4 e volta depois de dor: saúde e lesões', () => {
   const meia = estado({ ...base, experiencia: 'avancado', kmSemana: 45, longoAtual: 16, distancia: '21', semanasProva: 16, tempoLongo: '150', dias: ['1', '2', '4', '6', '0'] }, '2026-11-02', '2026-11-02');
   assert.match(efeitoDoFoco('musculacao', meia).linhas[0], /Com essa prioridade, a sua meta de meia maratona passa a/);
   assert.ok(!efeitoDoFoco('corrida', meia).linhas.some((l) => /Com essa prioridade/.test(l)));
+});
+
+test('triagem da corrida: "só com supervisão" não tem saída pela liberação; a pergunta da liberação só aparece com motivo', () => {
+  const q = PERGUNTAS.find((x) => x.k === 'liberado');
+  assert.equal(q.dataEm, 'liberadoEm');
+  assert.ok(!q.se(base));
+  assert.ok(q.se({ ...base, triagem: ['sopro'] }) && q.se({ ...base, condicoes: ['hipertensao'] }) && q.se({ ...base, remedios: ['glicose'] }));
+  assert.ok(!q.se({ ...base, triagem: ['medico'] }) && !q.se({ ...base, triagem: ['medico', 'tontura'] }));
+  assert.equal(motivoBloqueio({ ...base, triagem: ['medico'] }), 'supervisao');
+  assert.match(avisosBloqueio({ ...base, triagem: ['medico'] })[0].texto, /supervisão/);
+  // respostas salvas com "só com supervisão" e "liberado: sim" (versão anterior) continuam válidas, mas sem plano
+  assert.ok(respostasCompletas({ ...base, triagem: ['medico'], liberado: 'sim' }));
+  assert.equal(gerarPlano({ ...base, triagem: ['medico'], liberado: 'sim' }), null);
+});
+
+test('zonas: com remédio que segura o pulso, nada de frequência cardíaca (só esforço e fala)', () => {
+  const z = zonasDe(perfil({ ...base, remedios: ['pulso'] }), null);
+  assert.equal(z.fcMax, null);
+  assert.ok(z.lista.every((x) => x.fc === null && x.pse && x.fala));
+  assert.ok(zonasDe(perfil(base), null).lista[0].fc[0] > 0);
+  const p = gerarPlano({ ...base, remedios: ['pulso'] });
+  assert.ok(p.orientacoes.find((o) => o[0] === 'Como sentir o esforço')[1].includes('não use os batimentos'));
 });

@@ -25,6 +25,7 @@ import { LOCAIS_DOR, DIAS_ATIVA, dorDeAlerta, doresAtivas } from './dor.js';
 import { comboAtual } from './combinado.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { TIPOS_TREINO, DOR_CORRIDA } from '../data/corrida.js';
+import { perguntaCondicoes, perguntaTriagem, perguntaRemedios, perguntaLiberado, condicoesDe, sinaisDe, remediosDe, soComSupervisao, respostasProtegidas } from './saude.js';
 
 // ---------- datas (dia = 'AAAA-MM-DD'; contas feitas ao meio-dia UTC para não depender de fuso nem de horário de verão) ----------
 const DIA_MS = 86400000;
@@ -42,10 +43,20 @@ const vizinhos = (a, b) => distCiclica(a, b) === 1;
 // ---------- perguntas ----------
 const corre = (a) => ['iniciante', 'regular', 'avancado'].includes(a.experiencia);
 const comDistancia = (a) => ['distancia', 'ritmo', 'prova'].includes(a.objetivo);
-const temCondicao = (a) => (Array.isArray(a.condicoes) && a.condicoes.some((x) => x !== 'nenhuma')) || (Array.isArray(a.triagem) && a.triagem.some((x) => x !== 'nenhum'));
+// condição ou sinal que pede a pergunta da liberação (os remédios entram pelas condições que indicam: logic/saude.js).
+// "Um médico disse que só com supervisão" não tem saída pela liberação: o plano não é montado (ver perfil).
+const temCondicao = (a) => (condicoesDe(a).length > 0 || sinaisDe(a).length > 0) && !soComSupervisao(a);
 const DIAS_OP = [['1', 'Segunda-feira', ''], ['2', 'Terça-feira', ''], ['3', 'Quarta-feira', ''], ['4', 'Quinta-feira', ''], ['5', 'Sexta-feira', ''], ['6', 'Sábado', ''], ['0', 'Domingo', '']];
 
 export const PERGUNTAS = [
+  // A idade e as perguntas de segurança vêm primeiro, na ordem do PAR-Q+ (ref parq2023): condições, sinais, remédios e a
+  // liberação médica. As opções e a regra estão em logic/saude.js (as mesmas do Treinador).
+  // `informar`: o valor de partida não vale como resposta (ver views/coach.js)
+  { k: 'idade', tipo: 'numero', informar: true, titulo: 'Quantos anos você tem?', ajuda: 'A idade muda a progressão e os cuidados.', min: 8, max: 99, un: 'anos', padrao: 30 },
+  perguntaCondicoes(),
+  perguntaTriagem(),
+  perguntaRemedios(),
+  perguntaLiberado(temCondicao, 'Um médico já liberou você para correr?'),
   {
     k: 'experiencia', tipo: 'um', titulo: 'Como é a sua corrida hoje?',
     ajuda: 'Escolha o que mais parece com você, mesmo que esteja parado agora.',
@@ -62,10 +73,6 @@ export const PERGUNTAS = [
   { k: 'kmSemana', tipo: 'numero', se: corre, titulo: 'Quantos quilômetros você corre por semana?', ajuda: 'A média das últimas semanas em que treinou. Uma estimativa serve.', min: 0, max: 200, un: 'km por semana', padrao: 15 },
   { k: 'longoAtual', tipo: 'numero', se: (a) => corre(a) || a.experiencia === 'irregular', titulo: 'Qual foi a sua corrida mais longa nas últimas 4 semanas?', ajuda: 'O treino longo cresce a partir dela, sem saltos. Se ficou parado, informe a de antes da pausa.', min: 1, max: 60, un: 'km', padrao: 5 },
   {
-    k: 'provas', tipo: 'um', se: (a) => a.experiencia === 'regular' || a.experiencia === 'avancado', titulo: 'Qual a maior prova que você já completou?', ajuda: 'Serve para os cuidados de quem vai fazer a primeira maratona; não muda os treinos.',
-    op: [['nenhuma', 'Nunca fiz prova', ''], ['5a10', '5 km ou 10 km', ''], ['meia', 'Meia maratona', ''], ['maratona', 'Maratona', '']],
-  },
-  {
     // tempo parado: muda o nível e o volume de partida (caterisano2019, zheng2022)
     k: 'pausa', tipo: 'um', opcional: true, se: corre, titulo: 'Há quanto tempo você está sem correr?',
     ajuda: 'A volta depois de uma pausa começa com menos volume e sem treinos fortes.',
@@ -74,7 +81,8 @@ export const PERGUNTAS = [
   {
     k: 'objetivo', tipo: 'um', titulo: 'Qual é o seu objetivo na corrida?',
     op: [
-      ['comecar', 'Começar a correr', 'Chegar a 30 minutos de corrida sem parar (para quem já corre, vale como “Saúde e disposição”)'],
+      // só para quem ainda está na corrida e caminhada (nível 0): para quem já corre, valeria como "Saúde e disposição"
+      ['comecar', 'Começar a correr', 'Chegar a 30 minutos de corrida sem parar', (a) => { try { return perfil({ ...a, objetivo: 'saude' }).nivel === 0; } catch { return true; } }],
       ['saude', 'Saúde e disposição', 'Manter uma rotina, sem prova em vista'],
       ['distancia', 'Correr mais longe', 'Completar uma distância sem parar'],
       ['ritmo', 'Correr mais rápido', 'Melhorar o tempo em uma distância'],
@@ -82,13 +90,18 @@ export const PERGUNTAS = [
     ],
   },
   { k: 'distancia', tipo: 'um', se: comDistancia, titulo: 'Qual distância?', op: [['5', '5 km', ''], ['10', '10 km', ''], ['21', 'Meia maratona', '21,1 km'], ['42', 'Maratona', '42,2 km']] },
+  // só muda algo na maratona: o aviso de quem vai fazer a primeira (smyth2021muro, smyth2020vc)
+  {
+    k: 'provas', tipo: 'um', se: (a) => corre(a) && comDistancia(a) && a.distancia === '42', titulo: 'Você já completou uma maratona?', ajuda: 'Para a primeira maratona, eu explico os cuidados de quem vai completar a distância pela primeira vez. Não muda os treinos.',
+    op: [['nenhuma', 'Nunca fiz prova', ''], ['5a10', 'Já fiz 5 km ou 10 km', ''], ['meia', 'Já fiz meia maratona', ''], ['maratona', 'Sim, já completei uma maratona', '']],
+  },
   { k: 'semanasProva', tipo: 'numero', se: (a) => a.objetivo === 'prova', titulo: 'Em quantas semanas é a prova?', ajuda: 'Esta semana conta como a primeira. Na proposta eu mostro o dia em que a prova cai, para você conferir.', min: 1, max: 52, un: 'semanas', padrao: 12 },
   { k: 'temAlvo', tipo: 'um', se: (a) => a.objetivo === 'ritmo' || a.objetivo === 'prova', titulo: 'Você tem um tempo em mente?', op: [['nao', 'Não', 'Quero completar bem ou só melhorar'], ['sim', 'Sim', 'Tenho um tempo-alvo']] },
   { k: 'alvoMin', tipo: 'numero', se: (a) => (a.objetivo === 'ritmo' || a.objetivo === 'prova') && a.temAlvo === 'sim', titulo: 'Qual é o tempo-alvo?', ajuda: 'O tempo total da prova, em horas, minutos e segundos. Exemplo: meia maratona em 1 h 58 min 30 s.', min: 12, max: 420, un: 'minutos', padrao: 60, formato: 'tempo' },
   {
     k: 'resultado', tipo: 'um', se: corre, titulo: 'Você tem um resultado recente, de prova ou de treino forte?',
     ajuda: 'Dos últimos 3 meses. Com ele eu calculo os ritmos dos seus treinos. Sem ele, os treinos vão pelo esforço.',
-    op: [['nao', 'Não tenho', ''], ['3', '3 km', ''], ['5', '5 km', ''], ['10', '10 km', ''], ['21', 'Meia maratona', ''], ['42', 'Maratona', '']],
+    op: [['3', '3 km', ''], ['5', '5 km', ''], ['10', '10 km', ''], ['21', 'Meia maratona', ''], ['42', 'Maratona', ''], ['nao', 'Não tenho', '']],
   },
   { k: 'resultadoMin', tipo: 'numero', se: (a) => corre(a) && !!a.resultado && a.resultado !== 'nao', titulo: 'Em quanto tempo?', ajuda: 'Em horas, minutos e segundos, como no relógio. Exemplo: 27 min 30 s.', min: 8, max: 420, un: 'minutos', padrao: 30, formato: 'tempo' },
   { k: 'dias', tipo: 'varios', titulo: 'Em quais dias da semana você pode correr?', ajuda: 'Marque os dias possíveis. Eu deixo pelo menos um dia de descanso por semana e evito treinos fortes em dias seguidos.', op: DIAS_OP },
@@ -107,30 +120,13 @@ export const PERGUNTAS = [
     ],
   },
   { k: 'local', tipo: 'um', titulo: 'Onde você corre na maior parte das vezes?', ajuda: 'Na esteira, os treinos saem em km/h; na pista, os tiros saem em metros. Nos outros lugares, nada muda.', op: [['rua', 'Rua, parque ou calçadão', ''], ['pista', 'Pista de atletismo', ''], ['esteira', 'Esteira', ''], ['varia', 'Varia', '']] },
-  { k: 'idade', tipo: 'numero', titulo: 'Quantos anos você tem?', ajuda: 'A idade muda a progressão e os cuidados.', min: 8, max: 99, un: 'anos', padrao: 30 },
-  { k: 'peso', tipo: 'numero', titulo: 'Qual é o seu peso?', ajuda: 'Uma estimativa já serve.', min: 30, max: 250, un: 'kg', padrao: 70, passo: 0.5, dec: 1 },
-  { k: 'altura', tipo: 'numero', titulo: 'Qual é a sua altura?', ajuda: 'Em centímetros.', min: 120, max: 220, un: 'cm', padrao: 170 },
+  { k: 'peso', tipo: 'numero', informar: true, titulo: 'Qual é o seu peso?', ajuda: 'Uma estimativa já serve.', min: 30, max: 250, un: 'kg', padrao: 70, passo: 0.5, dec: 1 },
+  { k: 'altura', tipo: 'numero', informar: true, titulo: 'Qual é a sua altura?', ajuda: 'Em centímetros.', min: 120, max: 220, un: 'cm', padrao: 170 },
   { k: 'lesao12m', tipo: 'um', titulo: 'Você teve alguma lesão nos últimos 12 meses?', ajuda: 'Lesão recente é o principal fator de risco para uma nova: o plano sobe mais devagar.', op: [['nao', 'Não', ''], ['sim', 'Sim', 'Precisei parar ou reduzir os treinos']] },
   {
     k: 'limitacoes', tipo: 'varios', titulo: 'Você sente dor em alguma destas regiões hoje?', ajuda: 'O plano começa mais cuidadoso. Depois, use “Contar uma dor” para ele se ajustar ao que você sente.', nenhum: 'nenhuma',
-    op: [['nenhuma', 'Nenhuma', ''], ['joelho', 'Joelho', ''], ['canela', 'Canela', ''], ['aquiles', 'Tendão de Aquiles ou panturrilha', ''], ['pe', 'Pé ou calcanhar', ''], ['quadril', 'Quadril ou virilha', ''], ['coxa', 'Coxa', ''], ['lombar', 'Lombar', '']],
+    op: [['joelho', 'Joelho', ''], ['canela', 'Canela', ''], ['aquiles', 'Tendão de Aquiles ou panturrilha', ''], ['pe', 'Pé ou calcanhar', ''], ['quadril', 'Quadril ou virilha', ''], ['coxa', 'Coxa', ''], ['lombar', 'Lombar', ''], ['nenhuma', 'Nenhuma', '']],
   },
-  {
-    k: 'condicoes', tipo: 'varios', titulo: 'Alguma destas condições se aplica a você?', nenhum: 'nenhuma',
-    op: [['nenhuma', 'Nenhuma', ''], ['hipertensao', 'Pressão alta', ''], ['cardiaco', 'Problema no coração ou na circulação', ''], ['diabetes', 'Diabetes', ''], ['renal', 'Doença nos rins', ''], ['gestante', 'Gestação', ''], ['posparto', 'Parto nos últimos 6 meses', ''], ['cronica', 'Outra doença crônica', '']],
-  },
-  {
-    k: 'triagem', tipo: 'varios', titulo: 'Antes de começar: você tem algum destes sinais?', ajuda: 'São perguntas de segurança usadas antes de iniciar exercícios.', nenhum: 'nenhum',
-    op: [
-      ['nenhum', 'Nenhum deles', ''],
-      ['dor_peito', 'Dor ou pressão no peito, em repouso ou ao fazer esforço', ''],
-      ['tontura', 'Tontura com perda de equilíbrio ou desmaio nos últimos 12 meses', ''],
-      ['falta_ar', 'Falta de ar fora do normal ou palpitações', ''],
-      ['osseo', 'Problema nos ossos ou articulações que pode piorar com exercício', ''],
-      ['medico', 'Um médico já disse que só devo me exercitar com supervisão', ''],
-    ],
-  },
-  { k: 'liberado', tipo: 'um', se: temCondicao, titulo: 'Um médico já liberou você para correr?', ajuda: 'Com essas respostas, a recomendação é ter liberação médica antes de correr.', op: [['sim', 'Sim, estou liberado', ''], ['nao', 'Ainda não', '']] },
 ];
 
 export const ROTULO = {
@@ -287,8 +283,12 @@ export function perfil(respostas) {
   const a = isObj(respostas) ? respostas : {};
   const idade = entre(numero(a.idade, 30), 1, 120);
   const exp = OPC.experiencia.has(a.experiencia) ? a.experiencia : 'nunca';
-  const cond = lista(a.condicoes, OPC.condicoes).filter((x) => x !== 'nenhuma');
-  const tri = lista(a.triagem, OPC.triagem).filter((x) => x !== 'nenhum');
+  // condições já com o que os remédios dizem (insulina → diabetes; remédio contínuo sem condição → doença crônica): saude.js
+  const cond = condicoesDe(a);
+  const tri = sinaisDe(a);
+  const remedios = remediosDe(a);
+  // remédio que deixa o pulso mais baixo (betabloqueador): as zonas vão pelo esforço e pela fala (sbc2020, pescatello2004)
+  const pulsoBaixo = remedios.includes('pulso');
   const lim = lista(a.limitacoes, OPC.limitacoes).filter((x) => x !== 'nenhuma');
   // Quem corre de vez em quando, devagar e sem regularidade: já corre, mas sem base. Parte de 3 corridas curtas por semana
   // (cerca de 9 km: 3 × 22 minutos), o mínimo para o fôlego melhorar sem passar do que protege quem começa (pollock1998).
@@ -314,7 +314,9 @@ export function perfil(respostas) {
   // (6 METs ou mais) — e correr é vigoroso (cdc_intensidade). Por isso o plano de corrida pede a liberação nos dois casos.
   // Gestação e pós-parto, só com liberação (csep2019, goom2019).
   const precisaLiberacao = tri.length > 0 || gestante || posparto || cardiaco || renal || diabetes;
-  const bloqueio = idade < 12 ? 'idade' : precisaLiberacao && !liberado ? 'liberacao' : '';
+  // "um médico disse que só com supervisão" (parq2023, pergunta 7): nenhum plano para correr sozinho, mesmo com liberação
+  const supervisao = tri.includes('medico');
+  const bloqueio = idade < 12 ? 'idade' : supervisao ? 'supervisao' : precisaLiberacao && !liberado ? 'liberacao' : '';
   // Sem treino forte: sintomas, coração, rins, gestação e pós-parto sempre; pressão alta e outra doença crônica enquanto não
   // houver liberação (pescatello2004: intensidade moderada; oms2020 e bredin2013: com doença crônica, intensidade leve a
   // moderada e orientação de um profissional antes de ir além).
@@ -374,7 +376,7 @@ export function perfil(respostas) {
   const longoAtual = jaCorre ? entre(numero(a.longoAtual, Math.max(3, km * 0.4)), 1, 60) : 0;
   return {
     idade, exp, nivel, nivelBase, retorno, pausaDias, ativo, jaCorre, jovem, idoso, master, gestante, posparto, cardiaco, renal, diabetes, hipertensao, cronica, liberado,
-    precisaLiberacao, confirmar, bloqueio, bloqueado: !!bloqueio, cautela, imc, obeso, lesaoPrevia, limitacoes: lim, condicoes: cond, triagem: tri,
+    precisaLiberacao, confirmar, bloqueio, bloqueado: !!bloqueio, cautela, imc, obeso, lesaoPrevia, limitacoes: lim, condicoes: cond, triagem: tri, remedios, pulsoBaixo, supervisao,
     resultadoInvalido: !!rd && typeof a.resultadoMin === 'number' && !resultado, alvoInvalido: temAlvo && !alvoOk,
     dias, diaLongo, descansoForcado, tempo, tempoLongo, objetivo, dist, distPedida, distMax, semanasProva, alvoSeg, resultado, aparelho, local, modo, qMax,
     // irregular: cerca de 3 km (20 a 25 minutos) por dia de corrida, até 3 dias
@@ -395,9 +397,10 @@ export const motivoBloqueio = (respostas) => perfil(respostas).bloqueio;
 export function avisosBloqueio(respostas) {
   const pf = perfil(respostas);
   if (pf.bloqueio === 'idade') return [{ tipo: 'danger', texto: 'Para menores de 12 anos, não monto plano de corrida. Nessa idade a recomendação é somar 60 minutos por dia de atividades variadas, como brincadeiras e esportes, com orientação de um adulto. Não existem limites de distância por idade comprovados em estudos; por cautela, o treino estruturado fica para depois.', refs: ['oms2020', 'paz2021'] }];
+  if (pf.bloqueio === 'supervisao') return [{ tipo: 'danger', texto: 'Um médico já disse que você só deve se exercitar com supervisão. Então a corrida tem de ser feita com um profissional acompanhando, seguindo o que o médico indicou. Não monto plano para correr sozinho, mesmo com liberação.', refs: ['parq2023'] }];
   if (pf.bloqueio === 'liberacao') {
     const out = [];
-    if (pf.triagem.length) out.push({ tipo: 'danger', texto: 'Você marcou um sinal de alerta. Com dor ou pressão no peito, tontura ou desmaio, falta de ar fora do normal, palpitações ou restrição médica, a recomendação é procurar um médico antes de qualquer exercício. Não monto plano de corrida até você ter essa liberação.', refs: ['whitfield2017'] });
+    if (pf.triagem.length) out.push({ tipo: 'danger', texto: 'Você marcou um sinal de alerta. Com dor ou pressão no peito, falta de ar com pouco esforço, tontura ou desmaio, palpitações, inchaço nos tornozelos, dor na perna ao caminhar ou cansaço fora do comum, a recomendação é procurar um médico antes de qualquer exercício. Não monto plano de corrida até você ter essa liberação.', refs: ['whitfield2017', 'parq2023'] });
     if (pf.gestante) out.push({ tipo: 'danger', texto: 'Na gestação, o exercício é recomendado, mas depende de avaliação: algumas situações contraindicam o esforço. Converse com o seu obstetra e, com a liberação, refaça a entrevista.', refs: ['csep2019', 'sbc_gestacao2021'] });
     if (pf.posparto) out.push({ tipo: 'danger', texto: 'Depois do parto, a volta à corrida deve ser avaliada por um profissional (médico ou fisioterapeuta pélvica). O prazo é individual: nunca antes de 3 semanas, com as lesões do parto cicatrizadas, e as diretrizes de fisioterapeutas de 2019 sugerem esperar 12 semanas. Antes de correr, é preciso caminhar 30 minutos sem escape de urina, sensação de peso na vagina ou dor pélvica. Com a liberação, refaça a entrevista.', refs: ['christopher2024', 'selman2022', 'goom2019'] });
     if (pf.cardiaco || pf.renal || pf.diabetes) out.push({ tipo: 'danger', texto: pf.ativo
@@ -412,9 +415,11 @@ export function avisosBloqueio(respostas) {
 // Âncoras: teste da fala em três níveis (foster2020), esforço de 1 a 10 com cortes ≤4, 5–6 e ≥7
 // (haddad2017, ieno2020) e % da frequência máxima (haugen2022).
 // Frequência máxima estimada: 208 − 0,7 × idade (tanaka2001), com erro de cerca de 11 batimentos (shookster2020).
+// Com remédio que deixa o pulso mais baixo (betabloqueador), os batimentos não medem o esforço: as zonas ficam só com o
+// esforço e a fala, sem frequência cardíaca (sbc2020, pescatello2004). `fcMax` = null.
 export function zonasDe(pf, ritmos) {
-  const fcMax = Math.round(208 - 0.7 * pf.idade);
-  const bpm = (a, b) => [Math.round(fcMax * a), Math.round(fcMax * b)];
+  const fcMax = pf.pulsoBaixo ? null : Math.round(208 - 0.7 * pf.idade);
+  const bpm = (a, b) => (fcMax ? [Math.round(fcMax * a), Math.round(fcMax * b)] : null);
   return {
     fcMax,
     lista: [
@@ -1013,6 +1018,30 @@ const LOCAIS_CORRIDA = new Set(['lombar', 'quadril', 'virilha', 'coxa-frente', '
 // Registro de corrida validado, ou null. Fronteira de segurança: é por aqui que passa o que vem de um backup importado.
 // { id, data, tipo, distKm (0 = não informada), durMin (0 = não informado), pse (1–10 ou null), dor: { onde, nivel } | null, nota, planejado,
 //   plan: o treino que estava no plano naquele dia (para a análise do que foi feito), ou null }
+// Dores anotadas em uma corrida: [{ onde, nivel: 1–10, tipo }], uma por local, até MAX_DORES_REGISTRO.
+// tipo: 'muscular' (dor muscular comum depois do treino: só nos locais com músculo, MUSCULO_CORRIDA), 'articular'
+// (articulação, osso ou tendão; também quando a pessoa não sabe dizer, por cautela) ou 'aguda' (fisgada, estalo,
+// inchaço, não consegue apoiar). Registros antigos tinham uma dor só, em `dor: { onde, nivel }`: vira articular.
+export const MAX_DORES_REGISTRO = 6;
+export const MUSCULO_CORRIDA = new Set(['lombar', 'quadril', 'virilha', 'coxa-frente', 'coxa-tras', 'panturrilha', 'gluteo', 'canela']);
+const TIPOS_DOR_REGISTRO = new Set(['muscular', 'articular', 'aguda']);
+function limparDoresDoRegistro(raw) {
+  const brutas = Array.isArray(raw.dores) ? raw.dores : isObj(raw.dor) ? [{ ...raw.dor, tipo: 'articular' }] : [];
+  const out = [];
+  for (const d of brutas) {
+    if (!isObj(d) || typeof d.onde !== 'string' || !Object.prototype.hasOwnProperty.call(LOCAIS_DOR, d.onde) || out.some((x) => x.onde === d.onde)) continue;
+    const n = typeof d.nivel === 'number' && Number.isFinite(d.nivel) ? Math.round(d.nivel) : 0;
+    if (n < 1 || n > 10) continue;
+    let tipo = typeof d.tipo === 'string' && TIPOS_DOR_REGISTRO.has(d.tipo) ? d.tipo : 'articular';
+    if (tipo === 'muscular' && !MUSCULO_CORRIDA.has(d.onde)) tipo = 'articular';
+    out.push({ onde: d.onde, nivel: n, tipo });
+    if (out.length >= MAX_DORES_REGISTRO) break;
+  }
+  return out;
+}
+// Dor muscular comum depois do treino: só dores musculares, todas leves (até 3 de 10). A tela tranquiliza e diz o
+// que é esperado (começa em horas, piora em 1 a 3 dias e melhora em até uma semana — zondi2015, mizumura2024).
+export const soDorMuscularLeve = (dores) => Array.isArray(dores) && dores.length > 0 && dores.every((d) => d.tipo === 'muscular' && d.nivel <= 3);
 export function limparRegistro(raw) {
   if (!isObj(raw) || !idOk(raw.id) || !diaValido(raw.data)) return null;
   const ano = Number(raw.data.slice(0, 4));
@@ -1024,13 +1053,8 @@ export function limparRegistro(raw) {
   // ritmo impossível (mais rápido que 1:50 por km): o registro é recusado
   if (distKm && durMin && (durMin * 60) / distKm < 110) return null;
   const pse = typeof raw.pse === 'number' && Number.isFinite(raw.pse) && Math.round(raw.pse) >= 1 && Math.round(raw.pse) <= 10 ? Math.round(raw.pse) : null;
-  let dor = null;
-  if (isObj(raw.dor) && typeof raw.dor.onde === 'string' && Object.prototype.hasOwnProperty.call(LOCAIS_DOR, raw.dor.onde)) {
-    const n = typeof raw.dor.nivel === 'number' && Number.isFinite(raw.dor.nivel) ? Math.round(raw.dor.nivel) : 0;
-    if (n >= 1 && n <= 10) dor = { onde: raw.dor.onde, nivel: n };
-  }
   return {
-    id: raw.id, data: raw.data, tipo: typeof raw.tipo === 'string' && TIPOS_REGISTRO.has(raw.tipo) ? raw.tipo : 'livre', distKm, durMin, pse, dor,
+    id: raw.id, data: raw.data, tipo: typeof raw.tipo === 'string' && TIPOS_REGISTRO.has(raw.tipo) ? raw.tipo : 'livre', distKm, durMin, pse, dores: limparDoresDoRegistro(raw),
     nota: typeof raw.nota === 'string' ? raw.nota.slice(0, 200) : '', planejado: typeof raw.planejado === 'string' ? raw.planejado.slice(0, 160) : '',
     // o treino que estava no plano naquele dia; a chave só existe quando há o que guardar
     ...(limparPlanejado(raw.plan) ? { plan: limparPlanejado(raw.plan) } : {}),
@@ -1060,6 +1084,8 @@ function limparRespostas(v) {
     if (q.tipo === 'numero') { if (typeof x === 'number' && Number.isFinite(x) && x >= q.min && x <= q.max) out[q.k] = x; }
     else if (q.tipo === 'um') { if (typeof x === 'string' && q.op.some((o) => o[0] === x)) out[q.k] = x; }
     else if (Array.isArray(x)) { const ok = [...new Set(x.filter((y) => typeof y === 'string' && q.op.some((o) => o[0] === y)))].slice(0, q.op.length); if (ok.length) out[q.k] = ok; }
+    // data da liberação médica (AAAA-MM-DD): só com a resposta "sim"
+    if (q.dataEm && out[q.k] === 'sim' && diaValido(v[q.dataEm])) out[q.dataEm] = v[q.dataEm];
   }
   return out;
 }
@@ -1771,9 +1797,9 @@ export function gerarPlano(respostas, opcoes) {
   const efeitos = op.dores.map((d) => ({ d, ef: efeitoDaDor(d, pf) })).filter((x) => x.ef.nivel > 0);
   // dor de 4 ou mais anotada em uma corrida dos últimos 7 dias também conta, a não ser que haja um relato do mesmo local
   // (ativo, ou marcado como melhorado depois dessa corrida)
-  if (acompanha) for (const r of op.registros) {
-    if (!r.dor || r.dor.nivel < 4 || r.data > op.hoje || diasEntre(r.data, op.hoje) > 7 || op.dores.some((d) => d.onde === r.dor.onde && diaValido(d.data) && d.data > r.data) || op.encerradas.some((d) => d.onde === r.dor.onde && d.fim >= r.data)) continue;
-    const d = { onde: r.dor.onde, nivel: r.dor.nivel, tipo: 'articular', quando: 'durante', dias: diasEntre(r.data, op.hoje) };
+  if (acompanha) for (const r of op.registros) for (const rd of (Array.isArray(r.dores) ? r.dores : [])) {
+    if (rd.nivel < 4 || r.data > op.hoje || diasEntre(r.data, op.hoje) > 7 || op.dores.some((d) => d.onde === rd.onde && diaValido(d.data) && d.data > r.data) || op.encerradas.some((d) => d.onde === rd.onde && d.fim >= r.data)) continue;
+    const d = { onde: rd.onde, nivel: rd.nivel, tipo: rd.tipo || 'articular', quando: rd.tipo === 'muscular' ? 'depois' : 'durante', dias: diasEntre(r.data, op.hoje) };
     const ef = efeitoDaDor(d, pf);
     if (ef.nivel > 0) efeitos.push({ d, ef });
   }
@@ -2085,6 +2111,7 @@ function avisos(pf, P, { semanas, limitado }) {
   if (pf.gestante) av('warn', pf.nivel === 0 ? 'Gestação: como você não corria antes, o plano é de caminhada em intensidade moderada, subindo aos poucos em direção aos 150 minutos por semana que a diretriz recomenda.' : 'Gestação: mantive só corridas leves, de até 30 minutos, sem aumentar o volume. Pare e procure o médico se houver falta de ar que não passa com o repouso, dor de cabeça forte, contrações dolorosas, sangramento, perda de líquido, tontura que não passa, dor no peito ou palpitações.', ['csep2019', 'sbc_gestacao2021', 'oms2020']);
   if (pf.posparto) av('warn', 'Pós-parto: o plano recomeça por trechos de 30 segundos de corrida entre caminhadas, com um dia de descanso entre as corridas. Se houver escape de urina, peso ou pressão na vagina ou dor pélvica durante a corrida, pare e caminhe, e procure uma fisioterapeuta pélvica. Amamente ou tire o leite antes de correr.', ['selman2022', 'christopher2024', 'goom2019']);
   if (pf.hipertensao) av('warn', pf.liberado ? 'Pressão alta: corra só com a pressão controlada, e não treine no dia em que a pressão de repouso estiver acima de 160 por 105. Se usa betabloqueador, guie-se pelo esforço, não pela frequência cardíaca, e tenha cuidado extra no calor.' : 'Pressão alta sem liberação médica: deixei só treinos em intensidade leve a moderada. Para treinos fortes, peça avaliação médica. Não treine no dia em que a pressão de repouso estiver acima de 160 por 105.', ['sbc2020', 'pescatello2004']);
+  if (pf.pulsoBaixo) av('warn', 'Remédio que deixa o pulso mais baixo (como betabloqueador): os batimentos não servem para medir o esforço. As zonas do plano vão só pelo esforço e pela fala, sem frequência cardíaca. Tenha cuidado extra no calor.', ['sbc2020', 'pescatello2004']);
   if (pf.diabetes) av('warn', 'Diabetes: meça a glicemia antes de correr (o ideal é entre 90 e 250 mg/dL; abaixo de 90, coma 15 a 30 g de carboidrato). A hipoglicemia costuma aparecer de 6 a 15 horas depois, e o risco vai até 48 horas. Olhe os pés todos os dias. O plano fica sem treinos fortes: intensidade alta, só com orientação do seu médico.', ['colberg2016', 'whitfield2017']);
   if (pf.cardiaco || pf.renal) av('warn', 'Com doença do coração ou dos rins, o plano fica em intensidade leve. Treino forte só com orientação do seu médico.', ['whitfield2017', 'pescatello2004']);
   if (pf.cronica) av(pf.liberado ? 'info' : 'warn', pf.liberado ? 'Doença crônica: siga o que o seu médico orientou sobre o tipo e a quantidade de exercício, e pare se surgirem sintomas novos.' : 'Você marcou outra doença crônica e ainda não tem liberação médica: deixei só treinos leves, sem treinos fortes. Para quem tem doença crônica, a recomendação é conversar com um profissional de saúde sobre o tipo e a quantidade de exercício. Com a liberação, refaça a entrevista.', ['oms2020', 'bredin2013', 'whitfield2017']);
@@ -2142,7 +2169,10 @@ function orientacoes(pf, P, op) {
       : pf.modo === 'esteira' ? 'Seus treinos saem em distância e velocidade (km/h). Deixe 1% de inclinação se quiser aproximar do esforço da rua.'
         : 'Seus treinos saem em tempo e esforço. Sem aparelho, o teste da fala é o melhor guia.';
   o.push(['Como medir o treino', medir, pf.nivel <= 1 ? ['buist2008', 'nhs_c25k', 'foster2020'] : ['smyth2022', 'foster2020']]);
-  o.push(['Como sentir o esforço', 'Leve: você fala com conforto (2 a 4 em 10). Moderado: falar já exige esforço (5 a 6). Forte: não dá para falar com conforto (7 a 9). Se no treino leve a fala começar a pesar, diminua. A frequência cardíaca estimada pela idade erra cerca de 10 batimentos para mais ou para menos: use como apoio, não como regra.', ['foster2020', 'ieno2020', 'tanaka2001', 'shookster2020']]);
+  const fala = 'Leve: você fala com conforto (2 a 4 em 10). Moderado: falar já exige esforço (5 a 6). Forte: não dá para falar com conforto (7 a 9). Se no treino leve a fala começar a pesar, diminua.';
+  o.push(['Como sentir o esforço', pf.pulsoBaixo
+    ? `${fala} Com o remédio que deixa o pulso mais baixo, não use os batimentos: guie-se só pelo esforço e pela fala.`
+    : `${fala} A frequência cardíaca estimada pela idade erra cerca de 10 batimentos para mais ou para menos: use como apoio, não como regra.`, pf.pulsoBaixo ? ['foster2020', 'ieno2020', 'sbc2020', 'pescatello2004'] : ['foster2020', 'ieno2020', 'tanaka2001', 'shookster2020']]);
   o.push(['Como o plano cresce', `O volume sobe em passos de até cerca de ${Math.round(pf.passo * 100)}% por semana, com uma semana mais leve a cada quatro, e o treino longo não passa de cerca de 10% acima da sua corrida mais longa do último mês. O limite de 10% é uma convenção prudente; o que os estudos mostram é que saltos grandes aumentam o risco.`, ['frandsen2025', 'damsted2018', 'buist2008', 'knopp2024']]);
   o.push(['Treinos perdidos', 'Não tente repor. Perdeu um treino: siga o plano. Perdeu vários: registre o que fez e o plano retoma de onde você está.', ['feely2023', 'frandsen2025']]);
   if (pf.nivel >= 1 && !pf.cautela) o.push(['Aquecimento', 'Antes de treinos fortes, pelo menos 10 minutos de corrida leve (nos treinos descritos em atletas, de 15 a 20). Alongar antes de correr não previne lesões.', ['seiler2009', 'yeung2011']]);
@@ -2217,8 +2247,12 @@ function opcoesDoEstado(st, hoje) {
 export function planoAtual(st, hoje) {
   const run = st && isObj(st.run) ? st.run : null;
   if (!run || !run.aceitoEm || !diaValido(run.inicio) || run.pausadoEm || !diaValido(hoje) || !respostasCompletas(run.answers)) return null;
-  return gerarPlano(run.answers, opcoesDoEstado(st, hoje));
+  // com a proteção das outras entrevistas e a liberação médica só dentro dos 12 meses (saude.js): sem ela, não há plano
+  return gerarPlano(saudeDaCorrida(st, hoje).respostas, opcoesDoEstado(st, hoje));
 }
+// Respostas da corrida com a proteção das outras entrevistas: { respostas, avisos, liberacao, renovar, deFora }
+// (ver respostasProtegidas em logic/saude.js).
+export const saudeDaCorrida = (st, hoje) => respostasProtegidas('corrida', st, hoje);
 // Retoma um plano pausado: devolve o novo `run`. Sem prova com data, o plano continua de onde parou (o início anda as semanas
 // inteiras da pausa); com data, o calendário não muda. A pausa fica guardada: não conta como falta, e a volta é gradual.
 export function retomarPlano(run, hoje) {
@@ -2401,7 +2435,8 @@ export function alertas(registros, hoje) {
   if (u4.length >= 3 && u4.filter((r) => r.pse >= 8).length >= 3) out.push({ tipo: 'warn', texto: 'Três dos seus últimos treinos ficaram com esforço de 8 ou mais. Se o cansaço não passa em uma semana ou o rendimento cai, reduza os treinos; se durar mais de 4 semanas, procure um médico.', refs: ['meeusen2013', 'saw2016'] });
   // dor repetida no mesmo local
   const dores = {};
-  for (const r of rs) if (r.dor && temLocal(r.dor.onde) && diasEntre(r.data, hoje) <= 14) dores[r.dor.onde] = (dores[r.dor.onde] || 0) + 1;
+  // dor muscular leve repetida é o esperado de quem treina: só conta a de 4 ou mais
+  for (const r of rs) for (const rd of (Array.isArray(r.dores) ? r.dores : [])) if (temLocal(rd.onde) && diasEntre(r.data, hoje) <= 14 && (rd.tipo !== 'muscular' || rd.nivel >= 4)) dores[rd.onde] = (dores[rd.onde] || 0) + 1;
   for (const k of Object.keys(dores)) if (dores[k] >= 2 && temLocal(k)) out.push({ tipo: 'warn', texto: `Você anotou dor em ${LOCAIS_DOR[k].toLowerCase()} em ${dores[k]} corridas nas últimas 2 semanas. Dor que se repete pede avaliação de um médico ou fisioterapeuta.`, refs: ['vangent2007', 'esculier2016'] });
   // 7 dias seguidos correndo (meeusen2013, warden2021)
   const dias = new Set(rs.map((r) => r.data));

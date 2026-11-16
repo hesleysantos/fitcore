@@ -47,7 +47,9 @@ const T = [
   { k: 'lesao12m', base: corredor, muda: 'progressão de 7% por semana em vez de 10%, com aviso', fonte: 'vangent2007, vangent2007', confere: (p0, p1) => p1.perfil.passo === 0.07 && aviso(p1, /Lesão nos últimos 12 meses/) && p1.semanas[5].volumeKm < p0.semanas[5].volumeKm },
   { k: 'limitacoes', base: corredor, muda: 'cada região marcada: 2 primeiras semanas sem treino forte nem acelerações, progressão de 7% e a orientação do local (o ajuste fino vem de “Contar uma dor”)', fonte: 'nhs_dor, esculier2016, silbernagel2020', confere: (p0, p1) => p1.perfil.passo === 0.07 && aviso(p1, /Você disse que sente dor/) && p1.semanas[5].volumeKm < p0.semanas[5].volumeKm && p1.semanas.slice(0, 2).every((s) => s.dias.every((d) => d.intensidade !== 'forte')) },
   { k: 'condicoes', base: corredor, comLiberado: true, muda: 'pressão alta ou outra doença crônica: sem liberação, só treinos leves (com liberação, só os cuidados no aviso); coração, rins e diabetes: sem liberação, sem plano; com liberação, só no leve; gestação: manutenção leve; pós-parto: recomeço por corrida e caminhada', fonte: 'whitfield2017, sbc2020, oms2020, csep2019, selman2022, colberg2016' },
-  { k: 'triagem', base: corredor, comLiberado: true, muda: 'qualquer sinal: sem liberação, sem plano; com liberação, só treinos leves, com aviso', fonte: 'whitfield2017, whitfield2017', confere: (p0, p1) => p1 === null || semForte(p1) },
+  { k: 'triagem', base: corredor, comLiberado: true, muda: 'qualquer sinal: sem liberação, sem plano; com liberação, só treinos leves, com aviso; "só com supervisão": nunca há plano', fonte: 'whitfield2017, parq2023', confere: (p0, p1) => p1 === null || semForte(p1) },
+  { k: 'remedios', base: corredor, comLiberado: true, valores: [['pulso'], ['glicose'], ['outro'], ['nenhum']], muda: 'remédio que segura o pulso: zonas sem batimentos, pelo esforço e pela fala; insulina ou remédio que baixa o açúcar: vale como diabetes; outro remédio contínuo sem condição marcada: vale como outra doença crônica', fonte: 'sbc2020, pescatello2004, colberg2016, parq2023', neutros: { nenhum: 'é a resposta de quem não toma remédio (igual a não responder)' },
+    confere: (p0, p1, v) => (v === 'pulso' ? p1.zonas.fcMax === null && p1.zonas.lista.every((z) => z.fc === null) && aviso(p1, /pulso mais baixo/) : v === 'glicose' ? p1 === null || (p1.perfil.diabetes && semForte(p1)) : p1.perfil.cronica) },
   { k: 'liberado', base: hipertenso, muda: 'com a liberação, pressão alta volta a ter treinos fortes; sem ela, só leves e com confirmação na proposta', fonte: 'sbc2020, pescatello2004', confere: (p0, p1) => semForte(p0) && !semForte(p1) },
 ];
 
@@ -95,7 +97,11 @@ test('sensibilidade: condições e sinais de alerta, um por um', () => {
   const com = (extra) => gerarPlano({ ...corredor, ...extra });
   // sem liberação: sem plano
   for (const c of ['cardiaco', 'renal', 'diabetes', 'gestante', 'posparto']) assert.equal(com({ condicoes: [c], liberado: 'nao' }), null, c);
-  for (const t of ['dor_peito', 'tontura', 'falta_ar', 'osseo', 'medico']) assert.equal(com({ triagem: [t], liberado: 'nao' }), null, t);
+  const SINAIS = ['dor_peito', 'falta_ar', 'falta_ar_deitado', 'palpitacao', 'tontura', 'tornozelos', 'perna', 'sopro', 'cansaco', 'osseo'];
+  for (const t of [...SINAIS, 'medico']) assert.equal(com({ triagem: [t], liberado: 'nao' }), null, t);
+  // "um médico disse que só com supervisão": nem com liberação (parq2023, pergunta 7)
+  assert.equal(com({ triagem: ['medico'], liberado: 'sim' }), null);
+  assert.equal(perfil({ ...corredor, triagem: ['medico'], liberado: 'sim' }).bloqueio, 'supervisao');
   // sem liberação: plano só com treinos leves, aviso e confirmação
   for (const c of ['hipertensao', 'cronica']) { const p = com({ condicoes: [c], liberado: 'nao' }); assert.ok(semForte(p) && p.perfil.confirmar && p.avisos.some((x) => x.tipo === 'warn' && /liberação/.test(x.texto)), c); }
   // com liberação: cada uma com o seu cuidado
@@ -107,7 +113,7 @@ test('sensibilidade: condições e sinais de alerta, um por um', () => {
   assert.ok(semForte(g) && g.perfil.objetivo === 'saude' && g.semanas.every((s) => s.dias.every((d) => d.durMin <= 50)) && aviso(g, /Gestação/));
   const pp = com({ condicoes: ['posparto'], liberado: 'sim' });
   assert.ok(pp.tipo === 'adaptacao' && pp.semanas[0].dias.some((d) => /30 s correndo/.test(d.resumo)) && aviso(pp, /Pós-parto/));
-  for (const t of ['dor_peito', 'tontura', 'falta_ar', 'osseo', 'medico']) { const p = com({ triagem: [t], liberado: 'sim' }); assert.ok(semForte(p) && p.avisos[0].tipo === 'danger' && p.perfil.confirmar, t); }
+  for (const t of SINAIS) { const p = com({ triagem: [t], liberado: 'sim' }); assert.ok(semForte(p) && p.avisos[0].tipo === 'danger' && p.perfil.confirmar, t); }
   // idades: cada limiar muda o que a regra diz
   const id = (idade, extra = {}) => perfil({ ...corredor, idade, ...extra });
   assert.equal(gerarPlano({ ...corredor, idade: 11 }), null);

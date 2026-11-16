@@ -2,7 +2,8 @@
 import { h, btn, icon, note, badge, sectionTitle, toggle, toast, confirmSheet, stepper, parseNum, plural, dateKey, fmtClock, uid, DIAS_CURTO, DIAS_LONGO } from '../ui.js';
 import { state, update } from '../store.js';
 import { go, refresh } from '../router.js';
-import { interview, abasTreinador } from './coach.js';
+import { interview, abasTreinador, cartaoLiberacao } from './coach.js';
+import { respostasParaEntrevista } from '../logic/saude.js';
 import { cartaoDores } from './dor.js';
 import { barChart } from './charts.js';
 import { keepAwake, unlockAudio, beep, vibrate } from '../device.js';
@@ -11,7 +12,8 @@ import { REFS_CORRIDA, FAQ_CORRIDA, TIPOS_TREINO, FONTES_TELA } from '../data/co
 import {
   PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, planoAtual, planoDaSemana, treinoDoDia, avisosBloqueio, inicioPara, diasDeForca, evolucao, alertas, dicas,
   efeitoDaDor, orientacaoDor, expandirBlocos, textoBloco, limparRegistro, MAX_REGISTROS, fmtRitmo, fmtFaixa, fmtKm, fmtTempo, fmtDia, somaDias, diaValido, diasEntre,
-  retomarPlano, diaLocal, segundaDe, planejadoDe, analiseDoRegistro, analiseRecente, guardarDoDia, perfil,
+  retomarPlano, diaLocal, segundaDe, planejadoDe, analiseDoRegistro, analiseRecente, guardarDoDia, perfil, saudeDaCorrida,
+  MAX_DORES_REGISTRO, MUSCULO_CORRIDA, soDorMuscularLeve,
 } from '../logic/corrida.js';
 import { faltaPerguntar } from '../logic/combinado.js';
 import { cartaoCombinado, perguntarCombinado } from './combinado.js';
@@ -87,7 +89,7 @@ function zonasCard(p) {
     extra.push(h('p', { class: 'small', text: `Calculado pelo seu resultado: ${fmtKm(R.base.distKm)} em ${fmtTempo(R.base.seg)}. Previsões de hoje: 5 km em ${fmtTempo(R.previsoes[5])}, 10 km em ${fmtTempo(R.previsoes[10])}, meia maratona em ${fmtTempo(R.previsoes[21])}, maratona entre ${fmtTempo(R.previsoes[42])} e ${fmtTempo(R.previsoes.maratonaAte)}.` }));
     extra.push(h('p', { class: 'tiny muted', text: 'A previsão de maratona costuma ser otimista para quem treina pouco volume: por isso aparece como faixa.' }));
   } else extra.push(h('p', { class: 'small', text: 'Sem um resultado recente, os treinos são guiados pelo esforço e pelo teste da fala. Registre um “Teste de ritmo” de 3 km ou 5 km para ter ritmos calculados.' }));
-  extra.push(porQue('A frequência cardíaca máxima é estimada pela idade e pode errar 10 batimentos ou mais. Prefira o esforço e a fala.', FONTES_TELA.zonas, 'Como é calculado'));
+  extra.push(porQue(p.zonas.fcMax ? 'A frequência cardíaca máxima é estimada pela idade e pode errar 10 batimentos ou mais. Prefira o esforço e a fala.' : 'Com o remédio que deixa o pulso mais baixo, as zonas vão só pelo esforço e pela fala.', FONTES_TELA.zonas, 'Como é calculado'));
   return acc('Zonas de esforço e ritmos', box, ...extra);
 }
 function tiposCard(p) {
@@ -112,16 +114,32 @@ function linhaDia(d, data, hoje, feito) {
 }
 
 // ---------- proposta ----------
+// Saúde (logic/saude.js): de onde veio cada proteção e, se a liberação médica guardada não vale mais, o pedido de novo.
+function blocoDeSaude(sd, bloqueado) {
+  const out = sd.avisos.map((x) => aviso(x));
+  if (bloqueado && sd.liberacao !== 'falta' && sd.liberacao !== 'nao') {
+    const c = cartaoLiberacao({
+      estado: sd.liberacao,
+      aoRenovar: () => { update((s) => { s.run.answers.liberado = 'sim'; s.run.answers.liberadoEm = hojeKey(); }); toast('Liberação confirmada: vale por 12 meses.'); refresh(); },
+      aoNegar: () => { update((s) => { s.run.answers.liberado = 'nao'; delete s.run.answers.liberadoEm; }); refresh(); },
+      aoRefazer: () => { modo = 'entrevista'; refresh(); window.scrollTo(0, 0); },
+    });
+    if (c) out.push(c);
+  }
+  if (bloqueado) for (const av of avisosBloqueio(sd.respostas)) out.push(aviso(av));
+  return out;
+}
 function proposta() {
-  const a = state.run.answers;
   const hoje = hojeKey();
+  const sd = saudeDaCorrida(state, hoje);
+  const a = sd.respostas;
   const inicio = inicioPara(a, hoje);
   const adiado = inicio > segundaDe(hoje); // nesta semana não sobra dia de treino: o plano começa na segunda-feira
   const p = gerarPlano(a, { ...opcoesDoPlano(), dores: [], adiado }); // a proposta mostra o plano inteiro; as dores ajustam os dias depois do aceite
   const body = [cabecalho()];
   const mudar = btn('Mudar respostas', () => { modo = 'entrevista'; refresh(); window.scrollTo(0, 0); }, 'block ghost', 'edit');
+  for (const x of blocoDeSaude(sd, !p)) body.push(x);
   if (!p) {
-    for (const av of avisosBloqueio(a)) body.push(aviso(av));
     body.push(h('p', { class: 'small muted', text: 'Quando a situação mudar, refaça a entrevista. Suas respostas ficam guardadas só neste aparelho.' }));
     body.push(mudar);
     return body;
@@ -135,6 +153,14 @@ function proposta() {
   const quantas = p.tipo === 'caminhada' ? `${plural(s1.dias.length, 'caminhada', 'caminhadas')} por semana`
     : `${plural(nIni, 'corrida', 'corridas')} por semana${nMax > nIni ? ` no começo (chega a ${nMax})` : ''}${nCam ? ` e ${plural(nCam, 'caminhada', 'caminhadas')}` : ''}`;
   const dataProva = pf.dist && !p.provaRetirada ? somaDias(inicio, (p.totalSemanas - 1) * 7 + ((pf.diaLongo + 6) % 7)) : '';
+  // A semana 1 vai de segunda a domingo. Aceito no meio da semana, o plano usa esta semana e só valem os dias de hoje em
+  // diante: a tela mostra o primeiro treino de verdade, e não a segunda-feira que já passou.
+  const dataDe = (wd) => somaDias(inicio, (wd + 6) % 7);
+  const dmCurto = (k) => `${Number(k.slice(8, 10))}/${k.slice(5, 7)}`;
+  const treinosS1 = s1.dias.filter((d) => d.tipo !== 'descanso');
+  const primeiro = (treinosS1.find((d) => dataDe(d.wd) >= hoje) || treinosS1[0]);
+  const primeiroData = primeiro ? dataDe(primeiro.wd) : inicio;
+  const noMeio = inicio < hoje;
   body.push(h('div', { class: 'bubble' },
     h('p', { text: `Montei um plano de ${plural(p.totalSemanas, 'semana', 'semanas')} para ${meta}, com ${quantas}.` }),
     pf.objetivo === 'prova' && dataProva ? h('p', { class: 'bold', text: `A prova fica em ${fmtDia(dataProva)}. Confira a data: se não for essa, toque em “Mudar respostas” e ajuste as semanas.` }) : null,
@@ -145,10 +171,17 @@ function proposta() {
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Nível' }), h('span', { text: ROTULO.nivel[pf.nivel] })),
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Dias' }), h('span', { text: s1.dias.map((d) => DIAS_CURTO[d.wd]).join(', ') })),
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Como medir' }), h('span', { text: ROTULO.modo[p.modo] })),
-    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Começa em' }), h('span', { text: fmtDia(inicio) })),
+    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Primeiro treino' }), h('span', { id: 'corrida-primeiro', text: fmtDia(primeiroData) + (primeiroData === hoje ? ' (hoje)' : '') })),
+    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Semana 1' }), h('span', { text: `${dmCurto(inicio)} a ${dmCurto(somaDias(inicio, 6))}${noMeio ? ' (esta semana)' : ''}` })),
     dataProva ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: pf.objetivo === 'prova' ? 'Prova' : 'Dia do desafio' }), h('span', { text: fmtDia(dataProva) })) : null));
   body.push(sectionTitle('A primeira semana'));
-  body.push(h('div', { class: 'card col gap-s' }, ...s1.dias.map((d) => h('div', { class: 'row top' }, h('div', { class: 'dia-wd', text: DIAS_CURTO[d.wd] }), h('div', { class: 'grow' }, h('div', { class: 'bold', text: d.nome }), h('div', { class: 'small muted', text: d.resumo }), d.ritmo ? h('div', { class: 'small', text: (p.modo === 'esteira' ? 'Velocidade: ' : 'Ritmo: ') + fmtFaixa(d.ritmo, p.modo) }) : null)))));
+  if (noMeio) body.push(note('info', `A semana 1 é esta, de segunda, ${dmCurto(inicio)}, a domingo, ${dmCurto(somaDias(inicio, 6))}. Os dias que já passaram ficam de fora: seu primeiro treino é ${primeiroData === hoje ? 'hoje, ' : ''}${fmtDia(primeiroData).toLowerCase()}.`));
+  body.push(h('div', { class: 'card col gap-s', id: 'corrida-semana1' }, ...s1.dias.map((d) => {
+    const passou = dataDe(d.wd) < hoje;
+    return h('div', { class: 'row top' + (passou ? ' passou' : '') }, h('div', { class: 'dia-wd', text: DIAS_CURTO[d.wd] }),
+      h('div', { class: 'grow' }, h('div', { class: 'bold', text: d.nome }), h('div', { class: 'small muted', text: d.resumo }), d.ritmo && !passou ? h('div', { class: 'small', text: (p.modo === 'esteira' ? 'Velocidade: ' : 'Ritmo: ') + fmtFaixa(d.ritmo, p.modo) }) : null),
+      passou ? badge('Já passou', '') : dataDe(d.wd) === hoje ? badge('Hoje', 'acc') : h('span', { class: 'tiny muted nowrap', text: dmCurto(dataDe(d.wd)) }));
+  })));
   body.push(semanasCard(p, 0));
   body.push(tiposCard(p));
   body.push(zonasCard(p));
@@ -235,7 +268,14 @@ function painel() {
     return body;
   }
   const p = planoAtual(state, hoje);
-  if (!p) { body.push(note('warn', 'Não consegui montar o plano com as respostas guardadas. Refaça a entrevista.')); body.push(acoesFim()); return body; }
+  if (!p) {
+    // a saúde mudou depois do aceite (outra entrevista, liberação vencida ou sem data): a tela pede o que falta
+    const sd = saudeDaCorrida(state, hoje);
+    const saude = perfil(sd.respostas).bloqueio ? blocoDeSaude(sd, true) : [];
+    for (const x of saude) body.push(x);
+    if (!saude.length) body.push(note('warn', 'Não consegui montar o plano com as respostas guardadas. Refaça a entrevista.'));
+    body.push(acoesFim()); return body;
+  }
   guardarMostrado();
   const sem = planoDaSemana(state, hoje);
   const pf = p.perfil;
@@ -335,11 +375,12 @@ export function corridaView() {
           h('div', { class: 'mt' }), faq()],
       };
     }
-    const pre = { ...a };
+    // as respostas guardadas, mais o que as outras entrevistas disseram sobre a saúde (a pessoa confere e desmarca)
+    const pre = respostasParaEntrevista('corrida', state);
     for (const k of ['idade', 'peso', 'altura']) if (pre[k] == null) { const v = typeof state.trainer.answers[k] === 'number' ? state.trainer.answers[k] : state.nutri.answers[k]; if (typeof v === 'number') pre[k] = v; }
     return {
       title: 'Treinador', body: [interview({
-        perguntas: PERGUNTAS, respostas: pre, avatar: 'run',
+        perguntas: PERGUNTAS, respostas: pre, base: a, avatar: 'run',
         onDone: (r) => { update((s) => { s.run.answers = r; s.run.aceitoEm = ''; s.run.inicio = ''; s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); },
         onCancel: () => { modo = 'auto'; refresh(); },
       })],
@@ -353,13 +394,33 @@ export function corridaView() {
 const PSE_TXT = ['', 'Muito, muito fácil', 'Fácil', 'Moderado', 'Um pouco difícil', 'Difícil', 'Difícil', 'Muito difícil', 'Muito difícil', 'Quase no limite', 'Máximo'];
 const LOCAIS_CORRIDA = ['joelho', 'canela', 'panturrilha', 'aquiles', 'tornozelo', 'pe', 'coxa-frente', 'coxa-tras', 'quadril', 'virilha', 'gluteo', 'lombar'];
 const TIPOS_LIVRES = ['livre', 'leve', 'longo', 'corrida_caminhada', 'progressivo', 'fartlek', 'tempo', 'intervalado', 'tiros', 'teste', 'prova', 'caminhada'];
+// Ajuda para a pessoa saber se a dor é a dor muscular comum de quem treinou (zondi2015, mizumura2024) ou se pede cuidado
+// (nhs_dor; urina escura com dor muscular forte: cdc_rabdo).
+function guiaDorMuscular() {
+  const li = (t) => h('li', { text: t });
+  return h('details', { class: 'pq', id: 'guia-dor-muscular' }, h('summary', { text: 'Como saber se é dor muscular comum de treino?' }),
+    h('div', { class: 'small bold mt', text: 'É dor muscular comum quando:' }),
+    h('ul', { class: 'small' },
+      li('fica no meio do músculo (coxa, panturrilha, glúteo), espalhada, como desgaste, peso ou rigidez;'),
+      li('dói ao apertar, alongar ou usar o músculo, e quase nada parado;'),
+      li('aparece horas depois ou no dia seguinte, fica mais forte em 1 a 3 dias e passa em até uma semana;'),
+      li('melhora quando você aquece ou se movimenta de leve.')),
+    h('div', { class: 'small bold', text: 'Pede cuidado (marque “Dor em um ponto” ou “Fisgada”):' }),
+    h('ul', { class: 'small' },
+      li('dor em um ponto do osso, da articulação ou do tendão;'),
+      li('dor que começa ou piora durante a corrida e muda o seu jeito de correr;'),
+      li('fisgada, estalo, inchaço, ou dor que não deixa apoiar;'),
+      li('dor em repouso, à noite, ou que passa de uma semana.')),
+    h('p', { class: 'small', text: 'Dor muscular muito forte com urina escura pede atendimento médico no mesmo dia.' }),
+    h('div', { class: 'tiny bold muted', text: 'FONTES' }), fontes(['zondi2015', 'mizumura2024', 'nhs_dor', 'cdc_rabdo']));
+}
 function resumoRegistro(r) {
   const partes = [];
   if (r.distKm) partes.push(fmtKm(r.distKm));
   if (r.durMin) partes.push(fmtTempo(r.durMin * 60));
   if (r.distKm && r.durMin && r.tipo !== 'caminhada') partes.push(`${fmtRitmo((r.durMin * 60) / r.distKm)} por km`);
   if (r.pse) partes.push(`esforço ${r.pse}`);
-  if (r.dor) partes.push(`dor em ${LOCAIS_DOR[r.dor.onde].toLowerCase()} (${r.dor.nivel})`);
+  for (const d of r.dores || []) partes.push(`${d.tipo === 'muscular' ? 'dor muscular' : 'dor'} em ${LOCAIS_DOR[d.onde].toLowerCase()} (${d.nivel})`);
   return partes.join(' · ');
 }
 // "32", "32:30" ou "1:05:20" → minutos. Não há minuto decimal: "32,5" não é aceito (seria ambíguo com 32 min 50 s);
@@ -472,7 +533,7 @@ function cronometro(data, treino, aoTerminar) {
 }
 
 function formulario(data, planejado, existente, aoFechar) {
-  const r = existente ? { ...existente, dor: existente.dor ? { ...existente.dor } : null } : { id: 'c' + uid(), data, tipo: planejado && planejado.tipo !== 'descanso' ? planejado.tipo : 'livre', distKm: 0, durMin: 0, pse: null, dor: null, nota: '',
+  const r = existente ? { ...existente, dores: (existente.dores || []).map((d) => ({ ...d })) } : { id: 'c' + uid(), data, tipo: planejado && planejado.tipo !== 'descanso' ? planejado.tipo : 'livre', distKm: 0, durMin: 0, pse: null, dores: [], nota: '',
       // em dia que já passou, só vale o treino que o plano mostrou naquele dia; o previsto pelo plano de hoje não é gravado
       planejado: planejado && !planejado.estimado ? `${planejado.nome}: ${planejado.resumo}`.slice(0, 160) : '', plan: planejado && !planejado.estimado ? planejadoDe(planejado) : null };
   const card = h('div', { class: 'card col', id: 'registro' }, h('h3', { text: existente ? 'Editar o registro' : 'Como foi a corrida?' }));
@@ -501,18 +562,49 @@ function formulario(data, planejado, existente, aoFechar) {
   drawPse();
   card.appendChild(h('div', { class: 'col gap-s' }, h('div', { class: 'small bold', text: 'Esforço do treino, de 1 (muito fácil) a 10 (máximo)' }), pseChips, pseTxt,
     h('p', { class: 'tiny muted', text: 'Pense no treino inteiro, uns minutos depois de terminar.' })));
-  // dor
-  const dorBox = h('div', { class: 'col gap-s' });
+  // dor: uma ou mais regiões, cada uma com a intensidade e o tipo
+  const dorBox = h('div', { class: 'col gap-s', id: 'registro-dores' });
+  let comDor = r.dores.length > 0;
   const drawDor = () => {
     while (dorBox.firstChild) dorBox.removeChild(dorBox.firstChild);
-    if (!r.dor) return;
-    const chips = h('div', { class: 'chips wrap', role: 'radiogroup', 'aria-label': 'Onde doeu' });
-    for (const k of LOCAIS_CORRIDA) chips.appendChild(h('button', { type: 'button', class: 'chip' + (r.dor.onde === k ? ' on' : ''), role: 'radio', 'aria-checked': r.dor.onde === k ? 'true' : 'false', onClick: () => { r.dor.onde = k; drawDor(); } }, LOCAIS_DOR[k]));
+    if (!comDor) return;
+    const chips = h('div', { class: 'chips wrap', role: 'group', 'aria-label': 'Onde doeu' });
+    for (const k of LOCAIS_CORRIDA) {
+      const on = r.dores.some((d) => d.onde === k);
+      chips.appendChild(h('button', { type: 'button', class: 'chip' + (on ? ' on' : ''), role: 'checkbox', 'aria-checked': on ? 'true' : 'false', onClick: () => {
+        if (on) r.dores = r.dores.filter((d) => d.onde !== k);
+        else if (r.dores.length >= MAX_DORES_REGISTRO) { toast(`Marque até ${MAX_DORES_REGISTRO} regiões.`); return; }
+        else r.dores.push({ onde: k, nivel: 3, tipo: '' });
+        drawDor();
+      } }, LOCAIS_DOR[k]));
+    }
+    dorBox.appendChild(h('div', { class: 'small bold', text: 'Onde doeu? Pode marcar mais de uma região.' }));
     dorBox.appendChild(chips);
-    dorBox.appendChild(h('div', { class: 'col gap-s center' }, h('div', { class: 'small bold', text: 'Intensidade da dor, de 1 a 10' }), stepper({ value: r.dor.nivel, min: 1, max: 10, step: 1, label: 'Intensidade da dor', onChange: (v) => { r.dor.nivel = v; } })));
-    dorBox.appendChild(h('p', { class: 'tiny muted', text: 'A dor entra também em “Dores que você contou”, e o plano se ajusta.' }));
+    for (const d of r.dores) dorBox.appendChild(linhaDeDor(d));
+    if (r.dores.length) dorBox.appendChild(guiaDorMuscular());
+    dorBox.appendChild(h('p', { class: 'tiny muted', text: 'Cada dor entra também em “Dores que você contou”, e o plano se ajusta.' }));
   };
-  card.appendChild(h('div', { class: 'row' }, h('div', { class: 'grow small bold', text: 'Senti dor durante ou depois' }), toggle(!!r.dor, (v) => { r.dor = v ? { onde: 'joelho', nivel: 3 } : null; drawDor(); }, 'Senti dor')));
+  // intensidade e tipo de uma região
+  const linhaDeDor = (d) => {
+    const temMusculo = MUSCULO_CORRIDA.has(d.onde);
+    const tipos = temMusculo
+      ? [['muscular', 'Músculo cansado ou dolorido', 'Dor espalhada, como desgaste ou peso'], ['articular', 'Dor em um ponto', 'Na articulação, no osso ou no tendão'], ['aguda', 'Fisgada, estalo ou inchaço', 'Ou dor que não deixa apoiar'], ['naosei', 'Não sei dizer', 'Por cautela, conta como dor em um ponto']]
+      : [['articular', 'Dor em um ponto ou na articulação', ''], ['aguda', 'Fisgada, estalo ou inchaço', 'Ou dor que não deixa apoiar'], ['naosei', 'Não sei dizer', 'Por cautela, conta como dor em um ponto']];
+    const box = h('div', { class: 'card col gap-s dor-reg', 'data-onde': d.onde });
+    const opts = h('div', { class: 'chips wrap', role: 'radiogroup', 'aria-label': `Como foi a dor: ${LOCAIS_DOR[d.onde]}` });
+    const draw = () => {
+      while (opts.firstChild) opts.removeChild(opts.firstChild);
+      for (const [id, nome, sub] of tipos) opts.appendChild(h('button', { type: 'button', class: 'chip' + (d.tipo === id ? ' on' : ''), role: 'radio', 'aria-checked': d.tipo === id ? 'true' : 'false', title: sub, onClick: () => { d.tipo = id; draw(); } }, nome));
+    };
+    draw();
+    box.appendChild(h('div', { class: 'row between' }, h('div', { class: 'bold', text: LOCAIS_DOR[d.onde] }),
+      stepper({ value: d.nivel, min: 1, max: 10, step: 1, cls: 'sm', label: `Intensidade da dor: ${LOCAIS_DOR[d.onde]}`, onChange: (v) => { d.nivel = v; } })));
+    box.appendChild(h('div', { class: 'tiny muted', text: 'Intensidade de 1 (leve) a 10 (insuportável). Como foi?' }));
+    box.appendChild(opts);
+    if (!temMusculo) box.appendChild(h('p', { class: 'tiny muted', text: 'Aqui não há um músculo grande: dor nesta região é tratada como de articulação, osso ou tendão.' }));
+    return box;
+  };
+  card.appendChild(h('div', { class: 'row' }, h('div', { class: 'grow small bold', text: 'Senti dor durante ou depois' }), toggle(comDor, (v) => { comDor = v; if (!v) r.dores = []; drawDor(); }, 'Senti dor')));
   card.appendChild(dorBox); drawDor();
   const nota = h('input', { class: 'input', type: 'text', maxlength: '200', value: r.nota, placeholder: 'Observação (opcional)', 'aria-label': 'Observação' });
   card.appendChild(nota);
@@ -523,7 +615,11 @@ function formulario(data, planejado, existente, aoFechar) {
       if (!Number.isFinite(d) || d < 0 || d > 120) { toast('Confira a distância, em quilômetros.'); dist.focus(); return; }
       if (!Number.isFinite(t) || t < 0 || t > 900) { toast('Confira o tempo: minutos (32) ou minutos:segundos (32:30).'); dur.focus(); return; }
       if (!d && !t) { toast('Informe a distância ou o tempo.'); dist.focus(); return; }
-      const limpo = limparRegistro({ ...r, distKm: d, durMin: t, nota: nota.value });
+      if (comDor && !r.dores.length) { toast('Marque onde doeu, ou desligue “Senti dor”.'); return; }
+      const semTipo = r.dores.find((x) => !x.tipo);
+      if (semTipo) { toast(`Diga como foi a dor em ${LOCAIS_DOR[semTipo.onde].toLowerCase()}.`); const el = dorBox.querySelector(`[data-onde="${semTipo.onde}"]`); if (el) el.scrollIntoView({ block: 'center' }); return; }
+      // "não sei dizer" vale como dor em um ponto (articulação, osso ou tendão), o lado mais cauteloso
+      const limpo = limparRegistro({ ...r, dores: r.dores.map((x) => ({ ...x, tipo: x.tipo === 'naosei' ? 'articular' : x.tipo })), distKm: d, durMin: t, nota: nota.value });
       if (!limpo) { toast('Esse ritmo não parece possível. Confira a distância e o tempo.'); return; }
       update((s) => {
         const i = s.runs.findIndex((x) => x.id === limpo.id);
@@ -531,18 +627,25 @@ function formulario(data, planejado, existente, aoFechar) {
         s.runs.sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0));
         if (s.runs.length > MAX_REGISTROS) s.runs.splice(0, s.runs.length - MAX_REGISTROS);
         if (s.run.cron && (s.run.cron.terminado || s.run.cron.data === limpo.data)) s.run.cron = null; // a corrida do dia foi registrada: o cronômetro não continua rodando
-        // a dor anotada na corrida vira também um relato de dor (o mesmo que a musculação lê)
-        // (se já há um relato do mesmo local nesse dia, fica o mais forte dos dois)
-        const relato = limpo.dor ? s.dores.find((x) => x.onde === limpo.dor.onde && x.data === limpo.data && !x.fim) : null;
-        if (relato && limpo.dor.nivel > relato.nivel) relato.nivel = limpo.dor.nivel;
-        if (limpo.dor && !relato) {
-          const dor = limparDor({ id: 'dor' + uid(), data: limpo.data, onde: limpo.dor.onde, lado: '', tipo: 'articular', quando: 'durante', nivel: limpo.dor.nivel, nota: 'Anotada em uma corrida', fim: '' });
-          if (dor) { s.dores.push(dor); if (s.dores.length > MAX_DORES) s.dores.splice(0, s.dores.length - MAX_DORES); }
+        // cada dor anotada na corrida vira também um relato de dor (o mesmo que a musculação lê)
+        // (se já há um relato do mesmo local nesse dia, fica o mais forte dos dois, e o tipo mais cauteloso)
+        const GRAVIDADE = { muscular: 0, articular: 1, aguda: 2 };
+        for (const rd of limpo.dores) {
+          const relato = s.dores.find((x) => x.onde === rd.onde && x.data === limpo.data && !x.fim);
+          if (relato) {
+            if (rd.nivel > relato.nivel) relato.nivel = rd.nivel;
+            if ((GRAVIDADE[rd.tipo] ?? 1) > (GRAVIDADE[relato.tipo] ?? 1)) relato.tipo = rd.tipo;
+            continue;
+          }
+          const dor = limparDor({ id: 'dor' + uid(), data: limpo.data, onde: rd.onde, lado: '', tipo: rd.tipo, quando: rd.tipo === 'muscular' ? 'depois' : 'durante', nivel: rd.nivel, nota: 'Anotada em uma corrida', fim: '' });
+          if (dor) s.dores.push(dor);
         }
+        if (s.dores.length > MAX_DORES) s.dores.splice(0, s.dores.length - MAX_DORES);
       });
       if (!state.run.cron) { clearInterval(cronT); cronT = 0; keepAwake(false); }
       guardarMostrado();
-      toast(existente ? 'Registro atualizado.' : 'Corrida registrada! O plano leva em conta.');
+      toast(soDorMuscularLeve(limpo.dores) ? 'Corrida registrada. Parece dor muscular comum de treino: costuma piorar em 1 a 3 dias e passar em até uma semana.'
+        : existente ? 'Registro atualizado.' : 'Corrida registrada! O plano leva em conta.');
       refresh();
     }, 'primary grow', 'check')));
   return { card, definirTempo: (min) => { if (!dur.value.trim()) dur.value = String(min); } };

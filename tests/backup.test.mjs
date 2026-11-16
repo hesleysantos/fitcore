@@ -23,7 +23,8 @@ function responder(perguntas, i = 0) {
 }
 
 function estadoCheio() {
-  const treino = { objetivo: 'hipertrofia', idade: 31, peso: 78, altura: 176, experiencia: 'intermediario', pausa: '1a3m', dias: '4', tempo: '60', local: 'completa', limitacoes: ['joelho'], condicoes: ['nenhuma'], triagem: ['nenhum'], foco: [P_TREINO.find((q) => q.k === 'foco').op[1][0]] };
+  // (com um sinal da triagem, a liberação médica e a data dela, e um remédio: tudo tem de voltar igual)
+  const treino = { objetivo: 'hipertrofia', idade: 31, peso: 78, altura: 176, experiencia: 'intermediario', pausa: '1a3m', dias: '4', tempo: '60', local: 'completa', limitacoes: ['joelho'], condicoes: ['nenhuma'], triagem: ['tontura'], remedios: ['pulso'], liberado: 'sim', liberadoEm: '2026-10-01', foco: [P_TREINO.find((q) => q.k === 'foco').op[1][0]] };
   assert.ok(treinoOk(treino), 'respostas do Treinador usadas no teste são válidas');
   const p = gerarPlano(treino, { all: true, has: {} }, 0);
   const plano = { id: 'p1', nome: 'Plano do Treinador', origem: 'treinador', criadoEm: '2026-11-01T10:00:00.000Z', dias: p.dias.map((d) => ({ id: d.id, nome: d.nome, foco: d.foco, itens: d.itens.map((it) => ({ ...it, nota: 'obs' })) })), agenda: p.agenda, info: 'Feito para o teste.' };
@@ -42,15 +43,15 @@ function estadoCheio() {
     current: null,
     trainer: { answers: treino, aceitoEm: '2026-11-01T10:00:00.000Z', revisaoEm: '2026-12-27T10:00:00.000Z', adiadoAte: '2026-11-20T10:00:00.000Z', versao: 3, combo: 'corrida|sim' },
     combo: { foco: 'corrida', fortalecimento: 'sim', em: '2026-11-03T10:00:00.000Z' },
-    nutri: { answers: nutri, calculadoEm: '2026-11-02T10:00:00.000Z', seed: 7, emCasa: ALIMENTOS.slice(0, 12).map((f) => f.id), soCasa: true },
+    nutri: { answers: nutri, calculadoEm: '2026-11-02T10:00:00.000Z', seed: 7, emCasa: ALIMENTOS.slice(0, 12).map((f) => f.id), soCasa: true, ajustes: { '2026-11-12': { s: 3, m: [0, 2] }, '2026-11-13': { s: 0, m: [1] } } },
     body: [{ data: '2026-11-01', peso: 78.4, cintura: 84 }, { data: '2026-11-08', peso: 78.1, cintura: null }],
     run: { answers: corrida, aceitoEm: '2026-11-02T10:00:00.000Z', inicio: '2026-11-02', pausadoEm: '', cron: null, pausas: [{ de: '2026-11-10', ate: '2026-11-26', semanas: 2 }],
       // o treino que o plano mostrou em cada dia e o degrau de ritmo já concedido
       mostrados: [{ data: '2026-11-03', tipo: 'leve', nome: 'Rodagem leve', resumo: '5 km em ritmo leve', durMin: 32, distKm: 5, ritmo: [360, 420], pse: [2, 4], un: 'd' }, { data: '2026-11-04', tipo: '', nome: '', resumo: '', durMin: 0, distKm: 0, ritmo: null, pse: null, un: 't' }],
       degrau: { pontos: 1, base: 'entrevista' } },
     runs: [
-      { id: 'r1', data: '2026-11-03', tipo: 'leve', distKm: 5.2, durMin: 33.5, pse: 4, dor: null, nota: 'tranquilo', planejado: 'Rodagem leve' },
-      { id: 'r2', data: '2026-11-06', tipo: 'longo', distKm: 10, durMin: 68, pse: 6, dor: { onde: 'joelho', nivel: 3 }, nota: '', planejado: 'Longo' },
+      { id: 'r1', data: '2026-11-03', tipo: 'leve', distKm: 5.2, durMin: 33.5, pse: 4, dores: [], nota: 'tranquilo', planejado: 'Rodagem leve' },
+      { id: 'r2', data: '2026-11-06', tipo: 'longo', distKm: 10, durMin: 68, pse: 6, dores: [{ onde: 'joelho', nivel: 3, tipo: 'articular' }, { onde: 'coxa-tras', nivel: 2, tipo: 'muscular' }], nota: '', planejado: 'Longo' },
     ],
     dores: [{ id: 'dor1', data: '2026-11-06', onde: 'joelho', lado: 'd', tipo: 'articular', quando: 'durante', nivel: 3, nota: 'na descida', fim: '' }, { id: 'dor2', data: '2026-10-20', onde: 'lombar', lado: '', tipo: 'muscular', quando: 'depois', nivel: 4, nota: '', fim: '2026-10-25' }],
     sono: { acordar: '06:30', idade: 31, registros: [{ data: '2026-11-11', horas: 7.5 }, { data: '2026-11-12', horas: 6.25, qualidade: 2 }, { data: '2026-11-13', horas: 8, qualidade: 4 }], cochilos: [{ data: '2026-11-12', min: 25, inicio: '13:40' }, { data: '2026-11-13', min: 20, inicio: '14:10' }, { data: '2026-11-13', min: 45 }] },
@@ -76,6 +77,16 @@ test('backup: o estado completo sai no arquivo e volta idêntico', () => {
   assert.deepEqual(limpo.body, cheio.body);
   assert.deepEqual(limpo.run.aceitoEm, cheio.run.aceitoEm); assert.equal(limpo.run.inicio, '2026-11-02');
   assert.ok(Object.keys(limpo.run.answers).length >= 5, 'respostas da corrida preservadas');
+  assert.equal(limpo.trainer.answers.liberadoEm, '2026-10-01', 'a data da liberação médica volta do backup');
+  assert.deepEqual(limpo.nutri.answers.alergias, cheio.nutri.answers.alergias, 'as alergias voltam do backup');
+  assert.ok(cheio.nutri.answers.alergias.length, 'o teste responde a pergunta das alergias');
+  // a corrida com liberação e data também volta igual
+  const comLib = J(cheio); comLib.run.answers = { ...comLib.run.answers, liberado: 'sim', liberadoEm: '2026-09-30' };
+  assert.equal(store.sanitize(comLib).run.answers.liberadoEm, '2026-09-30');
+  // data inválida, ou data sem "sim", não entra
+  const ruim = J(cheio); ruim.trainer.answers.liberadoEm = '2026-02-30'; ruim.run.answers = { ...ruim.run.answers, liberado: 'nao', liberadoEm: '2026-09-30' };
+  assert.equal(store.sanitize(ruim).trainer.answers.liberadoEm, undefined);
+  assert.equal(store.sanitize(ruim).run.answers.liberadoEm, undefined);
   assert.deepEqual(limpo.runs, cheio.runs);
   assert.deepEqual(limpo.dores, [cheio.dores[1], cheio.dores[0]], 'dores preservadas (em ordem de data)');
   assert.deepEqual(limpo.sono, cheio.sono, 'hora de acordar, idade e noites registradas preservadas');
@@ -118,7 +129,7 @@ test('backup: treino em andamento não vem no arquivo restaurado; backup de vers
   antigo.nutri = { answers: cheio.nutri.answers, calculadoEm: cheio.nutri.calculadoEm, seed: cheio.nutri.seed };
   const r = store.readBackup(JSON.stringify({ app: 'fitcore', v: 1, dados: antigo })).dados;
   assert.equal(r.sessions.length, 2); assert.equal(r.plans.length, 1);
-  assert.deepEqual(r.runs, []); assert.deepEqual(r.dores, []); assert.deepEqual(r.nutri.emCasa, []); assert.equal(r.nutri.soCasa, false);
+  assert.deepEqual(r.runs, []); assert.deepEqual(r.dores, []); assert.deepEqual(r.nutri.emCasa, []); assert.equal(r.nutri.soCasa, false); assert.deepEqual(r.nutri.ajustes, {});
   assert.equal(r.run.aceitoEm, ''); assert.deepEqual(r.run.answers, {});
   // lixo e arquivo de outro aplicativo são recusados
   assert.throws(() => store.readBackup('{"app":"outro","dados":{}}'));

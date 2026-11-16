@@ -4,14 +4,15 @@ import { state, update, activePlan } from '../store.js';
 import { go, refresh } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { FAQ_TREINO } from '../data/knowledge.js';
-import { PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, sugerirTrocas, perfil, volumeSemanal, imcTexto, nomeGrupo, outraVersao, avisosDoPlano, orientacaoDaDor, ajustesPorDor, aplicarTrocasDor, voltasPorDor, aplicarVoltasDor, resumoCombinado, doresDoTreino, doresPendentes } from '../logic/trainer.js';
+import { PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, sugerirTrocas, perfil, volumeSemanal, imcTexto, nomeGrupo, outraVersao, avisosDoPlano, orientacaoDaDor, ajustesPorDor, aplicarTrocasDor, voltasPorDor, aplicarVoltasDor, resumoCombinado, doresDoTreino, doresPendentes, avisosBloqueio, saudeDoTreinador } from '../logic/trainer.js';
+import { respostasParaEntrevista } from '../logic/saude.js';
 import { comboAtual, chaveCombo, faltaPerguntar, temOsDois, temCorrida } from '../logic/combinado.js';
 import { cartaoCombinado, perguntarCombinado } from './combinado.js';
 import { doresAtivas, LOCAIS_DOR } from '../logic/dor.js';
 import { cartaoDores } from './dor.js';
 import { estagnados } from '../logic/progress.js';
 import { thumb } from '../figure.js';
-import { interview, faqBlock, notaObjetivo, conferirObjetivos, cartaoObjetivos, abasTreinador } from './coach.js';
+import { interview, faqBlock, notaObjetivo, conferirObjetivos, cartaoObjetivos, abasTreinador, cartaoLiberacao } from './coach.js';
 import { treinoPara } from '../logic/objetivos.js';
 import { alvoTexto, duracaoEstimada } from './common.js';
 import { criarPlano } from './plans.js';
@@ -44,6 +45,25 @@ const MARCA_DOR = 'Adaptado para dor';
 const corridaDeHoje = () => resumoCombinado(state, dateKey(new Date()));
 const pedeFortalecimento = (c) => !!c.fortalecimento && c.fortalecimento !== 'nao';
 const SEMANA = 7 * 86400000;
+// respostas do Treinador com a proteção das outras entrevistas (condições, sinais e remédios marcados em qualquer uma, e a
+// liberação médica só se estiver dentro dos 12 meses e cobrir tudo isso): logic/saude.js
+const saudeDeHoje = () => saudeDoTreinador(state, dateKey(new Date()));
+// Saúde antes do plano: de onde veio cada proteção, a liberação que precisa ser confirmada de novo e, sem plano, o porquê.
+function blocoDeSaude(sd, pf, bloqueado) {
+  const out = [];
+  for (const av of sd.avisos) out.push(note(av.tipo, av.texto));
+  if (bloqueado && pf.bloqueio === 'liberacao' && sd.liberacao !== 'falta' && sd.liberacao !== 'nao') {
+    const c = cartaoLiberacao({
+      estado: sd.liberacao,
+      aoRenovar: () => { update((s) => { s.trainer.answers.liberado = 'sim'; s.trainer.answers.liberadoEm = dateKey(new Date()); }); toast('Liberação confirmada: vale por 12 meses.'); refresh(); },
+      aoNegar: () => { update((s) => { s.trainer.answers.liberado = 'nao'; delete s.trainer.answers.liberadoEm; }); refresh(); },
+      aoRefazer: () => { modo = 'entrevista'; refresh(); window.scrollTo(0, 0); },
+    });
+    if (c) out.push(c);
+  }
+  if (bloqueado) for (const av of avisosBloqueio(sd.respostas)) out.push(note(av.tipo, av.texto));
+  return out;
+}
 
 export function revisaoPendente() {
   const t = state.trainer;
@@ -89,7 +109,8 @@ function orientacoesCard(lista) {
 }
 
 function proposta() {
-  const a = state.trainer.answers;
+  const sd = saudeDeHoje();
+  const a = sd.respostas;
   const versao = state.trainer.versao || 0;
   const dores = doresDeHoje();
   const comb = corridaDeHoje();
@@ -98,11 +119,13 @@ function proposta() {
   // contar uma dor ou marcar "Melhorou" refaz a proposta (quem chama redesenha a tela)
   const dorCard = () => cartaoDores({ extra: (d) => (orientacaoDaDor(d, a) || {}).texto || '', aoMudar: () => { novos = null; } });
   if (!p) {
-    body.push(note('danger', 'Para menores de 14 anos, a musculação deve ser orientada presencialmente por um profissional de educação física, com liberação do pediatra. Não monto treinos pelo aplicativo nessa faixa de idade.'));
+    // sem plano: menor de 14 anos, treino só com supervisão, ou falta a liberação médica que a triagem pede
+    for (const x of blocoDeSaude(sd, perfil(a), true)) body.push(x);
     body.push(btn('Mudar respostas', () => { modo = 'entrevista'; refresh(); }, 'block'));
     return body;
   }
   const pf = p.perfil;
+  for (const x of blocoDeSaude(sd, pf, false)) body.push(x);
   if (!p.dias.length) {
     body.push(dorCard());
     for (const c of cartoesDeDorPendente(() => { novos = null; })) body.push(c);
@@ -147,7 +170,8 @@ function proposta() {
   }, 'primary lg block', 'check');
   aceitar.disabled = !ciente;
   if (pf.liberacao) {
-    body.push(h('div', { class: 'card row' }, h('div', { class: 'grow small', text: 'Li o aviso de saúde acima e vou procurar liberação médica antes de começar.' }), toggle(false, (v) => { ciente = v; aceitar.disabled = !v; }, 'Li o aviso de saúde')));
+    const txt = pf.precisaLiberacao ? 'Confirmo que um médico me liberou nos últimos 12 meses e que li os avisos acima.' : 'Li o aviso de saúde acima e vou procurar liberação médica antes de começar.';
+    body.push(h('div', { class: 'card row' }, h('div', { class: 'grow small', text: txt }), toggle(false, (v) => { ciente = v; aceitar.disabled = !v; }, 'Li o aviso de saúde')));
   }
   body.push(aceitar);
   // "Outra versão": procura a próxima combinação que muda de fato os exercícios (os principais e a dose ficam)
@@ -167,11 +191,15 @@ function proposta() {
 }
 
 function painel() {
-  const a = state.trainer.answers;
+  const sd = saudeDeHoje();
+  const a = sd.respostas;
   const pf = perfil(a);
   const plan = activePlan();
   const body = [cabecalho(), cartaoObjetivos()].filter(Boolean);
   const dores = doresDeHoje();
+  // a saúde mudou depois do aceite (outra entrevista, liberação vencida): o aviso vem antes de tudo
+  for (const x of blocoDeSaude(sd, pf, pf.bloqueado)) body.push(x);
+  if (pf.bloqueado && plan && plan.origem === 'treinador') body.push(note('danger', 'Não use o treino abaixo até resolver o que está acima.'));
 
   // dores contadas: orientação de cada uma; ao marcar "Melhorou", os exercícios trocados voltam
   const trocadosPor = (onde) => (plan ? plan.dias.reduce((n, d) => n + d.itens.filter((it) => typeof it.nota === 'string' && it.nota.startsWith('dor:' + onde + ':')).length, 0) : 0);
@@ -355,14 +383,15 @@ export function trainerView() {
           h('div', { class: 'mt' }), faqBlock(FAQ_TREINO, 'Pergunte ao Treinador', 'Ex.: descanso, falha, joelho, cardio')],
       };
     }
-    const pre = { ...a };
+    // as respostas guardadas, mais o que as outras entrevistas disseram sobre a saúde (a pessoa confere e desmarca)
+    const pre = respostasParaEntrevista('treinador', state);
     const n = state.nutri.answers;
-    for (const k of ['idade', 'peso', 'altura']) if (pre[k] == null && typeof n[k] === 'number') pre[k] = n[k];
+    for (const k of ['idade', 'peso', 'altura']) if (pre[k] == null) { const v = typeof state.run.answers[k] === 'number' ? state.run.answers[k] : n[k]; if (typeof v === 'number') pre[k] = v; }
     // o objetivo começa igual ao da alimentação (o usuário pode trocar)
     if (pre.objetivo == null && treinoPara(n.objetivo)) pre.objetivo = treinoPara(n.objetivo);
     return {
       title: 'Treinador', body: [interview({
-        perguntas: PERGUNTAS, respostas: pre, notas: { objetivo: notaObjetivo('treino') },
+        perguntas: PERGUNTAS, respostas: pre, base: a, notas: { objetivo: notaObjetivo('treino') },
         onDone: (r) => { update((s) => { s.trainer.answers = r; s.trainer.aceitoEm = ''; s.trainer.revisaoEm = ''; s.trainer.adiadoAte = ''; }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); conferirObjetivos('treino'); },
         onCancel: () => { modo = 'auto'; refresh(); },
       })],

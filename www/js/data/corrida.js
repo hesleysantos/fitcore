@@ -67,6 +67,7 @@ export const REFS_CORRIDA = {
   ms_infarto: 'Ministério da Saúde (Brasil). Infarto: sintomas e o que fazer (ligue 192, SAMU). Saúde de A a Z, gov.br/saude. Consulta em novembro de 2026.',
   nhs_urgencia: 'NHS (Reino Unido). Stomach ache; Back pain; Chest pain: sinais que pedem atendimento urgente. nhs.uk. Consulta em novembro de 2026.',
   whitfield2017: 'Whitfield GP et al. Applying the ACSM preparticipation screening algorithm to U.S. adults: National Health and Nutrition Examination Survey 2001-2004. Med Sci Sports Exerc. 2017;49(10):2056-2063.',
+  parq2023: 'Warburton DER, Jamnik VK, Bredin SSD, Gledhill N, PAR-Q+ Collaboration. The Physical Activity Readiness Questionnaire for Everyone (PAR-Q+), versão de 2023. Health Fit J Can. 2011;4(2):3-23 (formulário de 2023).',
   kim2025: 'Kim JH et al. Cardiac arrest during long-distance running races. JAMA. 2025;333(19):1699-1707.',
   paz2021: 'Paz T et al. Youth distance running and lower extremity injury: a systematic review. Int J Environ Res Public Health. 2021;18(14):7542.',
   oms2020: 'Bull FC et al. World Health Organization 2020 guidelines on physical activity and sedentary behaviour. Br J Sports Med. 2020;54(24):1451-1462.',

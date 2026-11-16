@@ -277,12 +277,18 @@ test('o selo acompanha o texto: excesso, falta e desequilíbrio dão no máximo 
   assert.equal(avaliarDia(A, ctx).perfil.veredito, 'sim', 'o treino de peito, sozinho, não tem problema: o problema é do plano');
   // 5×3–5 com pressão alta, diabetes e menor de 18: não recomendado
   const pesado = dia('p', it('agachamento-smith', 5, '3-5', 180), it('supino-maquina', 5, '3-5', 180), it('puxada-frente-aberta', 5, '3-5', 180));
-  for (const extra of [{ condicoes: ['hipertensao'] }, { condicoes: ['cardiaco'] }, { condicoes: ['gestante'] }, { condicoes: ['diabetes'] }, { triagem: ['tontura'] }, { idade: 16 }]) {
+  // (coração, gestação e sinal da triagem: com a liberação médica — sem ela, o Treinador não monta treino nenhum: abaixo)
+  for (const extra of [{ condicoes: ['hipertensao'] }, { condicoes: ['cardiaco'], liberado: 'sim' }, { condicoes: ['gestante'], liberado: 'sim' }, { condicoes: ['diabetes'] }, { triagem: ['tontura'], liberado: 'sim' }, { idade: 16 }]) {
     const r = avaliarDia(pesado, { respostas: { ...base, ...extra }, gym: GYM });
     assert.equal(r.perfil.veredito, 'nao', JSON.stringify(extra));
     assert.match(r.conclusao, /não é recomendado/);
   }
   assert.equal(avaliarDia(pesado, ctx).perfil.veredito, 'sim');
+  // sem a liberação que a triagem pede (ou com "só com supervisão"), a avaliação não diz que serve: diz o que falta
+  for (const [extra, re] of [[{ condicoes: ['cardiaco'], liberado: 'nao' }, /liberação médica/], [{ triagem: ['dor_peito'], liberado: 'nao' }, /liberação médica/], [{ triagem: ['medico'] }, /supervisão/]]) {
+    const r = avaliarDia(pesado, { respostas: { ...base, ...extra }, gym: GYM });
+    assert.ok(!r.perfil.veredito && re.test(r.conclusao), JSON.stringify(extra) + ': ' + r.conclusao);
+  }
   // plano equilibrado e dentro das faixas: "serve"
   const p = gerarPlano(base, GYM, 0);
   assert.equal(avaliarPlano({ dias: p.dias, agenda: p.agenda }, ctx).perfil.veredito, 'sim');
@@ -303,7 +309,7 @@ test('limitação da entrevista vale pela mecânica também na avaliação: quad
   const bracos = avaliarDia(dia('b', it('rosca-direta-barra-w'), it('triceps-pulley-corda')), { respostas: { ...base, limitacoes: ['quadril'] }, gym: GYM });
   assert.equal(bracos.perfil.problemas.length, 0);
   // barra fixa para gestante, 60+, pressão alta e IMC de 30 ou mais: regra de segurança
-  for (const extra of [{ condicoes: ['gestante'] }, { idade: 72 }, { condicoes: ['hipertensao'] }, { peso: 110 }]) {
+  for (const extra of [{ condicoes: ['gestante'], liberado: 'sim' }, { idade: 72 }, { condicoes: ['hipertensao'] }, { peso: 110 }]) {
     const r = avaliarDia(dia('f', it('barra-fixa-pronada', 3, '10-12'), it('supino-maquina'), it('leg-press-horizontal')), { respostas: { ...base, ...extra }, gym: GYM });
     const pb = r.perfil.problemas.find((p) => p.ex === 'barra-fixa-pronada');
     assert.ok(pb && pb.grave && pb.motivos.some((m) => /pendurado/.test(m)), JSON.stringify(extra));

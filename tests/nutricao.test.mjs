@@ -585,7 +585,7 @@ test('contexto das entrevistas: sem contexto (ou concordando com a Nutricionista
   const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
   const um = (l) => l[Math.floor(rnd() * l.length)];
   const vazios = [undefined, null, {}, [], 'x', 5, { idades: 'x', condicoes: 7 }, { idades: [null, 5, { valor: 'a', origem: 'treinador' }, { valor: 15, origem: 'padaria' }, { valor: 999, origem: 'sono' }], condicoes: [{ id: 'transtorno', origem: 'corrida' }, { id: 'gestante', origem: 'vizinha' }, { id: '__proto__', origem: 'corrida' }, null] },
-    contextoDasEntrevistas(null), contextoDasEntrevistas({}), contextoDasEntrevistas({ trainer: 'x', run: [], sono: 7 }), contextoDasEntrevistas({ trainer: { answers: { idade: 'quinze', condicoes: 'gestante' } }, run: { answers: { idade: NaN, condicoes: [7, null, 'cronica', 'cardiaco'] } }, sono: { idade: -2 } })];
+    contextoDasEntrevistas(null), contextoDasEntrevistas({}), contextoDasEntrevistas({ trainer: 'x', run: [], sono: 7 }), contextoDasEntrevistas({ trainer: { answers: { idade: 'quinze', condicoes: 'gestante' } }, run: { answers: { idade: NaN, condicoes: [7, null, 'xpto', '__proto__'] } }, sono: { idade: -2 } })];
   for (let i = 0; i < 3000; i++) {
     const a = { objetivo: um(op('objetivo')), sexo: um(op('sexo')), idade: 10 + Math.floor(rnd() * 90), peso: 35 + Math.round(rnd() * 150), altura: 130 + Math.round(rnd() * 80), atividade: um(op('atividade')), treinos: um(op('treinos')), horario: um(op('horario')), refeicoes: um(op('refeicoes')), restricoes: [um(op('restricoes'))], condicoes: [um(op('condicoes'))] };
     const cor = rnd() < 0.3 ? { kmSemana: Math.round(rnd() * 80), minSemana: Math.round(rnd() * 500), sessoesSemana: 4, longoKm: 15, longoMin: 100 } : null;
@@ -598,7 +598,8 @@ test('contexto das entrevistas: sem contexto (ou concordando com a Nutricionista
   }
   // o levantamento: a idade de cada entrevista e só as condições que a Nutricionista trata
   assert.deepEqual(contextoDasEntrevistas({ trainer: { answers: { idade: 31.9, condicoes: ['hipertensao', 'cronica'] } }, run: { answers: { idade: 16, condicoes: ['gestante', 'hipertensao', 'cardiaco'] } }, sono: { idade: 16 }, nutri: { answers: { idade: 99, condicoes: ['renal'] } } }),
-    { idades: [{ valor: 31, origem: 'treinador' }, { valor: 16, origem: 'corrida' }, { valor: 16, origem: 'sono' }], condicoes: [{ id: 'hipertensao', origem: 'treinador' }, { id: 'gestante', origem: 'corrida' }] });
+    // (outra doença crônica e coração também chegam: tiram a dose de cafeína — ver o teste da união das entrevistas)
+    { idades: [{ valor: 31, origem: 'treinador' }, { valor: 16, origem: 'corrida' }, { valor: 16, origem: 'sono' }], condicoes: [{ id: 'hipertensao', origem: 'treinador' }, { id: 'outra', origem: 'treinador' }, { id: 'gestante', origem: 'corrida' }, { id: 'cardiaco', origem: 'corrida' }] });
   // contradições: vale o mais protegido e a tela pede para conferir
   const r = calcular({ ...base, idade: 30 }, null, contextoDasEntrevistas({ trainer: { answers: { idade: 15 } }, run: { answers: { idade: 12 } } }));
   assert.equal(r.modo, 'educativo'); assert.equal(r.idade, 12, 'vale a menor idade informada');
@@ -620,4 +621,57 @@ test('contexto das entrevistas: sem contexto (ou concordando com a Nutricionista
     assert.equal(x.modo, 'educativo'); assert.deepEqual(x.protecoes.map((p) => p.k), ['idade', 'gestante', 'diabetes', 'hipertensao', 'renal'], 'pós-parto não repete a gestação');
     for (const av of x.avisos) assert.ok(av.texto.length <= 330 && !/undefined|NaN|null|\[object/.test(av.texto), av.texto);
   }
+});
+
+// ---------- perguntas novas ou mudadas: cada opção tem efeito ----------
+test('alergia alimentar: cada opção tira os alimentos que têm aquilo e mostra o aviso do rótulo; "nenhuma" e a falta da resposta não mudam nada', async () => {
+  const { alergenosDe } = await import('../www/js/data/foods.js');
+  const q = PERGUNTAS.find((x) => x.k === 'alergias');
+  assert.ok(q && q.opcional && q.nenhum === 'nenhuma');
+  assert.deepEqual(q.op.map((o) => o[0]), ['amendoim', 'castanhas', 'peixe', 'ovo', 'leite', 'soja', 'nenhuma']);
+  assert.ok(respostasCompletas(base), 'entrevistas salvas sem a pergunta continuam completas');
+  const sem = calcular({ ...base, objetivo: 'ganhar' });
+  assert.deepEqual(calcular({ ...base, objetivo: 'ganhar', alergias: ['nenhuma'] }), sem);
+  const ids = (c) => c.refeicoes.flatMap((r) => r.itens.map((i) => i.id));
+  for (const [al] of q.op.filter((o) => o[0] !== 'nenhuma')) {
+    const r = calcular({ ...base, objetivo: 'ganhar', alergias: [al] });
+    assert.deepEqual(r.alergias, [al]);
+    assert.ok(r.avisos.some((x) => x.alergia && /rótulo/.test(x.texto)), al);
+    // em várias sementes, o cardápio de quem não tem alergia usa o alergênico, e o de quem tem, nunca
+    let antes = 0;
+    for (let s = 0; s < 30; s++) {
+      antes += ids(cardapio(sem, s)).filter((id) => alergenosDe(id).includes(al)).length;
+      assert.ok(ids(cardapio(r, s)).every((id) => !alergenosDe(id).includes(al)), `${al}: semente ${s}`);
+    }
+    if (al !== 'castanhas' && al !== 'amendoim') assert.ok(antes > 0, 'o cardápio comum deveria usar ' + al);
+  }
+});
+
+test('vegano: o aviso da intolerância à lactose não se repete (o cardápio já não tem leite)', () => {
+  const tem = (r) => r.avisos.some((x) => /Intolerância à lactose/.test(x.texto));
+  assert.ok(tem(calcular({ ...base, restricoes: ['sem_lactose'] })));
+  assert.ok(!tem(calcular({ ...base, restricoes: ['vegano', 'sem_lactose'] })));
+  // com alergia ao leite, a dica das versões sem lactose seria perigosa
+  assert.ok(!tem(calcular({ ...base, restricoes: ['sem_lactose'], alergias: ['leite'] })));
+});
+
+test('horário do treino: só para quem treina; quem não treina recebe a regra geral', () => {
+  const q = PERGUNTAS.find((x) => x.k === 'horario');
+  assert.ok(!q.se({ treinos: '0' }));
+  const naoTreina = { ...base, treinos: '0' };
+  delete naoTreina.horario;
+  assert.ok(respostasCompletas(naoTreina), 'sem a pergunta, as respostas estão completas');
+  assert.equal(calcular(naoTreina).horario, 'varia');
+  // resposta antiga de quem não treina, com "à noite": vale a regra geral
+  assert.equal(calcular({ ...base, treinos: '0', horario: 'noite' }).horario, 'varia');
+  assert.match(emVoltaDoTreino(calcular({ ...base, treinos: '0', horario: 'noite' })).horario, /Regra geral/);
+  assert.equal(calcular(base).horario, 'noite');
+});
+
+test('condição "Coração, circulação ou AVC" na Nutricionista: tira a dose de cafeína', async () => {
+  const { suplementos } = await import('../www/js/logic/nutrition.js');
+  const q = PERGUNTAS.find((x) => x.k === 'condicoes');
+  assert.equal(q.op.find((o) => o[0] === 'cardiaco')[1], 'Coração, circulação ou AVC');
+  assert.match(suplementos(calcular(base)).linhas[1], /3 mg/);
+  assert.ok(!/3 mg/.test(suplementos(calcular({ ...base, condicoes: ['cardiaco'] })).linhas[1]));
 });

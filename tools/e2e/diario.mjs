@@ -34,12 +34,15 @@ export default async (page) => {
   const comFolhas = async (n) => { for (let i = 0; i < 40; i++) { if ((await folhas()) === n) break; await page.sleep(100); } await page.sleep(150); return (await folhas()) === n; };
   const naFolha = (rotulo) => page.eval(`const f = [...document.querySelectorAll('.sheet')].pop(); const b = f && [...f.querySelectorAll('.sheet-ft .btn')].find((e) => e.textContent.trim() === ${JSON.stringify(rotulo)}); if (!b) return false; b.click(); return true;`);
   const aviso = () => page.eval(`const e = document.querySelector('.toast'); return e ? e.textContent : '';`);
-  const noDiario = (sel) => page.eval(`const e = document.querySelector('#diario ' + ${JSON.stringify(sel)}); return e ? e.textContent : '';`);
+  // com metas e cardápio, o resumo do dia (#diario) fica no alto e os alimentos de hoje aparecem em cada refeição
+  // (.refeicao .diario-comido) ou em "Outros alimentos de hoje" (#diario-hoje); os dias anteriores ficam em #diario-passado
+  const noDiario = (sel) => page.eval(`const s = ${JSON.stringify(sel)}; const e = document.querySelector(s.startsWith('#') ? s : '#diario ' + s); return e ? e.textContent : '';`);
   const modoNaTela = () => page.eval(`const e = document.getElementById('diario'); return e ? e.dataset.modo || '' : '';`);
-  const itensNaTela = () => page.eval(`return [...document.querySelectorAll('#diario .diario-item')].map((e) => e.textContent);`);
+  const itensNaTela = () => page.eval(`return [...document.querySelectorAll('#conteudo .diario-item')].filter((e) => !e.closest('#diario-passado')).map((e) => e.textContent);`);
   const doDia = (data) => estado(`(s.diario.dias.find((d) => d.data === '${data}') || { itens: [] }).itens`);
   const hoje = () => doDia(hojeKey);
-  const abrirAdicionar = async () => { await page.eval(`const b = [...document.querySelectorAll('#diario .btn')].find((e) => e.textContent.trim() === 'Adicionar alimento'); b.scrollIntoView({ block: 'center' }); b.click(); return true;`); return comFolhas(1); };
+  const abrirAdicionar = async (rotulo = 'Adicionar alimento') => { await page.eval(`const b = [...document.querySelectorAll('#conteudo .btn')].find((e) => e.textContent.trim() === ${JSON.stringify(rotulo)}); b.scrollIntoView({ block: 'center' }); b.click(); return true;`); return comFolhas(1); };
+  const naRefeicao = (ref) => page.eval(`return [...document.querySelectorAll('.refeicao[data-ref="${ref}"] .diario-comido .diario-item')].map((e) => e.textContent);`);
   // a refeição é sempre escolhida no roteiro (nada depende da refeição que a hora do relógio sugere)
   const refeicao = (ref) => page.eval(`const s = document.querySelector('.sheet select[aria-label="Refeição"]'); s.value = '${ref}'; s.dispatchEvent(new Event('change', { bubbles: true })); return s.value;`);
   const buscar = async (t) => { await page.eval(`const i = document.querySelector('.sheet input[aria-label="Buscar alimento"]'); i.value = ${JSON.stringify(t)}; i.dispatchEvent(new Event('input', { bubbles: true })); return true;`); await page.sleep(200); return page.eval(`return [...document.querySelectorAll('.sheet .diario-achado')].map((e) => e.dataset.al);`); };
@@ -47,7 +50,7 @@ export default async (page) => {
   const passo = (delta) => page.eval(`const b = document.querySelector('.sheet .stepper button[aria-label^="${delta < 0 ? 'Diminuir' : 'Aumentar'}"]'); for (let i = 0; i < ${Math.abs(delta)}; i++) b.click(); return document.querySelector('.sheet .stepper input').value;`);
   const conta = () => page.eval(`const e = document.getElementById('diario-conta'); return e ? e.textContent : '';`);
   const campo = (rotulo, v) => page.eval(`const i = document.querySelector('.sheet input[aria-label="${rotulo}"]'); if (!i) return false; i.value = ${JSON.stringify(v)}; i.dispatchEvent(new Event('input', { bubbles: true })); return true;`);
-  const tocarItem = async (trecho) => { const achou = await page.eval(`const b = [...document.querySelectorAll('#diario .diario-item')].find((e) => e.textContent.includes(${JSON.stringify(trecho)})); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true;`); return achou && (await comFolhas(1)); };
+  const tocarItem = async (trecho) => { const achou = await page.eval(`const b = [...document.querySelectorAll('#conteudo .diario-item')].filter((e) => !e.closest('#diario-passado')).find((e) => e.textContent.includes(${JSON.stringify(trecho)})); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true;`); return achou && (await comFolhas(1)); };
   const botoesDe = (ref) => page.eval(`const a = document.querySelector('.diario-acoes[data-ref="${ref}"]'); return a ? [...a.querySelectorAll('.btn')].map((b) => b.textContent.trim()).join('|') : '';`);
   const tocarEm = async (ref, rotulo) => { const achou = await page.eval(`const b = [...document.querySelectorAll('.diario-acoes[data-ref="${ref}"] .btn')].find((e) => e.textContent.trim() === ${JSON.stringify(rotulo)}); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true;`); await page.sleep(450); return achou; };
   const kcalDe = (al, g) => page.eval(`const f = (await import('/js/data/foods.js')).ALIMENTOS.find((x) => x.id === '${al}'); return Math.round(f.kcal * ${g} / 100);`);
@@ -93,11 +96,12 @@ export default async (page) => {
   t = await texto();
   ok((await modoNaTela()) === 'meta' && t.includes('kcal: comido / meta') && (await noDiario('.stat b')) === `${mil(kPao75)} / ${mil(meta.kcal)}`, `com meta: ${mil(kPao75)} / ${mil(meta.kcal)} kcal`);
   ok((await noDiario('#diario-frase')) === `Faltam ${mil(Math.round((meta.kcal - (await totalDeHoje())) / 10) * 10)} kcal para a meta do dia.` && (await noDiario('#diario-proteina')).startsWith('Proteína: faltam '), 'frase clara: ' + (await noDiario('#diario-frase')));
-  ok(await page.eval(`const pos = (sel) => document.querySelector(sel).getBoundingClientRect().top; return pos('#diario') < pos('details.refeicao');`), 'o bloco fica no topo, depois das metas e antes do cardápio');
+  ok(await page.eval(`const pos = (sel) => document.querySelector(sel).getBoundingClientRect().top; return pos('#hoje-nutri') < pos('#diario') && pos('#diario') < pos('.refeicao');`), 'comido / meta fica no alto, no cartão de hoje, antes do cardápio');
   await ver('#diario'); await foto('2-com-meta');
 
   console.log('3. "Comi isso": um toque copia a refeição do cardápio');
-  const sugerido = await page.eval(`const n = await import('/js/logic/nutrition.js'); const c = n.cardapio(n.calcular(${JSON.stringify(RESPOSTAS)}), 0); return Object.fromEntries(c.refeicoes.map((r) => [r.nome, r.itens.map((x) => [x.id, x.g])]));`);
+  // o cardápio de hoje é o do dia (semente pela data), o mesmo que a tela mostra
+  const sugerido = await page.eval(`const n = await import('/js/logic/nutrition.js'); const c = n.cardapioDoDia(n.calcular(${JSON.stringify(RESPOSTAS)}), '${hojeKey}'); return Object.fromEntries(c.refeicoes.map((r) => [r.nome, r.itens.map((x) => [x.id, x.g])]));`);
   const cafe = sugerido['Café da manhã'], almoco = sugerido['Almoço'];
   ok((await botoesDe('cafe')) === 'Comi isso|Comi outra coisa' && (await botoesDe('almoco')) === 'Comi isso|Comi outra coisa', 'cada refeição do cardápio tem "Comi isso" e "Comi outra coisa"');
   await ver('.diario-acoes[data-ref="cafe"]'); await foto('3-cardapio');
@@ -107,7 +111,8 @@ export default async (page) => {
   ok(doCafe.length === cafe.length && doCafe.every((x, i) => x.al === cafe[i][0] && x.g === cafe[i][1]), `os ${cafe.length} alimentos do café da manhã sugerido foram para o diário`);
   ok((await aviso()).includes('Café da manhã registrado no diário de hoje'), 'avisa que registrou: ' + (await aviso()));
   ok((await botoesDe('cafe')) === 'Adicionar mais' && (await page.eval(`return document.querySelector('.diario-acoes[data-ref="cafe"]').textContent;`)).includes('registrado no diário de hoje'), 'a refeição copiada mostra "registrado" e não oferece "Comi isso" de novo');
-  ok((await noDiario('h3')) === 'Café da manhã', 'o diário lista os alimentos por refeição');
+  ok((await naRefeicao('cafe')).length === cafe.length && !(await page.eval(`return !!document.querySelector('.refeicao[data-ref="cafe"] details.sugestao');`)), 'o que foi comido aparece dentro do café da manhã, no lugar da sugestão (que foi a comida)');
+  ok((await page.eval(`return [...document.querySelectorAll('#diario-hoje .diario-item')].map((e) => e.textContent.split(' ')[0] + ' ' + e.textContent.split(' ')[1]).join('|');`)).startsWith('Pão francês') && (await page.eval(`return document.querySelectorAll('#diario-hoje .diario-item').length;`)) === 1, 'em "Outros alimentos de hoje" fica só o pão do lanche da manhã (refeição que não está no cardápio de 4 refeições)');
 
   console.log('4. "Comi outra coisa" e um alimento avulso no horário do almoço');
   await tocarEm('almoco', 'Comi outra coisa');
@@ -120,6 +125,11 @@ export default async (page) => {
   itens = await hoje();
   const feijao = itens.find((x) => x.al === 'feijao-carioca-cozido' && x.ref === 'almoco');
   ok(!!feijao && feijao.g === 200 && feijao.m === false, 'feijão gravado no almoço, 200 g');
+  // o alimento de "Comi outra coisa" aparece na própria refeição (não num bloco solto no alto), com a sugestão à mão
+  const almocoNaTela = await naRefeicao('almoco');
+  ok(almocoNaTela.length === 1 && almocoNaTela[0].includes('Feijão carioca cozido'), 'o feijão aparece dentro do almoço, em "Você comeu"');
+  ok(await page.eval(`const c = document.querySelector('.refeicao[data-ref="almoco"]'); return !!c.querySelector('details.sugestao') && c.textContent.includes('Você comeu') && ![...document.querySelectorAll('#diario-hoje .diario-item')].some((e) => e.textContent.includes('Feijão')) && !document.querySelector('#hoje-nutri .diario-item');`), 'o almoço mostra "Você comeu" e "Ver a sugestão do cardápio"; nada vai para o alto da tela');
+  await ver('.refeicao[data-ref="almoco"]'); await foto('4b-comi-outra-coisa');
   ok((await botoesDe('almoco')) === 'Comi isso|Comi outra coisa', 'um alimento avulso no almoço NÃO tira o "Comi isso" do almoço');
   const antesDoAlmoco = (await hoje()).length;
   const novos = almoco.filter(([id]) => id !== 'feijao-carioca-cozido').length;
@@ -150,13 +160,13 @@ export default async (page) => {
   itens = await hoje();
   const bolo = itens.find((x) => x.nome);
   ok(!!bolo && bolo.nome === 'Bolo de cenoura <b>da vó</b>' && bolo.kcal === 1200 && bolo.p === 4.5 && bolo.ref === 'outro', '"1.200" vale 1200 kcal (não 1): ' + JSON.stringify(bolo));
-  ok(await page.eval(`const e = [...document.querySelectorAll('#diario .diario-item')].find((x) => x.textContent.includes('Bolo de cenoura')); return !!e && e.textContent.includes('<b>da vó</b>') && !e.querySelector('b') && e.textContent.includes('1.200 kcal') && e.textContent.includes('fora da lista');`), 'o nome digitado aparece como texto (não vira HTML), com as calorias');
+  ok(await page.eval(`const e = [...document.querySelectorAll('#diario-hoje .diario-item')].find((x) => x.textContent.includes('Bolo de cenoura')); return !!e && e.textContent.includes('<b>da vó</b>') && !e.querySelector('b') && e.textContent.includes('1.200 kcal') && e.textContent.includes('fora da lista');`), 'o nome digitado aparece como texto (não vira HTML), com as calorias, em "Outros alimentos de hoje" (fora das refeições do cardápio)');
   ok((await noDiario('#diario-macros')).includes('sem contar 1 alimento fora da lista'), 'a tela avisa que carboidrato, gordura e fibras não contam o alimento fora da lista');
 
   console.log('6. Corrigir e apagar (apagar pede confirmação)');
   const antes = (await hoje()).length;
   // o primeiro alimento do dia (i1) é o pão francês registrado no passo 1
-  ok((await page.eval(`const b = document.querySelector('#diario .diario-item[data-id="i1"]'); if (!b || !b.textContent.includes('Pão francês')) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true;`)) && (await comFolhas(1)), 'tocar no alimento abre "Corrigir alimento"');
+  ok((await page.eval(`const b = [...document.querySelectorAll('#conteudo .diario-item[data-id="i1"]')].find((e) => !e.closest('#diario-passado')); if (!b || !b.textContent.includes('Pão francês')) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true;`)) && (await comFolhas(1)), 'tocar no alimento abre "Corrigir alimento"');
   ok((await texto()).includes('Corrigir alimento') && (await conta()).startsWith('75 g'), 'a folha abre com a quantidade gravada');
   ok((await passo(1)) === '2' && (await conta()).startsWith('100 g (2 unidades)'), 'passa para 2 porções (100 g)');
   await naFolha('Salvar'); await comFolhas(0);
@@ -187,20 +197,25 @@ export default async (page) => {
   ok(ini.modo === 'meta' && ini.metaKcal === meta.kcal && ini.frase === 'Você passou 250 kcal da meta do dia.', 'resumoDeHoje() (Início): consumido / meta e a mesma frase');
   await ver('#diario'); await foto('6-passou');
 
-  console.log('8. Dias anteriores');
-  await page.click('Dia anterior'); await page.sleep(400);
+  console.log('8. Dias anteriores (seção no fim da tela, fechada)');
   const ontem = diaMenos(1);
-  ok((await texto()).includes(`O que comi em ${diaMes(ontem)}`) && (await noDiario('#diario-dia')) === `Ontem, ${diaMes(ontem)}` && (await texto()).includes('Nada registrado neste dia.'), 'o dia anterior abre vazio: ' + (await noDiario('#diario-dia')));
-  await abrirAdicionar();
+  ok((await page.eval(`const d = document.getElementById('diario-dias'); return !!d && !d.open;`)), '"Diário dos dias anteriores" começa fechado');
+  await page.click('Diário dos dias anteriores'); await page.sleep(300);
+  ok((await noDiario('#diario-dia')) === `Ontem, ${diaMes(ontem)}` && (await noDiario('#diario-passado')).includes('Nada registrado neste dia.'), 'abre em ontem, vazio: ' + (await noDiario('#diario-dia')));
+  await abrirAdicionar(`Adicionar alimento em ${diaMes(ontem)}`);
   ok((await texto()).includes('Adicionar alimento · ontem'), 'a folha diz de que dia é');
   ok((await buscar('banana pra')).includes('banana-prata') && (await escolher('banana-prata')), 'a busca ignora o hífen: "banana pra" acha a banana-prata');
   await refeicao('ceia'); await naFolha('Adicionar'); await comFolhas(0);
   const deOntem = await doDia(ontem);
   ok(deOntem.length === 1 && deOntem[0].al === 'banana-prata' && deOntem[0].ref === 'ceia' && (await estado('s.diario.dias.map((d) => d.data).join()')) === `${ontem},${hojeKey}`, 'gravado em ontem; os dias ficam em ordem de data');
-  ok((await itensNaTela()).length === 1, 'a tela de ontem mostra só o alimento de ontem');
-  ok((await page.eval(`return document.querySelector('#diario .iconbtn[aria-label="Dia anterior"]').disabled;`)) === false, 'ainda dá para voltar mais (o limite é o primeiro dia que o diário guarda)');
+  ok((await page.eval(`return document.querySelectorAll('#diario-passado .diario-item').length;`)) === 1 && (await page.eval(`return document.getElementById('diario-dias').open;`)), 'a seção continua aberta e mostra só o alimento de ontem');
+  ok(!(await page.eval(`return [...document.querySelectorAll('.refeicao .diario-item, #diario-hoje .diario-item')].some((e) => e.textContent.includes('Banana-prata'));`)), 'o alimento de ontem não entra nas refeições de hoje');
+  ok((await page.eval(`return document.querySelector('#diario-passado .iconbtn[aria-label="Dia anterior"]').disabled;`)) === false, 'ainda dá para voltar mais (o limite é o primeiro dia que o diário guarda)');
+  ok((await page.eval(`return document.querySelector('#diario-passado .iconbtn[aria-label="Dia seguinte"]').disabled;`)) === true, 'de ontem não se avança: hoje está nas refeições, no alto');
+  await page.click('Dia anterior'); await page.sleep(400);
+  ok((await noDiario('#diario-dia')) !== `Ontem, ${diaMes(ontem)}` && (await page.eval(`return document.querySelectorAll('#diario-passado .diario-item').length;`)) === 0, 'anteontem: vazio');
   await page.click('Dia seguinte'); await page.sleep(400);
-  ok((await texto()).includes('O que comi hoje') && (await page.eval(`return document.querySelector('#diario .iconbtn[aria-label="Dia seguinte"]').disabled;`)) === true, 'volta para hoje; não dá para ir ao futuro');
+  ok((await noDiario('#diario-dia')) === `Ontem, ${diaMes(ontem)}`, 'volta para ontem');
   await page.eval(`document.querySelector('#diario-semana summary').click(); return true;`); await page.sleep(200);
   ok((await page.eval(`return document.getElementById('diario-semana').textContent;`)).includes('2 dias registrados') && (await page.eval(`return document.getElementById('diario-semana').textContent;`)).includes('em 2 dias registrados nos últimos 7'), 'a semana mostra a média e os dias registrados');
   await ver('#diario-semana'); await foto('7-semana');
@@ -245,12 +260,12 @@ export default async (page) => {
   console.log('11. Virada do dia com a tela aberta (23:59 → 00:01)');
   const amanha = diaMenos(-1);
   await relogio(hojeKey, '23:59'); await redesenhar();
-  ok((await page.eval(`return document.getElementById('diario').dataset.dia;`)) === hojeKey && (await texto()).includes('O que comi hoje'), 'às 23:59 a tela mostra o dia de hoje');
+  ok((await page.eval(`return document.getElementById('diario').dataset.dia;`)) === hojeKey && (await itensNaTela()).length > 0, 'às 23:59 a tela mostra o dia de hoje, com o que foi comido');
   const nHoje = (await hoje()).length;
   await relogio(amanha, '00:01');
-  await page.eval(`const b = [...document.querySelectorAll('#diario .btn')].find((e) => e.textContent.trim() === 'Adicionar alimento'); b.scrollIntoView({ block: 'center' }); b.click(); return true;`); await page.sleep(500);
+  await page.eval(`const b = [...document.querySelectorAll('#diario-hoje .btn')].find((e) => e.textContent.trim() === 'Adicionar alimento'); b.scrollIntoView({ block: 'center' }); b.click(); return true;`); await page.sleep(500);
   ok((await folhas()) === 0 && (await aviso()).includes('O dia mudou'), 'depois da meia-noite, "Adicionar alimento" não abre a folha do dia errado e avisa: ' + (await aviso()));
-  ok((await page.eval(`return document.getElementById('diario').dataset.dia;`)) === amanha && (await texto()).includes('Nada registrado hoje'), 'a tela é redesenhada: "hoje" passa a ser o dia novo, vazio');
+  ok((await page.eval(`return document.getElementById('diario').dataset.dia;`)) === amanha && (await itensNaTela()).length === 0 && (await noDiario('#diario-frase')).startsWith('Faltam'), 'a tela é redesenhada: "hoje" passa a ser o dia novo, vazio');
   ok((await hoje()).length === nHoje && (await doDia(amanha)).length === 0, 'nada foi gravado no dia errado');
   // folha aberta antes da virada: ao tocar em Adicionar depois da meia-noite, não grava
   await relogio(hojeKey, '23:59'); await redesenhar();

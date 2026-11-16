@@ -3,13 +3,14 @@
 import { EX_POR_ID } from './data/exercises.js';
 import { EQUIPAMENTOS } from './data/equipment.js';
 import { PERGUNTAS as P_TREINO } from './logic/trainer.js';
-import { PERGUNTAS as P_NUTRI, limparEmCasa } from './logic/nutrition.js';
+import { PERGUNTAS as P_NUTRI, limparEmCasa, limparAjustes } from './logic/nutrition.js';
 import { parValido } from './logic/objetivos.js';
 import { limparDores } from './logic/dor.js';
 import { limparCorrida, limparRegistros } from './logic/corrida.js';
 import { limparSono, sonoPadrao } from './logic/sono.js';
 import { limparCombo, comboPadrao, chaveValida } from './logic/combinado.js';
 import { limparDiario, diarioPadrao } from './logic/diario.js';
+import { diaValido } from './logic/saude.js';
 
 const DB_NAME = 'fitcore';
 const STORE = 'kv';
@@ -31,7 +32,8 @@ const defaults = () => ({
   current: null,
   // combo: "foco|fortalecimento" com que o plano aceito foi montado (logic/combinado.js)
   trainer: { answers: {}, aceitoEm: '', revisaoEm: '', adiadoAte: '', versao: 0, combo: '' },
-  nutri: { answers: {}, calculadoEm: '', seed: 0, emCasa: [], soCasa: false },
+  // ajustes: "Outra sugestão" e "Trocar" do cardápio de cada dia (logic/nutrition.js, limparAjustes)
+  nutri: { answers: {}, calculadoEm: '', seed: 0, emCasa: [], soCasa: false, ajustes: {} },
   body: [],
   // Treinador de corrida (logic/corrida.js): entrevista e plano aceito; runs = corridas registradas
   run: { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [], mostrados: [], degrau: null },
@@ -97,6 +99,8 @@ function cleanAnswers(v, perguntas) {
       const ok = [...new Set(x.filter((y) => typeof y === 'string' && q.op.some((o) => o[0] === y)))].slice(0, q.max || q.op.length);
       if (ok.length) out[q.k] = ok;
     }
+    // data da liberação médica (AAAA-MM-DD, logic/saude.js): só com a resposta "sim"
+    if (q.dataEm && out[q.k] === 'sim' && diaValido(v[q.dataEm])) out[q.dataEm] = v[q.dataEm];
   }
   return out;
 }
@@ -196,7 +200,7 @@ export function sanitize(raw, { doAparelho = false } = {}) {
   const t = isObj(raw.trainer) ? raw.trainer : {};
   d.trainer = { answers: cleanAnswers(t.answers, P_TREINO), aceitoEm: iso(t.aceitoEm), revisaoEm: iso(t.revisaoEm), adiadoAte: iso(t.adiadoAte), versao: Math.round(num(t.versao, 0, 9999, 0)), combo: chaveValida(t.combo) ? t.combo : '' };
   const n = isObj(raw.nutri) ? raw.nutri : {};
-  d.nutri = { answers: cleanAnswers(n.answers, P_NUTRI), calculadoEm: iso(n.calculadoEm), seed: Math.round(num(n.seed, 0, 1e6, 0)), emCasa: limparEmCasa(n.emCasa), soCasa: n.soCasa === true };
+  d.nutri = { answers: cleanAnswers(n.answers, P_NUTRI), calculadoEm: iso(n.calculadoEm), seed: Math.round(num(n.seed, 0, 1e6, 0)), emCasa: limparEmCasa(n.emCasa), soCasa: n.soCasa === true, ajustes: limparAjustes(n.ajustes) };
   const dias = new Set();
   d.body = arr(raw.body, 3000, cleanBody).filter((b) => (dias.has(b.data) ? false : dias.add(b.data))).sort((a, b) => (a.data < b.data ? -1 : 1));
   d.dores = limparDores(raw.dores);

@@ -94,7 +94,7 @@ function contextoDe(ctx) {
   const c = ctx && typeof ctx === 'object' ? ctx : {};
   let pf = null;
   try { pf = c.respostas && typeof c.respostas === 'object' && respostasCompletas(c.respostas) ? perfil(c.respostas) : null; } catch { pf = null; }
-  return { pf: pf && !pf.bloqueado ? pf : null, bloqueado: !!(pf && pf.bloqueado), gym: c.gym, dores: lista(c.dores), corrida: c.corrida && typeof c.corrida === 'object' ? c.corrida : null };
+  return { pf: pf && !pf.bloqueado ? pf : null, bloqueado: !!(pf && pf.bloqueado), bloqueio: pf ? pf.bloqueio : '', gym: c.gym, dores: lista(c.dores), corrida: c.corrida && typeof c.corrida === 'object' ? c.corrida : null };
 }
 // motivos contra um exercício: com perfil, as regras do Treinador; sem perfil, só o que vale para qualquer pessoa
 // (exercícios que pedem supervisão e as dores contadas)
@@ -117,7 +117,7 @@ function dosePorPerfil(itens, pf) {
   const menorQue = (n) => carga.some((it) => it.lo < n);
   if (pf.liberacao) out.push({ grave: false, texto: 'Pelas suas respostas de saúde, peça liberação médica antes de começar ou de aumentar a carga.' });
   if (pf.cautela && menorQue(10)) out.push({ grave: true, texto: `${pf.gestante ? 'Na gestação' : pf.pressao ? 'Com pressão alta ou problema no coração' : 'Até ter liberação médica'}, evite cargas altas: use 10 repetições ou mais, sem prender a respiração.` });
-  else if (pf.moderado && menorQue(8)) out.push({ grave: true, texto: 'Com diabetes ou outra doença crônica, fique em 8 repetições ou mais, a não ser com liberação médica.' });
+  else if (pf.moderado && menorQue(8)) out.push({ grave: true, texto: 'Com diabetes, doença nos rins ou outra doença crônica, fique em 8 repetições ou mais, a não ser com liberação médica.' });
   else if (pf.jovem && menorQue(10)) out.push({ grave: true, texto: 'Antes dos 18 anos, o indicado são cargas moderadas, de 10 a 15 repetições, com a técnica em primeiro lugar.' });
   if (pf.nunca && itens.some((it) => comCarga(it) && it.series > 3)) out.push({ grave: false, texto: 'Para quem está começando, 1 a 3 séries por exercício bastam nas primeiras semanas.' });
   return out;
@@ -167,7 +167,9 @@ const vazio = (texto) => ({ vazio: true, conclusao: texto, refs: [] });
 const fraseDoPerfil = (p, c, bom) => (p.veredito === 'nao' ? 'Para o seu perfil, não é recomendado como está: veja o que trocar.'
   : p.veredito === 'ajustes' ? 'Serve para você com os ajustes indicados.'
     : p.veredito === 'sim' ? bom
-      : c.bloqueado ? 'Antes dos 14 anos, a musculação precisa de orientação presencial.' : 'Responda ao Treinador para saber se serve para o seu perfil.');
+      : c.bloqueio === 'idade' ? 'Antes dos 14 anos, a musculação precisa de orientação presencial.'
+        : c.bloqueio === 'supervisao' ? 'Um médico indicou exercício só com supervisão: treine com um profissional ao lado.'
+          : c.bloqueado ? 'Pelas suas respostas de saúde, antes de treinar é preciso ter liberação médica: veja o Treinador.' : 'Responda ao Treinador para saber se serve para o seu perfil.');
 
 // Avalia um treino (um dia). `contexto`: { respostas (do Treinador), gym, dores (ativas), corrida (resumoCombinado) }.
 // Devolve { vazio, foco: { grupos, texto, padroes }, mais, menos, volume, diretas, tipo: { id, texto }, definicao,

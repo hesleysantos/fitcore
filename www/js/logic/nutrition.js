@@ -3,7 +3,8 @@
 // Também: preferência por alimentos mais baratos (faixas de preço em data/foods.js), cardápio com o que há em casa e
 // alimentação para corrida (resumo vindo de logic/corrida.js).
 // Orientação educativa: não é prescrição dietética e não substitui consulta com nutricionista.
-import { ALIMENTOS } from '../data/foods.js';
+import { ALIMENTOS, CATEGORIAS_ALIMENTO, rendimentoDeCompra, temAlergeno, NOME_ALERGIA } from '../data/foods.js';
+import { uniaoSaude } from './saude.js';
 
 const FOOD = new Map(ALIMENTOS.map((f) => [f.id, f]));
 
@@ -18,26 +19,36 @@ export const PERGUNTAS = [
     op: [['barato', 'Sim, priorize os mais baratos', 'Frango, ovos, feijão, frutas e legumes da época'], ['tanto_faz', 'Tanto faz', 'O exemplo usa todos os alimentos']],
   },
   { k: 'sexo', tipo: 'um', titulo: 'Qual é o seu sexo biológico?', ajuda: 'Usado apenas na fórmula que estima o gasto de energia.', op: [['f', 'Feminino', ''], ['m', 'Masculino', '']] },
-  { k: 'idade', tipo: 'numero', titulo: 'Quantos anos você tem?', min: 10, max: 99, un: 'anos', padrao: 30 },
-  { k: 'peso', tipo: 'numero', titulo: 'Qual é o seu peso atual?', min: 30, max: 250, un: 'kg', padrao: 70, passo: 0.5, dec: 1 },
-  { k: 'altura', tipo: 'numero', titulo: 'Qual é a sua altura?', ajuda: 'Em centímetros.', min: 120, max: 220, un: 'cm', padrao: 170 },
+  // `informar`: o valor de partida não vale como resposta — a pessoa ajusta ou confirma (ver views/coach.js)
+  { k: 'idade', tipo: 'numero', informar: true, titulo: 'Quantos anos você tem?', min: 10, max: 99, un: 'anos', padrao: 30 },
+  { k: 'peso', tipo: 'numero', informar: true, titulo: 'Qual é o seu peso atual?', min: 30, max: 250, un: 'kg', padrao: 70, passo: 0.5, dec: 1 },
+  { k: 'altura', tipo: 'numero', informar: true, titulo: 'Qual é a sua altura?', ajuda: 'Em centímetros.', min: 120, max: 220, un: 'cm', padrao: 170 },
   {
     k: 'atividade', tipo: 'um', titulo: 'Como é o seu dia a dia, fora os treinos?',
     op: [['sedentario', 'Fico sentado a maior parte do dia', ''], ['leve', 'Fico em pé ou caminho parte do dia', ''], ['moderado', 'Trabalho em movimento na maior parte do dia', ''], ['intenso', 'Faço trabalho braçal pesado', '']],
   },
   { k: 'treinos', tipo: 'um', titulo: 'Quantos dias por semana você treina?', op: [['0', 'Ainda não treino', ''], ['2', '1 a 2 dias', ''], ['3', '3 dias', ''], ['4', '4 a 5 dias', ''], ['6', '6 a 7 dias', '']] },
+  // só para quem treina (quem ainda não treina recebe a regra geral, como em "Varia")
   {
-    k: 'horario', tipo: 'um', titulo: 'Em que horário você costuma treinar?',
-    op: [['cedo', 'Bem cedo, logo ao acordar', ''], ['manha', 'De manhã', ''], ['tarde', 'À tarde', ''], ['noite', 'À noite', ''], ['varia', 'Varia / não treino', '']],
+    k: 'horario', tipo: 'um', se: (a) => a.treinos !== '0', titulo: 'Em que horário você costuma treinar?',
+    op: [['cedo', 'Bem cedo, logo ao acordar', ''], ['manha', 'De manhã', ''], ['tarde', 'À tarde', ''], ['noite', 'À noite', ''], ['varia', 'Varia', '']],
   },
   { k: 'refeicoes', tipo: 'um', titulo: 'Quantas refeições você prefere fazer por dia?', op: [['3', '3 refeições', ''], ['4', '4 refeições', ''], ['5', '5 refeições', ''], ['6', '6 refeições', '']] },
   {
     k: 'restricoes', tipo: 'varios', titulo: 'Você tem alguma restrição alimentar?', nenhum: 'nenhuma',
-    op: [['nenhuma', 'Nenhuma', ''], ['vegetariano', 'Vegetariano', 'Não como carnes nem peixes'], ['vegano', 'Vegano', 'Nenhum alimento de origem animal'], ['sem_lactose', 'Intolerância à lactose', ''], ['sem_gluten', 'Doença celíaca / sem glúten', '']],
+    inclui: { vegano: ['vegetariano'] }, // quem é vegano já não come carne nem peixe: marcar os dois é a mesma coisa
+    op: [['vegetariano', 'Vegetariano', 'Não como carnes nem peixes'], ['vegano', 'Vegano', 'Nenhum alimento de origem animal'], ['sem_lactose', 'Intolerância à lactose', ''], ['sem_gluten', 'Doença celíaca / sem glúten', ''], ['nenhuma', 'Nenhuma', '']],
+  },
+  // Alergia alimentar: cada uma tira do cardápio, das trocas e das sugestões os alimentos que costumam ter aquilo
+  // (data/foods.js → ALERGENICOS). Opcional: respostas salvas antes desta pergunta valem como "nenhuma". Os grupos são os
+  // da lista oficial de alergênicos da Anvisa (ref anvisa_alergenicos), em palavras do dia a dia.
+  {
+    k: 'alergias', tipo: 'varios', opcional: true, titulo: 'Você tem alergia a algum destes alimentos?', ajuda: 'Eu tiro do cardápio os alimentos que costumam ter isso. Mesmo assim, leia sempre o rótulo.', nenhum: 'nenhuma',
+    op: [['amendoim', 'Amendoim', ''], ['castanhas', 'Castanhas e nozes', 'Castanha-de-caju, castanha-do-pará, amêndoa, nozes, avelã...'], ['peixe', 'Peixes e frutos do mar', 'Inclui camarão e outros crustáceos'], ['ovo', 'Ovo', ''], ['leite', 'Leite', 'Alergia à proteína do leite (não é a intolerância à lactose)'], ['soja', 'Soja', ''], ['nenhuma', 'Nenhuma', '']],
   },
   {
     k: 'condicoes', tipo: 'varios', titulo: 'Alguma destas situações se aplica a você?', ajuda: 'Algumas pedem acompanhamento profissional antes de mudar a alimentação.', nenhum: 'nenhuma',
-    op: [['nenhuma', 'Nenhuma', ''], ['diabetes', 'Diabetes', ''], ['hipertensao', 'Pressão alta', ''], ['renal', 'Doença nos rins', ''], ['gestante', 'Gestação ou amamentação', ''], ['transtorno', 'Tenho ou já tive transtorno alimentar', ''], ['outra', 'Outra doença crônica', '']],
+    op: [['diabetes', 'Diabetes', ''], ['hipertensao', 'Pressão alta', ''], ['cardiaco', 'Coração, circulação ou AVC', 'Doença do coração, das artérias ou das veias, ou AVC'], ['renal', 'Doença nos rins', ''], ['gestante', 'Gestação ou amamentação', ''], ['transtorno', 'Tenho ou já tive transtorno alimentar', ''], ['outra', 'Outra doença crônica', ''], ['nenhuma', 'Nenhuma', '']],
   },
 ];
 
@@ -46,7 +57,7 @@ export const ROTULO = { objetivo: { emagrecer: 'Emagrecer', ganhar: 'Ganhar mass
 export function respostasCompletas(a) {
   return PERGUNTAS.every((q) => {
     const v = a[q.k];
-    if (v == null && q.opcional) return true;
+    if (v == null && (q.opcional || (q.se && !q.se(a)))) return true;
     if (q.tipo === 'numero') return typeof v === 'number' && v >= q.min && v <= q.max;
     if (q.tipo === 'um') return typeof v === 'string' && q.op.some((o) => o[0] === v);
     return Array.isArray(v) && v.length > 0;
@@ -83,16 +94,24 @@ const numero = (v, min, max, padrao) => (typeof v === 'number' && Number.isFinit
 // nos rins, diabetes e pressão alta) marcadas ao Treinador ou ao Treinador de corrida. Pura: só lê o estado.
 // Devolve { idades: [{ valor, origem }], condicoes: [{ id, origem }] }, com origem = 'treinador' | 'corrida' | 'sono'.
 const ONDE = { treinador: 'ao Treinador', corrida: 'ao Treinador de corrida', sono: 'na tela do sono' };
-const COND_DE_FORA = { gestante: 'gestação', posparto: 'pós-parto', renal: 'doença nos rins', diabetes: 'diabetes', hipertensao: 'pressão alta' };
+// (também: doença do coração, outra doença crônica e qualquer sinal da triagem de saúde — eles tiram a dose de cafeína:
+// ver suplementos)
+const COND_DE_FORA = { gestante: 'gestação', posparto: 'pós-parto', renal: 'doença nos rins', diabetes: 'diabetes', hipertensao: 'pressão alta', cardiaco: 'doença do coração, da circulação ou AVC', outra: 'outra doença crônica', sinal: 'um sinal de alerta de saúde (como dor no peito, falta de ar ou tontura)' };
 const proprio = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
 const idadeValida = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 1 && v <= 130;
+// As condições, os sinais da triagem e os remédios vêm da união das entrevistas (logic/saude.js), com os nomes daqui:
+// "outra doença crônica" do Treinador vira "outra"; qualquer sinal da triagem vira "sinal"; insulina ou remédio que baixa
+// o açúcar vira "diabetes".
+const PARA_NUTRI = { gestante: 'gestante', posparto: 'posparto', renal: 'renal', diabetes: 'diabetes', hipertensao: 'hipertensao', cardiaco: 'cardiaco', cronica: 'outra' };
 export function contextoDasEntrevistas(st) {
   const s = st && typeof st === 'object' && !Array.isArray(st) ? st : {};
   const resp = (o) => (o && typeof o === 'object' && o.answers && typeof o.answers === 'object' && !Array.isArray(o.answers) ? o.answers : {});
   const out = { idades: [], condicoes: [] };
-  for (const [origem, a] of [['treinador', resp(s.trainer)], ['corrida', resp(s.run)]]) {
-    if (idadeValida(a.idade)) out.idades.push({ valor: Math.floor(a.idade), origem });
-    for (const c of Array.isArray(a.condicoes) ? a.condicoes : []) if (proprio(COND_DE_FORA, c) && !out.condicoes.some((x) => x.id === c)) out.condicoes.push({ id: c, origem });
+  for (const [origem, a] of [['treinador', resp(s.trainer)], ['corrida', resp(s.run)]]) if (idadeValida(a.idade)) out.idades.push({ valor: Math.floor(a.idade), origem });
+  for (const x of uniaoSaude(s).itens) {
+    if (x.origem !== 'treinador' && x.origem !== 'corrida') continue;
+    const id = x.tipo === 'sinal' ? 'sinal' : x.tipo === 'condicao' ? PARA_NUTRI[x.id] : x.tipo === 'remedio' && x.id === 'glicose' ? 'diabetes' : '';
+    if (proprio(COND_DE_FORA, id) && !out.condicoes.some((y) => y.id === id)) out.condicoes.push({ id, origem: x.origem });
   }
   if (s.sono && typeof s.sono === 'object' && idadeValida(s.sono.idade)) out.idades.push({ valor: Math.floor(s.sono.idade), origem: 'sono' });
   return out;
@@ -210,9 +229,16 @@ export function calcular(respostas, corrida = null, contexto = null) {
   if (cond.includes('outra')) avisos.push({ tipo: 'info', texto: 'Com doença crônica, confirme estas orientações com seu médico ou nutricionista antes de mudar a alimentação.' });
   if (rest.includes('vegano')) avisos.push({ tipo: 'info', texto: 'Alimentação vegana bem planejada atende a quem treina, mas a vitamina B12 precisa ser suplementada. Combine feijões com cereais e varie as fontes de proteína (soja, tofu, lentilha, grão-de-bico). Atenção também a ferro, cálcio, zinco, iodo, vitamina D e ômega-3.' });
   if (rest.includes('sem_gluten')) avisos.push({ tipo: 'info', texto: 'Doença celíaca: a exclusão de trigo, centeio, cevada (e aveia não certificada) deve ser total. Cuidado com a contaminação cruzada em utensílios, óleo de fritura e alimentos a granel. Confira sempre o rótulo.' });
-  if (rest.includes('sem_lactose')) avisos.push({ tipo: 'info', texto: 'Intolerância à lactose: o cardápio de exemplo não usa leite, iogurte nem queijo comuns. Se quiser, inclua as versões sem lactose desses alimentos.' });
+  // alergia alimentar: o aviso de ler os rótulos (RDC 26/2015, mantida na RDC 727/2022 — ref anvisa_alergenicos: os
+  // embalados trazem "ALÉRGICOS: CONTÉM" ou "PODE CONTER" logo depois dos ingredientes; a granel e em restaurante, não)
+  const alergias = alergiasDe({ alergias: lista(a.alergias) });
+  if (alergias.length) avisos.push({ tipo: 'warn', alergia: true, texto: `Alergia a ${alergias.map((x) => NOME_ALERGIA[x]).join(', ').replace(/, ([^,]*)$/, ' e $1')}: tirei do cardápio de exemplo, das trocas e das sugestões os alimentos que costumam ter isso, inclusive pratos prontos. Leia sempre o rótulo: nos alimentos embalados, procure o aviso “ALÉRGICOS: CONTÉM” ou “PODE CONTER”, logo depois dos ingredientes. Comida a granel ou de restaurante não traz esse aviso: pergunte como foi feita.${alergias.includes('leite') ? ' Leite e derivados “sem lactose” continuam tendo a proteína do leite: não servem para quem tem alergia.' : ''}` });
+  // (com vegano o cardápio já não tem leite: o aviso da lactose seria repetido; com alergia ao leite, a dica das versões
+  // sem lactose seria perigosa)
+  if (rest.includes('sem_lactose') && !rest.includes('vegano') && !alergias.includes('leite')) avisos.push({ tipo: 'info', texto: 'Intolerância à lactose: o cardápio de exemplo não usa leite, iogurte nem queijo comuns. Se quiser, inclua as versões sem lactose desses alimentos.' });
 
-  const out = { modo, imc, baixoPeso, tmb: r10(tmb), gasto: r10(gasto), fator: Math.round((gasto / tmb) * 1000) / 1000, pesoRef, avisos, restricoes: rest, condicoes: cond, peso, treina, objetivo, refeicoes: [3, 4, 5, 6].includes(Number(a.refeicoes)) ? Number(a.refeicoes) : 4, horario: a.horario || 'varia', sexo, idade };
+  // quem ainda não treina não tem horário de treino (a pergunta nem aparece): vale a regra geral
+  const out = { modo, imc, baixoPeso, tmb: r10(tmb), gasto: r10(gasto), fator: Math.round((gasto / tmb) * 1000) / 1000, pesoRef, avisos, restricoes: rest, alergias, condicoes: cond, peso, treina, objetivo, refeicoes: [3, 4, 5, 6].includes(Number(a.refeicoes)) ? Number(a.refeicoes) : 4, horario: String(a.treinos) === '0' ? 'varia' : a.horario || 'varia', sexo, idade };
   out.preco = a.preco === 'barato' ? 'barato' : 'tanto_faz';
   if (protecoes.length) out.protecoes = protecoes;
   // Água TOTAL do dia (bebidas + a água dos alimentos), em litros: a ingestão adequada da EFSA — 2,0 L (mulheres) e
@@ -377,7 +403,13 @@ function etiquetas(rest) {
   if (rest.includes('sem_lactose')) need.push('sem_lactose');
   return need;
 }
-const permite = (id, rest) => { const f = FOOD.get(id); const need = etiquetas(rest); return !!f && need.every((t) => f.tags.includes(t)); };
+// Alergias alimentares (res.alergias) andam junto com as restrições, como 'alergia:amendoim': nenhum alimento com o
+// alergênico entra no cardápio, nas trocas nem nas sugestões (data/foods.js → temAlergeno).
+const ALERGIAS_VALIDAS = new Set(['amendoim', 'castanhas', 'peixe', 'ovo', 'leite', 'soja']);
+const alergiasDe = (res) => (res && Array.isArray(res.alergias) ? res.alergias.filter((x) => ALERGIAS_VALIDAS.has(x)) : []);
+const restricoesDe = (res) => [...(res && Array.isArray(res.restricoes) ? res.restricoes : []), ...alergiasDe(res).map((x) => 'alergia:' + x)];
+const alergiasDoRest = (rest) => rest.filter((x) => typeof x === 'string' && x.startsWith('alergia:')).map((x) => x.slice(8));
+const permite = (id, rest) => { const f = FOOD.get(id); const need = etiquetas(rest); return !!f && need.every((t) => f.tags.includes(t)) && !temAlergeno(id, alergiasDoRest(rest)); };
 // "Mais baratos": ficam os alimentos da menor faixa de preço que o grupo tem; se forem menos de `min`, entram também os
 // da faixa seguinte — nunca mais que um degrau. Havendo um alimento barato, o caro não entra, mesmo que sobrem só uma
 // ou duas opções (é o caso do cardápio vegano: soja e proteína de soja, sem tofu). As faixas vêm de data/foods.js.
@@ -390,7 +422,7 @@ function economicos(lista, min = 2) {
 }
 // Contexto de um cardápio: restrições (sempre obrigatórias), preferência de preço e, se houver, o que a pessoa tem em casa.
 function contexto(res, emCasa) {
-  const rest = Array.isArray(res.restricoes) ? res.restricoes : [];
+  const rest = restricoesDe(res);
   const casa = Array.isArray(emCasa) ? new Set(emCasa.filter((id) => FOOD.has(id))) : null;
   const barato = !casa && res.preco === 'barato';                // com a lista de casa, o preço não entra: a comida já está comprada
   const pode = (id) => permite(id, rest) && (!casa || casa.has(id));
@@ -459,7 +491,8 @@ function concentradas(lista) {
 // gordura de cozinha do prato (1 colher): azeite; com "mais baratos", óleo de soja; com a lista de casa, a que houver
 function oleoDoPrato(ctx) {
   if (ctx.casa) return POOL_CASA.gordura.find(ctx.pode) || null;
-  return ctx.barato ? 'oleo-de-soja' : 'azeite-de-oliva';
+  // (com alergia à soja, o óleo de soja não entra: fica o azeite)
+  return ctx.barato && ctx.pode('oleo-de-soja') ? 'oleo-de-soja' : 'azeite-de-oliva';
 }
 // Monta uma refeição. Cada parte só entra se houver alimento para ela (com a lista de casa, um grupo pode faltar).
 function refeicao(tipo, nome, kcalAlvo, pAlvo, ctx, seed, usados, rico) {
@@ -816,15 +849,33 @@ const PLANO_REF = {
 
 // Gera um dia de exemplo. `semente` troca os alimentos (botão "Outra sugestão").
 // Com `emCasa` (lista de ids), o dia é montado só com esses alimentos e `faltas` diz o que faltou (ver faltasDaCasa).
-export function cardapio(res, semente = 0, { emCasa = null } = {}) {
+// `trocas` (opcional): [k0, k1, ...], uma por refeição na ordem do dia. k > 0 troca aquela refeição por outra montada
+// com os mesmos grupos de alimentos (o "Trocar" do cardápio): as outras refeições são montadas como antes, e o dia
+// passa de novo pelo ajuste fino para fechar a mesma meta (que pode mexer em quantidades e complementos das outras).
+// Cada refeição devolvida traz `ordem` (posição no dia).
+export function cardapio(res, semente = 0, { emCasa = null, trocas = null } = {}) {
   if (!res || res.modo === 'educativo' || !res.kcal) return null;
   const seed = Math.abs(Math.floor(Number(semente))) % 1000000 || 0;
   const ref = PLANO_REF[res.refeicoes] || PLANO_REF[4];
   const ctx = contexto(res, emCasa);
   const usados = new Map();
   const rico = (res.prot * 4) / res.kcal >= 0.26;
-  const refs = ref.map(([tipo, nome, fk, fp], i) => refeicao(tipo, nome, res.kcal * fk, res.prot * fp, ctx, seed + i * 2 + (tipo === 'principal' ? i : 0), usados, rico))
-    .filter((r) => r.itens.length);
+  const seedDe = (tipo, i) => seed + i * 2 + (tipo === 'principal' ? i : 0);
+  let refs = ref.map(([tipo, nome, fk, fp], i) => Object.assign(refeicao(tipo, nome, res.kcal * fk, res.prot * fp, ctx, seedDe(tipo, i), usados, rico), { ordem: i }));
+  const tr = Array.isArray(trocas) ? trocas.map((k) => Math.max(0, Math.floor(Number(k)) || 0)) : [];
+  if (tr.some((k) => k > 0)) {
+    for (let i = 0; i < ref.length; i++) {
+      if (!tr[i]) continue;
+      // a refeição trocada evita os alimentos que já estão nas outras (como no dia original)
+      const outros = new Map();
+      refs.forEach((r, j) => { if (j !== i) for (const x of r.itens) outros.set(x.id, (outros.get(x.id) || 0) + 1); });
+      const [tipo, nome, fk, fp] = ref[i];
+      refs[i] = Object.assign(refeicao(tipo, nome, res.kcal * fk, res.prot * fp, ctx, seedDe(tipo, i) + tr[i] * 7, outros, rico), { ordem: i });
+    }
+    usados.clear();
+    for (const r of refs) for (const x of r.itens) usados.set(x.id, (usados.get(x.id) || 0) + 1);
+  }
+  refs = refs.filter((r) => r.itens.length);
   equilibrar(refs, res, usados, ctx);
   if (res.corrida && res.carb) aproximarCarboidrato(refs, res);
   const dia = { refeicoes: refs.filter((r) => r.itens.length), kcal: soma(refs, 'kcal'), p: soma(refs, 'p'), c: soma(refs, 'c'), g: soma(refs, 'g'), fibra: soma(refs, 'fibra') };
@@ -876,7 +927,7 @@ function aproximarCarboidrato(refs, res) {
 export function faltaDeCarboidrato(res, dia) {
   if (!res || !res.corrida || !res.carb || !dia || !(dia.c < res.carb * 0.9)) return null;
   const falta = r5(res.carb - dia.c);
-  const rest = Array.isArray(res.restricoes) ? res.restricoes : [];
+  const rest = restricoesDe(res);
   const opcoes = [['banana-prata', 1, 'banana-prata', 'bananas-prata'], ['arroz-branco-cozido', 4, 'colher de sopa de arroz', 'colheres de sopa de arroz'], ['pao-frances', 1, 'pão francês', 'pães franceses']]
     .filter(([id]) => permite(id, rest)).slice(0, 2).map(([id, partes, um, varios]) => {
       const f = FOOD.get(id);
@@ -1002,7 +1053,7 @@ export function orientacaoCorrida(res, hoje = new Date()) {
   // Bebida caseira na concentração das esportivas (ficha "Sports drinks" do Australian Institute of Sport, lida inteira —
   // ref ais_bebida): 6 a 8% de carboidrato (60 g de açúcar por litro) e, nas bebidas comuns, de 0,46 a 0,92 g de sódio
   // por litro (20 a 40 mmol/L). 1,5 g de sal — um quarto de colher de chá — dão 0,6 g de sódio.
-  const caseira = 'Bebida caseira: 1 litro de água, 4 colheres de sopa de açúcar (60 g), um quarto de colher de chá de sal (1,5 g) e suco de 1 limão.';
+  const caseira = BEBIDA_CASEIRA;
   const blocos = [];
   // dia a dia
   const diaADia = [`Você corre cerca de ${Math.round(cor.kmSemana)} km por semana${cor.sessoesSemana ? ' em ' + cor.sessoesSemana + (cor.sessoesSemana === 1 ? ' treino' : ' treinos') : ''}.`];
@@ -1026,7 +1077,7 @@ export function orientacaoCorrida(res, hoje = new Date()) {
   if (semNumeros) depois.splice(1, 1);
   blocos.push({ titulo: 'Antes de correr', linhas: antes }, { titulo: 'Durante a corrida', linhas: linhasDurante }, { titulo: 'Depois', linhas: depois });
   // cafeína, com as ressalvas de segurança (EFSA 2015; ISSN 2021)
-  if (!semNumeros && !cond.includes('hipertensao')) blocos.push({ titulo: 'Cafeína', linhas: [`Ajuda em provas e treinos fortes: cerca de 3 mg por quilo, sem passar de 200 mg por vez, 1 hora antes. Teste antes em treino; evite à noite e não use se tiver arritmia ou ansiedade.`] });
+  if (!semNumeros && !cond.includes('hipertensao')) blocos.push({ titulo: 'Cafeína', linhas: [CAFEINA_CORRIDA] });
   // prova marcada
   let prova = null;
   if (cor.prova) {
@@ -1079,19 +1130,29 @@ export function emVoltaDoTreino(res, treinoForte = false) {
   const vgt = rest.includes('vegetariano');
   const grao = sg ? 'chia' : 'aveia';
   const iogurte = sl ? 'iogurte natural sem lactose' : 'iogurte natural';
+  // alergias (res.alergias): os exemplos não citam amendoim, ovo, leite, soja nem peixe para quem tem alergia a eles
+  const alg = alergiasDe(res);
+  const am = alg.includes('amendoim'), ov = alg.includes('ovo'), lt = alg.includes('leite'), sj = alg.includes('soja'), px = alg.includes('peixe');
+  const ou = (l) => (l.length <= 1 ? l.join('') : l.slice(0, -1).join(', ') + ' ou ' + l[l.length - 1]);
   const pre = [];
   if (veg) {
-    pre.push('2 bananas + 1 colher de sopa de pasta de amendoim + 1 colher de sopa de ' + grao);
-    pre.push(sg ? '1 tapioca média com tofu mexido + 1 fruta' : '2 fatias de pão com pasta de amendoim + 1 fruta');
+    pre.push(am ? '2 bananas + 2 colheres de sopa de ' + grao : '2 bananas + 1 colher de sopa de pasta de amendoim + 1 colher de sopa de ' + grao);
+    pre.push(sg ? (sj ? '1 tapioca média com banana + 1 fruta' : '1 tapioca média com tofu mexido + 1 fruta') : am ? '1 pão francês com banana amassada + 1 fruta' : '2 fatias de pão com pasta de amendoim + 1 fruta');
   } else {
-    pre.push(`1 banana + 1 pote de ${iogurte} + ` + (sg ? '1 colher de sopa de chia' : '2 colheres de sopa de aveia'));
-    pre.push((sg ? '1 tapioca média' : '1 pão francês') + (sl ? ' com 2 ovos mexidos + 1 fruta' : ' com 2 ovos mexidos ou queijo branco + 1 fruta'));
+    pre.push(lt ? '2 bananas + ' + (sg ? '1 colher de sopa de chia' : '2 colheres de sopa de aveia') : `1 banana + 1 pote de ${iogurte} + ` + (sg ? '1 colher de sopa de chia' : '2 colheres de sopa de aveia'));
+    const recheio = [ov ? '' : '2 ovos mexidos', sl || lt ? '' : 'queijo branco', ov && (sl || lt) ? 'frango desfiado' : ''].filter(Boolean);
+    pre.push((sg ? '1 tapioca média' : '1 pão francês') + ` com ${ou(recheio)} + 1 fruta`);
   }
   pre.push('Se a refeição principal (almoço ou jantar) for 2 a 3 horas antes, ela já serve como pré-treino.');
   const pos = [];
-  pos.push('A próxima refeição principal do dia: arroz, feijão, uma porção de ' + (veg ? 'tofu, soja ou grão-de-bico' : vgt ? (sl ? 'ovos ou tofu' : 'ovos, queijo ou tofu') : 'frango, carne, peixe ou ovos') + ' e salada.');
-  if (veg) pos.push('Vitamina de bebida de soja com banana e ' + grao + ', se a refeição for demorar.');
-  else pos.push((sl ? 'Vitamina de leite sem lactose ou bebida de soja' : 'Vitamina de leite ou iogurte') + ' com banana e ' + grao + (vgt ? '' : sg ? ', ou tapioca com frango ou atum' : ', ou sanduíche de frango ou atum') + ', se a refeição for demorar.');
+  const prato = veg ? (sj ? ['grão-de-bico', 'lentilha'] : ['tofu', 'soja', 'grão-de-bico'])
+    : vgt ? [ov ? '' : 'ovos', sl || lt ? '' : 'queijo', sj ? '' : 'tofu', ov && sj ? 'grão-de-bico' : ''].filter(Boolean)
+      : ['frango', 'carne', px ? '' : 'peixe', ov ? '' : 'ovos'].filter(Boolean);
+  pos.push('A próxima refeição principal do dia: arroz, feijão, uma porção de ' + ou(prato) + ' e salada.');
+  const lanche = vgt || veg ? '' : sg ? `, ou tapioca com ${px ? 'frango' : 'frango ou atum'}` : `, ou sanduíche de ${px ? 'frango' : 'frango ou atum'}`;
+  if (veg) pos.push((sj ? 'Banana com ' : 'Vitamina de bebida de soja com banana e ') + grao + ', se a refeição for demorar.');
+  else if (lt) pos.push((sj ? 'Banana com ' + grao : 'Vitamina de bebida de soja com banana e ' + grao) + lanche + ', se a refeição for demorar.');
+  else pos.push((sl ? (sj ? 'Vitamina de leite sem lactose' : 'Vitamina de leite sem lactose ou bebida de soja') : 'Vitamina de leite ou iogurte') + ' com banana e ' + grao + lanche + ', se a refeição for demorar.');
   const dicasHorario = {
     cedo: 'Treino ao acordar: em jejum só se você se sente bem e o treino é leve ou moderado. Se der fraqueza, coma algo leve 30 a 60 minutos antes e tome o café completo depois.',
     manha: 'Treino de manhã: tome o café da manhã 1 a 2 horas antes. O almoço serve como refeição pós-treino.',
@@ -1138,11 +1199,19 @@ export function suplementos(res) {
       aviso: 'No seu caso não mostro doses. Antes dos 18 anos, na gestação e na amamentação, com doença nos rins ou com transtorno alimentar, creatina, cafeína e proteína em pó só com orientação do seu médico ou nutricionista.' };
   }
   const linhas = ['Creatina monoidratada: 3 a 5 g por dia, todos os dias. Melhora força e ganho de massa.'];
+  // Sem dose de cafeína com pressão alta, doença do coração (inclui arritmia), outra doença crônica ou um sinal de alerta
+  // marcado na triagem de qualquer entrevista: o aviso de sempre já diz "pressão alta ou arritmia" e "remédios de uso
+  // contínuo" (refs guest2021, efsa2015); com sinal de alerta, a primeira coisa é a avaliação médica (ref whitfield2017).
+  const semCafeina = cond.includes('hipertensao') || cond.includes('cardiaco') || cond.includes('outra') || cond.includes('sinal');
   linhas.push(cond.includes('hipertensao')
     ? 'Cafeína: com pressão alta, não use como suplemento.'
-    : 'Cafeína: cerca de 3 mg por quilo de peso (até 200 mg por vez), 1 hora antes do treino, sem passar de 400 mg por dia. Evite à noite.');
-  linhas.push('Whey protein: só uma forma prática de proteína; conta na meta do dia.');
-  return { semDoses: false, intro: 'Suplemento não é obrigatório. Os que têm boa evidência para quem treina são:', linhas, aviso };
+    : semCafeina
+      ? 'Cafeína: com doença do coração, outra doença crônica ou um sinal de alerta de saúde, não use como suplemento sem falar com o seu médico.'
+      : 'Cafeína: cerca de 3 mg por quilo de peso (até 200 mg por vez), 1 hora antes do treino, sem passar de 400 mg por dia. Evite à noite.');
+  // whey é feito de leite: com alergia ao leite, não entra (data/foods.js)
+  const alergias = res && Array.isArray(res.alergias) ? res.alergias : [];
+  linhas.push(alergias.includes('leite') ? 'Whey protein: é feito de leite; com alergia ao leite, não use.' : 'Whey protein: só uma forma prática de proteína; conta na meta do dia.');
+  return { semDoses: false, semCafeina, intro: 'Suplemento não é obrigatório. Os que têm boa evidência para quem treina são:', linhas, aviso: semCafeina && !cond.includes('hipertensao') ? `${aviso} Com o que você informou, a cafeína fica sem dose: converse com o seu médico.` : aviso };
 }
 
 // Textos sobre o peso na tela de metas, montados num lugar só para não se contradizerem: a perda por semana sai do
@@ -1165,4 +1234,204 @@ export function textosDoPeso(r) {
     out.linhas.push('Ganhar mais rápido que o ritmo esperado costuma ser gordura. Se o peso não subir em 3 semanas, aumente de 100 a 200 kcal.');
   }
   return out;
+}
+
+// Textos da corrida usados em mais de um lugar (orientacaoCorrida e orientacaoDoDia).
+// Bebida caseira na concentração das esportivas (ref ais_bebida — ver orientacaoCorrida).
+const BEBIDA_CASEIRA = 'Bebida caseira: 1 litro de água, 4 colheres de sopa de açúcar (60 g), um quarto de colher de chá de sal (1,5 g) e suco de 1 limão.';
+// cafeína em provas e treinos fortes (EFSA 2015; ISSN 2021 — refs efsa2015, guest2021)
+const CAFEINA_CORRIDA = 'Ajuda em provas e treinos fortes: cerca de 3 mg por quilo, sem passar de 200 mg por vez, 1 hora antes. Teste antes em treino; evite à noite e não use se tiver arritmia ou ansiedade.';
+
+// ---------- cardápio de cada dia (semente pela data) e ajustes da pessoa ----------
+// Cada dia tem o seu cardápio, sempre o mesmo para a mesma data: a semente é o número do dia no calendário (dias desde
+// 1/1/2020), de 0 a 999. Dias seguidos têm sementes seguidas, e cada refeição gira os alimentos dos seus grupos: a semana
+// não repete o mesmo dia. O que a pessoa muda ("Outra sugestão" e "Trocar" de uma refeição) fica em state.nutri.ajustes:
+// { 'AAAA-MM-DD': { s: deslocamento da semente do dia (0 a 999), m: [troca de cada refeição, 0 a 99] } }.
+const DIA_MS = 86400000;
+const dataReal = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v + 'T12:00:00Z')) && new Date(v + 'T12:00:00Z').toISOString().slice(0, 10) === v;
+export function sementeDoDia(data) {
+  if (!dataReal(data)) return 0;
+  const n = Math.round((Date.parse(data + 'T12:00:00Z') - Date.UTC(2020, 0, 1, 12)) / DIA_MS);
+  return ((n % 1000) + 1000) % 1000;
+}
+export const MAX_AJUSTES = 40;
+const inteiro = (v, min, max) => (typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max ? v : 0);
+// um ajuste válido, ou null quando não muda nada
+export function limparAjuste(a) {
+  if (!a || typeof a !== 'object' || Array.isArray(a)) return null;
+  const s = inteiro(a.s, 0, 999);
+  const m = (Array.isArray(a.m) ? a.m.slice(0, 6) : []).map((k) => inteiro(k, 0, 99));
+  while (m.length && !m[m.length - 1]) m.pop();
+  return s || m.length ? { s, m } : null;
+}
+// state.nutri.ajustes vindo do aparelho ou de um backup: só datas reais, no máximo MAX_AJUSTES (as mais recentes)
+export function limparAjustes(v) {
+  const out = {};
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+  const datas = Object.keys(v).filter(dataReal).sort().slice(-MAX_AJUSTES);
+  for (const d of datas) { const a = limparAjuste(v[d]); if (a) out[d] = a; }
+  return out;
+}
+const sementeComAjuste = (data, ajuste) => { const a = limparAjuste(ajuste); return (sementeDoDia(data) + (a ? a.s : 0)) % 1000; };
+// O cardápio de uma data, com o ajuste da pessoa (ou null). `opcoes` = { emCasa } como em cardapio().
+export function cardapioDoDia(res, data, ajuste = null, opcoes = {}) {
+  const a = limparAjuste(ajuste);
+  return cardapio(res, sementeComAjuste(data, a), { emCasa: opcoes && opcoes.emCasa ? opcoes.emCasa : null, trocas: a ? a.m : null });
+}
+// "Outra sugestão": o ajuste que dá um dia com alimentos diferentes do atual (sem trocas de refeição), ou null
+export function outraSugestaoDoDia(res, data, ajuste = null, opcoes = {}) {
+  const atual = assinatura(cardapioDoDia(res, data, ajuste, opcoes));
+  if (!atual) return null;
+  const base = sementeDoDia(data), s0 = sementeComAjuste(data, ajuste);
+  const op = { emCasa: opcoes && opcoes.emCasa ? opcoes.emCasa : null };
+  for (let k = 1; k <= 24; k++) { const s = (s0 + k) % 1000; if (assinatura(cardapio(res, s, op)) !== atual) return { s: (s - base + 1000) % 1000, m: [] }; }
+  return null;
+}
+// "Trocar" uma refeição (pela `ordem` dela no dia): o ajuste que muda os alimentos dessa refeição, ou null se não houver
+// outra combinação (acontece com poucos alimentos em casa ou com restrições que deixam poucos alimentos no grupo)
+export function trocarRefeicaoDoDia(res, data, ajuste, ordem, opcoes = {}) {
+  const a = limparAjuste(ajuste) || { s: 0, m: [] };
+  const ids = (dia) => { const r = dia && dia.refeicoes.find((x) => x.ordem === ordem); return r ? r.itens.map((x) => x.id).sort().join(',') : ''; };
+  const atual = ids(cardapioDoDia(res, data, a, opcoes));
+  if (!atual || !Number.isInteger(ordem) || ordem < 0 || ordem > 5) return null;
+  for (let k = (a.m[ordem] || 0) + 1, n = 0; n < 30; k = (k % 99) + 1, n++) {
+    const m = a.m.slice(); while (m.length <= ordem) m.push(0); m[ordem] = k;
+    const novo = { s: a.s, m };
+    const outro = ids(cardapioDoDia(res, data, novo, opcoes));
+    if (outro && outro !== atual) return limparAjuste(novo);
+  }
+  return null;
+}
+
+// ---------- o dia de hoje: o que comer e beber em volta dos treinos ----------
+// `treinos` = { musculacao: { nome, forte } | null, corrida: { tipo, nome, durMin, distKm, intensidade } | null,
+//   conhecido: true quando há treino ou plano de corrida no aplicativo (sabemos quais dias são de treino) }.
+// Junta, num bloco só, o que já existe: emVoltaDoTreino (musculação e regra geral) e as orientações de corrida de
+// orientacaoCorrida — agora com a duração do treino DO DIA (carboidratoNaCorrida). Nenhuma regra nova. Em dia sem
+// treino não há "antes do treino": só a água do dia.
+const dec1 = (n) => String(Math.round(n * 10) / 10).replace('.', ',');
+export function rotuloDoTreino(treinos) {
+  const t = treinos || {};
+  const partes = [];
+  if (t.musculacao) partes.push(`musculação (${t.musculacao.nome})`);
+  if (t.corrida) partes.push(t.corrida.tipo === 'prova' ? 'dia da prova' : `${String(t.corrida.nome).toLowerCase()} de ${fmtDuracao(t.corrida.durMin)}`);
+  return partes.join(' + ');
+}
+export function orientacaoDoDia(res, treinos) {
+  const t = treinos || {};
+  const m = t.musculacao || null, c = t.corrida || null;
+  const semNumeros = res.modo === 'educativo';
+  const cond = Array.isArray(res.condicoes) ? res.condicoes : [];
+  const peso = Number.isFinite(res.pesoRef) ? res.pesoRef : 70;
+  const rotulo = rotuloDoTreino(t);
+  const treina = !!rotulo;
+  // sem treino nem plano de corrida no aplicativo: não sabemos o dia; quem treina recebe a regra geral
+  const semAgenda = !treina && !t.conhecido;
+  const out = { treina, semAgenda, titulo: treina ? 'Hoje: ' + rotulo : semAgenda ? (res.treina ? 'Nos dias de treino' : 'Hoje') : 'Hoje: descanso', resumo: '', antes: null, durante: null, depois: null, agua: '', refs: [] };
+  const aguaDoDia = res.agua ? `Água do dia: ${dec1(res.agua)} L somando bebidas e comida (cerca de ${dec1(res.aguaBebidas)} L em água e outras bebidas). Beba conforme a sede; a urina deve ficar clara.`
+    : cond.includes('renal') ? 'Água: com doença nos rins, a quantidade de líquidos é a que o seu médico indicar.' : 'Água: beba ao longo do dia, conforme a sede; a urina deve ficar clara.';
+  if (!treina && !(semAgenda && res.treina)) {
+    out.resumo = semAgenda ? 'Coma as refeições do cardápio com calma, sem pular refeições.' : 'Mantenha a proteína e as refeições normais. Descanso não é dia de comer menos.';
+    out.agua = aguaDoDia;
+    return out;
+  }
+  const e = emVoltaDoTreino(res, !!(m && m.forte));
+  out.resumo = e.horario;
+  const longa = !!c && c.durMin > 60;
+  // antes: na corrida de mais de 1 hora vale a faixa da corrida (1 a 2 g por quilo, de 1 a 4 h antes — thomas2016);
+  // nos outros treinos, a de emVoltaDoTreino
+  const antesIntro = semNumeros ? (longa ? 'Refeição com carboidrato e pouca gordura e fibra, de 1 a 4 horas antes.' : 'Carboidrato de fácil digestão e um pouco de proteína, de 1 a 2 horas antes.')
+    : longa ? `Refeição com carboidrato (${Math.round(peso)} a ${Math.round(peso * 2)} g) e pouca gordura e fibra, de 1 a 4 horas antes: quanto mais perto da corrida, menor.`
+      : `Carboidrato de fácil digestão (cerca de ${e.carbPre} g) e um pouco de proteína, de 1 a 2 horas antes.`;
+  const antesExtra = [];
+  if (m && m.forte) antesExtra.push('Treino pesado de pernas: capriche no carboidrato antes.');
+  if (c && cond.includes('diabetes')) antesExtra.push('Com diabetes, não corra em jejum, leve sempre um carboidrato de ação rápida e combine o plano de alimentação com o seu médico.');
+  else if (c && !m && !longa && !semNumeros && res.horario === 'cedo') antesExtra.push('Corrida leve de até 1 hora logo cedo pode ser em jejum, se você se sente bem.');
+  out.antes = { intro: antesIntro, itens: e.pre, extras: antesExtra };
+  if (c) {
+    const d = carboidratoNaCorrida(c.durMin, semNumeros);
+    const linhas = [d.texto];
+    const lanches = trintaGramas();
+    if (d.gHora && lanches.length) linhas.push(`Um gel tem de 20 a 30 g de carboidrato. Mais barato, 30 g são ${lanches.slice(0, 3).join(', ')}.`);
+    linhas.push('Água: beba conforme a sede, sem forçar. Beber além da sede dilui o sódio do sangue; se você termina a corrida mais pesado do que começou, bebeu demais.');
+    if (c.durMin > 120 && !semNumeros) linhas.push('Acima de 2 horas ou com muito calor, use também bebida com sódio (as esportivas têm de 0,5 a 0,9 g por litro). ' + BEBIDA_CASEIRA + (cond.includes('hipertensao') ? ' Com pressão alta, combine o uso de sal com o seu médico.' : ''));
+    if (c.intensidade === 'forte' && !semNumeros && !cond.includes('hipertensao')) linhas.push('Cafeína: ' + CAFEINA_CORRIDA.charAt(0).toLowerCase() + CAFEINA_CORRIDA.slice(1));
+    out.durante = { linhas };
+    out.refs = ['thomas2016', 'jeukendrup2014', 'ais_gel', 'ais_bebida', 'hewbutler2017', 'efsa2017', ...(c.intensidade === 'forte' ? ['guest2021'] : [])];
+  }
+  const depoisExtra = [];
+  if (c) {
+    if (!semNumeros) depoisExtra.push('Se for treinar de novo em menos de 8 horas, reponha o carboidrato logo: de 1 a 1,2 g por quilo por hora nas primeiras 4 horas.');
+    depoisExtra.push('Reponha o líquido aos poucos: para cada quilo perdido na corrida, cerca de 1 litro e meio.');
+  }
+  out.depois = { intro: semNumeros ? 'Uma refeição com proteína e carboidrato, até 2 horas depois.' : `Uma refeição com cerca de ${e.protPos} g de proteína e carboidrato, até 2 horas depois.`, itens: e.pos, extras: depoisExtra };
+  out.agua = e.agua;
+  return out;
+}
+
+// ---------- lista de compras da semana ----------
+// Soma os alimentos dos cardápios (dias) e diz quanto comprar: em unidades (ovo, banana, pão, pote de iogurte), em litros
+// (leite, bebidas), em colheres (óleo e azeite) ou em peso de compra — o peso pronto dividido pelo rendimento da tabela
+// de preços (data/foods.js: arroz e feijão crescem ao cozinhar, carnes encolhem, frutas perdem casca). Agrupada pelas
+// categorias do catálogo. Alimentos com o mesmo nome de compra (cenoura crua e cozida) somam numa linha só.
+const PREPARO = /\s+(cozid[oa]s?|grelhad[oa]s?|assad[oa]s?|refogad[oa]s?|frit[oa]s?|cru|crua|crus|cruas)(?=[\s,)]|$)/gi;
+export const nomeDeCompra = (nome) => String(nome).replace(PREPARO, '').replace(/\s{2,}/g, ' ').trim();
+const fmtPeso = (g) => (g >= 1000 ? dec1(Math.ceil(g / 100) / 10) + ' kg' : Math.max(50, Math.ceil(g / 50) * 50) + ' g');
+const POR_UNIDADE = /^(\d+)\s+(unidade|unidades|pote|potes|espiga|espigas|lata|latas)\b/i;
+const NOME_UNIDADE = { unidade: ['unidade', 'unidades'], pote: ['pote', 'potes'], espiga: ['espiga', 'espigas'], lata: ['lata', 'latas'] };
+function compra(f, g) {
+  const u = POR_UNIDADE.exec(f.porcao.desc);
+  if (u && f.cat !== 'gorduras') {
+    const tam = f.porcao.g / Number(u[1]);
+    const n = Math.max(1, Math.ceil(g / tam - 0.05));
+    const palavra = NOME_UNIDADE[u[2].toLowerCase().replace(/s$/, '')] || NOME_UNIDADE.unidade;
+    return { modo: 'u', n, pal: palavra, qtd: `${n} ${palavra[n === 1 ? 0 : 1]}` };
+  }
+  if (/\bmL\b/.test(f.porcao.desc) && f.papel !== 'gordura') {
+    const l = g / 1000;
+    return { modo: 'l', n: l, qtd: l >= 0.5 ? dec1(Math.ceil(l * 2) / 2) + ' L' : Math.ceil(l * 10) * 100 + ' mL' };
+  }
+  // óleo e azeite: em colheres de sopa, como no cardápio
+  if (f.g >= 99) { const n = Math.max(1, Math.round(g / f.porcao.g)); return { modo: 'c', n, pal: ['colher de sopa', 'colheres de sopa'], qtd: `${n} ${n === 1 ? 'colher' : 'colheres'} de sopa` }; }
+  const rend = rendimentoDeCompra(f.id);
+  // "rende X pronto" só para o que vai ao fogo (arroz, feijão, carnes); fruta e verdura com casca não precisam
+  return { modo: 'p', n: g / rend, qtd: fmtPeso(g / rend), pronto: rend !== 1 && /\s(cozid|grelhad|assad|refogad|frit)/i.test(f.nome) ? g : 0 };
+}
+// `dias` = lista de cardápios (o que cardapio() devolve; null é ignorado). `emCasa` (opcional): ids marcados em casa.
+export function listaDeCompras(dias, { emCasa = null } = {}) {
+  const gramas = new Map();
+  for (const d of Array.isArray(dias) ? dias : []) {
+    if (!d || !Array.isArray(d.refeicoes)) continue;
+    for (const r of d.refeicoes) for (const x of r.itens) if (FOOD.has(x.id) && x.g > 0) gramas.set(x.id, (gramas.get(x.id) || 0) + x.g);
+  }
+  const casa = new Set(Array.isArray(emCasa) ? emCasa : []);
+  const linhas = new Map();
+  for (const [id, g] of gramas) {
+    const f = FOOD.get(id);
+    const nome = nomeDeCompra(f.nome);
+    const c = compra(f, g);
+    const chave = nome + '|' + c.modo;
+    const l = linhas.get(chave);
+    if (l) {
+      l.n += c.n; l.pronto += c.pronto || 0; l.ids.push(id); l.emCasa = l.emCasa || casa.has(id);
+      l.qtd = c.modo === 'p' ? fmtPeso(l.n) : c.modo === 'l' ? (l.n >= 0.5 ? dec1(Math.ceil(l.n * 2) / 2) + ' L' : Math.ceil(l.n * 10) * 100 + ' mL') : `${l.n} ${l.pal[l.n === 1 ? 0 : 1]}`;
+    } else linhas.set(chave, { nome, cat: f.cat, modo: c.modo, pal: c.pal, n: c.n, qtd: c.qtd, pronto: c.pronto || 0, ids: [id], emCasa: casa.has(id) });
+  }
+  const grupos = [];
+  for (const [cat, nomeCat] of Object.entries(CATEGORIAS_ALIMENTO)) {
+    const itens = [...linhas.values()].filter((l) => l.cat === cat).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+      .map((l) => ({ nome: l.nome, qtd: l.qtd, ids: l.ids, emCasa: l.emCasa, detalhe: l.modo === 'p' && l.pronto ? `rende cerca de ${fmtPeso(l.pronto)} pronto` : '' }));
+    if (itens.length) grupos.push({ cat, nome: nomeCat, itens });
+  }
+  return { grupos, itens: grupos.reduce((n, gr) => n + gr.itens.length, 0) };
+}
+// a lista como texto simples, para copiar (nada sai do aparelho sem a pessoa colar em algum lugar)
+export function textoDaListaDeCompras(lista, titulo) {
+  const l = [titulo, 'Cardápio de exemplo do FitCore. Quantidades aproximadas: arroz, feijão, carnes e peixes em peso cru.', ''];
+  for (const g of lista.grupos) {
+    l.push(g.nome);
+    for (const x of g.itens) l.push(`- ${x.nome}: ${x.qtd}${x.emCasa ? ' (já marcado em casa)' : ''}`);
+    l.push('');
+  }
+  return l.join('\n').trim() + '\n';
 }
