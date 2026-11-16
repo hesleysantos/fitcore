@@ -5,7 +5,9 @@ import { EXERCICIOS, EX_POR_ID } from '../data/exercises.js';
 import { EQUIPAMENTOS } from '../data/equipment.js';
 import { FAIXA_DA_RESPOSTA } from './pausa.js';
 import { MUSCULOS, GRUPOS, PADROES, CUIDADOS } from '../data/muscles.js';
-import { LOCAIS_DOR, TIPOS_DOR, dorDeAlerta } from './dor.js';
+import { LOCAIS_DOR, TIPOS_DOR, DIAS_ATIVA, dorDeAlerta, doresAtivas } from './dor.js';
+import { planoDaSemana, planoDaSemanaEm } from './corrida.js';
+import { limparCombo, FOCOS, FORTALECIMENTOS } from './combinado.js';
 
 // ---------- perguntas ----------
 export const PERGUNTAS = [
@@ -207,9 +209,19 @@ export function perfil(respostas) {
     // itens extras em casa: só valem para os locais de casa e só os que existem na pergunta
     extras: a.local === 'halteres' || a.local === 'corporal' ? lista(a.extras, OPC.extras).filter((x) => x !== 'nenhum' && Object.prototype.hasOwnProperty.call(EQUIPAMENTOS, x)) : [],
     limitacoes: lim, cuidados, triagem: tri, foco, focoPedido, focoMax, bloqueado: idade < 14,
+    // regiões das limitações, para reconhecer pela mecânica os exercícios que usam a região sem estarem marcados
+    regioesLim: lim.map((x) => LIM_REGIAO[x]).filter(Boolean),
   };
 }
 const tem = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
+// Limitação da entrevista → região do corpo (as mesmas regiões das dores contadas). As marcas de `cuidado` do catálogo
+// tiram do plano os exercícios mais arriscados para a limitação; mas outros exercícios também usam a região (agachar com
+// limitação no quadril ou no tornozelo, por exemplo). Uma limitação antiga não é dor de alerta: esses exercícios não
+// são proibidos, ficam por último na escolha e, quando entram, o plano avisa para usar menos carga e só a amplitude sem
+// dor — o mesmo critério da dor moderada (modelo de monitoramento da dor: refs silbernagel2007, smith2017).
+const LIM_REGIAO = { ombro: 'ombro', joelho: 'joelho', lombar: 'lombar', cervical: 'pescoco', cotovelo: 'cotovelo', punho: 'punho', quadril: 'quadril', tornozelo: 'tornozelo' };
+const textoDaLimitacao = (r, nomes) => `Limitação ${LOCAL_TXT[r]}: ${nomes.length === 1 ? 'um exercício do plano ainda usa' : nomes.length + ' exercícios do plano ainda usam'} a região (${nomes.slice(0, 2).join(', ')}${nomes.length > 2 ? ' e outros' : ''}). Neles, menos carga e só a amplitude sem dor.`;
+const pegaLimitacao = (ex, pf) => (pf && Array.isArray(pf.regioesLim) ? pf.regioesLim.find((r) => carregaRegiao(ex, r)) || '' : '');
 // Quantos músculos dá para priorizar ao mesmo tempo. Nenhum estudo controlado dá esse número (ref pelland2026: não se
 // sabe se a resposta de um músculo depende da dose total do treino). O limite sai de duas coisas:
 //  1) o TETO de dois: a única orientação publicada que achei, de autor da área, é escolher "um ou dois" grupos por
@@ -353,6 +365,7 @@ function disponivel(ex, pf, gym) {
 const SO_MANUAL = {
   'remada-invertida-sob-mesa': 'a pessoa se pendura na borda de uma mesa da casa. Não há estudo sobre exercícios apoiados em móveis; a única orientação publicada que achei é jornalística (a mesa precisa ser firme e pesada para não virar sobre a pessoa — Coach, 3/5/2019). O risco é do mesmo tipo que causa a maioria das lesões do treino de força: um objeto pesado caindo sobre a pessoa (ref kerr2010), mais grave em casa e sem supervisão (ref faigenbaum2010)',
   'bom-dia-barra': 'barra nas costas com o tronco inclinado à frente: com apenas 25% do peso do corpo na barra, o momento na coluna lombar (L4/L5) já é igual ao do levantamento terra, e os autores pedem muito cuidado com a estabilidade do tronco com cargas maiores (ref schellenberg2013); a lombar não fica neutra, flexiona cerca de 25° (ref vigotsky2015). Nenhuma fonte o proíbe: fica só para a escolha manual por ser carga sobre a coluna sem ninguém para corrigir a técnica',
+  'agachamento-hack-invertido': 'agachamento na hack de frente para o encosto: só há uma descrição de técnica publicada (um site de musculação), sem estudo nem guia de entidade profissional, e na plataforma inclinada os calcanhares sobem no fundo do movimento. Sem ninguém para corrigir a técnica, fica só para a escolha manual; o agachamento hack comum e o articulado fazem o mesmo movimento',
   'hiit-bicicleta': 'treino intervalado de alta intensidade: com sobrepeso ou obesidade, só depois de avaliação do risco cardiovascular e com supervisão (ref oppert2021); em quem tem doença do coração, só em pacientes estáveis (ref esc2020); todos os estudos de segurança foram supervisionados, e o intervalado sem supervisão não foi avaliado (ref wewege2018); na gestação não há dados suficientes (ref sbc_gestacao2021). Adultos saudáveis e já ativos podem fazer esforço vigoroso (ref riebe2015), mas o aplicativo não tem como conferir isso',
 };
 export const soManual = (id) => Object.prototype.hasOwnProperty.call(SO_MANUAL, id);
@@ -361,6 +374,13 @@ const COM_APOIO = new Set(['maquina', 'smith']);
 const PERNAS_EM_PE = new Set(['afundo', 'agachar', 'dobradica_quadril', 'flexao_plantar']);
 const instavel = (ex) => ex.equip.includes('bola_suica') || ex.equip.includes('trx') || (ex.unilateral && PERNAS_EM_PE.has(ex.padrao) && !COM_APOIO.has(ex.modalidade));
 const barraComposto = (ex) => ex.modalidade === 'barra' && ex.tipo === 'composto';
+// Pendurado na barra fixa ou apoiado nas paralelas: a carga é o peso do corpo inteiro e não dá para reduzi-la. Fica fora
+// para quem precisa de cargas leves a moderadas e não pode prender a respiração — pressão alta, coração, gestação e
+// triagem positiva (refs aha2024, acog804, riebe2015, esc2020, sbc_gestacao2021); para 60 anos ou mais, em que as
+// máquinas são o ponto de partida e soltar a barra é queda (refs fragala2019, izquierdo2021); e com IMC de 30 ou mais,
+// em que o exercício não tem como começar leve e progredir (refs oppert2021, esc2020). A barra com apoio (gráviton) é
+// máquina e continua valendo.
+const pendurado = (ex) => ex.equip.includes('barra_fixa') || ex.equip.includes('paralelas');
 // estabilidade do exercício, para desempatar: máquina > guiado e cabos > halteres e peso do corpo > barra e kettlebell
 const maisEstavel = (ex) => ({ maquina: 5, smith: 4, cabo: 4, halteres: 3, peso_corporal: 3, barra: 2, kettlebell: 2 }[ex.modalidade] ?? 2) - (ex.unilateral ? 1 : 0) - (instavel(ex) ? 2 : 0);
 // Exercícios que dependem de um móvel da casa aguentar o peso do corpo: nunca entram sozinhos (SO_MANUAL); se a pessoa
@@ -383,6 +403,7 @@ export function permitido(ex, pf) {
   if (ex.padrao === 'cardio' && deImpacto(ex) && (pf.nivel === 1 || pf.conservador || pf.obeso)) return false;
   if (pf.conservador && barraComposto(ex)) return false;
   if ((pf.idoso || pf.gestante) && instavel(ex)) return false;
+  if ((pf.cautela || pf.idoso || pf.obeso) && pendurado(ex)) return false;
   if (pf.dor && vetadoPorDor(ex, pf.dor)) return false;
   const max = pf.conservador ? Math.min(pf.nivel, 2) : pf.nivel;
   // iniciantes: só exercícios simples; os demais podem ir um nível acima em exercícios auxiliares
@@ -406,6 +427,8 @@ function nota(ex, slot, pf) {
   }
   // dor moderada em articulação ou tendão: os exercícios que poupam a região vêm antes (ref fragala2019)
   if (pf.dor && poupadoPorDor(ex, pf.dor)) n -= 8;
+  // limitação da entrevista: os exercícios que usam a região (pela mecânica) vêm depois dos que a poupam
+  if (pf.regioesLim && pf.regioesLim.length && pegaLimitacao(ex, pf)) n -= 8;
   if (slot.core && ex.registro === 'segundos') n += pf.nivel === 1 ? 2 : 0;
   if (pf.idoso && m === 'maquina') n += 2;
   // barra fixa e paralelas não deixam ajustar a carga: nas faixas de 10 ou mais repetições (emagrecimento, saúde, resistência) os cabos e máquinas vêm antes
@@ -515,10 +538,11 @@ function dose(ex, slot, pf) {
 function segundos(itens) {
   let seg = 300;
   for (const it of itens) {
+    if (!it || typeof it !== 'object') continue;
     const ex = EX_POR_ID.get(it.ex);
     if (ex && ex.registro === 'minutos') { seg += (Number(it.reps) || 0) * 60; continue; }
     const trabalho = ex && ex.registro === 'segundos' ? Number(it.reps) || 30 : 40;
-    seg += it.series * (trabalho + it.descanso) + 60;
+    seg += (Number(it.series) || 0) * (trabalho + (Number(it.descanso) || 0)) + 60;
   }
   return seg;
 }
@@ -620,10 +644,29 @@ const idCurto = (i) => 'd' + (i + 1) + Math.random().toString(36).slice(2, 7);
 const numVersao = (v) => Math.abs(Math.floor(Number(v))) % 1000000 || 0;
 // Monta o plano. `versao` muda os exercícios auxiliares (rotação); os principais ficam. `doresBrutas` (opcional) é a
 // lista de dores ativas (logic/dor.js → doresAtivas): o plano já sai poupando as regiões doloridas (ver "dores", abaixo).
-export function gerarPlano(respostas, gymBruta, versaoBruta = 0, doresBrutas = null) {
+// `combinado` (opcional): resumoCombinado(state, hoje) — a prioridade de quem corre e faz musculação e os dias da corrida
+// forte e do longo. Sem ele, o plano sai como sempre.
+export function gerarPlano(respostas, gymBruta, versaoBruta = 0, doresBrutas = null, combinado = null) {
+  const corr = limparCombinado(combinado);
+  if (!corr || !corr.fortalece) return gerarComFoco(respostas, gymBruta, versaoBruta, doresBrutas, combinado);
+  // Fortalecimento para a corrida dentro da musculação: as garantias (um pé só, panturrilha, abdutores, core) entram no
+  // lugar de vagas auxiliares, e isso não pode derrubar um grande grupo abaixo da dose de manutenção (4 séries por semana;
+  // 6 para 60 anos ou mais — refs iversen2021, bickel2011, spiering2021). Se derrubar, entra uma garantia a menos (a
+  // última da ordem sai primeiro), até o plano voltar ao mínimo; o plano diz o que ficou de fora.
+  const sem = gerarComFoco(respostas, gymBruta, versaoBruta, doresBrutas, { ...combinado, fortalecimento: 'nao' });
+  if (!sem) return null;
+  const piso = sem.perfil.idoso ? 6 : 4;
+  let p = null;
+  for (let n = 4; n >= -1; n--) {
+    p = gerarComFoco(respostas, gymBruta, versaoBruta, doresBrutas, { ...combinado, garantias: n });
+    if (!p || GRANDES.every((g) => p.volume[g] >= Math.min(piso, sem.volume[g]))) break;
+  }
+  return p;
+}
+function gerarComFoco(respostas, gymBruta, versaoBruta, doresBrutas, combinado) {
   const pf = perfil(respostas);
   if (pf.bloqueado) return null;
-  if (!pf.foco.length) return montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, null, null);
+  if (!pf.foco.length) return montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, null, null, combinado);
   // Prioridade de músculo: o plano equilibrado serve de base para medir e limitar o aumento. A vaga extra de um músculo
   // só fica se render séries a mais para ele e se nenhum grande grupo cair abaixo da dose de manutenção: 4 séries por
   // semana (refs iversen2021, pelland2026; em jovens, um terço do volume manteve a massa por 32 semanas — ref
@@ -631,27 +674,29 @@ export function gerarPlano(respostas, gymBruta, versaoBruta = 0, doresBrutas = n
   // sobre dose mínima fala em até 2 sessões por semana com 2 a 3 séries por exercício (ref spiering2021).
   // Quando isso não acontece, a vaga passa a entrar em um treino sim, outro não; se ainda não der, a prioridade entra
   // só nas séries dos exercícios que já estão no plano.
-  const base = montarPlano({ ...respostas, foco: ['equilibrado'] }, gymBruta, versaoBruta, doresBrutas, null, null);
+  const base = montarPlano({ ...respostas, foco: ['equilibrado'] }, gymBruta, versaoBruta, doresBrutas, null, null, combinado);
   const piso = pf.idoso ? 6 : 4;
   const corte = new Map(); // músculo → 0 (vaga em todos os treinos possíveis), 1 (em metade), 2 (sem vaga)
   const nv = (g) => corte.get(g) || 0;
-  let p = montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, base, corte);
+  let p = montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, base, corte, combinado);
   for (let k = 0; k < pf.foco.length * 2; k++) {
     const fraco = p.foco.find((x) => x.para <= x.de && nv(x.id) < 2);
     const caiu = p.foco.some((x) => x.para < x.de) || GRANDES.some((g) => !pf.foco.includes(g) && p.volume[g] < Math.min(piso, base.volume[g]));
     const sai = fraco ? fraco.id : caiu ? pf.foco.slice().reverse().find((g) => nv(g) < 2) : null;
     if (!sai) break;
     corte.set(sai, nv(sai) + 1);
-    p = montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, base, corte);
+    p = montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, base, corte, combinado);
   }
   return p;
 }
 const GRANDES = ['peito', 'costas', 'quadriceps', 'posteriores', 'gluteos', 'ombros'];
-function montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, baseFoco, corteFoco) {
+function montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, baseFoco, corteFoco, combinadoBruto = null) {
   const pf = perfil(respostas);
   if (pf.bloqueado) return null;
   const dores = limparDoresTreino(doresBrutas);
   pf.dor = regrasDeDor(dores, pf);
+  // quem também corre: prioridade escolhida e dias da corrida forte e do longo (null = não corre)
+  const corr = limparCombinado(combinadoBruto);
   const gym = academia(gymBruta);
   const versao = numVersao(versaoBruta);
   // em casa as listas são curtas: a rotação usa os 4 primeiros de cada movimento (na academia, os 3 primeiros)
@@ -665,7 +710,9 @@ function montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, baseFoco, co
   const candsTodos = (slot) => { let c = memoTodos.get(slot); if (!c) { c = candidatos(slot, pf, gym, true); memoTodos.set(slot, c); } return c; };
   // vaga com os movimentos vizinhos de outra (mesma região do corpo), guardada para as próximas chamadas
   const vagaVizinha = (slot, viz) => {
-    const k = 'troca:' + viz.join(',') + (slot.core ? ':core' : '');
+    // a chave leva tudo o que a vaga copiada herda (core, alt, leve): sem isso, a vaga guardada dependia de qual treino a
+    // pediu primeiro, e o mesmo perfil podia receber planos diferentes conforme o que tinha sido montado antes
+    const k = 'troca:' + viz.join(',') + ':' + (slot.core ? 'c' : '') + (slot.alt ? 'a' : '') + (slot.leve ? 'l' : '');
     let v = memo.get(k);
     if (!v) memo.set(k, (v = { ...slot, p: viz, main: false, ordem: 0 }));
     return v;
@@ -676,9 +723,10 @@ function montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, baseFoco, co
     if (livres.length || slot.main) return livres;
     return candsTodos(slot).filter((e) => !usados.has(e.id) && !m.noDia.has(e.id) && (!slot.ordem || l.some((x) => x.padrao === e.padrao)));
   };
-  const temCardio = cands(CARDIO_FIM).length > 0;
+  // quem corre não recebe cardio no plano de musculação: a corrida já é o cardio
+  const temCardio = !corr && cands(CARDIO_FIM).length > 0;
   // o mesmo perfil sem as limitações: serve para saber se uma vaga ficou vazia por causa delas
-  const pfSemLimites = { ...pf, cuidados: [], cautela: false, idoso: false, dor: null };
+  const pfSemLimites = { ...pf, cuidados: [], regioesLim: [], cautela: false, idoso: false, dor: null };
   const semLimites = listasDoPerfil(pfSemLimites, gym);
 
   // escolhe a divisão: a primeira em que todo treino de força tem pelo menos 3 movimentos possíveis, um deles principal
@@ -736,6 +784,47 @@ function montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, baseFoco, co
     }
     return { chave, di, modelo, repeticao, slots, doFoco, escolhas: new Array(slots.length).fill(null), noDia: new Set(), padroes: new Set(), itens: [] };
   });
+  let cardioDaCorrida = false;
+  if (corr) {
+    for (let i = montagem.length - 1; i >= 0; i--) if (montagem[i].chave === 'cardio') { montagem.splice(i, 1); cardioDaCorrida = true; }
+    // Fortalecimento para a corrida dentro do treino de musculação: o plano garante o que protege quem corre e que
+    // costuma faltar — um exercício em um pé só, panturrilha, abdutores do quadril e core (refs blagrove2018, hamner2013,
+    // leppanen2024). Nesta ordem: (1) se o treino já tem uma vaga só desse movimento, ela fica protegida dos cortes de
+    // tempo; (2) o exercício em um pé só entra no lugar de um agachamento auxiliar (mesmo movimento, sem tempo a mais);
+    // (3) os outros entram no treino de pernas com menos garantias; se ele está cheio, sai a última vaga auxiliar. Vaga
+    // principal não sai: com treinos de 30 minutos nem tudo cabe, e o plano diz o que ficou de fora.
+    if (corr.fortalece) {
+      const pernas = montagem.filter((m) => D_PERNAS.includes(m.chave));
+      const exigidos = [['afundo'], ['flexao_plantar'], ['abducao'], R_CORE];
+      const pura = (x, ps) => x.p.every((p) => ps.includes(p));
+      const garantia = (x) => exigidos.some((ps) => pura(x, ps));
+      for (let gi = 0; gi < exigidos.length && corr.garantias >= 0; gi++) {
+        const ps = exigidos[gi];
+        const vaga = ps === R_CORE ? CORE : SLOT_RESERVA[ps[0]];
+        if (!cands(vaga).length) continue; // nada permitido para o perfil: o plano avisa que faltou
+        const ja = montagem.map((m) => [m, m.slots.find((x) => pura(x, ps) && cands(x).length > 0)]).find((y) => y[1]);
+        if (ja) { ja[0].doFoco.add(ja[1]); continue; }
+        if (gi >= corr.garantias) continue; // esta garantia tiraria séries de um grande grupo (ver gerarPlano)
+        if (ps[0] === 'afundo') {
+          const m = pernas.find((y) => y.slots.some((x) => !x.main && !y.doFoco.has(x) && (x.p.includes('agachar') || x.p.includes('afundo'))));
+          if (m) { m.slots[m.slots.findIndex((x) => !x.main && !m.doFoco.has(x) && (x.p.includes('agachar') || x.p.includes('afundo')))] = vaga; m.doFoco.add(vaga); continue; }
+        }
+        const ordem = pernas.slice().sort((a, b) => a.slots.filter(garantia).length - b.slots.filter(garantia).length || a.slots.length - b.slots.length);
+        for (const alvo of ordem) {
+          if (alvo.slots.length >= limite) {
+            let i = alvo.slots.length - 1;
+            while (i >= 0 && (alvo.slots[i].main || alvo.doFoco.has(alvo.slots[i]) || garantia(alvo.slots[i]))) i--;
+            if (i < 0) continue;
+            alvo.slots.splice(i, 1);
+          }
+          alvo.slots.push(vaga);
+          alvo.doFoco.add(vaga);
+          break;
+        }
+      }
+      for (const m of montagem) m.escolhas = new Array(m.slots.length).fill(null);
+    }
+  }
   // 2) os exercícios: primeiro os principais de todos os treinos (assim eles não mudam de uma versão para outra), depois os auxiliares
   const reservar = (m, ex) => { m.noDia.add(ex.id); usados.add(ex.id); m.padroes.add(ex.padrao); };
   const escolher = (m, i) => {
@@ -826,18 +915,32 @@ function montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, baseFoco, co
     dias.push({ id: idCurto(m.di), nome: m.modelo.nome, foco: m.modelo.foco, itens, _chave: chave, _wd: semana[m.di] });
   }
   // nomes A/B/C quando a divisão repete o mesmo dia
-  const totais = {};
-  for (const d of dias) totais[d._chave] = (totais[d._chave] || 0) + 1;
-  const cont = {};
-  for (const d of dias) {
-    if (totais[d._chave] > 1) { cont[d._chave] = (cont[d._chave] || 0) + 1; d.nome = `${DIAS_MODELO[d._chave].nome} ${'ABC'[cont[d._chave] - 1] || cont[d._chave]}`; }
-  }
+  const nomear = () => {
+    const totais = {};
+    for (const d of dias) totais[d._chave] = (totais[d._chave] || 0) + 1;
+    const cont = {};
+    for (const d of dias) {
+      cont[d._chave] = (cont[d._chave] || 0) + 1;
+      d.nome = totais[d._chave] > 1 ? `${DIAS_MODELO[d._chave].nome} ${'ABC'[cont[d._chave] - 1] || cont[d._chave]}` : DIAS_MODELO[d._chave].nome;
+    }
+  };
+  nomear();
   // prioridade: até cerca de 6 séries a mais por semana do que no plano equilibrado (refs pelland2026, scarpelli2022)
   const tetoFoco = {};
   if (baseFoco) for (const g of pf.foco) tetoFoco[g] = (baseFoco.volume[g] || 0) + FOCO_MAIS;
   const motivosFoco = ajustarVolume(dias, pf, tetoFoco);
+  // Treino que ficou curto demais (menos de 8 minutos contando os 5 de aquecimento: sobrou uma série de um exercício só,
+  // o que acontece com quase nenhum aparelho ou com dores que vetam quase tudo): vira descanso, com aviso. As séries que
+  // ele tinha não mudam de dia: os outros treinos já estão na dose do perfil.
+  const diasCurtos = [];
+  for (let i = dias.length - 1; i >= 0; i--) if (segundos(dias[i].itens) < 480) diasCurtos.unshift(dias.splice(i, 1)[0].nome);
+  if (diasCurtos.length) nomear();
+  // quem corre: os treinos vão para os dias que deixam as pernas longe da corrida forte e do longo
+  const encaixe = encaixarNaCorrida(dias, pf, corr);
   const agenda = {};
   for (const d of dias) if (d._wd != null) agenda[d._wd] = d.id;
+  // dias sem corrida nem musculação na semana (só para quem corre)
+  const descansoSemana = corr ? 7 - new Set([...corr.dias, ...Object.keys(agenda).map(Number)]).size : null;
   const limpos = dias.map((d) => ({ id: d.id, nome: d.nome, foco: d.foco, itens: d.itens.map(({ _main, _cardio, _fim, _leve, _foco, _tipo, _slot, _maxS, ...r }) => r) }));
   const volume = volumeSemanal(limpos);
   const av = avisos(pf);
@@ -869,6 +972,19 @@ function montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, baseFoco, co
   const porLimite = pf.cuidados.length > 0 || !!pf.dor;
   // treino que ficou sem nenhum exercício seguro: vira dia de descanso, e o plano diz por quê
   if (diasVazios.length) av.push({ tipo: 'warn', texto: `${diasVazios.length === 1 ? 'O treino' : 'Os treinos'} ${diasVazios.map((x) => '“' + x + '”').join(', ')} ${diasVazios.length === 1 ? 'ficou' : 'ficaram'} sem exercício ${porLimite ? 'seguro para as dores e limitações informadas' : 'possível com os aparelhos disponíveis'}: ${diasVazios.length === 1 ? 'esse dia vira' : 'esses dias viram'} descanso.` });
+  if (diasCurtos.length && dias.length) av.push({ tipo: 'warn', texto: `${diasCurtos.length === 1 ? 'Um treino ficou' : diasCurtos.length + ' treinos ficaram'} com menos de 8 minutos, ${porLimite ? 'pelas dores e limitações informadas' : 'por falta de aparelhos'}: ${diasCurtos.length === 1 ? 'esse dia virou' : 'esses dias viraram'} descanso.` });
+  // limitação da entrevista: exercícios do plano que usam a região sem serem marcados para ela (ver LIM_REGIAO)
+  for (const r of pf.regioesLim) {
+    const nomes = [...new Set(limpos.flatMap((d) => d.itens).map((it) => EX_POR_ID.get(it.ex)).filter((ex) => ex && carregaRegiao(ex, r)).map((ex) => ex.nome))];
+    if (nomes.length) av.push({ tipo: 'info', lim: r, texto: textoDaLimitacao(r, nomes) });
+  }
+  // item marcado em "tem mais algum destes em casa?" que não destrava nenhum exercício para este perfil (ex.: banco
+  // regulável sem halteres; corda de pular para quem não pode impacto): o plano diz, em vez de ignorar calado
+  const semUso = pf.extras.filter((x) => !EXERCICIOS.some((ex) => ex.equip.includes(x) && disponivel(ex, pf, gym) && permitido(ex, pf) && (ex.padrao === 'cardio' ? ex.registro === 'minutos' : PADROES_USADOS.has(ex.padrao) && (ex.registro === 'reps' || ex.registro === 'peso_reps' || ex.grupo === 'abdomen'))));
+  if (dias.length && semUso.length) av.push({ tipo: 'info', texto: `Você marcou ${semUso.map((x) => ROTULO.extras[x] || x).join(', ')}, mas, para o seu perfil e com o que você tem em casa, não há exercício com ${semUso.length === 1 ? 'esse item' : 'esses itens'}: ${semUso.length === 1 ? 'ele ficou' : 'eles ficaram'} fora do treino.` });
+  // item marcado que serve para o perfil, mas não entrou em nenhum treino deste plano: o plano também diz
+  const foraDoPlano = pf.extras.filter((x) => !semUso.includes(x) && !limpos.some((d) => d.itens.some((it) => (EX_POR_ID.get(it.ex) || { equip: [] }).equip.includes(x))));
+  if (dias.length && foraDoPlano.length) av.push({ tipo: 'info', texto: `Você marcou ${foraDoPlano.map((x) => ROTULO.extras[x] || x).join(', ')}, mas ${foraDoPlano.length === 1 ? 'esse item não entrou' : 'esses itens não entraram'} neste treino: os exercícios escolhidos para cada movimento foram outros. Dá para incluir pelo editor do treino.` });
   // grande grupo muscular que ficou sem nenhuma série: o plano diz qual
   const zerados = dias.length ? GRANDES.filter((g) => !volume[g]) : [];
   if (zerados.length) av.push({ tipo: 'warn', texto: `Este plano ficou sem exercício para ${zerados.map((g) => nomeGrupo(g).toLowerCase()).join(', ')}${porLimite ? ', por causa das dores ou limitações informadas' : pf.local === 'minha' ? ': faltam aparelhos em “Minha academia”' : ' com os aparelhos disponíveis'}.` });
@@ -882,13 +998,28 @@ function montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, baseFoco, co
   }
   // cardio do plano, em minutos por semana; sem cardio, o texto não promete que "o cardio do plano já conta"
   const minCardio = limpos.reduce((t, d) => t + d.itens.reduce((x, it) => x + ((EX_POR_ID.get(it.ex) || {}).registro === 'minutos' ? Number(it.reps) || 0 : 0), 0), 0);
-  const cardioPorDor = !minCardio && !!pf.dor && !temCardio && candidatos(CARDIO_FIM, { ...pf, dor: null }, gym).length > 0;
-  const estadoCardio = minCardio > 0 ? 'ok' : cardioPorDor ? 'dor' : 'sem';
+  const cardioPorDor = !corr && !minCardio && !!pf.dor && !temCardio && candidatos(CARDIO_FIM, { ...pf, dor: null }, gym).length > 0;
+  const estadoCardio = corr ? 'corrida' : minCardio > 0 ? 'ok' : cardioPorDor ? 'dor' : 'sem';
+  // corrida + musculação: o que mudou neste plano, em avisos curtos
+  let combinadoInfo = null;
+  if (corr && dias.length) {
+    const tem = (ps) => limpos.some((d) => d.itens.some((it) => ps.includes((EX_POR_ID.get(it.ex) || {}).padrao)));
+    const garantias = [['panturrilha', ['flexao_plantar']], ['abdutores do quadril', ['abducao']], ['um pé só', ['afundo']], ['core', R_CORE]];
+    const faltam = garantias.filter((g) => !tem(g[1]));
+    // o que faltou: por não haver exercício permitido para o perfil, ou por não caber no tempo do treino
+    const semExercicio = faltam.filter((g) => !cands(g[1] === R_CORE ? CORE : SLOT_RESERVA[g[1][0]]).length).map((g) => g[0]);
+    combinadoInfo = { foco: corr.foco, fortalecimento: corr.fortalecimento, agendaMudou: !!(encaixe && encaixe.mudou), vespera: encaixe ? encaixe.vespera : 0, garantidos: garantias.filter((g) => tem(g[1])).map((g) => g[0]), faltam: faltam.map((g) => g[0]), semExercicio, descanso: descansoSemana };
+    if (cardioDaCorrida || AEROBIO.has(pf.objetivoDose)) av.push({ tipo: 'info', combo: true, texto: 'Como você corre, este plano não tem cardio: a corrida já conta para a meta da semana.' });
+    if (encaixe && encaixe.mudou) av.push({ tipo: 'info', combo: true, texto: `${encaixe.ajusta ? 'Para as pernas ficarem a 24 horas ou mais da corrida forte e do longo' : 'Para a semana ter um dia de descanso'}, os treinos foram para: ${encaixe.dias.map((w) => DIAS_NOME[w]).join(', ')}.` });
+    if (descansoSemana === 0) av.push({ tipo: 'warn', combo: true, texto: 'Somando corrida e musculação, a semana fica sem nenhum dia de descanso. Tire um treino ou junte a musculação a uma corrida leve no mesmo dia: pelo menos um dia de descanso por semana é o recomendado.' });
+    if (encaixe && encaixe.vespera) av.push({ tipo: 'warn', combo: true, texto: 'Não deu para afastar todo treino de pernas da corrida forte: na véspera, treine as pernas mais leve.' });
+    if (corr.fortalece) av.push({ tipo: 'info', combo: true, texto: `Fortalecimento para a corrida: o treino tem ${combinadoInfo.garantidos.join(', ') || 'os exercícios de pernas'}.${semExercicio.length ? ` Sem exercício para o seu perfil e os seus aparelhos: ${semExercicio.join(', ')}.` : ''}${faltam.length > semExercicio.length ? ` Não coube no treino sem tirar o principal: ${faltam.map((g) => g[0]).filter((x) => !semExercicio.includes(x)).join(', ')}.` : ''}` });
+  }
   if (dias.length && cardioPorDor && (semCardio || AEROBIO.has(pf.objetivoDose))) av.push({ tipo: 'info', texto: 'Por causa da dor, o cardio ficou fora do plano. Ele volta quando a dor passar ou depois da avaliação.' });
   else if (dias.length && semCardio) av.push({ tipo: 'info', texto: 'Sem aparelho de cardio, os dias que seriam de cardio saíram do plano. Nesses dias, faça de 20 a 40 minutos de caminhada ou outra atividade aeróbica leve a moderada.' });
   return {
-    nome: 'Plano do Treinador', dias: limpos, agenda, volume, avisos: av, orientacoes: orientacoes(pf, estadoCardio), revisaoSemanas: semanasRevisao(pf), perfil: pf, minCardio,
-    foco, focoFora: pf.focoPedido.slice(pf.foco.length).map(nomeGrupo), versao,
+    nome: 'Plano do Treinador', dias: limpos, agenda, volume, avisos: av, orientacoes: orientacoes(pf, estadoCardio, corr ? corr.foco || 'corre' : ''), revisaoSemanas: semanasRevisao(pf), perfil: pf, minCardio,
+    foco, focoFora: pf.focoPedido.slice(pf.foco.length).map(nomeGrupo), versao, combinado: combinadoInfo,
     faltando: dias.filter((d) => d._chave !== 'cardio' && d.itens.filter((it) => !it._cardio).length < 3).map((d) => d.nome),
   };
 }
@@ -916,6 +1047,7 @@ export function volumeSemanal(dias) {
   const v = {};
   for (const d of Array.isArray(dias) ? dias : []) {
     for (const it of (d && Array.isArray(d.itens) ? d.itens : [])) {
+      if (!it || typeof it !== 'object') continue;
       const w = pesosDoExercicio(EX_POR_ID.get(it.ex));
       const n = Number(it.series) || 0;
       for (const g in w) v[g] = (v[g] || 0) + n * w[g];
@@ -1053,7 +1185,8 @@ function avisos(pf) {
   if (pf.retorno) {
     // Regras da volta: consenso CSCCa/NSCA de 2019 (ref caterisano2019), resumidas em logic/pausa.js. O corte de carga é
     // uma escolha conservadora do aplicativo; o consenso limita o volume, a frequência e o descanso.
-    const duas = 'Nas duas primeiras semanas o treino começa com menos séries por músculo, pelo menos 2 minutos de descanso entre as séries e metade do cardio na primeira semana.';
+    // (com pausa de até 3 meses, o plano é o mesmo de quem não parou: a redução é aplicada na hora do treino, e o texto diz isso)
+    const duas = 'O plano abaixo é o completo; a redução aparece na hora do treino: nas duas primeiras semanas ele começa com menos séries por músculo, pelo menos 2 minutos de descanso entre as séries e metade do cardio na primeira semana.';
     const t = {
       1: `Volta depois de 2 a 4 semanas parado: a força cai pouco nesse tempo. ${duas} Comece com cerca de 10% menos carga do que usava.`,
       2: `Volta depois de 1 a 3 meses parado: ${duas} Comece com cerca de 20% menos carga do que usava e suba a cada treino.`,
@@ -1071,16 +1204,17 @@ function avisos(pf) {
   if (pf.baixoPeso && pf.objetivo === 'emagrecimento') a.push({ tipo: 'warn', texto: 'Seu peso já está abaixo da faixa considerada saudável para a sua altura. Não busque perder mais peso: use o treino para ganhar força e converse com um médico ou nutricionista.' });
   return a;
 }
-function orientacoes(pf, estadoCardio = 'ok') {
+function orientacoes(pf, estadoCardio = 'ok', focoCorrida = '') {
   const o = [];
   const rir = pf.nivel === 1 || pf.conservador ? 'Termine cada série sentindo que ainda faria mais 2 a 4 repetições com boa técnica.' : 'Termine cada série sentindo que ainda faria 1 a 3 repetições. Ir até a falha não é necessário; se quiser, deixe para a última série de exercícios em máquina.';
-  o.push(['Esforço', rir]);
+  // quem prioriza a corrida (ou os dois por igual): pernas sem falha (ref blagrove2018)
+  o.push(['Esforço', rir + (focoCorrida === 'corrida' || focoCorrida === 'equilibrio' ? ' Nas pernas, não vá até a falha: isso não ajuda a corrida e pesa no treino seguinte.' : '')]);
   o.push(['Como aumentar a carga', 'Use a faixa de repetições do treino. Quando conseguir o número mais alto da faixa em todas as séries, em dois treinos seguidos, aumente a carga em 2 a 10% e volte ao número mais baixo.']);
   o.push(['Aquecimento', 'Faça 5 minutos de cardio leve e, antes dos dois primeiros exercícios, 1 ou 2 séries com metade da carga. Não é preciso alongar parado antes do treino de força.']);
   o.push(['Execução', 'Suba em 1 a 2 segundos e desça em 2 segundos, controlando o peso. Use a amplitude completa do movimento que você consegue fazer sem dor. Solte o ar no esforço e não prenda a respiração.']);
   // o texto só diz que "o cardio do plano já conta" quando o plano tem cardio
-  const conta = estadoCardio === 'ok' ? 'O cardio do plano já conta para essa meta.' : estadoCardio === 'dor' ? 'Com a dor que você contou, o cardio fica para depois que ela passar ou for avaliada.' : 'Este plano não tem cardio: some esses minutos com caminhada, bicicleta ou outra atividade.';
-  const alem = estadoCardio === 'ok' ? 'Além do cardio do plano, inclua' : estadoCardio === 'dor' ? 'Quando a dor passar, inclua' : 'Este plano não tem cardio: inclua';
+  const conta = estadoCardio === 'corrida' ? 'O seu plano de corrida já conta para essa meta.' : estadoCardio === 'ok' ? 'O cardio do plano já conta para essa meta.' : estadoCardio === 'dor' ? 'Com a dor que você contou, o cardio fica para depois que ela passar ou for avaliada.' : 'Este plano não tem cardio: some esses minutos com caminhada, bicicleta ou outra atividade.';
+  const alem = estadoCardio === 'corrida' ? 'O seu plano de corrida já cobre isto; se quiser, inclua' : estadoCardio === 'ok' ? 'Além do cardio do plano, inclua' : estadoCardio === 'dor' ? 'Quando a dor passar, inclua' : 'Este plano não tem cardio: inclua';
   const cardio = pf.gestante
     ? `Na gestação, a referência é somar pelo menos 150 minutos por semana de atividade aeróbica moderada, como caminhada ou bicicleta, em ritmo que permita conversar. ${conta}`
     : {
@@ -1092,7 +1226,12 @@ function orientacoes(pf, estadoCardio = 'ok') {
       hipertrofia: 'Cardio leve a moderado, 2 a 3 vezes por semana por 20 a 30 minutos, ajuda a saúde e não atrapalha o ganho de massa.',
       forca: 'Cardio leve a moderado, 2 vezes por semana, de preferência longe do treino de pernas, faz bem à saúde e não atrapalha a força máxima.',
     }[pf.objetivo];
-  o.push(['Cardio', cardio]);
+  o.push(['Cardio', estadoCardio === 'corrida' && (pf.objetivo === 'hipertrofia' || pf.objetivo === 'forca') && !pf.gestante ? 'O seu cardio é o plano de corrida. ' + (focoCorrida === 'musculacao' ? 'Com prioridade na musculação, a corrida se ajusta para não tirar a recuperação.' : 'Ele não atrapalha o ganho de força nem de massa em quem treina por lazer.') : cardio]);
+  if (focoCorrida) {
+    const txt = focoCorrida === 'musculacao' ? 'No dia com os dois treinos, faça a musculação antes da corrida, ou deixe 6 horas entre eles. A corrida forte e o longo ficam melhor longe do treino de pernas.'
+      : 'Treino de pernas e corrida forte ficam a 24 horas ou mais um do outro. No mesmo dia, corra primeiro e treine pelo menos 3 horas depois; se a corrida for leve, tanto faz a ordem.' + (pf.nivel === 1 ? ' Nas primeiras semanas de musculação, as pernas demoram até 48 horas para render de novo na corrida.' : '');
+    o.push(['Corrida e musculação', txt]);
+  }
   o.push(['Descanso', 'Durma bem e deixe pelo menos 48 horas antes de treinar forte o mesmo grupo muscular de novo.']);
   o.push(['Troca de exercícios', `Mantenha os exercícios principais por 8 a 12 semanas para evoluir neles. A cada ${semanasRevisao(pf)} semanas eu sugiro trocar 1 ou 2 exercícios auxiliares por treino, para variar o estímulo sem perder o progresso. Você decide se aceita.`]);
   return o;
@@ -1106,7 +1245,7 @@ export function sugerirTrocas(plan, respostas, gymBruta, max = 2, doresBrutas = 
   // com dor contada, a troca nunca traz um exercício que pede cuidado por causa dela
   const livreDeDor = (c) => { const a = dores.length ? avaliarDor(c, dores, pf) : null; return !a || a.grau < 2; };
   const gym = academia(gymBruta);
-  const diasPlano = plan && Array.isArray(plan.dias) ? plan.dias.filter((d) => d && Array.isArray(d.itens)) : [];
+  const diasPlano = (plan && Array.isArray(plan.dias) ? plan.dias.filter((d) => d && Array.isArray(d.itens)) : []).map((d) => ({ ...d, itens: d.itens.map((it) => (it && typeof it === 'object' ? it : { ex: '' })) }));
   const noPlano = new Set(diasPlano.flatMap((d) => d.itens.map((i) => i.ex)));
   const trocas = [];
   for (const d of diasPlano) {
@@ -1148,6 +1287,326 @@ export function alternativas(ex, pf, gymBruta, excluir = new Set()) {
   return out;
 }
 
+// ---------- corrida + musculação ----------
+// Quem corre e faz musculação escolhe o que vem primeiro (logic/combinado.js). Aqui fica o que isso muda NA MUSCULAÇÃO.
+// O que as fontes sustentam (treino concorrente):
+//  • Em praticantes recreativos a corrida não reduz o ganho de força máxima nem de massa (ref schumann2022); a força das
+//    pernas sofre em quem já é treinado, e só quando os dois treinos são na mesma sessão (ref petre2021); a força explosiva
+//    cai na mesma sessão e não cai com 3 horas ou mais de intervalo (ref schumann2022). Por isso o plano de musculação não
+//    perde exercícios nem séries por causa da corrida: o que muda é o encaixe na semana e o esforço nas pernas.
+//  • Força de pernas → corrida forte: pelo menos 24 horas; no mesmo dia, a corrida intensa vem antes e a força, mais de 3
+//    horas depois (ref blagrove2018). Em quem é novo na musculação, a corrida fica prejudicada por até 48 horas depois de um
+//    treino pesado de pernas (ref doma2017). Não há estudo sobre o treino longo: vale a mesma regra, por analogia.
+//  • Corrida intensa → força: evitar menos de 6 horas (ref robineau2016); no mesmo dia, a força feita antes rende mais nas
+//    pernas (ref eddens2018).
+//  • Para quem corre, treinar pernas até a falha é desnecessário, e os exercícios multiarticulares são a base (ref
+//    blagrove2018). Nenhuma fonte dá um número de séries de pernas por prioridade: o volume do plano não muda.
+//  • O plano de corrida já é o cardio: o plano de musculação fica sem cardio próprio (a meta semanal é a da ref oms2020).
+// Prioridade na corrida ou nos dois por igual: os treinos de pernas vão para dias a 24 horas ou mais da corrida forte e do
+// longo. Prioridade na musculação: o plano fica como é, e a corrida se ajusta (logic/corrida.js).
+const DIAS_NOME = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+const diasSemana = (l) => (Array.isArray(l) ? [...new Set(l.filter((x) => Number.isInteger(x) && x >= 0 && x <= 6))] : []);
+// Resumo da corrida e da escolha da pessoa, para passar a gerarPlano. null = a pessoa não tem plano de corrida.
+// O treino de musculação vale para várias semanas: por isso os dias de corrida, de treino forte e de longo são os de
+// TODAS as semanas que faltam do plano de corrida (a semana atual e as seguintes), e não só os desta semana.
+// { foco, fortalecimento, fortes: [wd], longo: wd desta semana | null, longos: [wd], dias: [wd] }
+const MEMO_CORRIDA = { k: '', v: null };
+const maisDias = (dia, n) => new Date(Date.parse(dia + 'T12:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+function semanasDaCorrida(st, hoje) {
+  const run = st.run;
+  const k = [hoje, run.aceitoEm, run.inicio, JSON.stringify(run.pausas || []), Array.isArray(st.runs) ? st.runs.length : 0, JSON.stringify(run.answers || {})].join('|');
+  if (MEMO_CORRIDA.k === k) return MEMO_CORRIDA.v;
+  const fortes = new Set(), longos = new Set(), dias = new Set();
+  let longo = null;
+  const ler = (s, atual) => {
+    for (let wd = 0; wd < 7; wd++) {
+      const d = s && Array.isArray(s.dias) ? s.dias[wd] : null;
+      if (!d || d.tipo === 'descanso') continue;
+      dias.add(wd);
+      if (d.tipo === 'longo') { longos.add(wd); if (atual) longo = wd; } else if (d.forte === true || d.intensidade === 'forte') fortes.add(wd);
+    }
+  };
+  try {
+    let semana = planoDaSemana(st, hoje);
+    // plano de corrida aceito que ainda não começou: vale a partir da primeira semana dele
+    if (semana && semana.antesDoInicio && semana.comecaEm) semana = planoDaSemanaEm(st, hoje, semana.comecaEm);
+    ler(semana, true);
+    let seg = semana && typeof semana.inicioDaSemana === 'string' ? semana.inicioDaSemana : '';
+    for (let n = 0; seg && n < 40; n++) {
+      seg = maisDias(seg, 7);
+      const s = planoDaSemanaEm(st, hoje, seg);
+      if (!s || s.concluido) break;
+      if (!s.foraDoPlano) ler(s, false);
+    }
+  } catch { /* sem plano de corrida legível: segue sem os dias */ }
+  const ordem = (c) => [...c].sort((a, b) => a - b);
+  MEMO_CORRIDA.k = k;
+  MEMO_CORRIDA.v = { fortes: ordem(fortes), longo, longos: ordem(longos), dias: ordem(dias) };
+  return MEMO_CORRIDA.v;
+}
+export function resumoCombinado(st, hoje) {
+  if (!st || typeof st !== 'object' || !st.run || typeof st.run !== 'object' || !st.run.aceitoEm || st.run.pausadoEm) return null;
+  const c = limparCombo(st.combo);
+  const s = semanasDaCorrida(st, typeof hoje === 'string' ? hoje : '');
+  return { foco: c.foco, fortalecimento: c.fortalecimento, fortes: s.fortes.slice(), longo: s.longo, longos: s.longos.slice(), dias: s.dias.slice() };
+}
+function limparCombinado(c) {
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return null;
+  const fortes = diasSemana(c.fortes);
+  const longo = Number.isInteger(c.longo) && c.longo >= 0 && c.longo <= 6 ? c.longo : null;
+  const longos = [...new Set([...diasSemana(c.longos), ...(longo == null ? [] : [longo])])];
+  const dias = [...new Set([...diasSemana(c.dias), ...fortes, ...longos])];
+  // sem nenhum dia de corrida (plano concluído, ou entrada inválida), nada muda na musculação
+  if (!dias.length) return null;
+  return {
+    foco: FOCOS.includes(c.foco) ? c.foco : '', fortalecimento: FORTALECIMENTOS.includes(c.fortalecimento) ? c.fortalecimento : '',
+    // quem pediu fortalecimento (dentro do treino, ou em plano próprio antes de ter musculação) recebe as garantias no plano do Treinador
+    fortalece: c.fortalecimento === 'sim' || c.fortalecimento === 'academia' || c.fortalecimento === 'casa',
+    // quantas garantias podem tomar o lugar de outra vaga (ver gerarPlano): 4 = todas; -1 = nem proteger as que já existem
+    garantias: Number.isInteger(c.garantias) ? Math.max(-1, Math.min(4, c.garantias)) : 4,
+    // dias-chave: corrida forte e longo, em qualquer semana do plano de corrida
+    fortes, longo, longos, chave: [...new Set([...fortes, ...longos])], dias,
+  };
+}
+const G_PERNA = new Set(['quadriceps', 'posteriores', 'gluteos', 'panturrilhas', 'adutores']);
+const ehDiaDePernas = (d) => d.itens.filter((it) => { const ex = EX_POR_ID.get(it.ex); return ex && G_PERNA.has(ex.grupo); }).length >= 2;
+// Põe os treinos de musculação nos dias da semana que deixam as pernas longe da corrida forte e do longo.
+// Custos (quanto menor, melhor): pernas na véspera de corrida forte ou do longo, 10; pernas dois dias antes, para quem é
+// novo na musculação, 4; pernas no mesmo dia da corrida forte, 3; musculação em dia de corrida, 1; o mesmo músculo como
+// principal em dias seguidos, 100; força em dias seguidos para menores de 18 e diabetes, 200. Empate: a agenda de sempre.
+// Dia de descanso: o encaixe nunca pode custar o último dia sem treino da semana. Semana com corrida ou musculação
+// nos 7 dias custa 80 (mais do que qualquer ganho de afastar as pernas): a musculação vai antes para um dia de corrida
+// leve. O consenso europeu e americano sobre excesso de treino recomenda pelo menos um dia de descanso passivo por
+// semana (ref meeusen2013, escrito para atletas e conferido por fontes secundárias; aqui vale como teto para todos); para
+// menores de 18, pelo menos 1 a 2 dias de folga por semana (refs valovichmcleod2011, brenner2024). Por isso, para
+// menores de 18 — e, por cautela, sem fonte direta, para 60 anos ou mais e iniciantes —, ficar com um dia só custa 12:
+// mais do que deixar um treino de pernas na véspera da corrida forte (que sai com o aviso de ir mais leve).
+function encaixarNaCorrida(dias, pf, corr) {
+  if (!corr) return null;
+  // com prioridade na musculação (ou sem resposta), as pernas não mudam de dia por causa da corrida: os treinos só
+  // saem do lugar quando, sem isso, a semana ficaria sem nenhum dia de descanso
+  const ajusta = corr.foco === 'corrida' || corr.foco === 'equilibrio';
+  const chave = new Set(ajusta ? corr.chave : []);
+  const n = dias.length;
+  if (!n || n > 6) return null;
+  const temDescanso = 7 - new Set([...corr.dias, ...dias.map((d) => d._wd)]).size > 0;
+  if (temDescanso && (!ajusta || !chave.size)) return null;
+  const pernas = dias.map(ehDiaDePernas);
+  const prim = dias.map((d) => { const m = {}; for (const it of d.itens) { const ex = EX_POR_ID.get(it.ex); if (!ex || ex.padrao === 'cardio') continue; for (const mu of new Set(ex.primarios)) if (GRANDES.includes(grupoVol(mu))) m[mu] = (m[mu] || 0) + it.series; } return m; });
+  const choca = (i, j) => Object.keys(prim[i]).some((mu) => prim[i][mu] >= 3 && (prim[j][mu] || 0) >= 3);
+  const alternado = pf.jovem || pf.diabetes;
+  const original = dias.map((d) => d._wd);
+  const doisDescansos = pf.jovem || pf.idoso || pf.nivel === 1;
+  const descansoDe = (wds) => 7 - new Set([...corr.dias, ...wds]).size;
+  const custo = (wds) => {
+    let c = 0;
+    const descanso = descansoDe(wds);
+    if (descanso < 1) c += 80; else if (descanso < 2 && doisDescansos) c += 12;
+    for (let i = 0; i < n; i++) {
+      const w = wds[i];
+      if (corr.dias.includes(w)) c += 1;
+      if (pernas[i]) { if (chave.has((w + 1) % 7)) c += 10; if (pf.nivel === 1 && chave.has((w + 2) % 7)) c += 4; if (chave.has(w)) c += 3; }
+      if (w !== original[i]) c += 0.1;
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        if (j > i && wds[j] < w) c += 0.2; // mantém, se der, a ordem A, B, C ao longo da semana
+        if ((wds[j] - w + 7) % 7 === 1) { if (choca(i, j)) c += 100; if (alternado) c += 200; }
+      }
+    }
+    return c;
+  };
+  let melhor = original.slice(), menor = custo(melhor);
+  const ocupado = new Array(7).fill(false), atual = new Array(n);
+  const tenta = (i) => {
+    if (i === n) { const c = custo(atual); if (c < menor - 1e-9) { menor = c; melhor = atual.slice(); } return; }
+    for (let w = 0; w < 7; w++) { if (ocupado[w]) continue; ocupado[w] = true; atual[i] = w; tenta(i + 1); ocupado[w] = false; }
+  };
+  tenta(0);
+  dias.forEach((d, i) => { d._wd = melhor[i]; });
+  return { ajusta, mudou: melhor.some((w, i) => w !== original[i]), vespera: dias.filter((d, i) => pernas[i] && chave.has((melhor[i] + 1) % 7)).length, dias: melhor.slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)) };
+}
+// O que a escolha do foco muda na musculação, em até 3 linhas curtas (para a folha da pergunta).
+export function efeitoDoFoco(foco, st) {
+  const refs = ['blagrove2018', 'schumann2022', 'petre2021', 'eddens2018', 'robineau2016'];
+  if (foco === 'corrida') return { linhas: ['Musculação: os treinos de pernas ficam a 24 horas ou mais da corrida forte e do longo.', 'Pernas sem ir até a falha; os exercícios e as séries continuam os mesmos.', 'O plano de musculação fica sem cardio: a corrida já cobre.'], refs };
+  if (foco === 'musculacao') return { linhas: ['Musculação: o plano fica completo, nos dias de sempre.', 'No dia com os dois treinos, a musculação vem antes da corrida, ou com 6 horas de intervalo.'], refs };
+  if (foco === 'equilibrio') return { linhas: ['Musculação: pernas a 24 horas ou mais da corrida forte e do longo.', 'No dia com os dois treinos, separe-os por 6 horas ou mais.'], refs };
+  return { linhas: [], refs: [] };
+}
+
+// ---------- fortalecimento para quem corre e não faz musculação ----------
+// O que as fontes sustentam:
+//  • Desempenho: 2 a 3 treinos de força por semana, por 6 a 14 semanas, melhoram a economia de corrida em 2 a 8%, sem
+//    aumentar o peso; 1 treino por semana mantém o ganho; parar faz voltar ao ponto de partida em 6 semanas. Exercícios
+//    multiarticulares (agachamento, levantamento terra, subida no degrau, afundo) e panturrilha; 2 a 6 séries de 3 a 10
+//    repetições com 70% da carga máxima ou mais, 2 a 3 min de descanso, sem ir até a falha; a maioria dos estudos começou
+//    com 1 a 2 séries (ref blagrove2018). Antes de carregar, aprender a técnica com cargas leves; duas sessões por semana
+//    (ref ronnestad2014). Os estudos foram supervisionados por treinador.
+//  • Panturrilha: o sóleo é o músculo que mais contribui para sustentar e impulsionar o corpo na corrida (ref hamner2013).
+//  • Em casa, com o peso do corpo e elástico: um programa de quadril e core (prancha, ponte, afundo, abdutores, posteriores;
+//    2 a 3 séries de 8 a 12 repetições ou 20 a 40 s) reduziu as lesões por sobrecarga em corredores iniciantes — orientado
+//    por fisioterapeuta (ref leppanen2024). Programas feitos sozinho, por vídeo, não reduziram lesões (refs toresdahl2020,
+//    wu2024). Não há estudo de desempenho só com o peso do corpo: o plano de casa não promete correr mais rápido.
+//  • Saltos (pliometria) também ajudam a economia de corrida, mas ficam só para a escolha manual (ver "segurança").
+// Dois treinos (A e B), em dias a 24 horas ou mais da corrida forte e do longo (48 para quem é novo na musculação) e com
+// pelo menos um dia entre eles. Sem dia livre para o segundo, fica um treino por semana (dose de manutenção).
+const FORT_A = [S('agachar', { main: 1 }), S(['dobradica_quadril', 'extensao_quadril'], { main: 1, ordem: 1 }), S('afundo'), S('flexao_plantar'), S('abducao'), S('anti_extensao', { core: true })];
+const FORT_B = [S(['afundo', 'agachar'], { main: 1, ordem: 1 }), S(['extensao_quadril', 'dobradica_quadril'], { main: 1, ordem: 1 }), S(['flexao_joelho', 'extensao_quadril']), S('flexao_plantar', { alt: 1 }), S(['abducao', 'aducao'], { alt: 1 }), S(['rotacao', 'anti_extensao', 'flexao_tronco'], { core: true })];
+// respostas para o perfil: as da corrida (idade, limitações, condições, triagem) mais as do Treinador, se existirem
+function respostasDoCorredor(st, local) {
+  const t = st.trainer && respostasCompletas(st.trainer.answers || {}) ? st.trainer.answers : null;
+  const r = st.run && st.run.answers && typeof st.run.answers === 'object' ? st.run.answers : {};
+  const num = (k, padrao) => (typeof r[k] === 'number' && Number.isFinite(r[k]) ? r[k] : t && typeof t[k] === 'number' ? t[k] : padrao);
+  const LIM = { joelho: 'joelho', canela: 'tornozelo', aquiles: 'tornozelo', pe: 'tornozelo', quadril: 'quadril', lombar: 'lombar' };
+  const COND = { hipertensao: 'hipertensao', cardiaco: 'cardiaco', diabetes: 'diabetes', gestante: 'gestante', cronica: 'cronica', renal: 'cronica', posparto: 'cronica' };
+  const junta = (a, b, mapa, nenhum) => { const out = new Set(); for (const x of Array.isArray(a) ? a : []) if (tem(mapa, x)) out.add(mapa[x]); for (const x of Array.isArray(b) ? b : []) if (typeof x === 'string' && x !== nenhum) out.add(x); return out.size ? [...out] : [nenhum]; };
+  const emCasa = local === 'casa';
+  const casaDoTreinador = t && (t.local === 'halteres' || t.local === 'corporal');
+  return {
+    objetivo: 'saude', idade: num('idade', 30), peso: num('peso', 70), altura: num('altura', 170),
+    experiencia: t ? t.experiencia : 'nunca', pausa: t ? t.pausa : undefined, dias: '2', tempo: '30',
+    local: emCasa ? (casaDoTreinador ? t.local : 'corporal') : st.gym && st.gym.all === false ? 'minha' : 'completa',
+    extras: emCasa && casaDoTreinador ? t.extras : undefined,
+    limitacoes: junta(r.limitacoes, t ? t.limitacoes : [], LIM, 'nenhuma'), condicoes: junta(r.condicoes, t ? t.condicoes : [], COND, 'nenhuma'),
+    triagem: junta([], [...(Array.isArray(r.triagem) ? r.triagem : []), ...(t && Array.isArray(t.triagem) ? t.triagem : [])], {}, 'nenhum'), foco: ['equilibrado'],
+  };
+}
+function doseDoFortalecimento(ex, slot, pf, emCasa) {
+  if (Object.prototype.hasOwnProperty.call(DOSE_PROPRIA, ex.id)) { const p = DOSE_PROPRIA[ex.id]; return { series: p.series, reps: p.reps, descanso: p.descanso }; }
+  if (ex.registro === 'segundos') return { series: 2, reps: pf.nivel === 1 ? '20' : '30', descanso: 45 };
+  // em casa, com o peso do corpo: 2 séries de 8 a 12 (programa da ref leppanen2024)
+  if (emCasa && ex.registro === 'reps') return { series: 2, reps: slot.core ? '10-12' : '8-12', descanso: 60 };
+  const leve = pf.nivel === 1 || pf.conservador || pf.cautela || pf.moderado;
+  // novo na musculação ou em dose conservadora: 2 séries com carga leve a moderada, para aprender (refs blagrove2018, ronnestad2014)
+  if (leve || slot.core) return { series: 2, reps: slot.core ? '10-12' : '10-15', descanso: 90 };
+  // quem já treina: carga alta nos multiarticulares, sem falha, com 2 min de descanso (os estudos usaram 2 a 3 min — ref
+  // blagrove2018); nos exercícios de uma articulação só, 2 séries, para o treino caber em cerca de 45 minutos
+  return ex.tipo === 'composto' ? { series: 3, reps: '6-10', descanso: 120 } : { series: 2, reps: '10-15', descanso: 60 };
+}
+// Plano de fortalecimento para quem corre e não faz musculação. `local`: 'academia' | 'casa'; `hoje`: 'AAAA-MM-DD';
+// `ocupados`: dias da semana (0–6) que já têm treino. Devolve { nome, dias, agenda, info, avisos, refs } ou null.
+// Quando não há plano possível, devolve { dias: [], motivo: 'idade' | 'saude' | 'sem_dias' | 'dor' | 'sem_exercicios', texto }
+// (o `texto` é para mostrar na tela). Só devolve null para um estado inválido.
+const semPlanoDeFortalecimento = (motivo, texto, refs = []) => ({ nome: 'Fortalecimento para corrida', dias: [], agenda: {}, info: '', avisos: [], faltam: [], refs, motivo, texto });
+export function planoFortalecimento(st, opcoes = {}) {
+  if (!st || typeof st !== 'object') return null;
+  const o = opcoes && typeof opcoes === 'object' ? opcoes : {};
+  const emCasa = o.local === 'casa';
+  const hoje = typeof o.hoje === 'string' ? o.hoje : '';
+  const run = st.run && st.run.answers && typeof st.run.answers === 'object' ? st.run.answers : {};
+  const respostas = respostasDoCorredor(st, emCasa ? 'casa' : 'academia');
+  const pf = perfil(respostas);
+  // Antes dos 14 anos o treino de força é seguro e faz bem, mas com supervisão qualificada e ensino da técnica (refs
+  // faigenbaum2009, lloyd2014): sem um profissional ao lado, o aplicativo não monta (a mesma regra do Treinador).
+  if (pf.bloqueado) return semPlanoDeFortalecimento('idade', 'Antes dos 14 anos, o treino de força faz bem, mas precisa de um profissional ao lado para ensinar e corrigir os movimentos. Por isso o aplicativo não monta esse treino.', ['faigenbaum2009', 'lloyd2014']);
+  // Parto nos últimos 6 meses: a volta ao exercício é avaliada por médico ou fisioterapeuta pélvica (refs goom2019,
+  // deering2024, as mesmas do plano de corrida). Sem essa avaliação, o aplicativo não escolhe exercícios de força e de
+  // abdômen para essa fase.
+  if (Array.isArray(run.condicoes) && run.condicoes.includes('posparto')) return semPlanoDeFortalecimento('saude', 'Depois do parto, o fortalecimento começa com a orientação de um médico ou fisioterapeuta pélvica, que avalia o assoalho pélvico e o abdômen. Com a liberação, refaça a entrevista da corrida.', ['goom2019', 'deering2024']);
+  // limitação "coxa" da entrevista da corrida: os exercícios que usam a frente e a parte de trás da coxa pedem menos carga
+  if (Array.isArray(run.limitacoes) && run.limitacoes.includes('coxa')) pf.regioesLim = [...new Set([...pf.regioesLim, 'coxa-frente', 'coxa-tras'])];
+  const dores = limparDoresTreino(doresDoTreino(st, hoje, pf));
+  pf.dor = regrasDeDor(dores, pf);
+  const gym = academia(st.gym);
+  const usados = new Set();
+  const monta = (slots, nome, foco, i) => {
+    const itens = [], noDia = new Set();
+    for (const slot of slots) {
+      let l = candidatos(slot, pf, gym).filter((e) => !noDia.has(e.id));
+      if (slot.ordem) { const p0 = slot.p.find((p) => l.some((e) => e.padrao === p)); l = l.filter((e) => e.padrao === p0); }
+      if (!l.length) { const viz = [...new Set(slot.p.flatMap((p) => SUBSTITUTOS[p] || []))]; if (viz.length) l = candidatos({ ...slot, p: viz, main: false, ordem: 0 }, pf, gym).filter((e) => !noDia.has(e.id)); }
+      if (!l.length) continue;
+      const ex = l.find((e) => !usados.has(e.id)) || l[0];
+      noDia.add(ex.id); usados.add(ex.id);
+      itens.push({ ex: ex.id, ...doseDoFortalecimento(ex, slot, pf, emCasa), nota: '' });
+    }
+    return itens.length >= 3 ? { id: idCurto(i), nome, foco, itens } : null;
+  };
+  const dias = [monta(FORT_A, 'Fortalecimento A', 'Pernas, quadril, panturrilha e core', 0), monta(FORT_B, 'Fortalecimento B', 'Um pé só, glúteos, panturrilha e core', 1)].filter(Boolean);
+  if (!dias.length) {
+    return pf.dor
+      ? semPlanoDeFortalecimento('dor', 'Com as dores que você contou, não sobraram exercícios seguros para um treino de fortalecimento. Quando melhorar, ou depois da avaliação de um profissional, tente de novo.', ['dubois2020'])
+      : semPlanoDeFortalecimento('sem_exercicios', 'Não há exercícios suficientes para o seu perfil com o que você tem disponível.');
+  }
+  // dias da semana: fora dos ocupados, longe da corrida forte e do longo de todas as semanas do plano de corrida, e com
+  // pelo menos um dia entre os dois treinos
+  const corr = limparCombinado(resumoCombinado(st, hoje)) || { chave: [], dias: [] };
+  const chave = new Set(corr.chave);
+  const ocupados = new Set(diasSemana(o.ocupados));
+  const livres = [1, 2, 3, 4, 5, 6, 0].filter((w) => !ocupados.has(w));
+  if (!livres.length) return semPlanoDeFortalecimento('sem_dias', 'Não há dia livre na semana para o fortalecimento. Libere um dia no seu plano de treinos e tente de novo.');
+  // (o dia de descanso da semana também conta: treinar no único dia sem corrida custa mais do que juntar com uma corrida leve)
+  const semCorrida = [0, 1, 2, 3, 4, 5, 6].filter((w) => !corr.dias.includes(w) && !ocupados.has(w));
+  const custoDia = (w) => (chave.has((w + 1) % 7) ? 10 : 0) + (pf.nivel === 1 && chave.has((w + 2) % 7) ? 4 : 0) + (chave.has(w) ? 3 : 0) + (corr.dias.includes(w) ? 1 : 0);
+  const semDescanso = (ws) => (semCorrida.length && semCorrida.every((w) => ws.includes(w)) && 7 - new Set([...corr.dias, ...ocupados, ...ws]).size < 1 ? 80 : 0);
+  const dist = (a, b) => Math.min((a - b + 7) % 7, (b - a + 7) % 7);
+  let par = null, menor = Infinity;
+  if (dias.length >= 2) for (let i = 0; i < livres.length; i++) for (let j = i + 1; j < livres.length; j++) {
+    const a = livres[i], b = livres[j];
+    if (dist(a, b) < 2) continue; // os estudos deixaram 48 horas ou mais entre os treinos de força (ref blagrove2018)
+    const c = custoDia(a) + custoDia(b) + (dist(a, b) === 2 ? 0.5 : 0) + semDescanso([a, b]);
+    if (c < menor - 1e-9) { menor = c; par = [a, b]; }
+  }
+  const agenda = {};
+  let escolhidos = [];
+  if (par) { escolhidos = par; agenda[par[0]] = dias[0].id; agenda[par[1]] = dias[1].id; }
+  else { const w = livres.slice().sort((a, b) => custoDia(a) + semDescanso([a]) - custoDia(b) - semDescanso([b]))[0]; escolhidos = [w]; agenda[w] = dias[0].id; }
+  const final = escolhidos.length === 1 ? [dias[0]] : dias;
+  const avisos = [];
+  avisos.push({ tipo: 'info', texto: emCasa
+    ? 'Em casa, o que está demonstrado é a prevenção: exercícios de quadril e core reduziram lesões de corrida quando orientados por fisioterapeuta. Faça com calma e técnica; não espere ganho de velocidade só com o peso do corpo.'
+    : 'Treinos de força com carga melhoram a economia de corrida em 2 a 8%. Comece leve, para aprender os movimentos, e aumente a carga aos poucos, sem ir até a falha.' });
+  if (escolhidos.length === 1) avisos.push({ tipo: 'info', texto: 'Só coube um treino por semana longe das corridas fortes: é a dose que mantém a força. Com mais um dia livre, entram dois.' });
+  if (escolhidos.some((w) => chave.has((w + 1) % 7))) avisos.push({ tipo: 'warn', texto: 'Em alguma semana do plano de corrida, um dos treinos cai na véspera de corrida forte ou do longo, por falta de outro dia: nessa véspera, faça as pernas mais leves.' });
+  if (escolhidos.some((w) => corr.dias.includes(w))) avisos.push({ tipo: 'info', texto: 'No dia em que houver corrida e fortalecimento, corra primeiro e faça o fortalecimento pelo menos 3 horas depois; se a corrida for leve, tanto faz a ordem.' });
+  if (7 - new Set([...corr.dias, ...ocupados, ...escolhidos]).size < 1) avisos.push({ tipo: 'warn', texto: 'Com o fortalecimento, a semana fica sem nenhum dia de descanso. Junte-o a uma corrida leve no mesmo dia ou tire um treino: pelo menos um dia de descanso por semana é o recomendado.' });
+  // o que não entrou por não haver exercício permitido para o perfil com o que a pessoa tem
+  const temPadrao = (ps) => final.some((d) => d.itens.some((it) => ps.includes((EX_POR_ID.get(it.ex) || {}).padrao)));
+  const faltam = [['panturrilha', ['flexao_plantar']], ['abdutores do quadril', ['abducao']], ['um pé só', ['afundo']], ['core', R_CORE]].filter((g) => !temPadrao(g[1])).map((g) => g[0]);
+  if (faltam.length) avisos.push({ tipo: 'info', texto: `Ficou de fora, por não haver exercício para o seu perfil${emCasa ? ' sem aparelhos' : ''}: ${faltam.join(', ')}.${emCasa && faltam.includes('panturrilha') ? ' Com um degrau firme, você pode incluir a elevação de calcanhar pelo editor do treino.' : ''}` });
+  // limitações (as da corrida também): exercícios que usam a região sem serem marcados para ela
+  for (const r of pf.regioesLim) {
+    const nomes = [...new Set(final.flatMap((d) => d.itens).map((it) => EX_POR_ID.get(it.ex)).filter((ex) => ex && carregaRegiao(ex, r)).map((ex) => ex.nome))];
+    if (nomes.length) avisos.push({ tipo: 'info', lim: r, texto: textoDaLimitacao(r, nomes) });
+  }
+  for (const x of avisosDeDor(dores, pf)) avisos.push(x);
+  if (pf.liberacao) avisos.push({ tipo: 'danger', texto: 'Pelas suas respostas, procure um médico e peça liberação antes de começar. Até lá, use só cargas leves.' });
+  const nomes = escolhidos.slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((w) => DIAS_NOME[w]).join(' e ');
+  return {
+    nome: 'Fortalecimento para corrida', dias: final, agenda,
+    info: `Para quem corre: pernas, quadril, panturrilha e core, ${escolhidos.length === 1 ? 'uma vez' : 'duas vezes'} por semana (${nomes}). Comece com 2 séries e carga leve; em algumas semanas, chegue a 3 séries${emCasa ? ' e passe às variações em um pé só' : ' com mais carga'}, sem ir até a falha.`,
+    avisos, faltam, refs: ['blagrove2018', 'ronnestad2014', 'leppanen2024', 'wu2024', 'toresdahl2020', 'hamner2013'], perfil: pf, motivo: '', texto: '',
+  };
+}
+
+// ---------- por que um exercício não é recomendado para um perfil (usado na avaliação do treino feito à mão) ----------
+// Devolve a lista de motivos: [{ id, texto, grave }]. Lista vazia = nada contra. `pf` é o perfil (perfil(respostas)).
+// `grave` = o Treinador não poria o exercício no plano dessa pessoa (regra de segurança); os outros são avisos (falta o
+// aparelho, ou a região dolorida pede carga mais leve). São as mesmas regras do gerador, com as mesmas fontes.
+export function motivosContra(ex, pf, gymBruta, doresBrutas = null) {
+  const out = [];
+  if (!ex || !pf) return out;
+  const por = (id, texto, grave = true) => out.push({ id, texto, grave });
+  const gym = academia(gymBruta);
+  if (soManual(ex.id)) por('manual', 'o Treinador não indica este exercício sem supervisão');
+  else if ((ex.grupo === 'funcional' && ex.padrao !== 'cardio') || FORA_DO_GERADOR.has(ex.padrao)) por('potencia', 'exercício de potência ou de técnica avançada: pede domínio do movimento e supervisão');
+  const max = Math.max(1, pf.conservador ? Math.min(pf.nivel, 2) : pf.nivel);
+  if (ex.nivel > max) por('nivel', `é de nível ${['', 'iniciante', 'intermediário', 'avançado'][ex.nivel]}, acima do seu`);
+  const cuid = ex.cuidado.filter((c) => pf.cuidados.includes(c));
+  if (cuid.length) por('cuidado', 'pede cuidado com ' + cuid.map((c) => (CUIDADOS[c] || c).toLowerCase()).join(', '));
+  if (ex.padrao === 'cardio' && deImpacto(ex) && (pf.nivel === 1 || pf.conservador || pf.obeso)) por('impacto', 'cardio de impacto: só para quem já treina, sem dose conservadora e com IMC abaixo de 30');
+  if (pf.conservador && barraComposto(ex)) por('barra', 'barra livre em exercício composto: para o seu perfil, o indicado são máquinas ou halteres');
+  if ((pf.idoso || pf.gestante) && instavel(ex)) por('instavel', 'instável ou em um pé só: risco de queda para o seu perfil');
+  if ((pf.cautela || pf.idoso || pf.obeso) && pendurado(ex)) por('pendurado', 'pendurado, com o peso do corpo inteiro e sem como reduzir a carga: não indicado para o seu perfil');
+  // limitação da entrevista: o exercício não é marcado para ela, mas usa a região (pela mecânica do movimento)
+  const rl = !cuid.length ? pegaLimitacao(ex, pf) : '';
+  if (rl) por('limitacao', `usa a região da sua limitação (${LOCAL_TXT[rl]}): menos carga e só a amplitude sem dor`, false);
+  if (!disponivel(ex, pf, gym)) por('aparelho', 'usa aparelho que você não marcou', false);
+  const al = alertaDoExercicio(ex.id, doresBrutas, pf);
+  if (al) por(al.nivel === 'evitar' ? 'dor' : 'dor-leve', al.nivel === 'evitar' ? 'carrega a região da dor que você contou: deixe de fora até melhorar' : 'pega a região da dor que você contou: faça mais leve', al.nivel === 'evitar');
+  return out;
+}
+
 // ---------- outra versão ----------
 // exercícios de cada treino, sem contar a ordem
 const assinaturaPlano = (p) => (p && Array.isArray(p.dias) ? p.dias.map((d) => (d && Array.isArray(d.itens) ? d.itens.map((i) => i.ex).sort().join(',') : '')).join('|') : '');
@@ -1157,13 +1616,13 @@ const assinaturaPlano = (p) => (p && Array.isArray(p.dias) ? p.dias.map((d) => (
 export function outraVersao(respostas, gymBruta, versaoAtual = 0, opc = {}) {
   const o = opc && typeof opc === 'object' ? opc : {};
   const v0 = numVersao(versaoAtual);
-  const atual = o.plano && Array.isArray(o.plano.dias) ? o.plano : gerarPlano(respostas, gymBruta, v0, o.dores);
+  const atual = o.plano && Array.isArray(o.plano.dias) ? o.plano : gerarPlano(respostas, gymBruta, v0, o.dores, o.combinado);
   if (!atual || !atual.dias.length) return null;
   const ass = assinaturaPlano(atual);
   const antes = atual.dias.map((d) => new Set((d && Array.isArray(d.itens) ? d.itens : []).map((i) => i.ex)));
   // a rotação usa listas de até 4 exercícios: depois de 12 versões, as combinações se repetem
   for (let k = 1; k <= 12; k++) {
-    const p = gerarPlano(respostas, gymBruta, v0 + k, o.dores);
+    const p = gerarPlano(respostas, gymBruta, v0 + k, o.dores, o.combinado);
     if (!p || !p.dias.length) return null;
     if (assinaturaPlano(p) === ass) continue;
     let trocados = 0;
@@ -1225,6 +1684,8 @@ function limparDoresTreino(raw) {
     out.push({
       onde: d.onde, tipo: d.tipo, nivel: Math.min(10, Math.max(1, Math.round(d.nivel))), quando: d.quando === 'repouso' || d.quando === 'depois' ? d.quando : 'durante',
       dias: typeof d.dias === 'number' && d.dias > 0 && Number.isFinite(d.dias) ? Math.round(d.dias) : 0,
+      // `volta`: dor de alerta que melhorou há pouco (ver doresDoTreino): a região volta com menos carga
+      volta: d.volta === true,
     });
     if (out.length >= 40) break;
   }
@@ -1238,6 +1699,7 @@ const DOR_ATE_5 = new Set(['ombro', 'aquiles', 'quadril', 'gluteo']);
 const tetoDeDor = (d, pf) => (pf.conservador || pf.nivel === 1 || !DOR_ATE_5.has(d.onde) ? 3 : 5);
 // 'alerta' | 'forte' | 'media' | 'leve'
 function classeDaDor(d, pf) {
+  if (d.volta) return 'volta';
   if (alertaDaDor(d, pf)) return 'alerta';
   if (d.tipo === 'muscular') return 'media';
   return d.nivel > tetoDeDor(d, pf) ? 'forte' : d.nivel >= 3 ? 'media' : 'leve';
@@ -1317,7 +1779,7 @@ function avaliarDor(ex, dores, pf) {
     const classe = classeDaDor(d, pf);
     const t = toqueDaDor(ex, d, classe === 'alerta');
     if (!t) continue;
-    const grau = classe === 'alerta' || (classe === 'forte' && t === 2) ? 3 : classe === 'forte' ? 1 : classe === 'media' ? t : t === 2 ? 1 : 0;
+    const grau = classe === 'volta' ? 2 : classe === 'alerta' || (classe === 'forte' && t === 2) ? 3 : classe === 'forte' ? 1 : classe === 'media' ? t : t === 2 ? 1 : 0;
     // em caso de empate, vale a dor de alerta (com ela não se propõe troca)
     if (grau && (!pior || grau > pior.grau || (grau === pior.grau && classe === 'alerta' && pior.classe !== 'alerta'))) pior = { grau, d, classe };
   }
@@ -1330,6 +1792,7 @@ function regrasDeDor(dores, pf) {
     const classe = classeDaDor(d, pf);
     const reg = REGIAO_DOR[d.onde];
     if (classe === 'alerta') { r.vetaMecA.add(d.onde); for (const c of reg.c) r.vetaC.add(c); for (const m of reg.m) { r.vetaP.add(m); r.vetaS.add(m); } }
+    else if (classe === 'volta') { r.poupaMec.add(d.onde); for (const c of reg.c) r.poupaC.add(c); for (const m of reg.m) r.poupaP.add(m); }
     else if (d.tipo === 'muscular') continue;
     else if (classe === 'forte') { r.vetaMec.add(d.onde); for (const c of reg.c) r.vetaC.add(c); for (const m of reg.m) r.vetaP.add(m); }
     else if (classe === 'media') { r.poupaMec.add(d.onde); for (const c of reg.c) r.poupaC.add(c); for (const m of reg.m) r.poupaP.add(m); }
@@ -1345,18 +1808,87 @@ function avisosDeDor(dores, pf) {
   for (const d of dores) {
     const classe = classeDaDor(d, pf);
     const onde = LOCAL_TXT[d.onde];
-    if (classe === 'alerta') out.push({ tipo: 'warn', dor: d.onde, texto: `Dor de alerta ${onde}: este plano não treina essa região. Procure um médico ou fisioterapeuta antes de voltar a treiná-la.` });
+    if (classe === 'volta') out.push({ tipo: 'info', dor: d.onde, texto: `Volta depois da dor ${onde}: por 2 semanas, os exercícios dessa região pedem menos carga e amplitude. Suba aos poucos; se a dor voltar, conte ao Treinador.` });
+    else if (classe === 'alerta') out.push({ tipo: 'warn', dor: d.onde, texto: `Dor de alerta ${onde}: este plano não treina essa região. Procure um médico ou fisioterapeuta antes de voltar a treiná-la.` });
     else if (d.tipo !== 'muscular' && classe === 'forte') out.push({ tipo: 'info', dor: d.onde, texto: `Dor ${onde}: deixei de fora os exercícios que sobrecarregam essa região.` });
     else if (d.tipo !== 'muscular' && classe === 'media') out.push({ tipo: 'info', dor: d.onde, texto: `Dor ${onde}: dei preferência a exercícios que poupam essa região. Nos demais, use menos carga e só a amplitude sem dor.` });
   }
   return out;
 }
 function refsDaDor(d, pf, classe) {
+  if (classe === 'volta') return ['dubois2020', 'caterisano2019', 'silbernagel2007'];
   if (classe === 'alerta') return [...new Set(['dubois2020', d.onde === 'lombar' ? 'verhagen2016' : '', pf.gestante ? 'acog804' : '', d.onde === 'peito' ? 'riebe2015' : ''].filter(Boolean))];
   if (d.tipo === 'muscular') return ['hody2019', 'cheung2003', 'herbert2011'];
   const regiao = { lombar: ['george2021', 'jorgensen2018'], ombro: ['holmgren2012', 'diercks2014'], joelho: ['breda2021', 'powers2014'], aquiles: ['cook2009'], cotovelo: ['bateman2021'], quadril: ['ageberg2010'], gluteo: ['ageberg2010'] }[d.onde] || [];
   return ['silbernagel2007', 'silbernagel2020', 'smith2017', ...regiao, ...(pf.conservador || pf.nivel === 1 ? ['raulline2025'] : []), ...(pf.idoso ? ['fragala2019'] : [])];
 }
+// ---------- dores para o Treinador: ativas, pendentes de resposta e em volta gradual ----------
+// A dor deixa de contar sozinha depois de DIAS_ATIVA dias sem atualização (logic/dor.js). Para uma dor de alerta ou acima
+// do aceitável, voltar ao treino normal sem perguntar seria afrouxar a regra calado: ela continua valendo para o
+// Treinador até a pessoa responder ("Melhorou" ou "Ainda dói") — são as dores PENDENTES.
+// Depois de uma dor de alerta que melhorou, a região volta aos poucos: a carga é retomada de forma gradual e guiada pela
+// dor (ref dubois2020), e a transição depois de um período parado dura 2 semanas (ref caterisano2019). Por 14 dias a
+// partir do "Melhorou", a dor entra como "em volta": os exercícios da região ficam por último na escolha e pedem menos
+// carga e amplitude.
+// O lado do corpo e o momento (durante ou depois do treino) ficam só registrados: o modelo de monitoramento da dor usa o
+// mesmo limite para a dor durante e depois do exercício (ref silbernagel2007) e os exercícios do plano não mudam conforme
+// o lado. Dor em repouso é sinal de alerta (logic/dor.js).
+const VOLTA_DIAS = 14;
+const diasEntreDatas = (a, b) => Math.round((Date.parse(b + 'T12:00:00') - Date.parse(a + 'T12:00:00')) / 86400000);
+const ehData = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v + 'T12:00:00'));
+// último relato de cada local e lado, até hoje
+function ultimasDores(st, hoje) {
+  const m = new Map();
+  if (!ehData(hoje)) return [];
+  for (const d of st && Array.isArray(st.dores) ? st.dores : []) {
+    if (!d || typeof d !== 'object' || !tem(REGIAO_DOR, d.onde) || !tem(TIPOS_DOR, d.tipo) || !ehData(d.data) || d.data > hoje || typeof d.nivel !== 'number') continue;
+    const k = d.onde + '|' + (d.lado || '');
+    const ant = m.get(k);
+    if (!ant || d.data >= ant.data) m.set(k, d);
+  }
+  return [...m.values()];
+}
+// Dores de alerta ou acima do aceitável que deixaram de contar por tempo, sem "Melhorou": [{ ...dor, dias, pendente: true }]
+export function doresPendentes(st, hoje, respostas = null) {
+  const pf = perfilDe(respostas);
+  const out = [];
+  for (const d of ultimasDores(st, hoje)) {
+    const dias = diasEntreDatas(d.data, hoje);
+    if (d.fim || dias <= DIAS_ATIVA) continue;
+    const limpa = limparDoresTreino([{ ...d, dias }])[0];
+    if (!limpa) continue;
+    const classe = classeDaDor(limpa, pf);
+    if (classe === 'alerta' || (classe === 'forte' && d.tipo !== 'muscular')) out.push({ ...d, dias, pendente: true });
+  }
+  return out.sort((a, b) => b.nivel - a.nivel);
+}
+// Dores que valem para o Treinador hoje: as ativas, as pendentes de resposta e as que estão em volta gradual.
+// Use no lugar de doresAtivas ao chamar gerarPlano, alertaDoExercicio, ajustesPorDor e a avaliação do treino.
+export function doresDoTreino(st, hoje, respostas = null) {
+  let ativas = [];
+  try { ativas = doresAtivas(st, hoje); } catch { ativas = []; }
+  const pf = perfilDe(respostas);
+  const out = [...ativas, ...doresPendentes(st, hoje, pf)];
+  for (const d of ultimasDores(st, hoje)) {
+    if (!ehData(d.fim) || d.fim > hoje || d.fim < d.data) continue;
+    const desde = diasEntreDatas(d.fim, hoje);
+    if (desde > VOLTA_DIAS) continue;
+    const limpa = limparDoresTreino([{ ...d, fim: '' }])[0];
+    if (!limpa || !alertaDaDor(limpa, pf)) continue;
+    if (out.some((x) => x.onde === d.onde && (x.lado || '') === (d.lado || ''))) continue;
+    out.push({ ...d, fim: '', dias: diasEntreDatas(d.data, hoje), volta: true, diasDeVolta: desde });
+  }
+  return out;
+}
+// Respostas para os avisos de dor no treino em andamento: as do Treinador, se completas; senão, um perfil equivalente
+// montado com as respostas da corrida (idade, gestação, condições, limitações); sem nenhuma das duas, null.
+export function respostasParaAvisos(st) {
+  if (!st || typeof st !== 'object') return null;
+  if (st.trainer && respostasCompletas(st.trainer.answers || {})) return st.trainer.answers;
+  const r = st.run && st.run.answers && typeof st.run.answers === 'object' ? st.run.answers : null;
+  return r && Object.keys(r).length ? respostasDoCorredor(st, 'academia') : null;
+}
+
 // Orientação curta sobre uma dor, para o cartão de dores: { classe, alerta, texto, refs }. null se a dor é inválida.
 export function orientacaoDaDor(dor, respostas) {
   const d = limparDoresTreino([dor])[0];
@@ -1364,7 +1896,8 @@ export function orientacaoDaDor(dor, respostas) {
   const pf = perfilDe(respostas);
   const classe = classeDaDor(d, pf);
   let texto;
-  if (classe === 'alerta') {
+  if (classe === 'volta') texto = 'Voltando depois da dor: por 2 semanas, menos carga e amplitude nos exercícios dessa região, subindo aos poucos. Se a dor voltar, conte de novo.';
+  else if (classe === 'alerta') {
     texto = pf.gestante && (d.onde === 'abdomen' || d.onde === 'panturrilha') ? 'Na gestação, dor no abdômen ou na panturrilha pede contato com o obstetra antes de treinar.'
       : d.onde === 'peito' && d.tipo !== 'muscular' ? 'Dor no peito que não é do músculo precisa de avaliação médica antes de qualquer treino.'
         : d.onde === 'lombar' ? 'Não treino essa região até a avaliação; o resto do corpo continua. Procure atendimento logo se houver formigamento ou fraqueza na perna, perda do controle da urina, febre ou queda.'
@@ -1393,7 +1926,8 @@ export function alertaDoExercicio(exId, doresBrutas, respostas = null) {
   const a = avaliarDor(ex, dores, pf);
   if (!a) return null;
   const onde = LOCAL_TXT[a.d.onde];
-  const texto = a.classe === 'alerta' ? `Dor de alerta ${onde}: não faça este exercício até um médico ou fisioterapeuta avaliar.`
+  const texto = a.classe === 'volta' ? `Volta depois da dor ${onde}: nestas 2 semanas, menos carga e só a amplitude sem dor. Pare se a dor voltar.`
+    : a.classe === 'alerta' ? `Dor de alerta ${onde}: não faça este exercício até um médico ou fisioterapeuta avaliar.`
     : a.grau === 3 ? `Dor ${onde} acima do aceitável: pule este exercício por enquanto.`
       : a.d.tipo === 'muscular' ? (a.grau === 2 ? `Músculo dolorido (dor ${onde}): hoje vá mais leve, com menos carga e uma série a menos.` : `Dor muscular ${onde}: este exercício usa esse músculo de leve; pare se a dor aumentar.`)
         : a.grau === 2 ? `Dor ${onde}: use menos carga e só a amplitude sem dor. Pare se passar de ${tetoDeDor(a.d, pf)} em 10.`
@@ -1429,6 +1963,8 @@ export function ajustesPorDor(plan, respostas, gymBruta, doresBrutas) {
       const onde = LOCAL_TXT[a.d.onde];
       const base = { diaId: d.id, dia: d.nome, idx, de: ex.id, onde: a.d.onde, refs: refsDaDor(a.d, pf, a.classe) };
       if (a.classe === 'alerta') { out.push({ ...base, tipo: 'pular', motivo: `Dor de alerta ${onde}: fica de fora até a avaliação.` }); return; }
+      // em volta gradual (depois de uma dor de alerta que melhorou), o exercício fica, mais leve: não se propõe troca
+      if (a.classe === 'volta') { out.push({ ...base, tipo: 'aliviar', motivo: 'Volta depois da dor ' + onde + ': menos carga e amplitude por 2 semanas.' }); return; }
       const alt = a.d.tipo === 'muscular' ? null : alternativas(ex, pf, gym, noPlano).find((c) => !avaliarDor(c, dores, pf));
       if (alt) { noPlano.add(alt.id); out.push({ ...base, tipo: 'trocar', para: alt.id, motivo: `Poupa a região da dor ${onde}.` }); return; }
       if (a.grau === 3) out.push({ ...base, tipo: 'pular', motivo: `Sem equivalente que poupe a região da dor ${onde}: fica de fora até melhorar.` });
@@ -1454,7 +1990,8 @@ export function aplicarTrocasDor(dias, ajustes) {
 }
 // Trocas por dor que já podem ser desfeitas: a dor melhorou, passou do prazo ou baixou. Cada item: { diaId, dia, idx, de, para, onde }.
 export function voltasPorDor(plan, respostas, doresBrutas) {
-  const dores = limparDoresTreino(doresBrutas);
+  // (a dor em volta gradual já não segura a troca: o exercício original volta, com o aviso de ir mais leve)
+  const dores = limparDoresTreino(doresBrutas).filter((d) => !d.volta);
   const pf = perfil(respostas);
   const out = [];
   for (const d of diasDoPlano(plan)) {

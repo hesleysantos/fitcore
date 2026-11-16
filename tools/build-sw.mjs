@@ -69,6 +69,16 @@ self.addEventListener('fetch', (event) => {
     }
   })());
 });
+
+// toque na notificação do fim do descanso: volta para o aplicativo
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const janelas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of janelas) if ('focus' in c) return c.focus();
+    return self.clients.openWindow('./');
+  })());
+});
 `;
 fs.writeFileSync(path.join(WWW, 'sw.js'), sw);
 console.log(`sw.js gerado: ${files.length} arquivos, versão ${version}`);

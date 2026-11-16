@@ -4,7 +4,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
-  sonoPadrao, limparSono, limparNoite, noiteDe, gravarNoite, apagarNoite, faixaDaIdade, perfilDeSono, metaDeSono, resumoDaSemana, horaDeDormir, dicasDeSono, painelDeSono,
+  sonoPadrao, limparSono, limparNoite, noiteDe, gravarNoite, apagarNoite, limparCochilo, cochilosDe, minutosDeCochilo, gravarCochilo, apagarCochilo,
+  cochiloTardio, MADRUGADA_ATE, MAX_COCHILOS, COCHILO_PASSO, COCHILO_MAX, COCHILOS_POR_DIA, SOMA_24H_ATE, COCHILO_LONGO, COCHILO_TARDE, DIAS_COCHILO_LONGO, DIAS_COCHILO_FREQUENTE, COCHILOS_TARDIOS, faixaDaIdade, perfilDeSono, metaDeSono, resumoDaSemana, horaDeDormir, dicasDeSono, painelDeSono,
   fmtHoras, fmtFaixa, horaValida, MAX_NOITES, HORAS_MAX, CARGA_ALTA, AJUSTE, NOITES_PARA_REGULARIDADE, IDADE_MIN, IDADE_MAX, FALTA_MINIMA, ANO_MIN, CAFE_HORAS,
 } from '../www/js/logic/sono.js';
 import { REFS_SONO, FAQ_SONO, DICAS_SONO, SINAIS_SONO } from '../www/js/data/sono.js';
@@ -167,9 +168,9 @@ test('meta: dias de treino, prova, gestação e os motivos de cada perfil', () =
 });
 
 test('validação: lixo, chaves herdadas, datas impossíveis e limites', () => {
-  assert.deepEqual(sonoPadrao(), { acordar: '', idade: null, registros: [] });
+  assert.deepEqual(sonoPadrao(), { acordar: '', idade: null, registros: [], cochilos: [] });
   for (const lixo of [null, undefined, 5, 'x', [], [1, 2], true, () => 1]) assert.deepEqual(limparSono(lixo), sonoPadrao());
-  const bom = { acordar: '06:30', idade: 34, registros: [{ data: '2026-11-11', horas: 7.5 }, { data: '2026-11-12', horas: 8, qualidade: 4 }] };
+  const bom = { acordar: '06:30', idade: 34, registros: [{ data: '2026-11-11', horas: 7.5 }, { data: '2026-11-12', horas: 8, qualidade: 4 }], cochilos: [{ data: '2026-11-11', min: 20, inicio: '13:30' }, { data: '2026-11-12', min: 45 }] };
   assert.deepEqual(limparSono(J(bom)), bom);
   assert.deepEqual(limparSono(limparSono(J(bom))), bom, 'validar duas vezes não muda nada');
   // hora de acordar
@@ -193,8 +194,8 @@ test('validação: lixo, chaves herdadas, datas impossíveis e limites', () => {
   const sujo = JSON.parse('{"__proto__": {"acordar": "07:00", "idade": 30, "polluted": true}, "constructor": {"prototype": {"polluted": true}}, "registros": [{"__proto__": {"data": "2026-11-12", "horas": 8}}, {"data": "2026-11-11", "horas": 7, "__proto__": {"qualidade": 5}}], "extra": 1}');
   const l = limparSono(sujo);
   assert.equal({}.polluted, undefined);
-  assert.deepEqual(l, { acordar: '', idade: null, registros: [{ data: '2026-11-11', horas: 7 }] });
-  assert.deepEqual(Object.keys(l), ['acordar', 'idade', 'registros']);
+  assert.deepEqual(l, { acordar: '', idade: null, registros: [{ data: '2026-11-11', horas: 7 }], cochilos: [] });
+  assert.deepEqual(Object.keys(l), ['acordar', 'idade', 'registros', 'cochilos']);
   assert.deepEqual(limparSono(Object.create({ acordar: '07:00', idade: 30, registros: [{ data: '2026-11-12', horas: 8 }] })), sonoPadrao(), 'o que vem do protótipo não passa');
   assert.deepEqual(limparSono({ registros: 'x' }).registros, []); assert.deepEqual(limparSono({ registros: { 0: { data: '2026-11-12', horas: 8 } } }).registros, []);
   // uma noite por dia (vale a última), em ordem de data
@@ -214,6 +215,14 @@ test('validação: lixo, chaves herdadas, datas impossíveis e limites', () => {
   assert.equal(limparNoite(noite({ data: '2999-12-31' })), null, 'sem informar o dia, vale o relógio do aparelho');
   assert.deepEqual(limparSono({ registros: [noite({ data: '2031-05-05' }), noite({ data: '2026-11-10' })] }, HOJE).registros.map((x) => x.data), ['2026-11-10']);
   assert.equal(gravarNoite(sonoPadrao(), noite({ data: somaDia(HOJE, 2) }), HOJE), null);
+  // sem corte de futuro (para carregar os dados com o relógio do aparelho atrasado): por opção ou com hoje = '9999-12-31'
+  const futuro = { acordar: '06:30', idade: 30, registros: [noite({ data: '2026-11-10' }), noite({ data: '2031-05-05' }), noite({ data: '9999-12-31', horas: 6 })], cochilos: [{ data: '2026-11-10', min: 20 }, { data: '2040-01-01', min: 30, inicio: '14:00' }] };
+  assert.deepEqual(limparSono(J(futuro), HOJE).registros.length, 1); assert.deepEqual(limparSono(J(futuro), HOJE).cochilos.length, 1);
+  for (const limpo of [limparSono(J(futuro), '9999-12-31'), limparSono(J(futuro), HOJE, { semCorteDeFuturo: true }), limparSono(J(futuro), undefined, { semCorteDeFuturo: true }), limparSono(J(futuro), { semCorteDeFuturo: true })]) assert.deepEqual(limpo, futuro, 'nada é recusado por ser futuro');
+  assert.deepEqual(limparNoite(noite({ data: '2999-01-01' }), HOJE, { semCorteDeFuturo: true }), noite({ data: '2999-01-01' })); assert.deepEqual(limparNoite(noite({ data: '2999-01-01' }), '9999-12-31'), noite({ data: '2999-01-01' }));
+  assert.equal(limparNoite(noite({ data: '1999-12-31' }), HOJE, { semCorteDeFuturo: true }), null, 'o piso de ano continua valendo'); assert.equal(limparNoite(noite({ data: '2026-02-31' }), '9999-12-31'), null);
+  assert.equal(limparSono(J(futuro), HOJE, { semCorteDeFuturo: false }).registros.length, 1); assert.equal(limparSono(J(futuro), HOJE, { semCorteDeFuturo: 'sim' }).registros.length, 1, 'só o valor true liga a opção');
+  assert.ok(limparSono({ registros: Array.from({ length: 5000 }, (_, i) => noite({ data: somaDia('2026-01-01', i) })) }, '9999-12-31').registros.length === MAX_NOITES, 'sem corte de futuro o limite de registros continua');
   // lista longa com as noites mais recentes no fim (e fora de ordem): ficam as MAX_NOITES mais recentes, não as primeiras
   const velhas = Array.from({ length: 7000 }, (_, i) => ({ data: somaDia('2000-01-01', i), horas: 6 }));
   const novas = Array.from({ length: 10 }, (_, i) => ({ data: somaDia(HOJE, -i), horas: 8 }));
@@ -222,7 +231,7 @@ test('validação: lixo, chaves herdadas, datas impossíveis e limites', () => {
   assert.equal(longa[0].data, somaDia('2000-01-01', 7000 - (MAX_NOITES - 10)));
   // pela validação geral do estado (backup importado)
   const s = store.sanitize({ sono: { acordar: '05:45', idade: 200, registros: [{ data: '2026-11-12', horas: 99 }, { data: '2026-11-11', horas: 6.25, qualidade: 9 }] } });
-  assert.deepEqual(s.sono, { acordar: '05:45', idade: null, registros: [{ data: '2026-11-11', horas: 6.25 }] });
+  assert.deepEqual(s.sono, { acordar: '05:45', idade: null, registros: [{ data: '2026-11-11', horas: 6.25 }], cochilos: [] });
   assert.deepEqual(store.sanitize({}).sono, sonoPadrao());
 });
 
@@ -286,6 +295,193 @@ test('semana: média de 7 dias, noites abaixo da faixa, variação e avisos', ()
   r = resumoDaSemana(estado({ sono: { acordar: '', idade: null, registros: noites([7, 8]) } }), HOJE);
   assert.equal(r.meta, null); assert.equal(r.n, 2); assert.equal(r.media, 7.5); assert.deepEqual(r.dias.map((d) => d.estado).filter(Boolean), []);
   assert.deepEqual(resumoDaSemana(st([7, 8]), '2026-02-31').dias, []); assert.equal(resumoDaSemana(null, HOJE).n, 0);
+});
+
+test('cochilos: validação, limites, soma por dia, gravar, corrigir e apagar', () => {
+  assert.deepEqual([COCHILO_PASSO, COCHILO_MAX, COCHILOS_POR_DIA, MAX_COCHILOS], [5, 240, 4, 3000]);
+  const c = (x = {}) => ({ data: '2026-11-12', min: 20, ...x });
+  assert.deepEqual(limparCochilo(c({ inicio: '14:10' }), HOJE), c({ inicio: '14:10' }));
+  assert.deepEqual(limparCochilo(c({ min: 22 }), HOJE), c({ min: 20 }), 'os minutos vão para o múltiplo de 5 mais próximo');
+  assert.deepEqual(limparCochilo(c({ min: 23 }), HOJE), c({ min: 25 })); assert.deepEqual(limparCochilo(c({ min: 240 }), HOJE), c({ min: 240 })); assert.deepEqual(limparCochilo(c({ min: 5 }), HOJE), c({ min: 5 }));
+  for (const ruim of [null, 5, 'x', [], {}, c({ min: 0 }), c({ min: 2 }), c({ min: -20 }), c({ min: 245 }), c({ min: 9999 }), c({ min: NaN }), c({ min: Infinity }), c({ min: '20' }), c({ min: null }), { data: '2026-11-12' }, { min: 20 },
+    c({ data: '2026-02-31' }), c({ data: '12/11/2026' }), c({ data: 20261112 }), c({ data: somaDia(HOJE, 2) }), c({ data: '1999-12-31' }), c({ data: '9999-01-01' })]) assert.equal(limparCochilo(ruim, HOJE), null, JSON.stringify(ruim));
+  for (const hora of ['24:00', '7:00', '14:60', 1410, null, '', '14:10<b>']) assert.equal('inicio' in limparCochilo(c({ inicio: hora }), HOJE), false, JSON.stringify(hora));
+  assert.deepEqual(Object.keys(limparCochilo(c({ inicio: '09:00', extra: '<script>', __proto__: { x: 1 } }), HOJE)), ['data', 'min', 'inicio']);
+  assert.equal(limparCochilo(JSON.parse('{"__proto__": {"data": "2026-11-12", "min": 20}}'), HOJE), null, 'o que vem do protótipo não passa');
+  // lista: lixo fora, ordem por dia e hora (sem hora no fim), até 4 por dia, as mais recentes quando passa do limite
+  assert.deepEqual(limparSono({ cochilos: 'x' }, HOJE).cochilos, []); assert.deepEqual(limparSono({ cochilos: { 0: c() } }, HOJE).cochilos, []);
+  const lista = limparSono({ cochilos: [c({ min: 30 }), { lixo: 1 }, c({ data: '2026-11-10', inicio: '15:00' }), c({ inicio: '16:30', min: 10 }), c({ inicio: '13:00', min: 15 }), c({ data: '2031-01-01' })] }, HOJE).cochilos;
+  assert.deepEqual(lista, [{ data: '2026-11-10', min: 20, inicio: '15:00' }, { data: '2026-11-12', min: 15, inicio: '13:00' }, { data: '2026-11-12', min: 10, inicio: '16:30' }, { data: '2026-11-12', min: 30 }]);
+  assert.deepEqual(limparSono({ cochilos: J(lista) }, HOJE).cochilos, lista, 'validar duas vezes não muda nada');
+  assert.equal(limparSono({ cochilos: Array.from({ length: 9 }, (_, i) => c({ min: 5 + 5 * i })) }, HOJE).cochilos.length, COCHILOS_POR_DIA);
+  const velhos = Array.from({ length: 4000 }, (_, i) => ({ data: somaDia('2010-01-01', i), min: 30 }));
+  const cortado = limparSono({ cochilos: [...velhos, c({ data: HOJE, min: 60 })] }, HOJE).cochilos;
+  assert.equal(cortado.length, MAX_COCHILOS); assert.deepEqual(cortado[cortado.length - 1], { data: HOJE, min: 60 }); assert.equal(cortado[0].data, somaDia('2010-01-01', 4000 - (MAX_COCHILOS - 1)));
+  assert.deepEqual(store.sanitize({ sono: { cochilos: [c({ min: 500 }), c({ min: 33, inicio: '99:00' })] } }).sono.cochilos, [{ data: '2026-11-12', min: 35 }]);
+  // gravar, somar por dia, corrigir pelo índice do dia e apagar
+  const sono = sonoPadrao();
+  assert.deepEqual(gravarCochilo(sono, c({ inicio: '14:00' }), HOJE), c({ inicio: '14:00' }));
+  gravarCochilo(sono, c({ min: 40 }), HOJE); gravarCochilo(sono, c({ data: '2026-11-13', min: 15, inicio: '13:10' }), HOJE); gravarCochilo(sono, c({ inicio: '12:30', min: 10 }), HOJE);
+  assert.deepEqual(cochilosDe({ sono }, '2026-11-12'), [c({ inicio: '12:30', min: 10 }), c({ inicio: '14:00' }), c({ min: 40 })]);
+  assert.equal(minutosDeCochilo({ sono }, '2026-11-12'), 70); assert.equal(minutosDeCochilo({ sono }, '2026-11-13'), 15); assert.equal(minutosDeCochilo({ sono }, '2026-11-11'), 0); assert.equal(minutosDeCochilo(null, HOJE), 0);
+  assert.equal(gravarCochilo(sono, c({ min: 0 }), HOJE), null); assert.equal(gravarCochilo(sono, c({ data: somaDia(HOJE, 3) }), HOJE), null); assert.equal(gravarCochilo(null, c(), HOJE), null);
+  gravarCochilo(sono, c({ min: 25 }), HOJE);
+  assert.equal(gravarCochilo(sono, c({ min: 5 }), HOJE), null, 'o quinto cochilo do dia é recusado'); assert.equal(cochilosDe({ sono }, '2026-11-12').length, 4);
+  assert.deepEqual(gravarCochilo(sono, c({ min: 35, inicio: '14:05' }), HOJE, 1), c({ min: 35, inicio: '14:05' }), 'corrigir troca o cochilo, mesmo com o dia cheio');
+  assert.deepEqual(cochilosDe({ sono }, '2026-11-12').map((x) => x.min), [10, 35, 40, 25]); assert.equal(minutosDeCochilo({ sono }, '2026-11-12'), 110);
+  assert.equal(gravarCochilo(sono, c(), HOJE, 9), null, 'índice que não existe');
+  assert.equal(apagarCochilo(sono, '2026-11-12', 0), true); assert.deepEqual(cochilosDe({ sono }, '2026-11-12').map((x) => x.min), [35, 40, 25]);
+  assert.equal(apagarCochilo(sono, '2026-11-12', 7), false); assert.equal(apagarCochilo(sono, '2026-11-01', 0), false); assert.equal(apagarCochilo(null, HOJE, 0), false); assert.equal(apagarCochilo(sono, '2026-11-12', -1), false);
+  assert.equal(sono.cochilos.length, 4); assert.deepEqual(limparSono(J(sono), HOJE).cochilos, sono.cochilos, 'o que a tela grava passa inteiro pela validação');
+});
+
+test('cochilos e a meta: soma em 24 horas até os 18 anos; à parte nos adultos', () => {
+  assert.equal(SOMA_24H_ATE, 18);
+  for (const [idade, soma] of [[6, true], [13, true], [17, true], [18, true], [19, false], [30, false], [70, false]]) assert.equal(metaDeSono(comIdade(idade), HOJE).soma24h, soma, 'idade ' + idade);
+  assert.match(metaDeSono(comIdade(16), HOJE).motivos[0].texto, /de 8 a 10 h por dia: os cochilos contam\./);
+  assert.match(metaDeSono(comIdade(30), HOJE).motivos[0].texto, /de 7 a 9 h por noite\./);
+  const com = (idade, horas, cochilos) => comIdade(idade, { sono: { acordar: '', idade, registros: noites(horas), cochilos } });
+  const ck = [{ data: HOJE, min: 60, inicio: '14:00' }, { data: HOJE, min: 30 }, { data: somaDia(HOJE, -1), min: 45, inicio: '16:30' }, { data: somaDia(HOJE, -9), min: 200 }, { data: somaDia(HOJE, 1), min: 200 }];
+  // 16 anos: 7 h de noite + 1 h 30 de cochilo = 8 h 30 → dentro da faixa de 8 a 10 h; sem cochilo, 7 h → abaixo
+  let r = resumoDaSemana(com(16, [7, 7, 7, 7, 7, 7.25, 7], ck), HOJE);
+  assert.equal(r.soma24h, true);
+  assert.deepEqual(r.dias.map((d) => d.cochiloMin), [0, 0, 0, 0, 0, 45, 90]); assert.deepEqual(r.dias.map((d) => d.cochilos), [0, 0, 0, 0, 0, 1, 2]);
+  assert.deepEqual(r.dias.map((d) => d.total), [7, 7, 7, 7, 7, 8, 8.5]); assert.deepEqual(r.dias.map((d) => d.estado), ['abaixo', 'abaixo', 'abaixo', 'abaixo', 'abaixo', 'dentro', 'dentro']);
+  assert.equal(r.abaixo, 5); assert.equal(r.dentro, 2);
+  assert.equal(fmtHoras(r.media), '7 h 02'); assert.equal(fmtHoras(r.media24), '7 h 21'); assert.equal(r.mediaDaMeta, r.media24);
+  assert.equal(r.faltaMin, 39); assert.equal(r.faltou, true);
+  assert.deepEqual(r.cochilo, { dias: 2, n: 3, totalMin: 135, mediaMin: 68, longos: 1, tardios: 1, semNoite: 0 }, 'cochilos fora dos 7 dias (antes e depois) não entram');
+  assert.match(dicasDeSono(com(16, [7, 7, 7, 7, 7, 7.25, 7], ck), HOJE)[0].texto, /Sua média, com os cochilos, foi de 7 h 21 em 7 noites, abaixo do mínimo de 8 h\./);
+  // os mesmos registros aos 30 anos: a meta é a da noite; o cochilo não muda o estado nem a média comparada
+  r = resumoDaSemana(com(30, [7, 7, 7, 7, 7, 6.5, 6.5], ck), HOJE);
+  assert.equal(r.soma24h, false); assert.deepEqual(r.dias.map((d) => d.estado).slice(5), ['abaixo', 'abaixo']); assert.deepEqual(r.dias.map((d) => d.total).slice(5), [7.25, 8]);
+  assert.equal(r.mediaDaMeta, r.media); assert.equal(fmtHoras(r.media), '6 h 51'); assert.equal(fmtHoras(r.media24), '7 h 11'); assert.equal(r.faltaMin, 9); assert.equal(r.cochilo.totalMin, 135);
+  // dia com cochilo e sem noite registrada: o cochilo aparece, mas não há total nem estado
+  r = resumoDaSemana(com(16, [null, null, null, null, null, null, 8], [{ data: somaDia(HOJE, -2), min: 30 }]), HOJE);
+  assert.deepEqual([r.dias[4].cochiloMin, r.dias[4].total, r.dias[4].estado, r.dias[4].horas], [30, null, '', null]); assert.equal(r.n, 1); assert.equal(r.media24, 8); assert.equal(r.cochilo.dias, 1);
+  // 15 anos, 5 noites de 7 h e 2 cochilos de 2 h em dias SEM noite: esses cochilos não entram na média em 24 horas
+  r = resumoDaSemana(com(15, [null, null, 7, 7, 7, 7, 7], [{ data: somaDia(HOJE, -6), min: 120 }, { data: somaDia(HOJE, -5), min: 120 }]), HOJE);
+  assert.equal(r.media24, 7); assert.equal(r.faltou, true); assert.equal(r.cochilo.dias, 2); assert.equal(r.cochilo.semNoite, 2);
+  assert.equal(resumoDaSemana(com(15, [null, 7, 7, 7, 7, 7, 7], [{ data: somaDia(HOJE, -6), min: 120 }, { data: somaDia(HOJE, -5), min: 120 }]), HOJE).cochilo.semNoite, 1);
+  // aviso de média: até os 18 anos conta noite + cochilo (6 h 30 + 1 h = 7 h 30 não é "abaixo de 7 horas")
+  const sete = (min) => Array.from({ length: 7 }, (_, i) => ({ data: somaDia(HOJE, -i), min }));
+  assert.equal(resumoDaSemana(com(15, [6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5], sete(60)), HOJE).avisos.length, 0);
+  assert.match(resumoDaSemana(com(15, [6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5], []), HOJE).avisos[0].texto, /abaixo de 7 horas/);
+  assert.match(resumoDaSemana(com(30, [5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5], sete(60)), HOJE).avisos[0].texto, /abaixo de 6 horas/, 'no adulto o cochilo não entra na média comparada');
+  // sem cochilos e com lixo no lugar da lista
+  r = resumoDaSemana(comIdade(30, { sono: { acordar: '', idade: 30, registros: noites([8, 8, 8]), cochilos: [null, 5, { data: HOJE }, { data: HOJE, min: 'x' }, { data: 'x', min: 20 }, { data: HOJE, min: 9999 }] } }), HOJE);
+  assert.deepEqual(r.cochilo, { dias: 0, n: 0, totalMin: 0, mediaMin: 0, longos: 0, tardios: 0, semNoite: 0 }); assert.equal(r.media24, 8);
+  assert.deepEqual(resumoDaSemana(null, HOJE).cochilo, { dias: 0, n: 0, totalMin: 0, mediaMin: 0, longos: 0, tardios: 0, semNoite: 0 });
+});
+
+test('cochilos e saúde: limites das dicas, por idade e gestação', () => {
+  assert.deepEqual([COCHILO_LONGO, COCHILO_TARDE, DIAS_COCHILO_LONGO, DIAS_COCHILO_FREQUENTE, COCHILOS_TARDIOS], [60, '16:00', 3, 5, 2]);
+  const ids = (st) => dicasDeSono(st, HOJE).map((d) => d.id);
+  const em = (dias, min, inicio) => dias.map((i) => ({ data: somaDia(HOJE, -i), min, ...(inicio ? { inicio } : {}) }));
+  const com = (idade, horas, cochilos, x = {}) => comIdade(idade, { sono: { acordar: '', idade, registros: noites(horas), cochilos }, ...x });
+  const oito = [8, 8, 8, 8, 8, 8, 8];
+  // cochilo longo: 60 min ou mais no dia, em 3 dias ou mais
+  assert.ok(ids(com(30, oito, em([0, 1, 2], 60))).includes('cochiloLongo'));
+  assert.ok(!ids(com(30, oito, em([0, 1], 60))).includes('cochiloLongo'), 'dois dias não bastam');
+  assert.ok(!ids(com(30, oito, em([0, 1, 2], 55))).includes('cochiloLongo'), '55 minutos não é cochilo longo');
+  assert.ok(ids(com(30, oito, [...em([0, 1, 2], 30), ...em([0, 1, 2], 30, '15:00')])).includes('cochiloLongo'), 'dois cochilos de 30 min no mesmo dia somam 60');
+  // só adultos a partir de 19 anos e não gestantes (os estudos são com adultos; não há estudo na gestação)
+  for (const idade of [12, 16, 18]) assert.ok(!ids(com(idade, [9, 9, 9, 9, 9, 9, 9], em([0, 1, 2, 3, 4, 5, 6], 90))).some((x) => x === 'cochiloLongo' || x === 'cochiloFrequente'), 'idade ' + idade);
+  assert.ok(ids(com(19, oito, em([0, 1, 2], 90))).includes('cochiloLongo')); assert.ok(ids(com(70, [7.5, 7.5, 7.5, 7.5, 7.5, 7.5, 7.5], em([0, 1, 2], 90))).includes('cochiloLongo'));
+  const gestante = estado({ trainer: { answers: { idade: 30, condicoes: ['gestante'] } }, sono: { acordar: '', idade: null, registros: noites(oito), cochilos: em([0, 1, 2, 3, 4, 5, 6], 90) } });
+  assert.ok(!ids(gestante).some((x) => x === 'cochiloLongo' || x === 'cochiloFrequente'));
+  // cochilo quase todo dia (5 de 7) com a noite na faixa: pode ser sinal de muito sono de dia
+  assert.ok(ids(com(30, oito, em([0, 1, 2, 3, 4], 20))).includes('cochiloFrequente'));
+  assert.ok(!ids(com(30, oito, em([0, 1, 2, 3], 20))).includes('cochiloFrequente'), 'quatro dias não é quase todo dia');
+  assert.ok(!ids(com(30, [8, 8, 8], em([0, 1, 2, 3, 4], 20))).includes('cochiloFrequente'), 'com poucas noites registradas não dá para dizer');
+  assert.ok(!ids(com(30, oito, em([0, 1, 2, 3, 4], 60))).includes('cochiloFrequente'), 'com cochilos longos, vale a dica dos longos');
+  const d = dicasDeSono(com(30, oito, em([0, 1, 2, 3, 4], 20)), HOJE).find((x) => x.id === 'cochiloFrequente');
+  assert.ok(d.refs.includes('kapur2017') && /procurar avaliação/.test(d.texto) && d.tom === 'atencao');
+  // noite curta + cochilos em 3 dias ou mais: o cochilo não repõe a noite (e a sugestão de cochilar some)
+  const curta = ids(com(30, [6, 6, 6, 6, 6, 6, 6], em([0, 1, 2], 20)));
+  assert.deepEqual(curta.slice(0, 2), ['faltou', 'cochiloNoite']); assert.ok(!curta.includes('cochilo') && !curta.includes('cochiloFrequente'));
+  assert.ok(ids(com(30, [6, 6, 6, 6, 6, 6, 6], em([0], 20))).includes('cochilo'), 'com um cochilo só, a sugestão de cochilo curto continua');
+  // cochilo tarde: termina depois das 16 h (início + duração) ou começa de madrugada; a janela das fontes é das 13 h às 16 h
+  assert.equal(MADRUGADA_ATE, '05:00');
+  const tardio = (inicio, min) => cochiloTardio({ data: HOJE, min, ...(inicio ? { inicio } : {}) });
+  for (const [inicio, min] of [['15:30', 90], ['15:45', 20], ['16:00', 5], ['17:00', 20], ['23:30', 20], ['00:00', 20], ['00:30', 20], ['04:55', 10], ['12:00', 245], ['13:00', 185]]) assert.equal(tardio(inicio, min), true, inicio + ' + ' + min);
+  for (const [inicio, min] of [['15:40', 20], ['13:00', 180], ['14:00', 60], ['05:00', 20], ['09:00', 30], ['12:30', 30], ['', 240], [null, 20], ['25:00', 20]]) assert.equal(tardio(inicio, min), false, inicio + ' + ' + min);
+  assert.equal(cochiloTardio(null), false); assert.equal(cochiloTardio({ inicio: '18:00' }), false);
+  assert.equal(resumoDaSemana(com(30, oito, [{ data: HOJE, min: 90, inicio: '15:30' }, { data: HOJE, min: 20, inicio: '15:40' }, { data: somaDia(HOJE, -1), min: 20, inicio: '00:30' }, { data: somaDia(HOJE, -2), min: 60 }]), HOJE).cochilo.tardios, 2);
+  // a dica pede dois cochilos tardios; sem hora informada não há como saber
+  assert.ok(ids(com(30, oito, em([0, 1], 20, '16:00'))).includes('cochiloTarde')); assert.ok(ids(com(30, oito, em([0, 1], 90, '15:30'))).includes('cochiloTarde')); assert.ok(ids(com(30, oito, em([0, 1], 20, '00:30'))).includes('cochiloTarde'));
+  assert.ok(!ids(com(30, oito, em([0, 1], 20, '15:40'))).includes('cochiloTarde')); assert.ok(!ids(com(30, oito, em([0], 20, '17:00'))).includes('cochiloTarde')); assert.ok(!ids(com(30, oito, em([0, 1, 2], 20))).includes('cochiloTarde'));
+  assert.match(DICAS_SONO.cochiloTarde.texto, /das 13 h às 16 h.*termina depois disso/);
+  // nenhuma dica de cochilo para menores (até 18 anos, em quem o cochilo soma à meta) nem para gestantes: as fontes são de adultos
+  const DE_COCHILO = ['cochilo', 'cochiloLongo', 'cochiloFrequente', 'cochiloTarde', 'cochiloNoite', 'semCochilo'];
+  const semDicaDeCochilo = (st, quem) => assert.deepEqual(ids(st).filter((x) => DE_COCHILO.includes(x)), [], quem);
+  for (const idade of [6, 12, 15, 18]) {
+    const nove = [9, 9, 9, 9, 9, 9, 9];
+    semDicaDeCochilo(com(idade, nove, em([0, 1], 20, '18:30')), idade + ' anos, cochilo tarde');
+    semDicaDeCochilo(com(idade, [6, 6, 6, 6, 6, 6, 6], em([0], 20), plano(6)), idade + ' anos, noite curta e treino em 6 dias');
+    const ruim = com(idade, idade === 18 ? [8.5, 8.5, 8.5, 8.5, 8.5, 8.5, 8.5] : nove, em([0], 20), plano(6)); ruim.sono.registros.forEach((x) => { x.qualidade = 1; });
+    assert.ok(ids(ruim).includes('acordado'), 'a dica de quem acorda cansado continua'); semDicaDeCochilo(ruim, idade + ' anos, acorda cansado e cochila');
+  }
+  const gravida = (horas, cochilos, q) => { const st = estado({ trainer: { answers: { idade: 30, condicoes: ['gestante'] } }, ...plano(6), sono: { acordar: '', idade: null, registros: noites(horas), cochilos } }); if (q) st.sono.registros.forEach((x) => { x.qualidade = q; }); return st; };
+  semDicaDeCochilo(gravida(oito, em([0, 1], 20, '18:30')), 'gestante, cochilo tarde'); semDicaDeCochilo(gravida([6, 6, 6, 6, 6, 6, 6], em([0, 1, 2], 20)), 'gestante, noite curta');
+  semDicaDeCochilo(gravida(oito, em([0], 20), 1), 'gestante, acorda cansada e cochila'); semDicaDeCochilo(gravida(oito, []), 'gestante, treino em 6 dias');
+  // "evite o cochilo" não aparece junto com nenhuma outra dica de cochilo (seriam contraditórias)
+  const cansadoCom = (idade, cochilos, x = {}) => { const st = com(idade, oito, cochilos, x); st.sono.registros.forEach((r) => { r.qualidade = 1; }); return st; };
+  for (const st of [cansadoCom(19, em([0], 20), plano(6)), cansadoCom(19, em([0, 1, 2, 3, 4], 20)), cansadoCom(30, em([0, 1, 2], 90, '17:00'), plano(6)), cansadoCom(30, em([0, 1, 2, 3, 4, 5, 6], 60, '23:00'))]) {
+    const l = ids(st);
+    assert.deepEqual(l.slice(0, 2), ['acordado', 'semCochilo']); assert.deepEqual(l.filter((x) => DE_COCHILO.includes(x)), ['semCochilo'], l.join());
+  }
+  // dormiu as horas e acorda cansado, e cochila: a orientação é evitar o cochilo (adultos)
+  const cansado = com(30, oito, em([0, 1], 20)); cansado.sono.registros.forEach((x) => { x.qualidade = 2; });
+  assert.deepEqual(ids(cansado).slice(0, 2), ['acordado', 'semCochilo']);
+  // nunca mais de 4 dicas, sem repetir, e todas com fonte
+  const tudo = com(30, [5, 9, 5, 9, 5, 9, 5], [...em([0, 1, 2, 3, 4, 5, 6], 90, '17:00')], plano(6));
+  const todas = dicasDeSono(tudo, HOJE); assert.equal(todas.length, 4); assert.equal(new Set(todas.map((x) => x.id)).size, 4); assert.ok(todas.every((x) => x.refs.length && x.refs.every((k) => REFS_SONO[k])));
+});
+
+// Pares de dicas que dizem coisas opostas e, por isso, nunca podem aparecer na mesma tela.
+const PARES_CONTRADITORIOS = [
+  ['semCochilo', 'cochilo'], ['semCochilo', 'cochiloFrequente'], ['semCochilo', 'cochiloLongo'], ['semCochilo', 'cochiloTarde'], ['semCochilo', 'cochiloNoite'], ['semCochilo', 'faltou'],
+  ['faltou', 'acordado'], ['cochilo', 'cochiloLongo'], ['cochilo', 'cochiloFrequente'], ['cochilo', 'cochiloNoite'], ['cochiloLongo', 'cochiloFrequente'], ['horario', 'irregular'], ['cafeina', 'cafeinaJovem'],
+];
+const DICAS_DE_COCHILO = ['cochilo', 'cochiloLongo', 'cochiloFrequente', 'cochiloTarde', 'cochiloNoite', 'semCochilo'];
+const DICAS_DE_ADULTO = ['alcool', 'cafeina', 'treinoNoite', 'emagrecer', 'musculo', 'dor', 'saude', ...DICAS_DE_COCHILO];
+// confere uma lista de dicas contra as regras; devolve o que achou de errado
+function problemasNasDicas(idsDicas, { idade, gestante }) {
+  const out = [];
+  for (const [a, b] of PARES_CONTRADITORIOS) if (idsDicas.includes(a) && idsDicas.includes(b)) out.push('par:' + a + '+' + b);
+  if (!(idade >= 19)) for (const id of idsDicas) if (DICAS_DE_COCHILO.includes(id)) out.push('menor:' + id);
+  if (!(idade >= 18)) for (const id of idsDicas) if (DICAS_DE_ADULTO.includes(id) && !DICAS_DE_COCHILO.includes(id)) out.push('menor:' + id);
+  if (gestante) for (const id of idsDicas) if (DICAS_DE_COCHILO.includes(id) || id === 'alcool' || id === 'emagrecer') out.push('gestante:' + id);
+  return out;
+}
+
+test('varredura: em 38.016 perfis, nenhum par de dicas contraditórias e nenhuma dica de adulto para menor ou gestante', () => {
+  const dias = (l, min, inicio) => l.map((i) => ({ data: somaDia(HOJE, -i), min, ...(inicio ? { inicio } : {}) }));
+  const IDADES = [6, 10, 13, 15, 17, 18, 19, 30, 45, 61, 70];
+  const NOITES = [[], [8, 8, 8], [8, 8, 8, 8, 8, 8, 8], [7, 7, 7, 7, 7, 7, 7], [5, 5, 5, 5, 5, 5, 5], [10, 10, 10, 10, 10, 10, 10], [5, 9, 5, 9, 5, 9, 5], [null, null, 6.5, 6.5, 6.5, 6.5, 6.5]];
+  const COCHILOS = [[], dias([0], 20), dias([0, 1], 20, '17:00'), dias([0, 1, 2], 20), dias([0, 1, 2, 3, 4], 20), dias([0, 1, 2, 3, 4, 5, 6], 20), dias([0, 1, 2], 90), dias([0, 1, 2, 3, 4, 5, 6], 90),
+    dias([0, 1, 2], 60, '23:30'), dias([0, 1], 30, '00:30'), dias([0, 1, 2, 3], 45, '15:30'), dias([5, 6], 120)];
+  let n = 0;
+  const achados = new Map();
+  const vistas = new Set();
+  for (const idade of IDADES) for (const gestante of [false, true]) for (const treino of [0, 3, 6]) for (const horas of NOITES) for (const q of [0, 1, 4]) for (const ck of COCHILOS) for (const extra of [false, true]) {
+    const st = estado({
+      trainer: { answers: { idade, condicoes: [...(gestante ? ['gestante'] : []), ...(extra ? ['hipertensao'] : [])], ...(extra ? { objetivo: 'hipertrofia' } : {}) } }, nutri: { answers: extra ? { horario: 'noite', objetivo: 'emagrecer' } : {} }, ...plano(treino),
+      dores: extra ? [{ id: 'd1', data: somaDia(HOJE, -2), onde: 'joelho', lado: '', tipo: 'articular', quando: 'durante', nivel: 4, nota: '', fim: '' }] : [],
+      sono: { acordar: extra ? '06:30' : '', idade: null, registros: noites(horas).map((r) => (q ? { ...r, qualidade: q } : r)), cochilos: ck },
+    });
+    const l = dicasDeSono(st, HOJE).map((d) => d.id);
+    n++;
+    assert.ok(l.length >= 3 && l.length <= 4 && new Set(l).size === l.length);
+    for (const id of l) vistas.add(id);
+    for (const x of problemasNasDicas(l, { idade, gestante })) achados.set(x, (achados.get(x) || 0) + 1);
+  }
+  assert.equal(n, 38016);
+  assert.deepEqual([...achados], [], 'dicas contraditórias ou fora do público das fontes');
+  // a grade passa por todas as dicas que dependem de registro ou perfil (as de prova e as gerais, que se revezam com o dia, têm teste próprio)
+  const FORA_DA_GRADE = ['prova', 'vespera', 'cafeina', 'cafeinaJovem', 'telas', 'quarto', 'horario', 'alcool'];
+  for (const id of Object.keys(DICAS_SONO)) if (!FORA_DA_GRADE.includes(id)) assert.ok(vistas.has(id), 'a varredura não chegou à dica ' + id);
 });
 
 test('hora de dormir: atravessa a meia-noite e recusa entrada inválida', () => {
@@ -428,12 +624,20 @@ function respostasCorrida(r) {
   }
   return a;
 }
+// cochilos válidos dos 7 dias que terminam em `hoje`, lidos direto do estado (conta independente da lógica)
+function cochilosDaSemana(st, hoje) {
+  const l = st && st.sono && Array.isArray(st.sono.cochilos) ? st.sono.cochilos : [];
+  if (typeof hoje !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(hoje) || Number.isNaN(Date.parse(hoje + 'T12:00:00Z')) || new Date(hoje + 'T12:00:00Z').toISOString().slice(0, 10) !== hoje) return [];
+  const ini = somaDia(hoje, -6);
+  return l.filter((c) => c && typeof c === 'object' && !Array.isArray(c) && typeof c.data === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.data) && !Number.isNaN(Date.parse(c.data + 'T12:00:00Z')) && new Date(c.data + 'T12:00:00Z').toISOString().slice(0, 10) === c.data
+    && typeof c.min === 'number' && Number.isFinite(c.min) && c.min >= COCHILO_PASSO && c.min <= COCHILO_MAX && c.data >= ini && c.data <= hoje);
+}
 const LIXO = [null, undefined, NaN, Infinity, -1, 99, '8', '', [], {}, true, '2026-02-31', '__proto__', { data: 'x' }, { horas: NaN }];
 
 test('estresse: milhares de perfis e estados aleatórios (nunca NaN, faixa coerente e dentro das fontes)', () => {
   const r = semente(20261113);
   const base = Date.parse('2026-01-01T12:00:00Z');
-  let comMeta = 0, comCorrida = 0, comAjuste = 0, semMeta = 0, comProvaNaSemana = 0;
+  let comMeta = 0, comCorrida = 0, comAjuste = 0, semMeta = 0, comProvaNaSemana = 0, comCochilos = 0, comLongo = 0;
   for (let i = 0; i < 4000; i++) {
     const hoje = new Date(base + inteiro(r, 0, 700) * 86400000).toISOString().slice(0, 10);
     const idade = r() < 0.08 ? um(r, LIXO) : r() < 0.3 ? um(r, [6, 12, 13, 14, 17, 18, 19, 25, 26, 64, 65, 99]) : inteiro(r, 1, 110);
@@ -465,11 +669,18 @@ test('estresse: milhares de perfis e estados aleatórios (nunca NaN, faixa coere
       brutos.push(r() < 0.12 ? um(r, LIXO) : { data: r() < 0.05 ? um(r, LIXO) : data, horas: r() < 0.08 ? um(r, LIXO) : um(r, [0, 0.25, 3, 4.5, 5, 6, 6.5, 7, 7.25, 7.5, 8, 8.5, 9, 10, 12, 16, 7.33]), qualidade: r() < 0.5 ? um(r, [1, 2, 3, 4, 5, 0, 9, 'x', null]) : undefined });
     }
     const acordar = r() < 0.6 ? `${String(inteiro(r, 0, 23)).padStart(2, '0')}:${String(inteiro(r, 0, 59)).padStart(2, '0')}` : um(r, ['', '25:00', null, 7]);
-    const limpo = limparSono({ acordar, idade: st.sono.idade, registros: brutos }, hoje);
+    const cochilosBrutos = [];
+    for (let k = inteiro(r, 0, 14); k > 0; k--) {
+      const data = new Date(Date.parse(hoje + 'T12:00:00Z') - inteiro(r, -3, 10) * 86400000).toISOString().slice(0, 10);
+      cochilosBrutos.push(r() < 0.12 ? um(r, LIXO) : { data: r() < 0.05 ? um(r, LIXO) : data, min: r() < 0.08 ? um(r, LIXO) : um(r, [5, 10, 20, 25, 30, 45, 60, 90, 120, 240, 22, 500]), inicio: r() < 0.6 ? um(r, ['12:30', '13:00', '14:10', '15:59', '16:00', '17:30', '21:00', '25:00', 7, null]) : undefined });
+    }
+    const limpo = limparSono({ acordar, idade: st.sono.idade, registros: brutos, cochilos: cochilosBrutos }, hoje);
+    assert.ok(limpo.cochilos.every((x, j, l) => x.min >= COCHILO_PASSO && x.min <= COCHILO_MAX && x.min % COCHILO_PASSO === 0 && x.data <= somaDia(hoje, 1) && (j === 0 || l[j - 1].data <= x.data)), 'cochilos válidos e em ordem');
+    assert.ok(Object.values(limpo.cochilos.reduce((m, x) => { m[x.data] = (m[x.data] || 0) + 1; return m; }, {})).every((n) => n <= COCHILOS_POR_DIA));
     assert.deepEqual(limparSono(J(limpo), hoje), limpo);
     assert.ok(limpo.registros.every((x) => x.data <= somaDia(hoje, 1)), 'nenhuma noite no futuro');
     assert.ok(limpo.registros.every((x, j, l) => x.horas >= 0 && x.horas <= HORAS_MAX && Number.isInteger(x.horas * 4) && (j === 0 || l[j - 1].data < x.data)));
-    st.sono = r() < 0.5 ? limpo : { acordar, idade: st.sono.idade, registros: brutos };
+    st.sono = r() < 0.5 ? limpo : { acordar, idade: st.sono.idade, registros: brutos, cochilos: r() < 0.9 ? cochilosBrutos : um(r, LIXO) };
     const hojeUsado = r() < 0.03 ? um(r, ['', '2026-02-31', null, 5]) : hoje;
 
     const pn = painelDeSono(st, hojeUsado);
@@ -510,6 +721,30 @@ test('estresse: milhares de perfis e estados aleatórios (nunca NaN, faixa coere
     assert.ok(s.dias.length === 0 || s.dias.length === 7);
     assert.ok(s.n >= 0 && s.n <= 7 && s.abaixo + s.dentro + s.acima === (meta ? s.n : 0));
     if (s.media != null) assert.ok(s.media >= 0 && s.media <= HORAS_MAX);
+    // cochilos: totais coerentes com os dias e com a regra de cada idade
+    const ck = s.cochilo;
+    assert.ok(ck.dias >= 0 && ck.dias <= 7 && ck.n >= ck.dias && ck.n <= 7 * COCHILOS_POR_DIA && ck.longos <= ck.dias && ck.tardios <= ck.n && ck.totalMin <= ck.n * COCHILO_MAX);
+    if (s.dias.length) {
+      assert.equal(ck.totalMin, s.dias.reduce((t, d) => t + d.cochiloMin, 0)); assert.equal(ck.dias, s.dias.filter((d) => d.cochilos > 0).length);
+      assert.equal(ck.mediaMin, ck.dias ? Math.round(ck.totalMin / ck.dias) : 0);
+      for (const d of s.dias) {
+        assert.equal(d.total, d.horas == null ? null : d.horas + d.cochiloMin / 60);
+        if (meta && d.horas != null) { const v = meta.soma24h ? d.total : d.horas; assert.equal(d.estado, v < meta.min ? 'abaixo' : v > meta.max ? 'acima' : 'dentro'); }
+      }
+      if (ck.dias) comCochilos++;
+    }
+    assert.equal(s.soma24h, !!meta && meta.idade <= SOMA_24H_ATE);
+    if (s.n) { assert.ok(s.media24 >= s.media && s.media24 <= HORAS_MAX + (COCHILOS_POR_DIA * COCHILO_MAX) / 60); assert.equal(s.mediaDaMeta, s.soma24h ? s.media24 : s.media); } else assert.equal(s.media24, null);
+    const idsCochilo = pn.dicas.map((d) => d.id);
+    assert.deepEqual(problemasNasDicas(idsCochilo, { idade: pn.perfil.idade, gestante: pn.perfil.gestante }), [], 'dicas contraditórias ou fora do público das fontes: ' + idsCochilo.join());
+    assert.equal(ck.semNoite, s.dias.filter((d) => d.cochilos > 0 && d.horas == null).length);
+    assert.equal(ck.tardios, cochilosDaSemana(st, hojeUsado).filter(cochiloTardio).length);
+    if (!meta || meta.soma24h || pn.perfil.gestante) assert.ok(!idsCochilo.some((x) => DICAS_DE_COCHILO.includes(x)), 'dica de cochilo (estudos com adultos) para menor ou gestante');
+    if (idsCochilo.includes('cochiloLongo')) { comLongo++; assert.ok(ck.longos >= DIAS_COCHILO_LONGO); }
+    if (idsCochilo.includes('cochiloFrequente')) assert.ok(ck.dias >= DIAS_COCHILO_FREQUENTE && s.media >= meta.min);
+    if (idsCochilo.includes('cochiloTarde')) assert.ok(ck.tardios >= COCHILOS_TARDIOS);
+    if (idsCochilo.includes('cochiloNoite')) assert.ok(s.faltou && !meta.soma24h);
+    assert.equal(minutosDeCochilo(st, hojeUsado), s.dias.length ? s.dias[6].cochiloMin : minutosDeCochilo(st, hojeUsado));
     assert.equal(s.desvioMin != null, s.n >= NOITES_PARA_REGULARIDADE);
     if (s.desvioMin != null) assert.ok(s.desvioMin >= 0 && s.desvioMin <= HORAS_MAX * 60 && ['regular', 'variavel', 'irregular'].includes(s.regularidade));
     assert.ok(s.faltaMin >= 0 && s.avisos.every((a) => a.texto && a.refs.every((k) => REFS_SONO[k])));
@@ -519,4 +754,5 @@ test('estresse: milhares de perfis e estados aleatórios (nunca NaN, faixa coere
   }
   // o sorteio cobriu os casos que importam
   assert.ok(comMeta > 2000 && semMeta > 300 && comCorrida > 100 && comAjuste > 100 && comProvaNaSemana >= 1 /* semana de prova é rara no sorteio (a corrida recusa prova inviável); o caso tem teste próprio */, JSON.stringify({ comMeta, semMeta, comCorrida, comAjuste, comProvaNaSemana }));
+  assert.ok(comCochilos > 1500 && comLongo > 20, JSON.stringify({ comCochilos, comLongo }));
 });

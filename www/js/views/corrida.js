@@ -11,14 +11,30 @@ import { REFS_CORRIDA, FAQ_CORRIDA, TIPOS_TREINO, FONTES_TELA } from '../data/co
 import {
   PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, planoAtual, planoDaSemana, treinoDoDia, avisosBloqueio, inicioPara, diasDeForca, evolucao, alertas, dicas,
   efeitoDaDor, orientacaoDor, expandirBlocos, textoBloco, limparRegistro, MAX_REGISTROS, fmtRitmo, fmtFaixa, fmtKm, fmtTempo, fmtDia, somaDias, diaValido, diasEntre,
-  retomarPlano, diaLocal, segundaDe,
+  retomarPlano, diaLocal, segundaDe, planejadoDe, analiseDoRegistro, analiseRecente, guardarDoDia, perfil,
 } from '../logic/corrida.js';
+import { faltaPerguntar } from '../logic/combinado.js';
+import { cartaoCombinado, perguntarCombinado } from './combinado.js';
 import { LOCAIS_DOR, doresAtivas, limparDor, MAX_DORES } from '../logic/dor.js';
 
 let modo = 'auto'; // 'auto' | 'entrevista' | 'proposta'
 const ORDEM = [1, 2, 3, 4, 5, 6, 0];
 const hojeKey = () => dateKey(new Date());
 const virgula = (n) => String(n).replace('.', ',');
+// Guarda o treino que o plano mostra hoje e nos próximos dias da semana (e o degrau de ritmo já concedido): os ajustes só
+// valem de hoje em diante, e a análise de um dia que passou tem de usar o que a pessoa viu. Fora do desenho da tela.
+let guardando = false;
+function guardarMostrado() {
+  if (guardando) return;
+  guardando = true;
+  queueMicrotask(() => {
+    guardando = false;
+    let g = null;
+    try { g = guardarDoDia(state, hojeKey()); } catch { g = null; }
+    if (g) update((s) => { s.run.mostrados = g.mostrados; s.run.degrau = g.degrau; });
+  });
+}
+const perfilAtual = () => { try { return perfil(state.run.answers); } catch { return null; } };
 
 // ---------- peças ----------
 function cabecalho() {
@@ -141,10 +157,13 @@ function proposta() {
   let ciente = !pf.confirmar;
   const aceitar = btn('Aceitar e usar este plano', () => {
     if (!ciente) return;
-    update((s) => { s.run.aceitoEm = new Date().toISOString(); s.run.inicio = inicioPara(s.run.answers, hojeKey()); s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; });
+    update((s) => { s.run.aceitoEm = new Date().toISOString(); s.run.inicio = inicioPara(s.run.answers, hojeKey()); s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; });
     modo = 'auto';
     toast('Plano ativado! Os treinos de corrida já aparecem na aba Treinos.');
     refresh(); window.scrollTo(0, 0);
+    // com o plano aceito: quer fortalecimento? E, se também faz musculação, o que vem primeiro?
+    const falta = faltaPerguntar(state);
+    if (falta.foco || falta.fortalecimento) perguntarCombinado({ aoMudar: () => refresh() });
   }, 'primary lg block', 'check');
   aceitar.disabled = !ciente;
   if (pf.confirmar) {
@@ -180,6 +199,15 @@ function evolucaoCard(hoje) {
   card.appendChild(porQue('Volume, regularidade e o esforço que você anota são os sinais que melhor acompanham a resposta ao treino. A carga soma esforço × minutos de cada corrida.', ev.refs, 'Como ler'));
   return card;
 }
+// análise de uma corrida contra o treino do dia
+const seloAnalise = (a) => badge(a.titulo, a.selo === 'dentro' ? 'ok' : a.selo === 'acima' ? 'warn' : a.selo === 'abaixo' ? 'acc' : '');
+function analiseBox(a) {
+  return h('div', { class: 'col gap-s', 'data-analise': a.selo },
+    h('div', { class: 'row between' }, h('div', { class: 'small bold', text: 'Análise do treino' }), seloAnalise(a)),
+    ...a.itens.map((x) => h('div', { class: 'row top' }, icon(x.tom === 'warn' ? 'warn' : x.tom === 'ok' ? 'check' : 'info', 's ' + (x.tom === 'warn' ? 'accent' : 'muted')), h('div', { class: 'grow small', text: x.texto }))),
+    h('p', { class: 'small' }, h('b', { text: 'O plano: ' }), a.plano),
+    a.refs.length ? porQue('', a.refs, 'Fontes') : null);
+}
 const quando = (dias) => (dias <= 0 ? 'hoje' : dias === 1 ? 'amanhã' : dias < 14 ? `daqui a ${dias} dias` : `daqui a ${Math.floor(dias / 7)} semanas`);
 function painel() {
   const run = state.run;
@@ -192,7 +220,7 @@ function painel() {
     }, 'block ghost', 'edit'),
     btn('Encerrar o plano', async () => {
       if (!(await confirmSheet({ title: 'Encerrar o plano de corrida?', text: 'Os treinos de corrida saem da sua semana. As corridas registradas e as suas respostas continuam guardadas.', okLabel: 'Encerrar', danger: true }))) return;
-      update((s) => { s.run.aceitoEm = ''; s.run.inicio = ''; s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; });
+      update((s) => { s.run.aceitoEm = ''; s.run.inicio = ''; s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; });
       modo = 'auto'; toast('Plano encerrado.'); refresh(); window.scrollTo(0, 0);
     }, 'block ghost danger', 'close'));
   if (run.pausadoEm) {
@@ -208,6 +236,7 @@ function painel() {
   }
   const p = planoAtual(state, hoje);
   if (!p) { body.push(note('warn', 'Não consegui montar o plano com as respostas guardadas. Refaça a entrevista.')); body.push(acoesFim()); return body; }
+  guardarMostrado();
   const sem = planoDaSemana(state, hoje);
   const pf = p.perfil;
   // semana atual
@@ -221,6 +250,9 @@ function painel() {
   body.push(topo);
   // avisos graves (meta que não coube, prova retirada) ficam à vista, não só em "Cuidados"
   for (const av of p.avisos) if (av.destaque) body.push(aviso(av));
+  // corrida e musculação: prioridade e fortalecimento (pergunta ou resumo da escolha)
+  const combinado = cartaoCombinado({ aoMudar: () => refresh() });
+  if (combinado) body.push(combinado);
   if (sem.concluido) body.push(btn('Montar um novo plano', () => { modo = 'entrevista'; refresh(); window.scrollTo(0, 0); }, 'primary block', 'refresh'));
   // ajustes feitos e por quê
   if (p.ajustes.length) {
@@ -238,8 +270,23 @@ function painel() {
     if (prox) body.push(acc(`Semana que vem (${volumeTxt(prox)})`, ...prox.dias.map((d) => h('div', { class: 'row top' }, h('div', { class: 'dia-wd', text: DIAS_CURTO[d.wd] }), h('div', { class: 'grow' }, h('div', { class: 'bold small', text: d.nome }), h('div', { class: 'small muted', text: d.resumo })))), h('p', { class: 'tiny muted', text: 'Pode mudar conforme o que você registrar nesta semana.' })));
   }
   body.push(btn('Registrar uma corrida', () => go('corrida/dia/' + hoje), 'block', 'plus'));
+  // o que foi feito contra o que estava no plano
+  const feitos = analiseRecente(state, hoje);
+  if (feitos.itens.length) {
+    const card = h('div', { class: 'card col gap-s', id: 'como-foram' }, h('h3', { text: 'Como foram os seus treinos' }),
+      h('p', { class: 'small muted', text: 'Cada corrida registrada, comparada com o treino do dia. Toque para ver a análise.' }));
+    for (const { registro: r, analise: a } of feitos.itens) {
+      card.appendChild(h('button', { class: 'item', type: 'button', onClick: () => go('corrida/dia/' + r.data) },
+        h('div', { class: 'grow' }, h('div', { class: 't', text: `${fmtDia(r.data)} · ${TIPOS_TREINO[r.tipo] ? TIPOS_TREINO[r.tipo].nome : 'Corrida'}` }), h('div', { class: 's', text: (a.itens.find((x) => x.tom === 'warn') || a.itens.find((x) => x.tom !== 'ok') || a.itens[0]).texto })),
+        seloAnalise(a)));
+    }
+    for (const pd of feitos.padroes) card.appendChild(h('div', { class: 'dica plana atencao' }, h('div', { class: 'dica-ic' }, icon('info')), h('div', { class: 'grow' }, h('div', { class: 'small', text: pd.texto }), porQue('', pd.refs, 'Fontes'))));
+    if (feitos.faltas.length) card.appendChild(h('p', { class: 'small muted', text: `${plural(feitos.faltas.length, 'treino do plano ficou', 'treinos do plano ficaram')} sem registro nas últimas 2 semanas. Treino perdido não se repõe: siga o plano.` }));
+    body.push(card);
+  }
   // dores: o mesmo registro vale para a musculação
-  body.push(cartaoDores({ extra: (d) => efeitoDaDor(d).texto, aoMudar: () => refresh() }));
+  const pfDor = perfilAtual();
+  body.push(cartaoDores({ extra: (d) => efeitoDaDor(d, pfDor).texto, aoMudar: () => refresh() }));
   const comOrientacao = doresAtivas(state, hoje).filter((d) => orientacaoDor(d.onde));
   if (comOrientacao.length) body.push(acc('O que fazer com essa dor na corrida', ...comOrientacao.flatMap((d) => { const o = orientacaoDor(d.onde); return [h('div', { class: 'bold', text: o.nome }), ...o.itens.map(([t, txt]) => h('p', { class: 'small' }, h('b', { text: t + ': ' }), txt)), porQue('', o.refs, 'Fontes')]; })));
   body.push(evolucaoCard(hoje));
@@ -293,7 +340,7 @@ export function corridaView() {
     return {
       title: 'Treinador', body: [interview({
         perguntas: PERGUNTAS, respostas: pre, avatar: 'run',
-        onDone: (r) => { update((s) => { s.run.answers = r; s.run.aceitoEm = ''; s.run.inicio = ''; s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); },
+        onDone: (r) => { update((s) => { s.run.answers = r; s.run.aceitoEm = ''; s.run.inicio = ''; s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); },
         onCancel: () => { modo = 'auto'; refresh(); },
       })],
     };
@@ -319,6 +366,9 @@ function resumoRegistro(r) {
 function lerTempo(txt) {
   const t = String(txt).trim();
   if (!t) return 0;
+  // "32.30" ou "32,30" (dois dígitos depois do ponto ou da vírgula) é lido como 32 min 30 s, igual a "32:30"
+  const mmss = /^(\d{1,3})[.,](\d{2})$/.exec(t);
+  if (mmss) return Number(mmss[2]) > 59 ? NaN : emMin(Number(mmss[1]) * 60 + Number(mmss[2]));
   if (t.includes(':')) {
     const p = t.split(':').map((x) => parseNum(x));
     if (p.some((x) => !Number.isFinite(x) || x < 0) || p.length > 3) return NaN;
@@ -420,9 +470,12 @@ function cronometro(data, treino, aoTerminar) {
 }
 
 function formulario(data, planejado, existente, aoFechar) {
-  const r = existente ? { ...existente, dor: existente.dor ? { ...existente.dor } : null } : { id: 'c' + uid(), data, tipo: planejado && planejado.tipo !== 'descanso' ? planejado.tipo : 'livre', distKm: 0, durMin: 0, pse: null, dor: null, nota: '', planejado: planejado ? `${planejado.nome}: ${planejado.resumo}`.slice(0, 160) : '' };
+  const r = existente ? { ...existente, dor: existente.dor ? { ...existente.dor } : null } : { id: 'c' + uid(), data, tipo: planejado && planejado.tipo !== 'descanso' ? planejado.tipo : 'livre', distKm: 0, durMin: 0, pse: null, dor: null, nota: '',
+      // em dia que já passou, só vale o treino que o plano mostrou naquele dia; o previsto pelo plano de hoje não é gravado
+      planejado: planejado && !planejado.estimado ? `${planejado.nome}: ${planejado.resumo}`.slice(0, 160) : '', plan: planejado && !planejado.estimado ? planejadoDe(planejado) : null };
   const card = h('div', { class: 'card col', id: 'registro' }, h('h3', { text: existente ? 'Editar o registro' : 'Como foi a corrida?' }));
-  if (!planejado || planejado.tipo === 'descanso' || existente) {
+  {
+    // o tipo vem do treino do dia, mas dá para mudar (fez um treino forte no dia leve, trocou por caminhada...)
     const chips = h('div', { class: 'chips wrap', role: 'radiogroup', 'aria-label': 'Tipo de corrida' });
     const draw = () => { while (chips.firstChild) chips.removeChild(chips.firstChild); for (const t of TIPOS_LIVRES) chips.appendChild(h('button', { type: 'button', class: 'chip' + (r.tipo === t ? ' on' : ''), role: 'radio', 'aria-checked': r.tipo === t ? 'true' : 'false', onClick: () => { r.tipo = t; draw(); } }, TIPOS_TREINO[t].nome)); };
     draw();
@@ -430,12 +483,21 @@ function formulario(data, planejado, existente, aoFechar) {
   }
   const dist = h('input', { class: 'input', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: r.distKm ? virgula(r.distKm) : '', placeholder: 'Ex.: 5,2', 'aria-label': 'Distância em quilômetros' });
   const dur = h('input', { class: 'input', type: 'text', inputmode: 'text', autocomplete: 'off', value: tempoTxt(r.durMin), placeholder: 'Ex.: 32 ou 32:30', 'aria-label': 'Tempo em minutos, ou minutos e segundos' });
-  card.appendChild(h('div', { class: 'row top' }, h('label', { class: 'field grow' }, h('span', { text: 'Distância (km)' }), dist), h('label', { class: 'field grow' }, h('span', { text: 'Tempo (min)' }), dur)));
+  card.appendChild(h('div', { class: 'row top' }, h('label', { class: 'field grow' }, h('span', { text: 'Distância (km)' }), dist), h('label', { class: 'field grow' }, h('span', { text: 'Tempo (min ou min:seg)' }), dur)));
+  card.appendChild(h('p', { class: 'tiny muted', text: 'Tempo: 32 (minutos), 32:30 (minutos e segundos) ou 1:05:20 (horas, minutos e segundos).' }));
+  if (planejado && planejado.estimado && !existente) card.appendChild(note('info', 'O que o plano mostrava neste dia não ficou guardado: a corrida entra no volume da semana, sem comparação com o planejado.'));
   card.appendChild(h('p', { class: 'tiny muted', text: 'Sem GPS aqui: digite a distância do relógio, do aplicativo de corrida ou da esteira. Se não souber, informe só o tempo.' }));
   // esforço percebido
-  const pseTxt = h('div', { class: 'small muted center', text: r.pse ? PSE_TXT[r.pse] : 'Ainda não informado: use − e +' });
-  card.appendChild(h('div', { class: 'col gap-s center' }, h('div', { class: 'small bold', text: 'Esforço do treino, de 1 (muito fácil) a 10 (máximo)' }),
-    stepper({ value: r.pse || 4, min: 1, max: 10, step: 1, label: 'Esforço percebido', onChange: (v) => { r.pse = v; pseTxt.textContent = PSE_TXT[v]; } }), pseTxt,
+  // esforço: nada vem marcado; o que aparece escolhido é o que fica gravado
+  const pseTxt = h('div', { class: 'small muted center' });
+  const pseChips = h('div', { class: 'chips wrap', role: 'radiogroup', 'aria-label': 'Esforço percebido' });
+  const drawPse = () => {
+    while (pseChips.firstChild) pseChips.removeChild(pseChips.firstChild);
+    for (let v = 1; v <= 10; v++) pseChips.appendChild(h('button', { type: 'button', class: 'chip' + (r.pse === v ? ' on' : ''), role: 'radio', 'aria-checked': r.pse === v ? 'true' : 'false', 'aria-label': `Esforço ${v}: ${PSE_TXT[v]}`, onClick: () => { r.pse = r.pse === v ? null : v; drawPse(); } }, String(v)));
+    pseTxt.textContent = r.pse ? PSE_TXT[r.pse] : 'Não informado. Sem o esforço, a análise do treino fica só no tempo e na distância.';
+  };
+  drawPse();
+  card.appendChild(h('div', { class: 'col gap-s' }, h('div', { class: 'small bold', text: 'Esforço do treino, de 1 (muito fácil) a 10 (máximo)' }), pseChips, pseTxt,
     h('p', { class: 'tiny muted', text: 'Pense no treino inteiro, uns minutos depois de terminar.' })));
   // dor
   const dorBox = h('div', { class: 'col gap-s' });
@@ -468,12 +530,16 @@ function formulario(data, planejado, existente, aoFechar) {
         if (s.runs.length > MAX_REGISTROS) s.runs.splice(0, s.runs.length - MAX_REGISTROS);
         if (s.run.cron && (s.run.cron.terminado || s.run.cron.data === limpo.data)) s.run.cron = null; // a corrida do dia foi registrada: o cronômetro não continua rodando
         // a dor anotada na corrida vira também um relato de dor (o mesmo que a musculação lê)
-        if (limpo.dor && !s.dores.some((x) => x.onde === limpo.dor.onde && x.data === limpo.data && !x.fim)) {
+        // (se já há um relato do mesmo local nesse dia, fica o mais forte dos dois)
+        const relato = limpo.dor ? s.dores.find((x) => x.onde === limpo.dor.onde && x.data === limpo.data && !x.fim) : null;
+        if (relato && limpo.dor.nivel > relato.nivel) relato.nivel = limpo.dor.nivel;
+        if (limpo.dor && !relato) {
           const dor = limparDor({ id: 'dor' + uid(), data: limpo.data, onde: limpo.dor.onde, lado: '', tipo: 'articular', quando: 'durante', nivel: limpo.dor.nivel, nota: 'Anotada em uma corrida', fim: '' });
           if (dor) { s.dores.push(dor); if (s.dores.length > MAX_DORES) s.dores.splice(0, s.dores.length - MAX_DORES); }
         }
       });
       if (!state.run.cron) { clearInterval(cronT); cronT = 0; keepAwake(false); }
+      guardarMostrado();
       toast(existente ? 'Registro atualizado.' : 'Corrida registrada! O plano leva em conta.');
       refresh();
     }, 'primary grow', 'check')));
@@ -484,6 +550,7 @@ export function corridaDiaView(data) {
   const hoje = hojeKey();
   if (!diaValido(data)) return { redirect: 'corrida' };
   const planejado = treinoDoDia(state, hoje, data);
+  if (data === hoje) guardarMostrado();
   const registros = state.runs.filter((r) => r.data === data);
   const futuro = data > hoje;
   const body = [];
@@ -507,6 +574,8 @@ export function corridaDiaView(data) {
         h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Duração' }), h('span', { text: `cerca de ${planejado.durMin} min` + (planejado.distKm && planejado.tipo !== 'caminhada' ? ` · ${fmtKm(planejado.distKm)}` : '') }))));
       if (t && t.paraQue) card.appendChild(porQue(t.paraQue + (t.sentir ? ' Como sentir: ' + t.sentir : ''), t.f, 'Para que serve este treino'));
       if (planejado.ajustado) card.appendChild(note('info', 'Este treino foi ajustado por causa de uma dor que você contou.'));
+      if (planejado.guardado) card.appendChild(h('p', { class: 'tiny muted', text: 'É o treino que o plano mostrava neste dia.' }));
+      if (planejado.estimado) card.appendChild(note('info', 'O que o plano mostrava neste dia não ficou guardado. Este é o treino previsto pelo plano de hoje, que pode ser diferente.'));
     }
     body.push(card);
     if (planejado.tipo !== 'descanso' && !futuro && !registros.length && planejado.blocos.some((b) => b.seg || b.ritmo)) body.push(cronometro(data, planejado, (min) => { if (form) form.definirTempo(min); const el = document.getElementById('registro'); if (el) el.scrollIntoView({ block: 'start' }); }));
@@ -525,6 +594,7 @@ export function corridaDiaView(data) {
         h('div', { class: 'row between' }, h('h3', { text: (TIPOS_TREINO[r.tipo] ? TIPOS_TREINO[r.tipo].nome : 'Corrida') + ' registrada' }), badge('Feita', 'ok')),
         h('p', { text: resumoRegistro(r) }), r.nota ? h('p', { class: 'small muted quebra', text: r.nota }) : null,
         r.planejado ? h('p', { class: 'tiny muted', text: 'No plano: ' + r.planejado }) : null,
+        (() => { const a = analiseDoRegistro(state, hoje, r); return a ? analiseBox(a) : null; })(),
         h('div', { class: 'row' },
           btn('Editar', () => { editando = r.id; desenhar(); }, 'grow ghost sm', 'edit'),
           btn('Apagar', async () => {
@@ -536,7 +606,8 @@ export function corridaDiaView(data) {
     if (futuro) area.appendChild(note('info', 'Este dia ainda não chegou. Você poderá registrar a corrida quando ela acontecer.'));
     else if (!tem) { form = formulario(data, planejado, null, null); area.appendChild(form.card); }
     else if (!editando) area.appendChild(btn('Registrar outra corrida neste dia', () => { editando = 'novo'; desenhar(); }, 'block ghost sm', 'plus'));
-    if (editando === 'novo') { form = formulario(data, null, null, () => { editando = ''; desenhar(); }); area.appendChild(form.card); }
+    // outra corrida no mesmo dia: entra com o mesmo treino planejado (a análise soma as corridas do dia)
+    if (editando === 'novo') { form = formulario(data, planejado, null, () => { editando = ''; desenhar(); }); area.appendChild(form.card); }
   };
   desenhar();
   body.push(area);

@@ -109,9 +109,7 @@ window.addEventListener('hashchange', () => render());
 setRenderer(render);
 
 async function registerSw() {
-  // No app Android (Capacitor) os arquivos já estão dentro do aplicativo: não há service worker.
-  const native = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
-  if (native || !('serviceWorker' in navigator) || location.protocol === 'file:') return;
+  if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
   try {
     let url = 'sw.js';
     if (window.trustedTypes && window.trustedTypes.createPolicy) {
@@ -140,6 +138,7 @@ async function boot() {
     root.appendChild(h('p', { class: 'center mt-l', text: 'Por segurança, o FitCore não abre dentro de outra página. Abra o endereço do aplicativo diretamente no navegador.' }));
     return;
   }
+  initInstall();
   await load();
   applyTheme();
   subscribe(applyTheme);
@@ -147,7 +146,6 @@ async function boot() {
     const mq = window.matchMedia('(prefers-color-scheme: light)');
     if (mq.addEventListener) mq.addEventListener('change', applyTheme); else if (mq.addListener) mq.addListener(applyTheme); // Safari antigo
   }
-  initInstall();
   onExternalChange((motivo) => { render(true); toast(motivo === 'conflito' ? 'O app estava aberto em outra janela: carreguei os dados mais recentes.' : 'Dados atualizados a partir de outra janela do app.'); });
   onSaveError(() => toast('Atenção: não foi possível salvar. Libere espaço no aparelho e faça um backup em Ajustes.'));
   render();

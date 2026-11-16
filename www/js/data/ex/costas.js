@@ -33,7 +33,7 @@ export default [
       'Fazer meia repetição, sem descer até estender os braços.',
       'Encolher os ombros em direção às orelhas.',
     ],
-    cuidado: ['ombro', 'cotovelo'],
+    cuidado: ['ombro', 'cotovelo', 'hipertensao', 'gestante'],
     aliases: ['pull-up', 'pull up', 'barra', 'barra pronada', 'flexão na barra'],
     fontes: [
       { org: 'ACE', titulo: 'Pull-ups', url: 'https://www.acefitness.org/resources/everyone/exercise-library/191/pull-ups/' },
@@ -69,7 +69,7 @@ export default [
       'Soltar o corpo de uma vez no final da descida.',
       'Projetar o queixo para a frente para alcançar a barra.',
     ],
-    cuidado: ['ombro', 'cotovelo', 'punho'],
+    cuidado: ['ombro', 'cotovelo', 'punho', 'hipertensao', 'gestante'],
     aliases: ['chin-up', 'chin up', 'barra supinada', 'barra fixa invertida'],
     fontes: [
       { org: 'ACE', titulo: 'Chin-ups', url: 'https://www.acefitness.org/resources/everyone/exercise-library/190/chin-ups/' },
@@ -106,7 +106,7 @@ export default [
       'Fazer meia repetição, sem estender os braços na descida.',
       'Encolher os ombros em direção às orelhas.',
     ],
-    cuidado: ['ombro', 'cotovelo'],
+    cuidado: ['ombro', 'cotovelo', 'hipertensao', 'gestante'],
     aliases: ['neutral grip pull-up', 'barra pegada martelo', 'barra neutra', 'pull-up neutro'],
     fontes: [
       { org: 'StrengthLog', titulo: 'Pull-Ups With a Neutral Grip', url: 'https://www.strengthlog.com/pull-ups-with-a-neutral-grip/' },
@@ -303,7 +303,7 @@ export default [
   },
   {
     id: 'puxada-maquina-articulada',
-    nome: 'Puxada na máquina articulada',
+    nome: 'Puxada articulada de costas para o aparelho (tipo Hammer)',
     grupo: 'costas',
     primarios: ['dorsais'],
     secundarios: ['biceps', 'costas_superior'],
@@ -331,7 +331,7 @@ export default [
       'Soltar o peso de uma vez na volta.',
     ],
     cuidado: ['ombro'],
-    aliases: ['machine pulldown', 'hammer pulldown', 'puxada articulada', 'puxada hammer', 'pulldown máquina'],
+    aliases: ['machine pulldown', 'hammer pulldown', 'puxada articulada', 'puxada na máquina articulada', 'puxada articulada de costas', 'puxada hammer', 'pulldown máquina', 'pulldown articulado', 'puxador articulado', 'iso-lateral front lat pulldown'],
     fontes: [
       { org: 'ACE', titulo: 'Seated Lat Pulldown', url: 'https://www.acefitness.org/resources/everyone/exercise-library/158/seated-lat-pulldown/' },
       { org: 'StrengthLog', titulo: 'Machine Lat Pulldown', url: 'https://www.strengthlog.com/machine-lat-pulldown/' },
@@ -1088,7 +1088,7 @@ export default [
   },
   {
     id: 'puxada-alta-articulada',
-    nome: 'Puxada alta articulada (high row)',
+    nome: 'Remada alta articulada (high row, com apoio de peito)',
     grupo: 'costas',
     primarios: ['dorsais', 'costas_superior'],
     secundarios: ['biceps', 'deltoide_post', 'trapezio'],
@@ -1118,7 +1118,7 @@ export default [
       'Deixar a almofada das coxas alta demais e levantar do banco.',
     ],
     cuidado: ['ombro'],
-    aliases: ['high row', 'machine high row', 'iso-lateral high row', 'hammer strength high row', 'remada alta articulada', 'puxada articulada'],
+    aliases: ['high row', 'machine high row', 'iso-lateral high row', 'hammer strength high row', 'remada alta articulada', 'puxada alta com apoio de peito', 'puxada high row'],
     fontes: [
       { org: 'SET FOR SET', titulo: 'Machine High Row: Right Technique, Muscles Worked, & Benefits', url: 'https://www.setforset.com/blogs/news/machine-high-row' },
       { org: 'Hammer Strength', titulo: 'Plate Loaded Iso-Lateral High Row (página do fabricante)', url: 'https://www.lifefitness.com/en-us/catalog/strength-training/plate-loaded/plate-loaded-iso-lateral-high-row' },

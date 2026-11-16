@@ -6,10 +6,9 @@ import { EX_POR_ID } from '../data/exercises.js';
 import { figure, thumb } from '../figure.js';
 import { sugestao, retomada, recorde, e1rm, assistido, voltaDePausa, seriesNaVolta, descansoNaVolta } from '../logic/progress.js';
 import { nivelPausa, cortePausa, duracaoTxt } from '../logic/pausa.js';
-import { doresAtivas } from '../logic/dor.js';
-import { alertaDoExercicio } from '../logic/trainer.js';
+import { alertaDoExercicio, doresDoTreino, respostasParaAvisos } from '../logic/trainer.js';
 import { pickExercises, novoItem, subtitulo, folha } from './common.js';
-import { keepAwake, unlockAudio, beep, vibrate, agendarAviso, cancelarAviso } from '../device.js';
+import { keepAwake, unlockAudio, beep, vibrate, agendarAviso, cancelarAviso, fimDoDescanso } from '../device.js';
 
 // ---------- iniciar ----------
 function montarItem(planItem) {
@@ -259,7 +258,9 @@ export function sessionView() {
     const alvoTxt = tipo === 'minutos' ? `${it.alvo} min` : tipo === 'segundos' ? `${it.sets.length} × ${it.alvo} s` : `${it.sets.length} × ${it.alvo} repetições`;
     // dor que o usuário contou ao Treinador e que este exercício sobrecarrega: aviso no próprio cartão
     let avisoDor = null;
-    try { avisoDor = alertaDoExercicio(it.ex, doresAtivas(state, dateKey(new Date())), state.trainer.answers); } catch { avisoDor = null; }
+    // dores ativas, dores de alerta que passaram do prazo sem "Melhorou" e dores em volta gradual; o perfil vem do
+    // Treinador ou, para quem só corre, das respostas da corrida
+    try { const perfilDeAviso = respostasParaAvisos(state); avisoDor = alertaDoExercicio(it.ex, doresDoTreino(state, dateKey(new Date()), perfilDeAviso), perfilDeAviso); } catch { avisoDor = null; }
     const card = h('div', { class: 'card col' },
       h('div', { class: 'exhead' },
         h('button', { class: 'thumb', type: 'button', 'aria-label': 'Ver como fazer: ' + ex.nome, onClick: () => infoSheet(ex) }, thumb(ex)),
@@ -414,7 +415,7 @@ export function sessionView() {
       if (rem <= 0) {
         if (!alarmed) { alarmed = true; if (rem > -8) { beep(2); vibrate(); } doneUntil = now + 6000; }
         mutCur((x) => { x.restEnd = 0; x.restTotal = 0; });
-        cancelarAviso();
+        fimDoDescanso();
         drawBar();
       } else if (t) t.textContent = fmtClock(Math.ceil(rem));
       else drawBar();

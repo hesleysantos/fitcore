@@ -83,7 +83,7 @@ function cardioPermitido(ex, pf) {
 }
 // ---------- segurança: as regras escritas de novo aqui, sem usar a lógica do aplicativo ----------
 // exercícios que o Treinador nunca escolhe sozinho, para ninguém (ficam para a escolha manual)
-const SO_MANUAL = new Set(['remada-invertida-sob-mesa', 'bom-dia-barra', 'hiit-bicicleta']);
+const SO_MANUAL = new Set(['remada-invertida-sob-mesa', 'bom-dia-barra', 'hiit-bicicleta', 'agachamento-hack-invertido']);
 const NAO_USADOS = new Set(['remada_alta', 'mergulho', 'total', 'carregar']);
 const instavel = (ex) => ex.equip.includes('bola_suica') || ex.equip.includes('trx') || (ex.unilateral && ['afundo', 'agachar', 'dobradica_quadril', 'flexao_plantar'].includes(ex.padrao) && ex.modalidade !== 'maquina' && ex.modalidade !== 'smith');
 // devolve o motivo pelo qual o exercício não pode ser prescrito automaticamente para o perfil ('' = pode)
@@ -95,6 +95,7 @@ function inseguro(ex, pf) {
   if (pf.conservador && ex.modalidade === 'barra' && ex.tipo === 'composto') return 'barra livre em exercício composto para 60+, menor de 18, gestante, pressão alta ou triagem positiva';
   if ((pf.idoso || pf.gestante) && instavel(ex)) return 'exercício instável para 60+ ou gestante';
   if ((pf.pressao || pf.gestante || pf.liberacao) && ex.cuidado.includes('hipertensao')) return 'apneia, isometria pesada ou posição invertida com pressão alta, coração, gestação ou triagem positiva';
+  if ((pf.pressao || pf.gestante || pf.liberacao || pf.idoso || (pf.imc != null && pf.imc >= 30)) && (ex.equip.includes('barra_fixa') || ex.equip.includes('paralelas'))) return 'pendurado na barra fixa ou nas paralelas para pressão alta, coração, gestação, triagem positiva, 60+ ou IMC 30+';
   if (pf.nivel === 1 && ex.nivel > 1) return 'exercício acima do nível 1 para iniciante';
   return '';
 }
@@ -208,9 +209,10 @@ class Falhas {
 }
 
 // Confere um plano. Devolve { p, pf } (p = null quando o perfil é bloqueado).
-function validar(a, gym, versao, F, rot, dores = null) {
+// `corr`: resumo da corrida da semana e da prioridade escolhida (quem corre não recebe cardio no plano de musculação).
+function validar(a, gym, versao, F, rot, dores = null, corr = null) {
   let p;
-  try { p = gerarPlano(a, gym, versao, dores); } catch (e) { F.add('lançou erro', `${rot}: ${e.message}`); return {}; }
+  try { p = gerarPlano(a, gym, versao, dores, corr); } catch (e) { F.add('lançou erro', `${rot}: ${e.message}`); return {}; }
   const pf = perfil(a);
   if (a.idade < 14) { if (p !== null) F.add('menor de 14 sem bloqueio', rot); return { p: null, pf }; }
   if (!p) { F.add('plano não gerado', rot); return {}; }
@@ -225,8 +227,8 @@ function validar(a, gym, versao, F, rot, dores = null) {
   // número de treinos e agenda
   if (p.dias.length > pf.dias) F.add('treinos a mais', `${rot}: ${p.dias.length} > ${pf.dias}`);
   if (p.dias.length < pf.dias) {
-    if (poolForca.length >= 1 && poolCardio.length >= 1) F.add('treinos a menos, havendo exercícios', `${rot}: ${p.dias.length} < ${pf.dias}`);
-    if (!p.avisos.some((x) => x.tipo !== 'info' || /aeróbic|caminhada|cardio ficou fora/i.test(x.texto))) F.add('treinos a menos sem aviso', rot);
+    if (!corr && poolForca.length >= 1 && poolCardio.length >= 1) F.add('treinos a menos, havendo exercícios', `${rot}: ${p.dias.length} < ${pf.dias}`);
+    if (!p.avisos.some((x) => x.tipo !== 'info' || /aeróbic|caminhada|cardio ficou fora/i.test(x.texto) || (corr && /Como você corre, este plano não tem cardio/.test(x.texto)))) F.add('treinos a menos sem aviso', rot);
   }
   if (poolForca.length >= 1 && p.dias.length === 0) F.add('plano sem nenhum treino, havendo exercícios', rot);
   if (p.dias.length === 0 && !p.avisos.some((x) => x.tipo === 'danger' || x.tipo === 'warn')) F.add('plano vazio sem aviso', rot);
@@ -1397,6 +1399,89 @@ test('flexão nórdica: dose dos protocolos publicados, em qualquer objetivo', (
     const p = gerarPlano({ ...base, ...extra, local, dias: '6', tempo: '75' }, GYM_ALL, 0);
     assert.ok(!p.dias.some((d) => d.itens.some((it) => it.ex === 'flexao-nordica')), JSON.stringify(extra));
   }
+});
+
+test('corrida + musculação: 5.000 perfis × semana de corrida × prioridade × fortalecimento × dores — todas as regras de segurança continuam valendo', () => {
+  const F = new Falhas();
+  const r = semente(20261116);
+  const N = 5000;
+  let comFort = 0, mudou = 0, semDescanso = 0;
+  for (let i = 0; i < N; i++) {
+    const { a, gym, versao } = perfilAleatorio(r);
+    if (a.idade < 14) a.idade = 14 + (i % 80);
+    // semana de corrida: 2 a 6 dias, até 2 treinos fortes e, quase sempre, um longo
+    const dias = [0, 1, 2, 3, 4, 5, 6].sort(() => r() - 0.5).slice(0, inteiro(r, 2, 6));
+    const longo = r() < 0.85 ? dias[0] : null;
+    const fortes = dias.slice(1, 1 + inteiro(r, 0, 2));
+    const corr = { foco: um(r, ['', 'corrida', 'musculacao', 'equilibrio']), fortalecimento: um(r, ['', 'nao', 'sim', 'sim', 'academia', 'casa']), fortes, longo, dias };
+    const dores = r() < 0.3 ? doresAleatorias(r, 2) : null;
+    const rot = rotulo(a, gym, versao) + ' corrida ' + JSON.stringify(corr) + (dores ? ' dores ' + dores.map((d) => `${d.onde}/${d.tipo}/${d.nivel}`).join('+') : '');
+    const { p } = validar(a, gym, versao, F, rot, dores, corr);
+    TOTAL++;
+    if (!p) continue;
+    if (!p.dias.length) continue;
+    // quem corre não recebe cardio no plano de musculação
+    if (p.minCardio !== 0 || p.dias.some((d) => d.itens.some((it) => ehCardio(EX_POR_ID.get(it.ex))))) F.add('cardio no plano de quem corre', rot);
+    if (!p.combinado || p.combinado.foco !== corr.foco) F.add('resumo do combinado ausente', rot);
+    // determinístico
+    if (assinatura(gerarPlano(a, gym, versao, dores, corr)) !== assinatura(p) || JSON.stringify(gerarPlano(a, gym, versao, dores, corr).agenda).replace(/"d\w+"/g, '') !== JSON.stringify(p.agenda).replace(/"d\w+"/g, '')) F.add('plano combinado não é determinístico', rot);
+    // véspera de corrida forte ou do longo: o que o plano diz confere com a agenda
+    const chave = new Set([...fortes, ...(longo == null ? [] : [longo])]);
+    const pernas = (d) => d.itens.filter((it) => ['quadriceps', 'posteriores', 'gluteos', 'panturrilhas', 'adutores'].includes(EX_POR_ID.get(it.ex).grupo)).length >= 2;
+    const vesp = Object.entries(p.agenda).filter(([wd, id]) => chave.has((Number(wd) + 1) % 7) && pernas(p.dias.find((d) => d.id === id))).length;
+    const ajusta = corr.foco === 'corrida' || corr.foco === 'equilibrio';
+    if (ajusta && p.combinado.vespera !== vesp) F.add('véspera informada difere da agenda', `${rot}: ${p.combinado.vespera} × ${vesp}`);
+    if (ajusta && vesp > 0 && !p.avisos.some((x) => x.tipo === 'warn' && /na véspera, treine as pernas mais leve/.test(x.texto))) F.add('pernas na véspera sem aviso', rot);
+    const descanso = (x) => 7 - new Set([...dias, ...Object.keys(x.agenda).map(Number)]).size;
+    // sem prioridade na corrida, os dias só mudam para a semana não ficar sem descanso
+    if (!ajusta && p.combinado.agendaMudou && !p.avisos.some((x) => /Para a semana ter um dia de descanso/.test(x.texto))) F.add('agenda mudou sem prioridade na corrida', rot);
+    if (p.combinado.descanso !== descanso(p)) F.add('dias de descanso informados diferem da agenda', rot);
+    if (descanso(p) === 0) { semDescanso++; if (!p.avisos.some((x) => x.tipo === 'warn' && /sem nenhum dia de descanso/.test(x.texto))) F.add('semana sem descanso, sem aviso', rot); }
+    if (p.combinado.agendaMudou) mudou++;
+    // com prioridade na corrida, nunca pior do que sem ela
+    if (ajusta) {
+      const q = gerarPlano(a, gym, versao, dores, { ...corr, foco: 'musculacao' });
+      const vq = Object.entries(q.agenda).filter(([wd, id]) => chave.has((Number(wd) + 1) % 7) && pernas(q.dias.find((d) => d.id === id))).length;
+      // (só pode piorar a véspera para guardar um dia de descanso)
+      if (vesp > vq && descanso(p) <= descanso(q)) F.add('o encaixe piorou a véspera', `${rot}: ${vesp} > ${vq}`);
+      if (descanso(p) < descanso(q) && descanso(p) < 1) F.add('o encaixe tirou o último dia de descanso', rot);
+      if (assinatura(q) !== assinatura(p)) F.add('a prioridade mudou os exercícios', rot);
+    }
+    // fortalecimento: o que o plano diz que tem, tem
+    if (['sim', 'academia', 'casa'].includes(corr.fortalecimento)) {
+      comFort++;
+      const padroes = new Set(p.dias.flatMap((d) => d.itens).map((it) => EX_POR_ID.get(it.ex).padrao));
+      const P = { panturrilha: ['flexao_plantar'], 'abdutores do quadril': ['abducao'], 'um pé só': ['afundo'], core: ['anti_extensao', 'flexao_tronco', 'rotacao', 'flexao_quadril'] };
+      for (const g of p.combinado.garantidos) if (!P[g].some((x) => padroes.has(x))) F.add('fortalecimento: diz que tem e não tem', `${rot}: ${g}`);
+      for (const g of p.combinado.faltam) if (P[g].some((x) => padroes.has(x))) F.add('fortalecimento: diz que falta e tem', `${rot}: ${g}`);
+      if (!p.avisos.some((x) => /Fortalecimento para a corrida: o treino tem/.test(x.texto))) F.add('fortalecimento sem aviso', rot);
+    } else if (p.avisos.some((x) => /Fortalecimento para a corrida/.test(x.texto))) F.add('aviso de fortalecimento sem o pedido', rot);
+  }
+  assert.ok(comFort > 1500 && mudou > 400, `amostra fraca: ${comFort} com fortalecimento, ${mudou} agendas mudadas`);
+  console.log(`   corrida + musculação: ${mudou} agendas mudadas; ${semDescanso} planos em que corrida e musculação tomam os 7 dias (todos com aviso)`);
+  F.confere('corrida + musculação');
+});
+
+test('o plano não depende do que foi montado antes: 2.500 perfis em uma ordem e na ordem inversa dão os mesmos planos', () => {
+  // (as listas de candidatos ficam guardadas entre as chamadas; nada do que fica guardado pode mudar o resultado)
+  const r = semente(20261117);
+  const casos = [];
+  for (let i = 0; i < 2500; i++) {
+    const { a, gym, versao } = perfilAleatorio(r);
+    if (a.idade < 14) a.idade = 14 + (i % 80);
+    const dores = r() < 0.25 ? doresAleatorias(r, 2) : null;
+    const corr = r() < 0.3 ? { foco: um(r, ['', 'corrida', 'musculacao', 'equilibrio']), fortalecimento: um(r, ['nao', 'sim']), fortes: [inteiro(r, 0, 6)], longo: inteiro(r, 0, 6), dias: [1, 3, 5, 0] } : null;
+    casos.push({ a, gym, versao, dores, corr });
+  }
+  const ficha = (p) => JSON.stringify([p.dias.map((d) => [d.nome, d.itens.map((it) => [it.ex, it.series, it.reps, it.descanso])]), Object.keys(p.agenda), p.avisos.map((x) => x.texto)]);
+  const ida = casos.map((c) => ficha(gerarPlano(c.a, c.gym, c.versao, c.dores, c.corr)));
+  let dif = 0, exemplo = '';
+  for (let i = casos.length - 1; i >= 0; i--) {
+    const c = casos[i];
+    if (ficha(gerarPlano(c.a, c.gym, c.versao, c.dores, c.corr)) !== ida[i]) { dif++; if (!exemplo) exemplo = rotulo(c.a, c.gym, c.versao); }
+  }
+  TOTAL += casos.length;
+  assert.equal(dif, 0, `${dif} planos mudaram conforme a ordem das chamadas; exemplo: ${exemplo}`);
 });
 
 test('prioridade de músculo: quando não aumenta, o motivo dito é o verdadeiro (9.600 planos, com e sem limitação)', () => {

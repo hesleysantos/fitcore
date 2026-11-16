@@ -68,7 +68,7 @@ export function cartaoDores({ extra = null, aoMudar = null } = {}) {
         alerta ? badge('Atenção', 'warn') : null),
       alerta ? h('div', { class: 'note warn' }, icon('warn'), h('div', { text: 'Dor forte, repentina, com inchaço ou que aparece em repouso precisa de avaliação de um médico ou fisioterapeuta antes de treinar essa região.' })) : null,
       txt ? h('p', { class: 'small', text: txt }) : null,
-      btn('Melhorou', () => { update((s) => { const x = s.dores.find((y) => y.id === d.id); if (x) x.fim = dateKey(new Date()); }); toast('Que bom! O treino volta ao normal aos poucos.'); if (aoMudar) aoMudar(null); refresh(); }, 'sm ghost', 'check')));
+      btn('Melhorou', () => { update((s) => { const x = s.dores.find((y) => y.id === d.id); if (x) x.fim = dateKey(new Date()); }); toast('Que bom! Os treinos deixam de ser ajustados por essa dor.'); if (aoMudar) aoMudar(null); refresh(); }, 'sm ghost', 'check')));
   }
   card.appendChild(btn('Contar outra dor', abrir, 'block ghost sm', 'plus'));
   return card;

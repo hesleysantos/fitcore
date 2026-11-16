@@ -7,13 +7,17 @@ import { thumb } from '../figure.js';
 import { semanaAtual, sequenciaSemanas, inicioSemana } from '../logic/progress.js';
 import { duracaoEstimada, alvoTexto } from './common.js';
 import { startSession } from './session.js';
+import { mostrarSemana, guardarCorridaMostrada } from './plans.js';
+import { cartaoCombinado } from './combinado.js';
+import { faltaPerguntar } from '../logic/combinado.js';
 import { installCard } from '../install.js';
 import { metaSemanal, dicaCard } from './history.js';
 import { analisar, destaques } from '../logic/insights.js';
 import { revisaoPendente } from './trainer.js';
-import { calcular, respostasCompletas as nutriOk } from '../logic/nutrition.js';
+import { calcular, respostasCompletas as nutriOk, contextoDasEntrevistas } from '../logic/nutrition.js';
 import { planoDaSemana, resumoParaNutricao } from '../logic/corrida.js';
 import { cartaoSono } from './sono.js';
+import { resumoDeHoje } from '../logic/diario.js';
 
 function saudacao() {
   const hora = new Date().getHours();
@@ -21,6 +25,7 @@ function saudacao() {
 }
 
 export function homeView() {
+  guardarCorridaMostrada();
   const body = [];
   const plan = activePlan();
   const hoje = new Date();
@@ -39,12 +44,21 @@ export function homeView() {
   let corridaSem = null;
   try { corridaSem = planoDaSemana(state, dateKey(hoje)); } catch { corridaSem = null; }
   const corridaHoje = corridaSem && Array.isArray(corridaSem.dias) ? corridaSem.dias[wd] : null;
+  if (corridaSem && corridaSem.antesDoInicio && state.run && state.run.inicio) {
+    const ini = new Date(state.run.inicio + 'T12:00:00');
+    const seg = (d) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+    const n = Math.round((seg(ini).getTime() - seg(hoje).getTime()) / (7 * 86400000));
+    if (n >= 1) body.push(h('div', { class: 'card row', id: 'corrida-comeca' }, icon('run', 'accent'), h('div', { class: 'grow' }, h('div', { class: 'bold', text: `Seu plano de corrida começa ${n === 1 ? 'na semana que vem' : 'em ' + n + ' semanas'}` }), h('div', { class: 'small muted', text: `${DIAS_LONGO[ini.getDay()]}, ${ini.getDate()}/${String(ini.getMonth() + 1).padStart(2, '0')}.` })), btn('Ver semana', () => { mostrarSemana(n); go('treinos'); }, 'sm')));
+  }
   if (corridaHoje) {
     body.push(h('div', { class: 'card hl col' },
       h('div', { class: 'row between' }, h('div', null, h('div', { class: 'tiny accent bold', text: corridaHoje.feito ? 'CORRIDA DE HOJE · FEITA' : 'CORRIDA DE HOJE' }), h('h2', { text: String(corridaHoje.nome || 'Corrida') })), corridaHoje.feito ? badge('Concluída', 'ok') : null),
       corridaHoje.resumo ? h('p', { class: 'small muted', text: String(corridaHoje.resumo) }) : null,
       btn(corridaHoje.feito ? 'Ver corrida' : 'Abrir corrida', () => go('corrida/dia/' + corridaHoje.data), (corridaHoje.feito ? '' : 'primary ') + 'lg block', 'run')));
   }
+
+  // corrida + musculação: enquanto falta dizer o que priorizar (ou se quer fortalecimento), a pergunta aparece aqui
+  try { const f = faltaPerguntar(state); if (f.foco || f.fortalecimento) { const cc = cartaoCombinado({ aoMudar: () => refresh() }); if (cc) body.push(cc); } } catch { /* segue sem o cartão */ }
 
   // treino de hoje
   const treinosDeHoje = state.sessions.filter((s) => dateKey(new Date(s.inicio)) === dateKey(hoje));
@@ -155,14 +169,16 @@ export function homeView() {
     // as metas levam em conta os treinos de corrida, como na tela de Nutrição
     let resumoCorrida = null;
     try { resumoCorrida = resumoParaNutricao(state, dateKey(hoje)); } catch { resumoCorrida = null; }
-    const r = calcular(state.nutri.answers, resumoCorrida);
+    const r = calcular(state.nutri.answers, resumoCorrida, contextoDasEntrevistas(state)); // vale a resposta mais protegida entre as entrevistas
     if (r.kcal) {
       body.push(h('button', { class: 'card click col gap-s', type: 'button', onClick: () => go('nutricao') },
         h('div', { class: 'row between' }, h('h2', { text: 'Alimentação de hoje' }), icon('right', 's muted')),
         h('div', { class: 'stats' },
           h('div', { class: 'stat' }, h('b', { text: fmtInt(r.kcal) }), h('span', { text: 'kcal' })),
           h('div', { class: 'stat' }, h('b', { text: r.prot + ' g' }), h('span', { text: 'proteína' })),
-          h('div', { class: 'stat' }, h('b', { text: String(r.agua).replace('.', ',') + ' L' }), h('span', { text: 'água' })))));
+          h('div', { class: 'stat' }, h('b', { text: String(r.agua).replace('.', ',') + ' L' }), h('span', { text: 'água' }))),
+        // diário: o que já foi comido hoje, contra a meta (só quando há algo registrado e o perfil recebe contagem)
+        (() => { try { const d = resumoDeHoje(state, dateKey(hoje)); return d && d.n > 0 && d.frase ? h('p', { class: 'small', id: 'inicio-diario', text: `Comido hoje: ${fmtInt(Math.round(d.kcal))} kcal. ${d.frase}` }) : h('p', { class: 'small muted', text: 'Toque para anotar o que você comeu hoje.' }); } catch { return null; } })()));
     }
   } else {
     body.push(h('button', { class: 'card click row', type: 'button', onClick: () => go('nutricao') }, h('div', { class: 'avatar nutri' }, icon('apple')), h('div', { class: 'grow' }, h('h3', { text: 'O que comer para o seu objetivo?' }), h('p', { class: 'small muted', text: 'Metas e cardápio de exemplo em 2 minutos.' })), icon('right', 's muted')));

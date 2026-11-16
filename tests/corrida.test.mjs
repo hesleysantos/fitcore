@@ -1,7 +1,7 @@
 // Regras do Treinador de corrida: perfil, plano, segurança e ajuste pelos registros.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PERGUNTAS, respostasCompletas, perfil, gerarPlano, motivoBloqueio, avisosBloqueio, ritmosDe, vdotDe, riegel, zonasDe, expandirBlocos, textoBloco, efeitoDaDor, orientacaoDor, planoDaSemana, treinoDoDia, resumoParaNutricao, inicioPara, diasDeForca, evolucao, alertas, dicas, limparRegistro, limparRegistros, MAX_REGISTROS, limparCorrida, retomarPlano, recordeSeg, resultadoValido, planoAtual, diaLocal, fmtRitmo, fmtFaixa, fmtDuracao, somaDias, diaDaSemana, ETAPAS_CC } from '../www/js/logic/corrida.js';
+import { PERGUNTAS, respostasCompletas, perfil, gerarPlano, motivoBloqueio, avisosBloqueio, ritmosDe, vdotDe, riegel, zonasDe, expandirBlocos, textoBloco, efeitoDaDor, orientacaoDor, planoDaSemana, treinoDoDia, resumoParaNutricao, inicioPara, diasDeForca, evolucao, alertas, dicas, limparRegistro, limparRegistros, MAX_REGISTROS, limparCorrida, retomarPlano, recordeSeg, resultadoValido, planoAtual, planoDaSemanaEm, efeitoDoFoco, planejadoDe, analiseDoRegistro, analiseRecente, guardarDoDia, diaLocal, fmtRitmo, fmtFaixa, fmtDuracao, somaDias, diaDaSemana, ETAPAS_CC } from '../www/js/logic/corrida.js';
 import { REFS_CORRIDA, FAQ_CORRIDA, TIPOS_TREINO } from '../www/js/data/corrida.js';
 import * as store from '../www/js/store.js';
 
@@ -742,4 +742,435 @@ test('C3 e C4: longão e volume sem degraus no que a pessoa vê', () => {
       if (i > 0 && !s.dias.some((d) => d.tipo === 'prova')) { const ant = Math.max(...p.semanas.slice(Math.max(0, i - 3), i).map((x) => x.volumeKm)); assert.ok(s.volumeKm <= Math.max(ant * 1.1, ant + 1.5) + 1.2, `semana ${s.n}: ${s.volumeKm} km depois de ${ant} km`); }
     });
   }
+});
+
+// ---------- quarta rodada: foco, corredor irregular, análise do treino feito, semana navegável ----------
+const comMusculacao = (st, foco) => ({ ...st, plans: [{ id: 'p1', nome: 'Meu treino', origem: 'modelo', dias: [{ id: 'd1', nome: 'A', itens: [{ ex: 'x1' }] }], agenda: { 1: 'd1', 3: 'd1', 5: 'd1' } }], activePlan: 'p1', combo: { foco, fortalecimento: 'nao', em: '' } });
+
+test('foco: a prioridade entre corrida e musculação muda a corrida conforme as fontes', () => {
+  const a = { ...base, dias: ['1', '2', '3', '4', '5', '6'], kmSemana: 45, longoAtual: 14, experiencia: 'avancado', objetivo: 'saude' };
+  const p0 = gerarPlano(a);
+  const pm = gerarPlano(a, { foco: 'musculacao' });
+  const pe = gerarPlano(a, { foco: 'equilibrio' });
+  const pc = gerarPlano(a, { foco: 'corrida' });
+  const corridas = (p) => Math.max(...p.semanas.map((s) => s.dias.filter(corr).length));
+  const fortes = (p) => Math.max(...p.semanas.map((s) => s.dias.filter((d) => d.intensidade === 'forte').length));
+  assert.ok(corridas(p0) >= 5 && fortes(p0) === 2);
+  // musculação primeiro: até 3 corridas, de até 40 minutos, e no máximo 1 forte
+  assert.ok(corridas(pm) <= 3 && fortes(pm) <= 1 && pm.semanas.every((s) => s.dias.every((d) => d.durMin <= 42)), 'corrida como complemento');
+  assert.ok(pm.ajustes.some((x) => /complemento da musculação/.test(x.texto) && x.refs.includes('murach2016') && x.motivo.length > 80));
+  // os dois por igual: até 4 corridas e 1 forte
+  assert.ok(corridas(pe) <= 4 && fortes(pe) <= 1 && corridas(pe) > corridas(pm) && pe.ajustes.some((x) => /por igual/.test(x.texto) && x.refs.includes('baar2014')));
+  // corrida primeiro: o plano de corrida não muda
+  assert.deepEqual(pc.semanas, p0.semanas);
+  assert.equal(gerarPlano(a, { foco: 'x' }).ajustes.length, 0, 'foco inválido não muda nada');
+  // com foco na musculação, a maratona não cabe: vira distância menor, com aviso
+  const mar = gerarPlano({ ...a, objetivo: 'prova', distancia: '42', semanasProva: 20, tempoLongo: '150' }, { foco: 'musculacao' });
+  assert.ok(mar.perfil.dist < 42 && mar.avisos.some((x) => x.tipo === 'danger' && /musculação em primeiro lugar/.test(x.texto)));
+  // pelo estado: só vale com os dois treinos e com a escolha feita
+  const st = estado(a, '2026-11-02', '2026-11-02');
+  assert.deepEqual(planoAtual(comMusculacao(st, ''), '2026-11-03').semanas, planoAtual(st, '2026-11-03').semanas, 'sem resposta, o plano fica como está');
+  assert.ok(corridas(planoAtual(comMusculacao(st, 'musculacao'), '2026-11-03')) <= 3);
+  assert.deepEqual(planoAtual({ ...st, combo: { foco: 'musculacao', fortalecimento: 'nao', em: '' } }, '2026-11-03').semanas, planoAtual(st, '2026-11-03').semanas, 'sem musculação na agenda, o foco não se aplica');
+  // texto do cartão
+  for (const f of ['corrida', 'musculacao', 'equilibrio']) { const e = efeitoDoFoco(f, st); assert.ok(e.linhas.length >= 1 && e.linhas.length <= 3 && e.linhas.every((l) => l.length > 30 && l.length < 200) && e.refs.length && e.refs.every((k) => REFS_CORRIDA[k]), f); }
+  assert.deepEqual(efeitoDoFoco('', st), { linhas: [], refs: [] });
+  assert.deepEqual(efeitoDoFoco('corrida', { run: { aceitoEm: '' } }), { linhas: [], refs: [] });
+  // a semana expõe o que a musculação precisa para se encaixar
+  const sem = planoDaSemana(st, '2026-11-03');
+  assert.ok(sem.dias.filter(Boolean).every((d) => typeof d.forte === 'boolean' && typeof d.chave === 'boolean' && typeof d.tipo === 'string'));
+  assert.equal(sem.diaLongo, sem.dias.find((d) => d && d.tipo === 'longo').wd);
+});
+
+test('corredor irregular e lento: 3 corridas curtas, só por esforço, base de 8 semanas', () => {
+  const a = { experiencia: 'irregular', longoAtual: 4, objetivo: 'saude', dias: ['1', '2', '3', '4', '5', '6'], diaLongo: 'auto', tempo: '60', aparelho: 'gps', local: 'rua', idade: 35, peso: 72, altura: 175, lesao12m: 'nao', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'] };
+  assert.ok(respostasCompletas(a), 'responde só a corrida mais longa; não responde quilometragem, pausa nem resultado');
+  assert.equal(respostasCompletas({ ...a, longoAtual: undefined }), false);
+  assert.ok(respostasCompletas(base) && respostasCompletas(novato), 'respostas antigas continuam válidas');
+  const p = gerarPlano(a);
+  assert.ok(p.perfil.irregular && p.perfil.nivel === 1 && p.modo === 'tempo' && p.ritmos === null && p.perfil.passo === 0.07);
+  assert.ok(p.semanas.every((s) => s.dias.filter(corr).length === 3), '3 corridas por semana, desde a primeira');
+  assert.ok(p.semanas[0].dias.filter(corr).every((d) => d.durMin <= 35) && p.semanas[0].volumeKm <= 11, 'começa com corridas curtas');
+  assert.ok(p.semanas.slice(0, 8).every((s) => s.dias.every((d) => d.intensidade !== 'forte')), '8 semanas de base');
+  assert.ok(p.semanas.every((s) => s.dias.every((d) => d.ritmo === null)), 'sem ritmo: só esforço');
+  assert.ok(p.avisos.some((x) => /sem regularidade/.test(x.texto) && x.refs.includes('malisoux2015risco') && x.refs.includes('pollock1998')));
+  // difere de quem corre com regularidade o mesmo tanto
+  const reg = gerarPlano({ ...a, experiencia: 'iniciante', kmSemana: 9, pausa: 'treinando', resultado: 'nao' });
+  assert.ok(Math.max(...reg.semanas.map((s) => s.dias.filter(corr).length)) === 4 && reg.perfil.passo === 0.1);
+  // resultado que tenha sobrado de uma entrevista antiga não vira ritmo
+  assert.equal(gerarPlano({ ...a, resultado: '5', resultadoMin: 27 }).ritmos, null);
+  assert.ok(limparCorrida({ answers: a }).answers.experiencia === 'irregular', 'a opção passa pela validação do estado');
+});
+
+test('análise do treino feito: mais longo, mais rápido, esforço alto, forte trocado e corrida fora do plano', () => {
+  const inicio = '2026-11-02';
+  const st = estado(base, inicio, inicio);
+  const p = planoAtual(st, inicio);
+  const dia = (pred) => { for (const s of p.semanas.slice(0, 3)) for (const d of s.dias) if (pred(d)) return { d, data: somaDias(inicio, (s.n - 1) * 7 + ((d.wd + 6) % 7)) }; throw new Error('dia não encontrado'); };
+  const leve = dia((d) => d.tipo === 'leve' && d.ritmo);
+  const plan = planejadoDe(leve.d);
+  assert.deepEqual(Object.keys(plan).sort(), ['distKm', 'durMin', 'pse', 'ritmo', 'tipo', 'un']);
+  const feito = (extra) => ({ ...reg('a1', leve.data, 'leve', leve.d.distKm, leve.d.durMin, 3), plan, ...extra });
+  const an = (r, runs = []) => analiseDoRegistro({ ...st, runs: [...runs, r] }, leve.data, r);
+  // dentro do plano
+  const ok = an(feito({}));
+  assert.ok(ok.selo === 'dentro' && ok.itens.every((x) => x.tom === 'ok') && ok.plano === 'Nada muda no plano.', JSON.stringify(ok));
+  // 30 minutos planejados × 40 feitos (sem salto sobre a corrida mais longa do mês): acima, sem alarme
+  const plano30 = { ...plan, durMin: 30, distKm: 0, un: 't' }; // treino prescrito por tempo
+  const mais = an({ ...reg('a2', leve.data, 'leve', 6.6, 40, 3), plan: plano30 }, [reg('z', somaDias(leve.data, -6), 'longo', 10, 62, 3)]);
+  assert.ok(mais.selo === 'acima' && mais.itens.some((x) => /10 min a mais que o planejado \(30 min\): \+33%/.test(x.texto)) && !mais.itens.some((x) => x.tom === 'warn'), JSON.stringify(mais.itens));
+  // o mesmo excesso como salto sobre a corrida mais longa dos últimos 30 dias: risco
+  const salto = an({ ...reg('a3', leve.data, 'leve', 19.2, 120, 3), plan: plano30 }, [reg('z', somaDias(leve.data, -6), 'leve', 12, 75, 3)]);
+  assert.ok(salto.itens.some((x) => x.tom === 'warn' && /60% a mais que a sua corrida mais longa/.test(x.texto)) && salto.refs.includes('frandsen2025') && /treinos leves/.test(salto.plano));
+  // ritmo 6:00 planejado × 5:00 feito
+  const plano6 = { ...plan, durMin: 30, distKm: 0, ritmo: [350, 370], un: 't' };
+  const rapidoFacil = an({ ...reg('a4', leve.data, 'leve', 6, 30, 3), plan: plano6 });
+  assert.ok(rapidoFacil.itens.some((x) => x.tom === 'info' && /5:00 por km, mais rápido que a faixa \(5:50 a 6:10\), com esforço baixo/.test(x.texto)) && /Teste de ritmo/.test(rapidoFacil.plano) && rapidoFacil.refs.includes('vdoto2_ajuste'));
+  const rapidoPesado = an({ ...reg('a5', leve.data, 'leve', 6, 30, 6), plan: plano6 });
+  assert.ok(rapidoPesado.selo === 'acima' && rapidoPesado.itens.some((x) => x.tom === 'warn' && /virou moderado/.test(x.texto)) && rapidoPesado.refs.includes('esteve2007') && /segura o volume/.test(rapidoPesado.plano));
+  // esforço alto em treino leve, no ritmo certo
+  const pesado = an(feito({ pse: 7 }));
+  assert.ok(pesado.selo === 'acima' && pesado.itens.some((x) => x.tom === 'warn' && /Esforço 7 em treino leve/.test(x.texto)) && pesado.refs.includes('ieno2020'));
+  // mais lento, com esforço baixo: sem problema
+  assert.ok(an({ ...reg('a6', leve.data, 'leve', 4.4, 30, 3), plan: plano6 }).itens.some((x) => x.tom === 'ok' && /devagar não é erro/.test(x.texto)));
+  // mais curto: abaixo, sem repor
+  const menos = an({ ...reg('a7', leve.data, 'leve', 2.2, 15, 3), plan: plano30 });
+  assert.ok(menos.selo === 'abaixo' && /não repõe/.test(menos.plano) && menos.refs.includes('feely2023'));
+  // treino forte que virou corrida leve, e treino forte em dia leve
+  const forte = dia((d) => d.intensidade === 'forte');
+  const trocado = analiseDoRegistro(st, forte.data, { ...reg('b1', forte.data, 'leve', 5, 32, 3), plan: planejadoDe(forte.d) });
+  assert.ok(trocado.selo === 'abaixo' && trocado.itens.some((x) => /virou corrida leve/.test(x.texto)));
+  const emDiaLeve = an(feito({ tipo: 'intervalado', pse: 8 }));
+  assert.ok(emDiaLeve.selo === 'acima' && emDiaLeve.itens.some((x) => x.tom === 'warn' && /48 horas/.test(x.texto)) && emDiaLeve.refs.includes('stanley2013'));
+  // registro sem treino planejado
+  const livre = analiseDoRegistro({ ...st, run: limparCorrida({}) }, '2026-11-03', reg('c1', '2026-11-03', 'livre', 5, 30, 4));
+  assert.ok(livre.selo === 'livre' && livre.itens.length >= 1 && livre.refs.every((k) => REFS_CORRIDA[k]));
+  // sem `plan` guardado, a análise usa o treino do plano naquele dia
+  const semPlan = analiseDoRegistro({ ...st, runs: [] }, leve.data, reg('d1', leve.data, 'leve', leve.d.distKm, leve.d.durMin, 3));
+  assert.equal(semPlan.selo, 'dentro');
+  assert.equal(analiseDoRegistro(st, inicio, { id: 'x' }), null);
+  for (const x of [ok, mais, salto, rapidoFacil, rapidoPesado, pesado, menos, trocado, emDiaLeve, livre]) assert.ok(x.titulo && x.plano.length > 10 && x.refs.every((k) => REFS_CORRIDA[k]) && x.itens.every((y) => y.texto.length > 15 && ['ok', 'info', 'warn'].includes(y.tom)));
+  // o registro guarda o que estava planejado, validado
+  const limpo = limparRegistro({ ...reg('e1', leve.data, 'leve', 5, 30, 3), plan: { ...plan, lixo: '<x>' } });
+  assert.deepEqual(limpo.plan, plan);
+  assert.equal('plan' in limparRegistro({ ...reg('e2', leve.data, 'leve', 5, 30, 3), plan: { tipo: '<script>', durMin: 'x' } }), false);
+  assert.equal(limparRegistro({ ...reg('e3', leve.data, 'leve', 5, 30, 3), plan: { tipo: 'leve', durMin: 1e9, distKm: -4, ritmo: [1, 2], pse: [9, 3] } }).plan.ritmo, null);
+});
+
+test('análise recente e padrões: o plano muda quando o desvio se repete', () => {
+  const inicio = '2026-09-07';
+  const st = estado(base, inicio, inicio);
+  const p0 = planoAtual(st, inicio);
+  // 5 semanas à risca, com os leves sempre mais rápidos que a faixa e esforço baixo
+  const runs = p0.semanas.slice(0, 5).flatMap((s) => s.dias.filter(corr).map((d) => {
+    const data = somaDias(inicio, (s.n - 1) * 7 + ((d.wd + 6) % 7));
+    const rapido = (d.tipo === 'leve' || d.tipo === 'longo' || d.tipo === 'regenerativo') && d.ritmo;
+    return { ...reg(`s${s.n}d${d.wd}`, data, d.tipo, d.distKm, rapido ? (d.distKm * (d.ritmo.de - 25)) / 60 : d.durMin, rapido ? 3 : Math.round((d.pse[0] + d.pse[1]) / 2)), plan: planejadoDe(d) };
+  }));
+  const hoje = somaDias(inicio, 35);
+  const com = { ...st, runs };
+  const rec = analiseRecente(com, hoje);
+  assert.ok(rec.itens.length === 5 && rec.itens.every((x) => x.analise && x.registro.id) && rec.padroes.some((x) => x.id === 'rapido_facil' && x.refs.every((k) => REFS_CORRIDA[k])));
+  assert.equal(rec.contagem.dentro + rec.contagem.acima + rec.contagem.abaixo + rec.contagem.livre + rec.contagem.sem, 5);
+  // o degrau de ritmo vem em 4 semanas (e não em 6) quando o padrão existe
+  const adiantado = planoAtual(com, hoje);
+  assert.ok(adiantado.ajustes.some((x) => /um degrau mais rápidos/.test(x.texto) && /mais rápidos que a faixa, com esforço baixo/.test(x.motivo)), JSON.stringify(adiantado.ajustes.map((x) => x.texto)));
+  const semPadrao = planoAtual({ ...st, runs: runs.map((r) => ({ ...r, durMin: r.plan.durMin, pse: 3 })) }, hoje);
+  assert.ok(!semPadrao.ajustes.some((x) => /degrau/.test(x.texto)), 'sem o padrão, o degrau só vem em 6 semanas');
+  // treino forte feito na véspera de um treino forte do plano: o de hoje vira rodagem leve
+  const s6 = p0.semanas[5];
+  const forte = s6.dias.find((d) => d.intensidade === 'forte');
+  const dataForte = somaDias(inicio, 35 + ((forte.wd + 6) % 7));
+  const vespera = somaDias(dataForte, -1);
+  const extra = { ...st, runs: [...runs.map((r) => ({ ...r, durMin: r.plan.durMin, pse: 3 })), reg('x1', vespera, 'tempo', 8, 44, 8)] };
+  const trocado = planoAtual(extra, dataForte);
+  assert.ok(trocado.semanas[5].dias.find((d) => d.wd === forte.wd).intensidade === 'leve' && trocado.ajustes.some((x) => /trocado por rodagem leve/.test(x.texto) && x.refs.includes('stanley2013')));
+  assert.equal(planoAtual({ ...st, runs: extra.runs.slice(0, -1) }, dataForte).semanas[5].dias.find((d) => d.wd === forte.wd).intensidade, 'forte');
+  // treinos do plano sem registro: aparecem como faltas (só para quem registra)
+  assert.deepEqual(analiseRecente(st, hoje).faltas, [], 'sem nenhum registro, não dá para saber o que foi feito');
+  assert.deepEqual(analiseRecente(null, hoje), { itens: [], faltas: [], padroes: [], contagem: { dentro: 0, acima: 0, abaixo: 0, livre: 0, sem: 0 } });
+  // leves com esforço alto: padrão e plano que segura o volume
+  const pesados = analiseRecente({ ...st, runs: runs.map((r) => (r.tipo === 'leve' || r.tipo === 'regenerativo' ? { ...r, durMin: r.plan.durMin, pse: 6 } : r)) }, hoje);
+  assert.ok(pesados.padroes.some((x) => x.id === 'leve_pesado'));
+});
+
+test('semana navegável: passada, atual, futura, antes do início e depois do fim', () => {
+  // aceito no domingo: o plano começa na segunda, e a semana do início já aparece com os treinos
+  const a = { ...base, dias: ['2', '4', '6'], semanasProva: 12 };
+  const st = estado(a, '2026-11-15', inicioPara(a, '2026-11-15'));
+  assert.equal(st.run.inicio, '2026-11-16');
+  const antes = planoDaSemanaEm(st, '2026-11-15', '2026-11-09');
+  assert.ok(antes.antesDoInicio && antes.comecaEm === '2026-11-16' && antes.dias.every((d) => d === null));
+  const primeira = planoDaSemanaEm(st, '2026-11-15', '2026-11-16');
+  assert.ok(primeira.antesDoInicio && primeira.semana === 1 && primeira.comecaEm === '2026-11-16' && primeira.dias.filter(Boolean).length === 3, 'a 1ª semana fica visível antes de começar');
+  assert.ok(primeira.dias.filter(Boolean).every((d) => d.data >= '2026-11-16' && d.data <= '2026-11-22' && d.feito === null && typeof d.forte === 'boolean'));
+  assert.ok(planoDaSemana(st, '2026-11-15').antesDoInicio && planoDaSemana(st, '2026-11-15').comecaEm === '2026-11-16');
+  // atual: igual a planoDaSemana; qualquer dia da semana serve como referência
+  const hoje = '2026-12-02';
+  assert.deepEqual(planoDaSemanaEm(st, hoje, '2026-11-30'), planoDaSemana(st, hoje));
+  assert.deepEqual(planoDaSemanaEm(st, hoje, '2026-12-03'), planoDaSemana(st, hoje));
+  // passada, com o que foi feito
+  const com = { ...st, runs: [reg('r1', '2026-11-17', 'leve', 5, 31, 3)] };
+  const passada = planoDaSemanaEm(com, hoje, '2026-11-16');
+  assert.ok(passada.semana === 1 && !passada.antesDoInicio && passada.dias[2].feito.id === 'r1' && passada.dias[4].feito === null);
+  // futura e fim do plano
+  const futura = planoDaSemanaEm(st, hoje, '2026-12-28');
+  assert.ok(futura.semana === 7 && futura.dias.filter(Boolean).length === 3 && futura.inicioDaSemana === '2026-12-28');
+  const ultima = planoDaSemanaEm(st, hoje, '2027-01-25');
+  assert.ok(ultima.semana === 11 && ultima.dias.some((d) => d && d.tipo === 'prova'));
+  const depois = planoDaSemanaEm(st, hoje, '2027-02-01');
+  assert.ok(depois.concluido && depois.dias.every((d) => d === null));
+  // semana pulada por uma pausa do plano
+  const semData = estado({ ...base, objetivo: 'saude' }, '2026-09-07', '2026-09-07');
+  semData.run = retomarPlano({ ...semData.run, pausadoEm: new Date(2026, 8, 21, 10).toISOString() }, '2026-10-12');
+  assert.ok(planoDaSemanaEm(semData, '2026-10-12', '2026-09-28').foraDoPlano);
+  assert.equal(planoDaSemanaEm(semData, '2026-10-12', '2026-10-12').semana, 3);
+  assert.equal(planoDaSemanaEm(semData, '2026-10-12', '2026-09-07').semana, 1);
+  // sem plano, datas inválidas
+  assert.equal(planoDaSemanaEm({ run: limparCorrida({}) }, hoje, '2026-11-30'), null);
+  assert.equal(planoDaSemanaEm(st, hoje, 'x'), null);
+});
+
+// ---------- quinta rodada: análise coerente, treino mostrado, lesões e questionário ----------
+// vive o plano dia a dia, de `de` até a véspera de `ate`: guarda o que a tela mostra e registra as corridas
+// (fator(hoje, treino) = quanto do treino mostrado é feito; 0 = não corre)
+function viver(st, de, ate, fator = () => 1) {
+  let s = st;
+  for (let k = 0; somaDias(de, k) < ate; k++) {
+    const hoje = somaDias(de, k);
+    const g = guardarDoDia(s, hoje);
+    if (g) s = { ...s, run: { ...s.run, ...g } };
+    const t = treinoDoDia(s, hoje, hoje), f = t ? fator(hoje, t) : 0;
+    if (t && corr(t) && f > 0) s = { ...s, runs: [...s.runs, { ...reg('v' + hoje, hoje, t.tipo, Math.round(t.distKm * f * 10) / 10, Math.round(t.durMin * f), 3), plan: planejadoDe(t) }] };
+  }
+  const g = guardarDoDia(s, ate);
+  return g ? { ...s, run: { ...s.run, ...g } } : s;
+}
+const semanal = (st, inicio, n) => Array.from({ length: n }, (_, i) => planoAtual(st, somaDias(inicio, i * 7)).semanas[i].volumeKm);
+
+test('C1: excesso grande nunca é tranquilizado sem comparação válida', () => {
+  const inicio = '2026-11-02';
+  // novato, 30 min planejados × 90 feitos, só com o tempo
+  const stN = estado(novato, inicio, inicio);
+  const tN = treinoDoDia(stN, inicio, inicio);
+  const aN = analiseDoRegistro(stN, inicio, { ...reg('n1', inicio, 'corrida_caminhada', 0, tN.durMin * 3, null), plan: planejadoDe(tN) });
+  assert.ok(aN.selo === 'acima' && aN.itens.some((x) => x.tom === 'warn' && /mais que dobra o risco/.test(x.texto) && /começando/.test(x.texto)), JSON.stringify(aN.itens));
+  // regular, 6,3 km planejados × 12,6 feitos, sem histórico: compara com o longo informado na entrevista (10 km)
+  const st = estado(base, inicio, inicio);
+  const d = planoAtual(st, inicio).semanas[0].dias.find((x) => x.tipo === 'leve');
+  const data = somaDias(inicio, (d.wd + 6) % 7);
+  const aR = analiseDoRegistro(st, data, { ...reg('r1', data, 'leve', d.distKm * 2, d.durMin * 2, 3), plan: planejadoDe(d) });
+  assert.ok(aR.itens.some((x) => x.tom === 'warn' && /informou na entrevista/.test(x.texto)), JSON.stringify(aR.itens));
+  for (const a of [aN, aR]) assert.ok(!a.itens.some((x) => /acréscimo é pequeno|sem salto|não é um salto/.test(x.texto)) && a.plano !== 'Nada muda no plano.');
+  // sem nada com que comparar (plano por tempo, registro só com distância, sem histórico): não afirma nem nega
+  const semRef = analiseDoRegistro({ ...stN, run: { ...stN.run, inicio: '2026-01-05' } }, inicio, { ...reg('n2', inicio, 'corrida_caminhada', 9, 0, 3), plan: planejadoDe(tN) });
+  assert.ok(!semRef.itens.some((x) => x.tom === 'ok' && /salto|acréscimo/.test(x.texto)) && !semRef.itens.some((x) => /a mais que o planejado/.test(x.texto)), 'C8: plano por tempo e registro só com distância não vira excesso por estimativa');
+  assert.ok(semRef.itens.some((x) => /não tem o tempo/.test(x.texto)));
+});
+
+test('C2: semanas passadas e registro atrasado usam o treino que a tela mostrou', () => {
+  const inicio = '2026-09-07';
+  const st0 = estado(base, inicio, inicio);
+  const p0 = planoAtual(st0, inicio);
+  // semana 1 normal; na semana 2, dor 8 no joelho na terça: os dias seguintes viram "Sem corrida"
+  let st = viver(st0, inicio, somaDias(inicio, 8));
+  st = { ...st, dores: [{ id: 'd1', data: somaDias(inicio, 8), onde: 'joelho', lado: '', tipo: 'articular', quando: 'durante', nivel: 8, nota: '', fim: '' }] };
+  st = viver(st, somaDias(inicio, 8), somaDias(inicio, 11), (hoje, t) => (t.tipo === 'descanso' ? 0 : 1));
+  st = { ...st, dores: [{ ...st.dores[0], fim: somaDias(inicio, 11) }] }; // “Melhorou” 3 dias depois
+  st = viver(st, somaDias(inicio, 11), somaDias(inicio, 21), (hoje, t) => (t.tipo === 'descanso' ? 0 : 1));
+  const hoje = somaDias(inicio, 21);
+  const quinta = somaDias(inicio, 10);
+  const visto = treinoDoDia(st, hoje, quinta);
+  assert.ok(visto && visto.tipo === 'descanso' && visto.guardado, 'visto depois, o dia continua como “Sem corrida”');
+  assert.equal(planoDaSemanaEm(st, hoje, somaDias(inicio, 7)).dias[4].tipo, 'descanso');
+  // sem o treino guardado, o dia vem como estimado e o registro atrasado não é comparado
+  const semGuardar = { ...st, run: { ...st.run, mostrados: [] } };
+  assert.ok(treinoDoDia(semGuardar, hoje, quinta).estimado && !treinoDoDia(semGuardar, hoje, quinta).guardado);
+  const atrasado = analiseDoRegistro({ ...semGuardar, runs: [] }, hoje, reg('x', quinta, 'leve', 5, 31, 3));
+  assert.ok(atrasado.selo === 'sem' && /não há como comparar/.test(atrasado.itens[0].texto));
+  // com o treino guardado, o registro atrasado é comparado com o que a tela mostrou
+  const terca1 = somaDias(inicio, 1), mostrado = st.run.mostrados.find((m) => m.data === terca1);
+  const aGuardado = analiseDoRegistro({ ...st, runs: [] }, hoje, reg('y', terca1, mostrado.tipo, mostrado.distKm, mostrado.durMin, 3));
+  assert.equal(aGuardado.selo, 'dentro');
+  // faltas: só o que a tela mostrou como corrida e ficou sem registro
+  const faltas = analiseRecente(st, hoje).faltas;
+  assert.ok(faltas.every((f) => st.run.mostrados.some((m) => m.data === f.data && m.tipo === f.tipo) && f.tipo !== 'descanso' && f.tipo !== 'caminhada'));
+  assert.deepEqual(analiseRecente({ ...semGuardar }, hoje).faltas, [], 'sem o treino guardado, não há falta');
+  const pulou = viver(st0, inicio, somaDias(inicio, 14), (h2) => (h2 >= somaDias(inicio, 7) && h2 <= somaDias(inicio, 9) ? 0 : 1));
+  assert.ok(analiseRecente(pulou, somaDias(inicio, 14)).faltas.length >= 1);
+  // semana vista traz `semanaAtual`, e corridas em dia sem treino do plano vêm em `extras`
+  const comExtra = { ...st, runs: [...st.runs, reg('e1', somaDias(inicio, 0), 'livre', 3, 20, 3)] };
+  const s1 = planoDaSemanaEm(comExtra, hoje, inicio);
+  assert.ok(s1.semana === 1 && s1.semanaAtual === 4 && s1.dias[1] === null && s1.extras[1].length === 1 && s1.extras[1][0].id === 'e1' && s1.extras[2].length === 0);
+  assert.equal(planoDaSemanaEm(st, hoje, somaDias(inicio, 28)).semanaAtual, 4);
+  // validação do estado: só o formato válido, um por data, os mais recentes
+  const limpo = limparCorrida({ ...st.run, mostrados: [...st.run.mostrados, { data: 'x' }, { data: '2026-09-08', tipo: '<b>', nome: 5 }, 7, null], degrau: { pontos: 99, base: 'x' } });
+  assert.ok(limpo.mostrados.length === st.run.mostrados.length && limpo.mostrados.find((m) => m.data === '2026-09-08').tipo === '' && limpo.degrau === null);
+  assert.deepEqual(limparCorrida({ answers: base, mostrados: st.run.mostrados, degrau: { pontos: 1, base: 'entrevista' } }).mostrados, []);
+  assert.equal(limparCorrida({ ...st.run, mostrados: Array.from({ length: 900 }, (_, i) => ({ data: somaDias('2020-01-01', i), tipo: 'leve', durMin: 30 })) }).mostrados.length, 400);
+  assert.equal(guardarDoDia(st, hoje), null, 'sem mudança, nada a gravar');
+  assert.ok(p0.semanas.length > 0);
+});
+
+test('C3: correr mais do que o plano mostrava nunca aumenta as semanas seguintes', () => {
+  const inicio = '2026-09-07';
+  for (const a of [{ ...base, objetivo: 'saude', kmSemana: 30, longoAtual: 10 }, base, { ...base, aparelho: 'tempo', dias: ['1', '3', '5', '6'] }]) {
+    const st0 = estado(a, inicio, inicio);
+    // 3 semanas fazendo metade: o plano corta; depois, uma semana fazendo exatamente o mostrado ou 2,2 vezes o mostrado
+    const fraco = viver(st0, inicio, somaDias(inicio, 21), () => 0.5);
+    const exato = viver(fraco, somaDias(inicio, 21), somaDias(inicio, 28), () => 1);
+    const excesso = viver(fraco, somaDias(inicio, 21), somaDias(inicio, 28), () => 2.2);
+    for (const k of [4, 5, 6]) {
+      const hoje = somaDias(inicio, k * 7);
+      const pe = planoAtual(k === 4 ? exato : viver(exato, somaDias(inicio, 28), hoje, () => 1), hoje), px = planoAtual(k === 4 ? excesso : viver(excesso, somaDias(inicio, 28), hoje, () => 1), hoje);
+      assert.ok(px.semanas[k].volumeKm <= pe.semanas[k].volumeKm + 0.2, `semana ${k + 1}: ${px.semanas[k].volumeKm} km com excesso × ${pe.semanas[k].volumeKm} km seguindo o plano`);
+      const lg = (p) => Math.max(0, ...p.semanas[k].dias.filter((d) => d.tipo === 'longo').map((d) => d.distKm));
+      assert.ok(lg(px) <= lg(pe) + 0.1, `semana ${k + 1}: longo ${lg(px)} × ${lg(pe)}`);
+    }
+    assert.ok(analiseRecente(excesso, somaDias(inicio, 28)).padroes.some((x) => x.id === 'acima_do_volume' && /o plano mostrava/.test(x.texto)));
+  }
+});
+
+test('C4, C5, C7, C9 e C10: selo, textos e padrões coerentes', () => {
+  const inicio = '2026-11-02';
+  const st = estado(base, inicio, inicio);
+  const plano = (extra) => ({ tipo: 'leve', durMin: 40, distKm: 6.5, ritmo: [350, 400], pse: [2, 4], un: 't', ...extra });
+  const an = (r, plan, runs = []) => analiseDoRegistro({ ...st, runs: [...runs] }, inicio, { ...r, plan });
+  // varredura: tipo × quantidade × ritmo × esforço — o selo sai dos itens por uma regra só
+  let n = 0;
+  for (const tipo of ['leve', 'longo', 'regenerativo', 'fartlek', 'tempo', 'intervalado', 'progressivo', 'corrida_caminhada', 'prova']) for (const un of ['t', 'd']) for (const fq of [0, 0.4, 0.9, 1, 1.12, 1.6, 2.5]) for (const ritmo of [0, 300, 370, 430]) for (const pse of [null, 1, 3, 5, 7, 10]) for (const feitoTipo of [tipo, 'leve', 'livre', 'intervalado']) {
+    const forte = ['fartlek', 'tempo', 'intervalado'].includes(tipo);
+    const plan = plano({ tipo, un, pse: tipo === 'corrida_caminhada' ? [3, 5] : forte ? [7, 9] : tipo === 'progressivo' ? [3, 6] : tipo === 'prova' ? [7, 10] : [2, 4], ritmo: ['leve', 'longo', 'regenerativo'].includes(tipo) ? [350, 400] : null, distKm: tipo === 'prova' ? 10 : 6.5 });
+    const dur = un === 't' ? plan.durMin * fq : ritmo ? (plan.distKm * fq * ritmo) / 60 : 0;
+    const dist = un === 'd' ? plan.distKm * fq : ritmo && dur ? (dur * 60) / ritmo : 0;
+    if (!dur && !dist) continue;
+    const a = an(reg('q', inicio, feitoTipo, dist, dur, pse), plan);
+    n++;
+    const rot = JSON.stringify({ tipo, un, fq, ritmo, pse, feitoTipo, a });
+    assert.ok(['dentro', 'acima', 'abaixo', 'sem'].includes(a.selo) && a.itens.length && a.plano && a.refs.every((k) => REFS_CORRIDA[k]), rot);
+    if (a.selo === 'dentro') assert.ok(a.itens.every((x) => x.tom !== 'warn') && a.plano === 'Nada muda no plano.' && !a.itens.some((x) => /mais rápido que a faixa|a mais que|a menos que|bem acima|ficou menor/.test(x.texto)), 'dentro com alerta ou mudança: ' + rot);
+    if (a.itens.some((x) => x.tom === 'warn')) assert.equal(a.selo, 'acima', 'alerta sem selo de acima: ' + rot);
+    if (a.plano !== 'Nada muda no plano.' && a.plano !== 'Nada muda no plano por este treino.') assert.notEqual(a.selo, 'dentro', rot);
+    // esforço 3 ou mais pontos fora da faixa sempre tem uma linha sobre o esforço
+    if (pse != null && tipo !== 'prova' && (pse >= plan.pse[1] + 3 || pse <= plan.pse[0] - 3)) assert.ok(a.itens.some((x) => /[Ee]sforço/.test(x.texto) && x.tom !== 'ok'), 'esforço fora da faixa sem linha: ' + rot);
+    // dentro da faixa de esforço que o plano mostrou, nenhum alerta de esforço (C5)
+    if (pse != null && pse >= plan.pse[0] && pse <= plan.pse[1]) assert.ok(!a.itens.some((x) => x.tom === 'warn' && /^Esforço/.test(x.texto)), rot);
+    // textos na unidade certa e ícone coerente (C10)
+    if (un === 'd') assert.ok(!a.itens.some((x) => /Duração dentro/.test(x.texto)), rot);
+    assert.ok(!a.itens.some((x) => x.tom === 'ok' && /soma mais cansaço/.test(x.texto)), rot);
+    if (feitoTipo === 'livre' && pse >= 7 && forte) assert.ok(!a.itens.some((x) => /virou corrida leve/.test(x.texto)), rot);
+    // dia de prova com menos distância que a prova não é "dentro"
+    if (tipo === 'prova' && dist > 0 && dist < 9) assert.notEqual(a.selo, 'dentro', rot);
+  }
+  assert.ok(n > 5000, String(n));
+  // corrida e caminhada com esforço 5 (o plano mostra 3 a 5) e bem menos tempo: abaixo, sem alerta de esforço
+  const cc = an(reg('c', inicio, 'corrida_caminhada', 0, 10, 5), plano({ tipo: 'corrida_caminhada', durMin: 30, pse: [3, 5], ritmo: null }));
+  assert.ok(cc.selo === 'abaixo' && !cc.itens.some((x) => x.tom === 'warn'));
+  // duas corridas no mesmo dia, metade cada: somadas, dão o treino do dia
+  const meia = reg('m1', inicio, 'leve', 3.3, 20, 3), outra = reg('m2', inicio, 'leve', 3.2, 20, 3);
+  const soma = an(meia, plano({}), [{ ...outra, plan: plano({}) }]);
+  assert.ok(soma.selo === 'dentro' && soma.itens.some((x) => /Somei as 2 corridas/.test(x.texto)), JSON.stringify(soma));
+  assert.equal(analiseRecente({ ...st, runs: [{ ...meia, plan: plano({}) }, { ...outra, plan: plano({}) }] }, inicio).itens.length, 1, 'um item por dia');
+  // padrão "leves pesados": mesma janela do gerador, e o texto só afirma o que o plano fez
+  const inicio2 = '2026-09-07', st2 = estado(base, inicio2, inicio2);
+  const pesado = viver(st2, inicio2, somaDias(inicio2, 14));
+  const comPse = { ...pesado, runs: pesado.runs.map((r) => (r.tipo === 'leve' || r.tipo === 'regenerativo' || r.tipo === 'longo' ? { ...r, pse: 6 } : r)) };
+  const h14 = somaDias(inicio2, 14), pl = planoAtual(comPse, h14), pad = analiseRecente(comPse, h14).padroes.find((x) => x.id === 'leve_pesado');
+  assert.ok(pad && pl.sinais.pesado);
+  assert.equal(/segurou o volume/.test(pad.texto), pl.ajustes.some((x) => /Volume mantido nesta semana|Semana leve antecipada/.test(x.texto)));
+  // só na semana atual (ainda não entrou na conta do plano): o padrão não aparece
+  const soAgora = { ...pesado, runs: [...pesado.runs, reg('p1', h14, 'leve', 5, 30, 7), reg('p2', somaDias(h14, 1), 'leve', 5, 30, 7)] };
+  assert.equal(analiseRecente(soAgora, somaDias(h14, 2)).padroes.some((x) => x.id === 'leve_pesado'), planoAtual(soAgora, somaDias(h14, 2)).sinais.pesado);
+});
+
+test('C6: degrau de ritmo concedido não volta atrás', () => {
+  const inicio = '2026-09-07';
+  const st = estado(base, inicio, inicio);
+  const hoje = somaDias(inicio, 30);
+  const semDegrau = planoAtual(st, hoje);
+  assert.equal(semDegrau.degrau.pontos, 0);
+  const com = planoAtual({ ...st, run: { ...st.run, degrau: { pontos: 1, base: 'entrevista' } } }, hoje);
+  assert.ok(com.degrau.pontos === 1 && com.ritmos.vdot > semDegrau.ritmos.vdot && com.ajustes.some((x) => /um degrau mais rápidos/.test(x.texto)));
+  // degrau de outro resultado não vale
+  assert.equal(planoAtual({ ...st, run: { ...st.run, degrau: { pontos: 2, base: '2026-08-01' } } }, hoje).degrau.pontos, 0);
+  // guardarDoDia grava o degrau concedido e o mantém
+  const g = guardarDoDia({ ...st, run: { ...st.run, degrau: { pontos: 1, base: 'entrevista' } } }, hoje);
+  assert.deepEqual(g.degrau, { pontos: 1, base: 'entrevista' });
+});
+
+test('A1, B3 e B4: uma corrida por semana, dor informada na entrevista e plano sem data', () => {
+  // 1 dia por semana: a corrida única segue o teto do treino longo, a partir da corrida mais longa informada
+  for (const [a, teto] of [[{ ...base, experiencia: 'iniciante', kmSemana: 20, longoAtual: 4, dias: ['3'], tempo: '90', objetivo: 'saude', resultado: 'nao' }, 4.4], [{ ...base, dias: ['3'], tempo: '90', objetivo: 'saude', longoAtual: 6 }, 6.6], [{ ...base, experiencia: 'avancado', kmSemana: 60, longoAtual: 15, dias: ['6'], tempo: '90', objetivo: 'saude' }, 16.5]]) {
+    const p = gerarPlano(a);
+    const unica = (s) => s.dias.filter(corr)[0].distKm;
+    assert.ok(unica(p.semanas[0]) <= teto + 0.3, `semana 1 com ${unica(p.semanas[0])} km para mais longa de ${a.longoAtual} km`);
+    for (let i = 1; i < p.semanas.length; i++) { const ant = Math.max(...p.semanas.slice(Math.max(0, i - 4), i).map(unica)); assert.ok(unica(p.semanas[i]) <= Math.max(ant * 1.1, ant + 0.75) + 0.6, `semana ${i + 1}: ${unica(p.semanas[i])} depois de ${ant}`); }
+  }
+  // irregular: volume proporcional aos dias; quem ainda não corre 3 km seguidos parte de corrida e caminhada
+  const irr = (extra) => gerarPlano({ experiencia: 'irregular', longoAtual: 4, objetivo: 'saude', dias: ['1', '3', '5'], diaLongo: 'auto', tempo: '60', aparelho: 'tempo', local: 'rua', idade: 35, peso: 72, altura: 175, lesao12m: 'nao', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'], ...extra });
+  assert.ok(irr({ dias: ['3'], tempo: '90' }).semanas[0].volumeKm <= 4.5 && irr({ dias: ['2', '5'] }).semanas[0].volumeKm <= 7);
+  const curto = irr({ longoAtual: 1, dias: ['3'], tempo: '90' });
+  assert.ok(curto.tipo === 'adaptacao' && curto.semanas[0].dias.some((d) => d.tipo === 'corrida_caminhada') && curto.semanas[0].dias.every((d) => d.tipo !== 'leve'));
+  // dor informada na entrevista: sem treino forte nem acelerações nas 2 primeiras semanas, e orientação do local
+  const a = { ...base, dias: ['1', '2', '3', '4', '5', '6'], kmSemana: 45, longoAtual: 14, experiencia: 'avancado' };
+  const p0 = gerarPlano(a);
+  assert.ok(p0.semanas[0].dias.some((d) => d.intensidade === 'forte'));
+  const textos = new Set();
+  for (const regiao of ['joelho', 'canela', 'aquiles', 'pe', 'quadril', 'coxa', 'lombar']) {
+    const p = gerarPlano({ ...a, limitacoes: [regiao] });
+    assert.ok(p.semanas.slice(0, 2).every((s) => s.dias.every((d) => d.intensidade !== 'forte' && !d.blocos.some((b) => b.rotulo === 'Acelerações'))), regiao);
+    assert.ok(p.semanas[2].dias.some((d) => d.intensidade === 'forte') && p.perfil.passo === 0.07);
+    assert.notDeepEqual(p.semanas[0], p0.semanas[0]);
+    const av = p.avisos.find((x) => /Você disse que sente dor/.test(x.texto));
+    assert.ok(av && av.tipo === 'warn' && av.refs.length && av.refs.every((k) => REFS_CORRIDA[k]), regiao);
+    textos.add(av.texto);
+  }
+  assert.equal(textos.size, 7, 'cada região tem a sua orientação');
+  // plano sem data não encolhe: tem pelo menos a duração mínima da distância
+  const semData = gerarPlano({ ...base, experiencia: 'avancado', kmSemana: 30, longoAtual: 15, dias: ['3'], tempo: '30', objetivo: 'distancia', distancia: '21', tempoLongo: '60' });
+  assert.ok(semData.totalSemanas >= 8 && !(semData.totalSemanas <= 4 && semData.semanas.some((s) => s.dias.some((d) => d.tipo === 'prova'))), String(semData.totalSemanas));
+  for (const dist of ['5', '10', '21', '42']) for (const exp of ['iniciante', 'regular', 'avancado']) {
+    const p = gerarPlano({ ...base, experiencia: exp, objetivo: 'distancia', distancia: dist, tempoLongo: '150' });
+    const ev = p.semanas[p.totalSemanas - 1].dias.find((d) => d.tipo === 'prova');
+    if (ev) assert.ok(p.totalSemanas >= 8, `${exp} ${dist}: ${p.totalSemanas} semanas`);
+    // desafio que passa do tempo que a pessoa disse ter: aviso forte
+    if (ev && ev.durMin > p.perfil.tempoLongoDito + 15) assert.ok(p.avisos.some((x) => x.tipo === 'danger' && x.destaque && /mais do que o tempo que você disse ter/.test(x.texto)), `${exp} ${dist}`);
+  }
+});
+
+test('A2, A3, A4 e volta depois de dor: saúde e lesões', () => {
+  // diabetes com liberação: o aviso diz "sem treinos fortes" e o plano cumpre
+  const dia = gerarPlano({ ...base, condicoes: ['diabetes'], liberado: 'sim' });
+  assert.ok(dia.semanas.every((s) => s.dias.every((d) => d.intensidade !== 'forte')) && dia.avisos.some((x) => /sem treinos fortes/.test(x.texto)));
+  for (const p of [dia, gerarPlano({ ...base, condicoes: ['cardiaco'], liberado: 'sim' }), gerarPlano({ ...base, triagem: ['falta_ar'], liberado: 'sim' })]) assert.ok(/só em intensidade leve/.test(p.avisos.find((x) => x.tipo === 'danger').texto) && p.semanas.every((s) => s.dias.every((d) => d.intensidade !== 'forte')));
+  // dor no peito que não é do músculo suspende em qualquer intensidade; gestante: abdômen e panturrilha
+  const peito = efeitoDaDor({ onde: 'peito', tipo: 'articular', quando: 'durante', nivel: 5, dias: 0 });
+  assert.ok(peito.nivel === 4 && /avaliação médica/.test(peito.texto) && /192/.test(peito.texto));
+  assert.equal(efeitoDaDor({ onde: 'peito', tipo: 'muscular', quando: 'depois', nivel: 3, dias: 1 }).nivel, 0);
+  const gest = perfil({ ...base, condicoes: ['gestante'], liberado: 'sim' });
+  assert.equal(efeitoDaDor({ onde: 'abdomen', tipo: 'articular', quando: 'durante', nivel: 6, dias: 0 }, gest).nivel, 4);
+  assert.equal(efeitoDaDor({ onde: 'panturrilha', tipo: 'muscular', quando: 'depois', nivel: 3, dias: 1 }, gest).nivel, 4);
+  assert.equal(efeitoDaDor({ onde: 'panturrilha', tipo: 'muscular', quando: 'depois', nivel: 3, dias: 1 }, perfil(base)).nivel, 0);
+  // chaves herdadas não passam
+  for (const onde of ['__proto__', 'constructor', 'toString']) assert.deepEqual(efeitoDaDor({ onde, tipo: 'aguda', quando: 'repouso', nivel: 9 }), { nivel: 0, corte: 0, texto: '', refs: [] });
+  assert.deepEqual(alertas([{ id: 'a', data: '2026-11-01', tipo: 'leve', distKm: 5, durMin: 30, pse: 3, dor: { onde: '__proto__', nivel: 4 } }], '2026-11-02'), []);
+  // dor forte anotada na corrida não é anulada por um relato leve do mesmo local e do mesmo dia: vale o pior
+  const inicio = '2026-11-02', ontem = somaDias(inicio, 1), hoje = somaDias(inicio, 2);
+  const corrida = reg('d1', ontem, 'leve', 6, 38, 4, { onde: 'joelho', nivel: 8 });
+  const relato = { onde: 'joelho', nivel: 2, tipo: 'articular', quando: 'durante', dias: 1, data: ontem };
+  const p = gerarPlano(base, { inicio, hoje, registros: [corrida], dores: [relato], desde: inicio });
+  assert.ok(p.semanas[0].dias.filter((d) => d.wd !== 1 && d.wd !== 2 && d.tipo !== 'caminhada').every((d) => d.tipo === 'descanso'), JSON.stringify(tipos(p.semanas[0])));
+  // relato posterior à corrida (a pessoa atualizou a dor): vale o relato
+  const depois = gerarPlano(base, { inicio, hoje, registros: [corrida], dores: [{ ...relato, data: hoje, dias: 0 }], desde: inicio });
+  assert.ok(depois.semanas[0].dias.some((d) => d.tipo !== 'descanso' && d.tipo !== 'caminhada' && d.wd !== 1 && d.wd !== 2));
+  // canela aguda 8 e “Melhorou” 2 dias depois: a volta é gradual (sem treino forte, volume reduzido)
+  const ini2 = '2026-09-07', st0 = estado({ ...base, objetivo: 'saude', kmSemana: 30 }, ini2, ini2);
+  const st = viver(st0, ini2, somaDias(ini2, 21));
+  const comDor = { ...st, dores: [{ id: 'c1', data: somaDias(ini2, 21), onde: 'canela', lado: '', tipo: 'aguda', quando: 'durante', nivel: 8, nota: '', fim: somaDias(ini2, 23) }] };
+  const volta = planoAtual(comDor, somaDias(ini2, 24));
+  assert.ok(volta.ajustes.some((x) => /Volta depois da dor/.test(x.texto)) && volta.semanas[3].dias.every((d) => d.intensidade !== 'forte'), JSON.stringify(volta.ajustes.map((x) => x.texto)));
+  // B5: a folha da escolha avisa, antes, o que a prioridade faz com a meta de corrida
+  const meia = estado({ ...base, experiencia: 'avancado', kmSemana: 45, longoAtual: 16, distancia: '21', semanasProva: 16, tempoLongo: '150', dias: ['1', '2', '4', '6', '0'] }, '2026-11-02', '2026-11-02');
+  assert.match(efeitoDoFoco('musculacao', meia).linhas[0], /Com essa prioridade, a sua meta de meia maratona passa a/);
+  assert.ok(!efeitoDoFoco('corrida', meia).linhas.some((l) => /Com essa prioridade/.test(l)));
 });

@@ -22,6 +22,7 @@
 //   que se corre (hreljac2005) e o recorde mundial (wa_recordes).
 import { FAIXA_DA_RESPOSTA, FAIXAS_PAUSA } from './pausa.js';
 import { LOCAIS_DOR, DIAS_ATIVA, dorDeAlerta, doresAtivas } from './dor.js';
+import { comboAtual } from './combinado.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { TIPOS_TREINO, DOR_CORRIDA } from '../data/corrida.js';
 
@@ -51,15 +52,17 @@ export const PERGUNTAS = [
     op: [
       ['nunca', 'Nunca corri', 'Ou não corro há anos'],
       ['caminha', 'Caminho ou alterno corrida e caminhada', 'Ainda não corro 10 minutos seguidos'],
+      // quem corre, mas pouco e sem regularidade: plano por esforço, com 3 corridas curtas por semana (malisoux2015risco, pollock1998)
+      ['irregular', 'Corro de vez em quando, devagar', 'Sem regularidade: umas semanas sim, outras não'],
       ['iniciante', 'Corro até uns 30 minutos seguidos', 'Cerca de 3 a 5 km sem parar'],
       ['regular', 'Corro com regularidade', 'De 5 a 10 km sem parar; já penso em ritmo'],
       ['avancado', 'Treino há anos, com bom volume', 'Corro 15 km ou mais; já fiz meia maratona ou maratona'],
     ],
   },
   { k: 'kmSemana', tipo: 'numero', se: corre, titulo: 'Quantos quilômetros você corre por semana?', ajuda: 'A média das últimas semanas em que treinou. Uma estimativa serve.', min: 0, max: 200, un: 'km por semana', padrao: 15 },
-  { k: 'longoAtual', tipo: 'numero', se: corre, titulo: 'Qual foi a sua corrida mais longa nas últimas 4 semanas?', ajuda: 'O treino longo cresce a partir dela, sem saltos. Se ficou parado, informe a de antes da pausa.', min: 1, max: 60, un: 'km', padrao: 5 },
+  { k: 'longoAtual', tipo: 'numero', se: (a) => corre(a) || a.experiencia === 'irregular', titulo: 'Qual foi a sua corrida mais longa nas últimas 4 semanas?', ajuda: 'O treino longo cresce a partir dela, sem saltos. Se ficou parado, informe a de antes da pausa.', min: 1, max: 60, un: 'km', padrao: 5 },
   {
-    k: 'provas', tipo: 'um', se: (a) => a.experiencia === 'regular' || a.experiencia === 'avancado', titulo: 'Qual a maior prova que você já completou?',
+    k: 'provas', tipo: 'um', se: (a) => a.experiencia === 'regular' || a.experiencia === 'avancado', titulo: 'Qual a maior prova que você já completou?', ajuda: 'Serve para os cuidados de quem vai fazer a primeira maratona; não muda os treinos.',
     op: [['nenhuma', 'Nunca fiz prova', ''], ['5a10', '5 km ou 10 km', ''], ['meia', 'Meia maratona', ''], ['maratona', 'Maratona', '']],
   },
   {
@@ -71,7 +74,7 @@ export const PERGUNTAS = [
   {
     k: 'objetivo', tipo: 'um', titulo: 'Qual é o seu objetivo na corrida?',
     op: [
-      ['comecar', 'Começar a correr', 'Chegar a 30 minutos de corrida sem parar'],
+      ['comecar', 'Começar a correr', 'Chegar a 30 minutos de corrida sem parar (para quem já corre, vale como “Saúde e disposição”)'],
       ['saude', 'Saúde e disposição', 'Manter uma rotina, sem prova em vista'],
       ['distancia', 'Correr mais longe', 'Completar uma distância sem parar'],
       ['ritmo', 'Correr mais rápido', 'Melhorar o tempo em uma distância'],
@@ -91,7 +94,7 @@ export const PERGUNTAS = [
   { k: 'dias', tipo: 'varios', titulo: 'Em quais dias da semana você pode correr?', ajuda: 'Marque os dias possíveis. Eu deixo pelo menos um dia de descanso por semana e evito treinos fortes em dias seguidos.', op: DIAS_OP },
   { k: 'diaLongo', tipo: 'um', se: (a) => Array.isArray(a.dias) && a.dias.length >= 2, titulo: 'Qual é o melhor dia para o treino mais longo?', ajuda: 'Se o dia não estiver entre os que você marcou, eu escolho.', op: [['auto', 'Tanto faz', 'Eu escolho o melhor dia'], ...DIAS_OP] },
   { k: 'tempo', tipo: 'um', titulo: 'Quanto tempo você tem por treino, em um dia comum?', ajuda: 'Conte com aquecimento e volta à calma.', op: [['30', 'Cerca de 30 minutos', ''], ['45', 'Cerca de 45 minutos', ''], ['60', 'Cerca de 1 hora', ''], ['90', 'Até 1h30', '']] },
-  { k: 'tempoLongo', tipo: 'um', se: comDistancia, titulo: 'E no dia do treino mais longo?', op: [['60', 'Até 1 hora', ''], ['90', 'Até 1h30', ''], ['120', 'Até 2 horas', ''], ['150', 'Até 2h30', ''], ['180', 'Até 3 horas', '']] },
+  { k: 'tempoLongo', tipo: 'um', se: comDistancia, titulo: 'E no dia do treino mais longo?', op: [['60', 'Até 1 hora', ''], ['90', 'Até 1h30', ''], ['120', 'Até 2 horas', ''], ['150', 'Até 2h30', ''], ['180', 'Até 3 horas', 'O treino mais longo do plano vai até 2h30']] },
   {
     // como medir o treino: define se a prescrição sai em distância e ritmo, em velocidade de esteira ou em tempo e esforço
     k: 'aparelho', tipo: 'um', titulo: 'Como você mede as suas corridas?',
@@ -103,7 +106,7 @@ export const PERGUNTAS = [
       ['nada', 'Não meço', 'Vou pelo que sinto'],
     ],
   },
-  { k: 'local', tipo: 'um', titulo: 'Onde você corre na maior parte das vezes?', op: [['rua', 'Rua, parque ou calçadão', ''], ['pista', 'Pista de atletismo', ''], ['esteira', 'Esteira', ''], ['varia', 'Varia', '']] },
+  { k: 'local', tipo: 'um', titulo: 'Onde você corre na maior parte das vezes?', ajuda: 'Na esteira, os treinos saem em km/h; na pista, os tiros saem em metros. Nos outros lugares, nada muda.', op: [['rua', 'Rua, parque ou calçadão', ''], ['pista', 'Pista de atletismo', ''], ['esteira', 'Esteira', ''], ['varia', 'Varia', '']] },
   { k: 'idade', tipo: 'numero', titulo: 'Quantos anos você tem?', ajuda: 'A idade muda a progressão e os cuidados.', min: 8, max: 99, un: 'anos', padrao: 30 },
   { k: 'peso', tipo: 'numero', titulo: 'Qual é o seu peso?', ajuda: 'Uma estimativa já serve.', min: 30, max: 250, un: 'kg', padrao: 70, passo: 0.5, dec: 1 },
   { k: 'altura', tipo: 'numero', titulo: 'Qual é a sua altura?', ajuda: 'Em centímetros.', min: 120, max: 220, un: 'cm', padrao: 170 },
@@ -287,14 +290,20 @@ export function perfil(respostas) {
   const cond = lista(a.condicoes, OPC.condicoes).filter((x) => x !== 'nenhuma');
   const tri = lista(a.triagem, OPC.triagem).filter((x) => x !== 'nenhum');
   const lim = lista(a.limitacoes, OPC.limitacoes).filter((x) => x !== 'nenhuma');
-  const jaCorre = exp === 'iniciante' || exp === 'regular' || exp === 'avancado';
-  const km = jaCorre ? entre(numero(a.kmSemana, exp === 'iniciante' ? 8 : exp === 'regular' ? 20 : 40), 0, 200) : 0;
-  let nivelBase = exp === 'iniciante' ? 1 : exp === 'regular' ? (km < 10 ? 1 : 2) : exp === 'avancado' ? (km < 25 ? 2 : 3) : 0;
+  // Quem corre de vez em quando, devagar e sem regularidade: já corre, mas sem base. Parte de 3 corridas curtas por semana
+  // (cerca de 9 km: 3 × 22 minutos), o mínimo para o fôlego melhorar sem passar do que protege quem começa (pollock1998).
+  const irregular = exp === 'irregular';
+  const jaCorre = exp === 'iniciante' || exp === 'regular' || exp === 'avancado' || irregular;
+  const km = irregular ? 9 : jaCorre ? entre(numero(a.kmSemana, exp === 'iniciante' ? 8 : exp === 'regular' ? 20 : 40), 0, 200) : 0;
+  let nivelBase = exp === 'iniciante' || irregular ? 1 : exp === 'regular' ? (km < 10 ? 1 : 2) : exp === 'avancado' ? (km < 25 ? 2 : 3) : 0;
   // volta de pausa: de 3 a 6 meses, um nível abaixo; mais de 6 meses, recomeço (zheng2022, coyle1984, caterisano2019)
   const retorno = jaCorre ? FAIXA_DA_RESPOSTA[a.pausa] || 0 : 0;
   let nivel = retorno >= 4 ? (nivelBase >= 2 ? 1 : 0) : retorno === 3 ? Math.max(0, nivelBase - 1) : nivelBase;
+  // quem está correndo e não passou de 3 km seguidos (cerca de 20 minutos) nas últimas 4 semanas parte do que faz: corrida e
+  // caminhada. Na volta de pausa a pergunta vale para antes da pausa, e a regra é a da volta.
+  if (jaCorre && retorno === 0 && numero(a.longoAtual, 3) < 3) nivel = 0;
   // "já se exercita com regularidade" na triagem do ACSM (riebe2015, whitfield2017)
-  const ativo = jaCorre && retorno < 3;
+  const ativo = jaCorre && !irregular && retorno < 3;
   const pausaDias = FAIXAS_PAUSA[retorno] ? FAIXAS_PAUSA[retorno].meio : 0; // tempo parado representativo da resposta
   const jovem = idade < 18, idoso = idade >= 60, master = idade >= 40;
   const gestante = cond.includes('gestante'), posparto = cond.includes('posparto');
@@ -309,7 +318,7 @@ export function perfil(respostas) {
   // Sem treino forte: sintomas, coração, rins, gestação e pós-parto sempre; pressão alta e outra doença crônica enquanto não
   // houver liberação (pescatello2004: intensidade moderada; oms2020 e bredin2013: com doença crônica, intensidade leve a
   // moderada e orientação de um profissional antes de ir além).
-  const cautela = tri.length > 0 || cardiaco || renal || gestante || posparto || ((hipertensao || cronica) && !liberado);
+  const cautela = tri.length > 0 || cardiaco || renal || diabetes || gestante || posparto || ((hipertensao || cronica) && !liberado);
   // a proposta só é aceita com uma confirmação: quem declarou liberação médica e quem tem doença sem liberação
   const confirmar = precisaLiberacao || ((hipertensao || cronica) && !liberado);
   if (posparto) nivel = 0; // volta sempre por corrida e caminhada (deering2024, goom2019)
@@ -340,14 +349,15 @@ export function perfil(respostas) {
   if ((cautela || idade < 16) && objetivo === 'ritmo') objetivo = 'distancia'; // sem treino forte, a meta passa a ser completar a distância
   if (idade < 14 && objetivo === 'prova') objetivo = 'distancia'; // prova oficial de rua só a partir dos 14 (cbat_norma12)
   // o treino contínuo mais longo não passa de 150 minutos (daniels)
-  const tempoLongo = dist ? Math.max(tempo, Math.min(150, maisPerto(Number(a.tempoLongo), TEMPOS_LONGO, 90))) : tempo;
+  const tempoLongoDito = dist ? Math.max(tempo, maisPerto(Number(a.tempoLongo), TEMPOS_LONGO, 90)) : tempo; // o que a pessoa disse ter no dia mais longo
+  const tempoLongo = Math.min(150, tempoLongoDito);
   const semanasProva = objetivo === 'prova' ? Math.round(entre(numero(a.semanasProva, 12), 1, 52)) : null;
   // tempo-alvo: entre o recorde mundial da distância e 12 minutos por km
   const temAlvo = !cautela && idade >= 16 && dist === distPedida && (objetivo === 'ritmo' || objetivo === 'prova') && a.temAlvo === 'sim' && Number.isFinite(a.alvoMin);
   const alvoOk = temAlvo && a.alvoMin >= 12 && a.alvoMin <= 420 && a.alvoMin * 60 >= recordeSeg(DIST[dist]) && (a.alvoMin * 60) / DIST[dist] <= 720;
   const alvoSeg = alvoOk ? a.alvoMin * 60 : null;
   // resultado recente → ritmos
-  const rd = jaCorre && a.resultado !== 'nao' && ({ 3: 3, ...DIST })[a.resultado];
+  const rd = jaCorre && !irregular && a.resultado !== 'nao' && ({ 3: 3, ...DIST })[a.resultado];
   const rs = typeof a.resultadoMin === 'number' ? a.resultadoMin * 60 : 0;
   const resultado = rd && resultadoValido(rd, rs) ? { distKm: rd, seg: rs } : null;
   // como medir: iniciantes sempre por tempo e esforço (buist2008, nhs_c25k); com resultado e GPS ou esteira, distância e ritmo
@@ -367,10 +377,14 @@ export function perfil(respostas) {
     precisaLiberacao, confirmar, bloqueio, bloqueado: !!bloqueio, cautela, imc, obeso, lesaoPrevia, limitacoes: lim, condicoes: cond, triagem: tri,
     resultadoInvalido: !!rd && typeof a.resultadoMin === 'number' && !resultado, alvoInvalido: temAlvo && !alvoOk,
     dias, diaLongo, descansoForcado, tempo, tempoLongo, objetivo, dist, distPedida, distMax, semanasProva, alvoSeg, resultado, aparelho, local, modo, qMax,
-    kmSemana: km, longoAtual, provas: ['nenhuma', '5a10', 'meia', 'maratona'].includes(a.provas) ? a.provas : 'nenhuma',
+    // irregular: cerca de 3 km (20 a 25 minutos) por dia de corrida, até 3 dias
+    kmSemana: irregular ? 3 * Math.min(3, dias.length) : km, longoAtual, tempoLongoDito, provas: ['nenhuma', '5a10', 'meia', 'maratona'].includes(a.provas) ? a.provas : 'nenhuma',
     // passo semanal de volume: até 10% (soligard2016, deering2024); nos planos publicados, 5 a 9% (knopp2024). Quem tem mais
     // risco de lesão fica com 7%, o meio dessa faixa (lesão prévia: saragiotto2014; idade e IMC: kluitenberg2015)
-    passo: lesaoPrevia || idoso || jovem || obeso || lim.length ? 0.07 : 0.10,
+    // quem corre pouco e sem regularidade também: baixo volume semanal e pouca experiência são fatores de risco (vanpoppel2021)
+    passo: lesaoPrevia || idoso || jovem || obeso || lim.length || irregular ? 0.07 : 0.10,
+    // corridas por semana: no máximo 3 para quem corre sem regularidade (iniciantes se lesionam mais acima de 3 dias: pollock1998)
+    irregular, maxCorridas: irregular ? 3 : 9,
     // começo mais lento no programa de corrida e caminhada (nielsen2014imc, bertelsen2018, chodzko2009, goom2019)
     inicioLento: nivel === 0 && (obeso || idoso || posparto),
   };
@@ -760,13 +774,14 @@ function semanasNecessarias(pf, dist, nivel, longo0) {
 function curva(pf, cfg) {
   const { T, nivel, dist, evento, v0, longo0, semQ, estLeve } = cfg;
   const qMax = cfg.qMax != null ? cfg.qMax : pf.qMax;
-  const nMax = Math.min(pf.dias.length, MAX_CORRIDAS[nivel], pf.idade < 14 ? 3 : 9); // antes dos 14, até 3 corridas por semana (paz2021)
+  const nMax = Math.min(pf.dias.length, MAX_CORRIDAS[nivel], pf.idade < 14 ? 3 : 9, pf.maxCorridas || 9); // antes dos 14, até 3 corridas por semana (paz2021)
   const capDe = (k) => (((k - 1) * pf.tempo + pf.tempoLongo) * 60 / estLeve) * 0.95; // km que cabem em k corridas, pelo tempo disponível
   const capKm = capDe(nMax);
   const capLeveKm = (pf.tempo * 60) / estLeve;
-  // só entra mais um dia de corrida quando cada rodagem tem, em média, 30 minutos ou mais (daniels: mínimo da rodagem leve);
+  // só entra mais um dia de corrida quando cada rodagem tem, em média, 30 minutos ou mais (daniels: mínimo da rodagem leve;
+  // para quem corre sem regularidade, 20 minutos: a frequência de 3 vezes por semana vem antes da duração — pollock1998);
   // a rodagem mais curta tem 20 minutos (o primeiro trecho contínuo dos programas de iniciantes: nhs_c25k, kluitenberg2015)
-  const minPorCorrida = (30 * 60) / estLeve, minLeveKm = Math.min(capLeveKm, (20 * 60) / estLeve);
+  const minPorCorrida = ((pf.irregular ? 20 : 30) * 60) / estLeve, minLeveKm = Math.min(capLeveKm, (20 * 60) / estLeve);
   cfg.minPorCorrida = minPorCorrida;
   const kmForte = Math.min(capLeveKm, ((nivel <= 1 ? 30 : 40) * 60) / (estLeve * 0.93)); // tamanho típico de um treino forte
   // quantas rodagens da semana viram regenerativo (o dia seguinte a um treino forte ou ao longo), que tem teto de duração
@@ -806,7 +821,7 @@ function curva(pf, cfg) {
     // pequenas os percentuais enganam: damsted2018)
     const ult = Math.max(0, ...sem.slice(-4).map((s) => s.longo));
     let longo;
-    if (n < 2) longo = 0;
+    if (n < 2) longo = Math.min(vol, capLeveKm, emPol ? Infinity : w === 1 ? Math.max(longo0, minLeveKm) : ult >= 8 ? ult * 1.1 : ult + 0.75);
     else if (emPol) longo = w === T ? 0 : Math.min(ult, maxLongo * (tp === 3 ? [0.75, 0.6][w - R - 1] : 0.7));
     else if (w === 1) longo = Math.min(Math.max(longo0, minLeveKm), longoMaxKm, tetoLongoDe(n)); // nenhum treino tem menos de 20 minutos
     else if (descarga) longo = ult * 0.8;
@@ -837,6 +852,8 @@ function curva(pf, cfg) {
       q = fortesDe(n);
     }
     maxLongo = Math.max(maxLongo, longo);
+    // semana de uma corrida só: o volume é essa corrida
+    if (n < 2 && longo < vol) { vol = longo; if (!emPol && !descarga) ref = Math.min(ref, vol); }
     // sem mais dias para abrir: o volume da semana é o que cabe nos treinos (e a progressão segue a partir dele)
     if (n >= 2 && !emPol && !descarga) { const cabe = cabeEm(n, q, longo); if (vol > cabe) { vol = cabe; ref = Math.min(ref, vol); } }
     sem.push({ n: w, fase, descarga, polimento: emPol, vol, longo, q, corridas: n, semAcel: w <= (cfg.semAcel || 0), dose: descarga ? 0.65 : emPol ? (w === T ? 0.4 : 0.6) : 1 });
@@ -944,7 +961,7 @@ function diasDaSemana(s, pf, c, cfg, cont, pernas) {
     livres = presos.length ? livres.filter((d) => !presos.includes(d)) : [];
   }
   // uma rodagem por semana com acelerações (nível 2 ou mais; fora de descarga e de volta de pausa)
-  let strides = nivel >= 2 && !s.descarga && !s.semAcel && !pf.cautela && !ehEvento;
+  let strides = nivel >= 2 && !s.descarga && !s.semAcel && !pf.cautela && !ehEvento && corrida.length >= 2; // a única corrida da semana é só leve
   for (const d of leves) {
     const km = Math.max(Math.min(2, minLeve), arr(alvo.get(d)));
     if (ehEvento) { const depois = pos(d) > pos(pf.diaLongo); out.set(d, depois ? tRegenerativo(Math.min(km, 3), c) : tLeve(Math.min(km, vizinhos(d, pf.diaLongo) ? 3 : 5), c, { curto: true })); continue; }
@@ -995,7 +1012,8 @@ const idOk = (v) => typeof v === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(v) && 
 const LOCAIS_CORRIDA = new Set(['lombar', 'quadril', 'virilha', 'coxa-frente', 'coxa-tras', 'joelho', 'canela', 'panturrilha', 'aquiles', 'tornozelo', 'pe', 'gluteo']);
 
 // Registro de corrida validado, ou null. Fronteira de segurança: é por aqui que passa o que vem de um backup importado.
-// { id, data, tipo, distKm (0 = não informada), durMin (0 = não informado), pse (1–10 ou null), dor: { onde, nivel } | null, nota, planejado }
+// { id, data, tipo, distKm (0 = não informada), durMin (0 = não informado), pse (1–10 ou null), dor: { onde, nivel } | null, nota, planejado,
+//   plan: o treino que estava no plano naquele dia (para a análise do que foi feito), ou null }
 export function limparRegistro(raw) {
   if (!isObj(raw) || !idOk(raw.id) || !diaValido(raw.data)) return null;
   const ano = Number(raw.data.slice(0, 4));
@@ -1015,6 +1033,8 @@ export function limparRegistro(raw) {
   return {
     id: raw.id, data: raw.data, tipo: typeof raw.tipo === 'string' && TIPOS_REGISTRO.has(raw.tipo) ? raw.tipo : 'livre', distKm, durMin, pse, dor,
     nota: typeof raw.nota === 'string' ? raw.nota.slice(0, 200) : '', planejado: typeof raw.planejado === 'string' ? raw.planejado.slice(0, 160) : '',
+    // o treino que estava no plano naquele dia; a chave só existe quando há o que guardar
+    ...(limparPlanejado(raw.plan) ? { plan: limparPlanejado(raw.plan) } : {}),
   };
 }
 export const MAX_REGISTROS = 3000;
@@ -1074,7 +1094,9 @@ export function limparCorrida(raw) {
   const r = isObj(raw) ? raw : {};
   const aceitoEm = isoOk(r.aceitoEm);
   const inicio = aceitoEm && diaValido(r.inicio) ? segundaDe(r.inicio) : '';
-  return { answers: limparRespostas(r.answers), aceitoEm: inicio ? aceitoEm : '', inicio, pausadoEm: inicio ? isoOk(r.pausadoEm) : '', cron: inicio ? limparCron(r.cron) : null, pausas: inicio ? limparPausas(r.pausas) : [] };
+  return { answers: limparRespostas(r.answers), aceitoEm: inicio ? aceitoEm : '', inicio, pausadoEm: inicio ? isoOk(r.pausadoEm) : '', cron: inicio ? limparCron(r.cron) : null, pausas: inicio ? limparPausas(r.pausas) : [],
+    // o treino mostrado em cada dia e o degrau de ritmo já concedido (ver guardarDoDia)
+    mostrados: inicio ? limparMostrados(r.mostrados) : [], degrau: inicio ? limparDegrau(r.degrau) : null };
 }
 
 const ehCorrida = (r) => r.tipo !== 'caminhada';
@@ -1089,17 +1111,22 @@ const LEVES = new Set(['leve', 'longo', 'regenerativo', 'corrida_caminhada', 'li
 // Tamanho do corte: nenhuma fonte dá um percentual por faixa de dor; "metade" é o que as orientações de volta usam (um terço
 // a metade da distância: liem2013; 50% do volume na primeira semana: caterisano2019).
 // Dor muscular tardia: reduzir intensidade e duração por 1 a 2 dias (cheung2003); some em até 7 dias (mizumura2016).
+const temLocal = (k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(LOCAIS_DOR, k);
 const METADE = 0.5;
 const TRONCO = new Set(['abdomen', 'coluna-alta', 'pescoco']);
-export function efeitoDaDor(d) {
+// pf (opcional) = perfil de quem corre: na gestação, dor no abdômen ou na panturrilha suspende a corrida (mottola2018, acog804)
+export function efeitoDaDor(d, pf = null) {
   const nada = { nivel: 0, corte: 0, texto: '', refs: [] };
-  if (!d || !LOCAIS_DOR[d.onde]) return nada;
+  if (!isObj(d) || !temLocal(d.onde)) return nada;
+  if (isObj(pf) && pf.gestante && (d.onde === 'abdomen' || d.onde === 'panturrilha')) return { nivel: 4, corte: 1, texto: 'Corrida suspensa: na gestação, dor no abdômen ou na panturrilha é sinal para parar e falar com o seu obstetra antes de voltar a treinar.', refs: ['mottola2018', 'acog804'] };
   const nome = LOCAIS_DOR[d.onde].toLowerCase();
   const alerta = dorDeAlerta(d);
   if (!LOCAIS_CORRIDA.has(d.onde)) {
     // Fora das pernas: dor de alerta no peito pode ser do coração (ms_infarto, riebe2015); no abdômen, nas costas e no pescoço,
     // dor forte e repentina pede atendimento (nhs_urgencia). Nesses casos a corrida para.
     if (d.onde === 'peito') {
+      // dor no peito que não é do músculo suspende a corrida em qualquer intensidade
+      if (!alerta && d.tipo !== 'muscular') return { nivel: 4, corte: 1, texto: 'Corrida suspensa. Dor no peito que não é do músculo precisa de avaliação médica antes de qualquer treino. Com falta de ar, suor frio, enjoo ou dor que vai para o braço, as costas ou o queixo, ligue 192 (SAMU).', refs: ['riebe2015', 'ms_infarto'] };
       return alerta
         ? { nivel: 4, corte: 1, texto: 'Corrida suspensa. Dor forte, repentina ou em repouso no peito pode ser do coração: procure atendimento agora. Com falta de ar, suor frio, enjoo ou dor que vai para o braço, as costas ou o queixo, ligue 192 (SAMU).', refs: ['ms_infarto', 'riebe2015'] }
         : { ...nada, texto: 'Dor muscular no peito depois do treino de força não muda a corrida. Dor ou pressão no peito durante o esforço é sinal de alerta: pare e procure atendimento.', refs: ['riebe2015', 'ms_infarto'] };
@@ -1113,7 +1140,7 @@ export function efeitoDaDor(d) {
       ? { ...nada, texto: 'Essa dor pede avaliação de um médico ou fisioterapeuta. Se a corrida provocar ou aumentar a dor, pare. Dor no braço ou no ombro junto com aperto no peito ou falta de ar: procure atendimento na hora.', refs: ['nhs_urgencia', 'ms_infarto'] }
       : { ...nada, texto: 'Não muda o plano de corrida.' };
   }
-  const info = DOR_CORRIDA[d.onde] || { osso: false, f: [] };
+  const info = Object.prototype.hasOwnProperty.call(DOR_CORRIDA, d.onde) ? DOR_CORRIDA[d.onde] : { osso: false, f: [] };
   const reduz = (texto, refs) => ({ nivel: 2, corte: METADE, texto, refs });
   if (alerta) return { nivel: 4, corte: 1, texto: `Corrida suspensa até você ser avaliado: dor de 7 ou mais, repentina ou em repouso (${nome}) não é para treinar por cima. Procure um médico ou fisioterapeuta.`, refs: ['nhs_dor', 'hoenig2022', 'warden2021'] };
   // em região de osso, dor de 4 ou mais suspende a corrida, seja qual for o tipo informado (moen2012, warden2021)
@@ -1209,6 +1236,299 @@ function aplicarDor(dia, ef, c) {
   return refazer(n, c);
 }
 
+// ---------- corrida + musculação: o que a prioridade muda na corrida ----------
+// A escolha vem de state.combo (logic/combinado.js). Interferência entre os dois treinos (wilson2012, petre2021, murach2016,
+// baar2014, methenitis2018):
+// - a perda é de força e massa das pernas, cresce com a frequência e a duração do aeróbico (acima de 3 dias por semana e de
+//   20 a 30 minutos por sessão: wilson2012) e é maior com corrida do que com bicicleta;
+// - para ganhar massa: 2 (no máximo 3) dias de aeróbico curto, de 30 a 40 minutos (murach2016); com 2 (no máximo 3) dias, o ganho de
+//   massa não é prejudicado (murach2016); passar de 4 dias por semana trava o ganho de força e massa (baar2014);
+// - o fôlego se mantém por até 15 semanas com 2 sessões por semana, desde que a intensidade fique (spiering2021);
+// - no mesmo dia: 3 horas no mínimo, de preferência 6 a 24 (murach2016, methenitis2018); quem prioriza a força faz a força
+//   primeiro, e quem prioriza a corrida corre primeiro (methenitis2018); em treinados, a perda só apareceu com os dois treinos
+//   colados, com menos de 20 minutos entre eles (petre2021);
+// - depois do treino pesado de pernas, o rendimento na corrida cai por 24 a 48 horas (doma2017, doma2019).
+// 'musculacao': corrida como complemento (até 3 corridas de até 40 minutos, no máximo 1 forte). 'equilibrio': até 4 corridas
+// e 1 forte. 'corrida': o plano de corrida fica inteiro; quem se ajusta é a musculação (logic/trainer.js).
+const FOCOS_CORRIDA = ['corrida', 'musculacao', 'equilibrio'];
+const REFS_FOCO = { corrida: ['methenitis2018', 'murach2016', 'doma2017', 'ronnestad2014'], musculacao: ['murach2016', 'wilson2012', 'spiering2021', 'methenitis2018'], equilibrio: ['baar2014', 'murach2016', 'petre2021', 'doma2017'] };
+export function efeitoDoFoco(foco, st) {
+  const corre = !!(st && isObj(st.run) && st.run.aceitoEm);
+  if (!FOCOS_CORRIDA.includes(foco) || !corre) return { linhas: [], refs: [] };
+  const linhas = foco === 'musculacao'
+    ? ['Corrida como complemento: até 3 corridas por semana, de até 40 minutos, e no máximo 1 treino forte.', 'No dia dos dois treinos, a musculação vem primeiro e a corrida fica para 6 horas depois (3, no mínimo).']
+    : foco === 'equilibrio'
+      ? ['Corrida com até 4 treinos por semana e 1 treino forte, para sobrar recuperação para a musculação.', 'Treino forte e longão ficam a 24 horas ou mais do treino pesado de pernas; no mesmo dia, 6 horas entre os dois (3, no mínimo).']
+      : ['A corrida segue o plano inteiro; treino forte e longão ficam a 24 horas ou mais do treino pesado de pernas.', 'No dia dos dois treinos, corra primeiro e faça a musculação 6 horas depois (3, no mínimo).'];
+  // com a prioridade na musculação (ou nos dois), a meta de corrida pode não caber mais: avisa antes de a pessoa escolher
+  if (foco !== 'corrida') {
+    try {
+      const antes = gerarPlano(st.run.answers, {}), depois = gerarPlano(st.run.answers, { foco });
+      if (antes && depois && antes.perfil.dist && (depois.perfil.dist !== antes.perfil.dist || depois.perfil.objetivo !== antes.perfil.objetivo)) {
+        linhas.unshift(`Com essa prioridade, a sua meta de ${ROTULO.distancia[antes.perfil.dist]} ${depois.perfil.dist ? (depois.perfil.dist !== antes.perfil.dist ? 'passa a ' + ROTULO.distancia[depois.perfil.dist] : 'fica sem data marcada') : 'dá lugar a um plano de saúde'}.`);
+      }
+    } catch { /* sem entrevista completa: fica só a regra geral */ }
+  }
+  return { linhas, refs: REFS_FOCO[foco] };
+}
+// perfil com os limites do foco (antes de montar a curva)
+function aplicarFoco(pf, foco, pernas) {
+  if (foco !== 'musculacao' && foco !== 'equilibrio') return FOCOS_CORRIDA.includes(foco) ? { ...pf, foco } : pf;
+  const max = foco === 'musculacao' ? 3 : 4;
+  let dias = pf.dias, diaLongo = pf.diaLongo;
+  if (dias.length > max) {
+    // ficam os dias mais espalhados, de preferência fora dos dias de treino de pernas
+    const livres = dias.filter((d) => !pernas.includes(d));
+    const base = livres.length >= max ? livres : dias;
+    dias = escolherDias(base, max, base.includes(diaLongo) ? diaLongo : null, false);
+    if (!dias.includes(diaLongo)) diaLongo = dias.includes(0) ? 0 : dias.includes(6) ? 6 : dias[dias.length - 1];
+  }
+  const curto = foco === 'musculacao';
+  return { ...pf, foco, dias, diaLongo, maxCorridas: Math.min(pf.maxCorridas || 9, max), qMax: Math.min(pf.qMax, 1), tempo: curto ? Math.min(pf.tempo, 40) : pf.tempo, tempoLongo: curto ? Math.min(pf.tempoLongo, 40) : pf.tempoLongo };
+}
+
+// ---------- análise do treino feito contra o planejado ----------
+const TIPOS_FORTES_REG = new Set(['fartlek', 'tempo', 'intervalado', 'tiros', 'progressivo', 'ritmo', 'teste', 'prova']);
+const CONTINUOS = new Set(['leve', 'regenerativo', 'longo']);
+const parDe = (v, min, max) => (Array.isArray(v) && v.length === 2 && v.every((x) => Number.isInteger(x) && x >= min && x <= max) && v[0] <= v[1] ? [v[0], v[1]] : null);
+const num1 = (v, max) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.min(max, Math.round(v * 10) / 10) : 0);
+// O que estava planejado no dia, guardado junto com o registro:
+// { tipo, durMin, distKm, ritmo: [de, ate] | null, pse: [de, ate] | null, un: 't' (treino prescrito por tempo) | 'd' (por distância) }
+function limparPlanejado(p) {
+  if (!isObj(p) || typeof p.tipo !== 'string' || !Object.prototype.hasOwnProperty.call(TIPOS_TREINO, p.tipo)) return null;
+  return { tipo: p.tipo, durMin: num1(p.durMin, 900), distKm: num1(p.distKm, 120), ritmo: parDe(p.ritmo, 100, 1300), pse: parDe(p.pse, 0, 10), un: p.un === 'd' ? 'd' : 't' };
+}
+const unidadeDe = (t) => (t.un === 'd' || (Array.isArray(t.blocos) && t.blocos.some((b) => b.m > 0 && !b.seg)) ? 'd' : 't');
+const parRitmo = (r) => (Array.isArray(r) ? r : r ? [Math.round(r.de), Math.round(r.ate)] : null);
+export const planejadoDe = (t) => (t && typeof t.tipo === 'string' && t.tipo ? limparPlanejado({ tipo: t.tipo, durMin: t.durMin, distKm: t.distKm, ritmo: parRitmo(t.ritmo), pse: Array.isArray(t.pse) ? t.pse.map((x) => Math.round(x)) : null, un: unidadeDe(t) }) : null);
+
+// O treino que o plano MOSTROU em cada dia (state.run.mostrados): os ajustes do plano só valem de hoje em diante, então o
+// que foi mostrado em um dia que já passou tem de ficar guardado para a análise, as faltas e a semana passada baterem com
+// o que a pessoa viu. tipo '' = o plano não tinha treino naquele dia.
+export const MAX_MOSTRADOS = 400;
+function limparMostrado(m) {
+  if (!isObj(m) || !diaValido(m.data)) return null;
+  const tipo = typeof m.tipo === 'string' && Object.prototype.hasOwnProperty.call(TIPOS_TREINO, m.tipo) ? m.tipo : '';
+  const txt = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '');
+  if (!tipo) return { data: m.data, tipo: '', nome: '', resumo: '', durMin: 0, distKm: 0, ritmo: null, pse: null, un: 't' };
+  return { data: m.data, tipo, nome: txt(m.nome, 60), resumo: txt(m.resumo, 160), durMin: num1(m.durMin, 900), distKm: num1(m.distKm, 120), ritmo: parDe(m.ritmo, 100, 1300), pse: parDe(m.pse, 0, 10), un: m.un === 'd' ? 'd' : 't' };
+}
+function limparMostrados(v) {
+  const mapa = new Map();
+  if (Array.isArray(v)) for (let i = 0; i < v.length && i < MAX_MOSTRADOS * 20; i++) { const m = limparMostrado(v[i]); if (m) mapa.set(m.data, m); }
+  const out = [...mapa.values()].sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0));
+  return out.length > MAX_MOSTRADOS ? out.slice(out.length - MAX_MOSTRADOS) : out;
+}
+const mostradoDe = (d, data) => limparMostrado(d ? { data, tipo: d.tipo, nome: d.nome, resumo: d.resumo, durMin: d.durMin, distKm: d.distKm, ritmo: parRitmo(d.ritmo), pse: Array.isArray(d.pse) ? d.pse.map((x) => Math.round(x)) : null, un: unidadeDe(d) } : { data, tipo: '' });
+// degrau de ritmo já concedido: { pontos (1 a 10), base ('entrevista' ou a data do resultado que serve de base) }
+function limparDegrau(d) {
+  if (!isObj(d) || !Number.isInteger(d.pontos) || d.pontos < 1 || d.pontos > 10 || !(d.base === 'entrevista' || diaValido(d.base))) return null;
+  return { pontos: d.pontos, base: d.base };
+}
+const mostradoEm = (st, data) => { const l = st && isObj(st.run) && Array.isArray(st.run.mostrados) ? st.run.mostrados : []; const m = l.find((x) => isObj(x) && x.data === data); return m ? limparMostrado(m) : null; };
+
+// treino leve mais rápido que a faixa e com esforço baixo
+const rapidoEFacil = (r) => !!(r.plan && r.plan.ritmo && CONTINUOS.has(r.plan.tipo) && r.distKm && r.durMin && (r.durMin * 60) / r.distKm < r.plan.ritmo[0] - 5 && r.pse != null && r.pse <= 4);
+// padrão: 3 dos 5 últimos treinos leves (em 28 dias) mais rápidos que a faixa, com esforço baixo
+function padraoRapidoFacil(registros, hoje) {
+  const l = registros.filter((r) => r.data <= hoje && diasEntre(r.data, hoje) <= 28 && r.plan && CONTINUOS.has(r.plan.tipo) && r.plan.ritmo && r.distKm && r.durMin && r.pse != null).slice(-5);
+  return l.length >= 3 && l.filter(rapidoEFacil).length >= 3;
+}
+const SELO = { dentro: 'Dentro do plano', acima: 'Acima do plano', abaixo: 'Abaixo do plano', livre: 'Fora do plano', sem: 'Sem comparação' };
+// Compara o que foi feito no dia com o que estava planejado.
+// ctx = { longa30, longaMin30: maior corrida (km e min) dos 30 dias anteriores; informado: corrida mais longa informada na
+// entrevista (só nas 4 primeiras semanas do plano); nivel; desconhecido: o plano existia, mas o que ele mostrava não ficou guardado }.
+// Devolve { selo, titulo, itens: [{ tom: 'ok' | 'info' | 'warn', texto }], plano (o que o plano faz com isso), refs }.
+// O selo sai dos itens por uma regra só: algo a mais (volume, ritmo ou esforço) → acima; senão, algo a menos → abaixo;
+// senão, se houve o que comparar → dentro; sem nada para comparar → sem comparação. "Dentro do plano" nunca traz alerta.
+// Regras: a carga de uma corrida se mede contra a mais longa dos últimos 30 dias (frandsen2025: até 10% a mais não muda o
+// risco; de 10 a 30%, 64% maior; de 30 a 100%, 52% maior; mais que o dobro, 128% maior); treino leve tem de ser leve
+// (seiler2009, esteve2007, ieno2020); atletas tendem a fazer o dia leve mais forte e o forte mais leve do que o planejado
+// (foster2001b, inoue2022); depois de treino intenso, 48 horas ou mais de recuperação (stanley2013); treino perdido ou
+// encurtado não se repõe (pollock1998, feely2023); ritmo mais rápido com o mesmo esforço acompanha a melhora, mas só um
+// resultado novo muda os ritmos (vesterinen2014, vdoto2_ajuste).
+function analisar(plan, r, ctx) {
+  const itens = [], refs = new Set(), planos = [];
+  // lado: 'mais' | 'menos' | 'ok' (comparou e bateu) | '' (informação, sem comparação)
+  const it = (tom, lado, texto, ...f) => { itens.push({ tom, lado, texto }); for (const k of f) refs.add(k); };
+  const fim = (seloFixo) => {
+    if (!itens.length) it('info', '', 'Sem distância, tempo ou esforço para comparar com o planejado.');
+    const selo = seloFixo || (itens.some((x) => x.lado === 'mais') ? 'acima' : itens.some((x) => x.lado === 'menos') ? 'abaixo' : itens.some((x) => x.lado === 'ok') ? 'dentro' : 'sem');
+    return { selo, titulo: SELO[selo], itens: itens.map(({ tom, texto }) => ({ tom, texto })), plano: [...new Set(planos)].join(' ') || (selo === 'dentro' ? 'Nada muda no plano.' : selo === 'livre' ? 'O plano considera esta corrida no volume da semana.' : 'Nada muda no plano por este treino.'), refs: [...refs] };
+  };
+  const ritmo = r.distKm && r.durMin ? (r.durMin * 60) / r.distKm : 0;
+  const forteFeito = TIPOS_FORTES_REG.has(r.tipo) || (r.tipo === 'livre' && r.pse != null && r.pse >= 7);
+  if (ctx.soma > 1) it('info', '', `Somei as ${ctx.soma} corridas registradas neste dia.`);
+  // Salto de carga em uma corrida. Referência: a corrida mais longa dos 30 dias anteriores; sem histórico, o longo informado na
+  // entrevista ou o próprio treino planejado (na unidade em que foi prescrito). Sem distância, a conta é feita em tempo.
+  // Devolve null (sem como comparar), 0 (até 10% a mais) ou o percentual do salto (e já escreve o alerta).
+  const salto = () => {
+    const refKm = Math.max(ctx.longa30, ctx.informado, plan && plan.un === 'd' ? plan.distKm : 0);
+    const refMin = Math.max(ctx.longaMin30, plan && plan.un === 't' ? plan.durMin : 0);
+    // com distância e tempo, vale a pior das duas contas
+    const temKm = r.distKm > 0 && refKm > 0, temMin = r.durMin > 0 && refMin > 0;
+    if (!temKm && !temMin) return null;
+    const pKm = temKm ? r.distKm / refKm : 0, pMin = temMin ? r.durMin / refMin : 0;
+    const porKm = temKm && pKm >= pMin;
+    const pct = Math.round((Math.max(pKm, pMin) - 1) * 100);
+    if (pct <= 10 || (porKm ? r.distKm < 2 : r.durMin < 15)) return 0;
+    const risco = pct > 100 ? 'mais que dobra o risco de lesão por sobrecarga' : pct > 30 ? 'aumenta o risco de lesão por sobrecarga em cerca de 50%' : 'aumenta o risco de lesão por sobrecarga em cerca de 60%';
+    const contra = porKm ? (ctx.longa30 >= refKm ? 'a sua corrida mais longa dos últimos 30 dias' : ctx.informado >= refKm ? 'a corrida mais longa que você informou na entrevista' : 'o treino planejado') : (ctx.longaMin30 >= refMin ? 'a sua corrida mais longa dos últimos 30 dias' : 'o treino planejado');
+    const novato = ctx.nivel <= 1 && pct > 30;
+    it('warn', 'mais', `Foram ${porKm ? fmtKm(r.distKm) : Math.round(r.durMin) + ' min'}, ${pct}% a mais que ${contra} (${porKm ? fmtKm(refKm) : Math.round(refMin) + ' min'}). Um salto desse tamanho em uma única corrida ${risco}.${novato ? ' Para quem está começando, o risco de lesão já é maior nas primeiras semanas.' : ''}`, 'frandsen2025', ...(novato ? ['videbaek2015'] : []));
+    planos.push('Nos próximos dias, fique nos treinos leves. O plano não cresce a partir deste excesso: a próxima semana parte do que estava previsto.');
+    return pct;
+  };
+  if (r.tipo === 'caminhada') { it('ok', '', 'Caminhada: soma movimento sem somar impacto. Não entra no volume de corrida.', 'oms2020'); return fim('livre'); }
+  if (!plan) {
+    if (ctx.desconhecido) { it('info', '', 'Não ficou guardado o que o plano mostrava neste dia: não há como comparar. A corrida conta no volume da semana.'); return fim('sem'); }
+    it('info', '', 'Corrida fora do plano: entra no volume da semana e na conta do treino longo.', 'frandsen2025');
+    const s = salto();
+    if (s === 0) it('ok', '', 'Ficou dentro de 10% da sua corrida mais longa do mês: sem salto de carga.', 'frandsen2025');
+    if (forteFeito || (r.pse != null && r.pse >= 7)) { it('warn', 'mais', 'Foi um treino forte a mais na semana. Depois de um treino intenso, o corpo leva 48 horas ou mais para se recuperar.', 'stanley2013', 'seiler2009'); planos.push('Se o próximo treino forte cair no dia seguinte, o plano troca por rodagem leve.'); }
+    return fim('livre');
+  }
+  const leve = INTENS[plan.tipo] === 'leve';
+  const ehProva = plan.tipo === 'prova' || plan.tipo === 'teste';
+  if (plan.tipo === 'descanso') {
+    it('warn', 'mais', 'O plano tinha tirado a corrida deste dia por causa de uma dor. Correr por cima de dor que pede pausa pode piorar a lesão.', 'warden2021', 'hoenig2022');
+    planos.push('Se a dor voltar ou aumentar, anote-a: o plano se ajusta. Se melhorou, marque “Melhorou” na dor.');
+    return fim();
+  }
+  // 1) tipo do treino
+  if (forteFeito && leve && r.tipo !== 'teste' && r.tipo !== 'prova') {
+    it('warn', 'mais', `Era dia de ${TIPOS_TREINO[plan.tipo].nome.toLowerCase()} e saiu um treino forte. Depois de um treino intenso, o corpo leva 48 horas ou mais para se recuperar; forte demais nos dias leves tira qualidade dos dias fortes.`, 'stanley2013', 'seiler2009');
+    planos.push('Se o próximo treino forte cair no dia seguinte, o plano troca por rodagem leve.');
+  } else if (!leve && !ehProva && !forteFeito && LEVES.has(r.tipo) && r.tipo !== 'longo' && !(r.pse != null && r.pse >= 6)) {
+    it('info', 'menos', `O ${TIPOS_TREINO[plan.tipo].nome.toLowerCase()} do dia virou corrida leve. Perder uma sessão de vez em quando não derruba o condicionamento.`, 'pollock1998', 'feely2023');
+    planos.push('O plano não repõe o treino forte: segue no próximo.');
+  }
+  // 2) quantidade, na unidade em que o treino foi prescrito (sem ela, nada de comparar por estimativa)
+  const porTempo = plan.un !== 'd';
+  const feito = porTempo ? r.durMin : r.distKm, previsto = porTempo ? plan.durMin : plan.distKm;
+  const txtPrevisto = porTempo ? Math.round(previsto) + ' min' : fmtKm(previsto);
+  if (ehProva) {
+    if (r.distKm && plan.distKm) {
+      if (r.distKm < plan.distKm * 0.9) it('info', 'menos', `O dia era de ${TIPOS_TREINO[plan.tipo].nome.toLowerCase()} de ${fmtKm(plan.distKm)}, e o registro tem ${fmtKm(r.distKm)}: a distância não foi completada.`);
+      else it('ok', 'ok', 'Distância completada.');
+    } else it('info', '', 'Sem a distância no registro, não dá para conferir se a distância foi completada.');
+  } else if (!previsto) { /* sem quantidade planejada: nada a comparar */ }
+  else if (!feito) it('info', '', porTempo ? `O treino era por tempo (${txtPrevisto}) e o registro não tem o tempo: sem como comparar a duração.` : `O treino era por distância (${txtPrevisto}) e o registro não tem a distância: sem como comparar.`);
+  else {
+    const dif = feito - previsto, pct = Math.round((dif / previsto) * 100), un = porTempo ? `${Math.round(Math.abs(dif))} min` : fmtKm(Math.abs(dif));
+    const grande = Math.abs(dif) >= (porTempo ? 5 : 0.6) && Math.abs(pct) >= 15;
+    if (grande && dif > 0) {
+      it('info', 'mais', `Você fez ${un} a mais que o planejado (${txtPrevisto}): +${pct}%.`);
+      const s = salto();
+      if (s === null) it('info', '', 'Sem uma corrida anterior para comparar, não dá para dizer se foi um salto de carga. A regra: não passar de 10% sobre a sua corrida mais longa do último mês.', 'frandsen2025');
+      else if (s === 0) it('ok', '', 'Ficou dentro de 10% da sua corrida mais longa do mês: não é um salto de carga.', 'frandsen2025');
+      if (!leve) it('info', '', 'Treino forte esticado soma mais cansaço do que ganho: o tamanho da parte forte tem limite.', 'daniels');
+      planos.push('O plano não acompanha o excesso: a próxima semana parte do que estava previsto.');
+    } else if (grande && dif < 0) {
+      it('info', 'menos', `Você fez ${un} a menos que o planejado (${txtPrevisto}): ${pct}%. Treino encurtado não precisa ser reposto.`, 'feely2023', 'pollock1998');
+      planos.push('O plano não repõe. Se a semana inteira ficar bem abaixo, a próxima parte do que você fez.');
+    } else it('ok', 'ok', porTempo ? 'Duração dentro do planejado.' : 'Distância dentro do planejado.');
+  }
+  // 3) ritmo, nos treinos contínuos com faixa
+  let disseEsforco = false;
+  if (plan.ritmo && ritmo && CONTINUOS.has(plan.tipo) && !forteFeito) {
+    const faixa = `${fmtRitmo(plan.ritmo[0])} a ${fmtRitmo(plan.ritmo[1])}`;
+    const limite = plan.pse ? plan.pse[1] : 4;
+    if (ritmo < plan.ritmo[0] - 5) {
+      if (r.pse != null && r.pse > limite) {
+        it('warn', 'mais', `Ritmo de ${fmtRitmo(ritmo)} por km, mais rápido que a faixa (${faixa}), e com esforço ${r.pse}: o treino leve virou moderado. Com o mesmo treino forte, quem passa mais tempo no moderado melhora menos.`, 'seiler2009', 'esteve2007');
+        planos.push('Se dois dos três últimos treinos leves ficarem com esforço de 5 ou mais, o plano segura o volume da semana seguinte.');
+        disseEsforco = true;
+      } else if (r.pse != null) {
+        it('info', 'mais', `Ritmo de ${fmtRitmo(ritmo)} por km, mais rápido que a faixa (${faixa}), com esforço baixo. Pode ser sinal de evolução, mas não acelere os dias leves: só um teste confirma.`, 'vesterinen2014', 'vdoto2_ajuste');
+        planos.push('Os ritmos não mudam por um treino. Registre um “Teste de ritmo” de 3 ou 5 km para eu recalcular; se o padrão se repetir, eles sobem um degrau em 4 semanas em vez de 6.');
+      } else it('info', 'mais', `Ritmo de ${fmtRitmo(ritmo)} por km, mais rápido que a faixa (${faixa}). Sem o esforço anotado, não dá para dizer se foi fácil ou forçado: nos dias leves, fique na faixa.`, 'seiler2009');
+    } else if (ritmo > plan.ritmo[1] + 10) {
+      if (r.pse != null && r.pse >= 6) { it('warn', 'mais', `Mais lento que a faixa (${fmtRitmo(ritmo)} por km contra ${faixa}) e, ainda assim, com esforço ${r.pse}: pode ser cansaço acumulado, calor ou noite ruim.`, 'saw2016', 'meeusen2013'); planos.push('Se o esforço alto se repetir, o plano segura o volume ou antecipa uma semana leve.'); disseEsforco = true; }
+      else it('ok', 'ok', `Mais lento que a faixa (${fmtRitmo(ritmo)} por km contra ${faixa})${r.pse != null ? ', com esforço baixo' : ''}: sem problema. No treino leve, devagar não é erro.`, 'seiler2009');
+    } else it('ok', 'ok', `Ritmo dentro da faixa (${faixa} por km).`);
+  }
+  // 4) esforço, contra a faixa que o próprio plano mostrou para o treino
+  if (r.pse == null) { if (plan.pse) it('info', '', 'Esforço não informado: sem ele, a análise fica só no tempo e na distância.'); }
+  else if (plan.pse && !disseEsforco && !ehProva) {
+    const [min, max] = plan.pse;
+    if (leve && r.pse > max) {
+      it('warn', 'mais', `Esforço ${r.pse} em treino leve (o esperado é até ${max}). É o desvio mais comum: o dia leve sai mais forte do que o planejado e tira recuperação.`, 'ieno2020', 'foster2001b', 'inoue2022');
+      planos.push('Se dois dos três últimos treinos leves ficarem com esforço de 5 ou mais, o plano segura o volume da semana seguinte.');
+    } else if (!leve && r.pse > max + 1) {
+      it('warn', 'mais', `Esforço ${r.pse} em treino previsto para ${min} a ${max}: bem acima do esperado. Treino forte é forte, mas controlado; no limite, a recuperação demora mais.`, 'saw2016', 'stanley2013');
+      planos.push('Se os três últimos treinos ficarem com esforço de 7 ou mais, o plano antecipa uma semana leve.');
+    } else if (!leve && r.pse < min - 1) it('info', 'menos', `Esforço ${r.pse} em treino previsto para ${min} a ${max}: o estímulo ficou menor que o planejado. É comum fazer o dia forte mais leve do que o previsto.`, 'foster2001b', 'inoue2022');
+    else it('ok', 'ok', `Esforço ${r.pse}: dentro do esperado para este treino.`);
+  }
+  return fim();
+}
+// análise de um registro do estado (as corridas do mesmo dia são somadas)
+export function analiseDoRegistro(st, hoje, registro) {
+  const r0 = limparRegistro(registro);
+  if (!r0) return null;
+  const runs = limparRegistros(st && Array.isArray(st.runs) ? st.runs : []).filter((x) => x.id !== r0.id && x.tipo !== 'caminhada');
+  const run = st && isObj(st.run) ? st.run : {};
+  // o que estava planejado: o que o registro guardou; senão, o que o plano mostrou no dia; senão (hoje ou adiante), o plano de agora
+  let plan = r0.plan || null, desconhecido = false;
+  if (!plan) {
+    const m = mostradoEm(st, r0.data);
+    if (m) plan = m.tipo ? limparPlanejado(m) : null;
+    else if (diaValido(hoje) && r0.data >= hoje) { try { plan = planejadoDe(treinoDoDia(st, hoje, r0.data)); } catch { plan = null; } }
+    else desconhecido = !!(run.aceitoEm && diaLocal(run.aceitoEm) && r0.data >= diaLocal(run.aceitoEm));
+  }
+  // corridas do mesmo dia entram somadas
+  const doDia = r0.tipo === 'caminhada' ? [] : runs.filter((x) => x.data === r0.data);
+  const todos = [r0, ...doDia];
+  const pses = todos.map((x) => x.pse).filter((x) => x != null);
+  const r = doDia.length ? { ...r0, distKm: todos.every((x) => x.distKm) ? todos.reduce((s, x) => s + x.distKm, 0) : 0, durMin: todos.every((x) => x.durMin) ? todos.reduce((s, x) => s + x.durMin, 0) : 0, pse: pses.length ? Math.max(...pses) : null, tipo: todos.some((x) => TIPOS_FORTES_REG.has(x.tipo)) ? todos.find((x) => TIPOS_FORTES_REG.has(x.tipo)).tipo : r0.tipo } : r0;
+  const antes = runs.filter((x) => x.data < r0.data && diasEntre(x.data, r0.data) <= 30);
+  let informado = 0, nivel = 2;
+  try { const pf = perfil(run.answers); nivel = pf.nivel; if (pf.retorno === 0 && diaValido(run.inicio) && diasEntre(run.inicio, r0.data) < 28) informado = pf.longoAtual; } catch { /* sem entrevista */ }
+  return analisar(plan, r, { longa30: Math.max(0, ...antes.map((x) => x.distKm || 0)), longaMin30: Math.max(0, ...antes.map((x) => x.durMin || 0)), informado, nivel, desconhecido, soma: todos.length });
+}
+// Últimas corridas com a análise de cada uma, os treinos que o plano mostrou e ficaram sem registro, e os padrões que se repetem.
+export function analiseRecente(st, hoje, n = 5) {
+  const out = { itens: [], faltas: [], padroes: [], contagem: { dentro: 0, acima: 0, abaixo: 0, livre: 0, sem: 0 } };
+  if (!st || !diaValido(hoje)) return out;
+  const runs = limparRegistros(st.runs).filter((r) => r.data <= hoje);
+  // um item por dia (as corridas do mesmo dia são analisadas juntas)
+  const dias = new Set();
+  for (const r of runs.filter((x) => diasEntre(x.data, hoje) <= 28).reverse()) {
+    if (dias.has(r.data) || dias.size >= n) continue;
+    dias.add(r.data);
+    const a = analiseDoRegistro(st, hoje, r);
+    if (a) { out.itens.push({ registro: r, analise: a }); out.contagem[a.selo]++; }
+  }
+  let p = null;
+  try { p = planoAtual(st, hoje); } catch { p = null; }
+  const mostrados = limparMostrados(st.run && st.run.mostrados);
+  const recentes = runs.filter((r) => diasEntre(r.data, hoje) <= 28);
+  const corridaMostrada = (m) => m.tipo && m.tipo !== 'caminhada' && m.tipo !== 'descanso';
+  // faltas: corridas que o plano MOSTROU nos últimos 14 dias e ficaram sem registro (só para quem registra)
+  if (recentes.length) for (const m of mostrados) {
+    if (m.data >= hoje || diasEntre(m.data, hoje) > 14 || m.data < recentes[0].data || !corridaMostrada(m) || runs.some((r) => r.data === m.data)) continue;
+    out.faltas.push({ data: m.data, tipo: m.tipo, nome: m.nome || TIPOS_TREINO[m.tipo].nome, forte: INTENS[m.tipo] === 'forte' });
+  }
+  // padrões: o texto só afirma o que o plano de fato está fazendo
+  const ajuste = (re) => !!(p && p.ajustes.some((x) => re.test(x.texto)));
+  if (p && p.sinais && p.sinais.pesado) out.padroes.push({ id: 'leve_pesado', texto: 'Seus treinos leves têm ficado com esforço de 5 ou mais. Leve é até 4: diminua o ritmo.' + (ajuste(/Volume mantido nesta semana|Semana leve antecipada/) ? ' Por isso o plano segurou o volume desta semana.' : ''), refs: ['seiler2009', 'ieno2020', 'esteve2007'] });
+  if (padraoRapidoFacil(runs, hoje)) out.padroes.push({ id: 'rapido_facil', texto: 'Seus treinos leves têm saído mais rápidos que a faixa, com esforço baixo: sinal de que o condicionamento subiu. Um “Teste de ritmo” de 3 ou 5 km recalcula tudo; sem teste, os ritmos sobem um degrau a cada 4 semanas de treino em dia.', refs: ['vesterinen2014', 'vdoto2_ajuste'] });
+  if (p && p.semanaAtual >= 2 && p.semanaAtual <= p.totalSemanas + 1) {
+    const ini = p.inicios[p.semanaAtual - 2], fim = somaDias(ini, 6);
+    const daSemana = mostrados.filter((m) => m.data >= ini && m.data <= fim);
+    // só com a semana inteira guardada dá para dizer quanto o plano previa
+    if (daSemana.length === 7) {
+      const previsto = daSemana.filter(corridaMostrada).reduce((s, m) => s + m.distKm, 0);
+      const feito = runs.filter((r) => r.tipo !== 'caminhada' && r.data >= ini && r.data <= fim).reduce((s, r) => s + (r.distKm || 0), 0);
+      if (previsto >= 5 && feito > previsto * 1.15 && feito - previsto >= 3) out.padroes.push({ id: 'acima_do_volume', texto: `Na semana passada você correu ${fmtKm(feito)}, e o plano mostrava ${fmtKm(previsto)}. O plano não acompanha o excesso: esta semana parte do que estava previsto. O limite seguro é subir até 10% por semana; saltos acima de 20 a 30% estão ligados a mais lesões.`, refs: ['soligard2016', 'nielsen2014prog', 'damsted2019'] });
+    }
+  }
+  const fortesPerdidos = out.faltas.filter((f) => f.forte).length;
+  if (fortesPerdidos >= 2) out.padroes.push({ id: 'fortes_perdidos', texto: `${fortesPerdidos} treinos fortes ficaram sem registro nas últimas 2 semanas. Não tente repor: siga o plano. A forma se mantém por semanas com menos treino, desde que a intensidade volte.`, refs: ['feely2023', 'pollock1998', 'spiering2021'] });
+  return out;
+}
+
 // ---------- plano ----------
 function opcoesLimpas(o) {
   const op = isObj(o) ? o : {};
@@ -1221,6 +1541,8 @@ function opcoesLimpas(o) {
     .sort((a, b) => (a.de < b.de ? -1 : a.de > b.de ? 1 : 0));
   return {
     hoje, inicio, desde: diaValido(op.desde) ? op.desde : '', registros: limparRegistros(op.registros), adiado: op.adiado === true, paradas,
+    mostrados: limparMostrados(op.mostrados), degrau: limparDegrau(op.degrau),
+    foco: FOCOS_CORRIDA.includes(op.foco) ? op.foco : '', // prioridade entre corrida e musculação ('' = sem escolha: o plano não muda)
     diasForca: dias(op.diasForca), diasPernas: dias(op.diasPernas),
     dores: (Array.isArray(op.dores) ? op.dores : []).filter((d) => isObj(d) && typeof d.onde === 'string' && Object.prototype.hasOwnProperty.call(LOCAIS_DOR, d.onde) && Number.isFinite(d.nivel)).slice(0, 30),
     // dores que a pessoa marcou como melhoradas: { onde, fim }
@@ -1253,7 +1575,7 @@ function voltaDe(datas, paradas, hoje) {
   }
   for (const p of paradas) {
     const d = diasEntre(p.de, p.ate);
-    if (p.ate > hoje || d < (p.motivo === 'dor' ? 7 : 14) || datas.some((x) => x > p.de && x < p.ate)) continue;
+    if (p.ate > hoje || d < (p.motivo === 'dor' ? 1 : 14) || datas.some((x) => x > p.de && x < p.ate)) continue;
     cand.push({ dias: p.motivo === 'dor' ? Math.max(d, 14) : d, de: p.de, retorno: p.ate, motivo: p.motivo });
   }
   // o intervalo sem corrida que cobre uma suspensão por dor é uma volta depois da dor
@@ -1301,7 +1623,7 @@ function cfgGeral(pf, est, grade, semAlvo) {
   const longo0 = Math.max(2, t ? tetoDaVolta(t, pf.pausaDias, 1, pf.longoAtual) : pf.longoAtual);
   const T = semAlvo || (pf.dist ? semanasNecessarias(pf, pf.dist, pf.nivel, longo0) : 12);
   // iniciante: 8 semanas de base antes do primeiro treino forte (ramskov2018, munoz2014)
-  return { T, nivel: pf.nivel, dist: pf.dist, evento: eventoDe(pf), v0, longo0, semQ: Math.max(t ? t.semForte : 0, pf.nivel === 1 ? 8 : 0), semAcel: t ? t.semAcel : 0, estLeve: est, grade };
+  return { T, nivel: pf.nivel, dist: pf.dist, evento: eventoDe(pf), v0, longo0, semQ: Math.max(t ? t.semForte : 0, pf.nivel === 1 ? 8 : 0, pf.limitacoes.length ? 2 : 0), semAcel: Math.max(t ? t.semAcel : 0, pf.limitacoes.length ? 2 : 0), estLeve: est, grade };
 }
 // maior trecho de corrida (km) das sessões de uma etapa do programa de corrida e caminhada (guardado: a conta se repete muito)
 const MEMO_ETAPA = new Map();
@@ -1311,7 +1633,7 @@ function maiorDaEtapa(et, c) {
   return MEMO_ETAPA.get(k);
 }
 // maior corrida de uma sessão (km) nas 4 semanas antes da última semana do plano, e o total de semanas
-function maiorAntes(pf, c, grade, semAlvo) {
+function maiorAntes(pf, c, grade, semAlvo, comData = false) {
   const est = c.est.leve, capLeve = (pf.tempo * 60) / est;
   const maiores = [];
   let total;
@@ -1327,7 +1649,7 @@ function maiorAntes(pf, c, grade, semAlvo) {
   }
   let maior = Math.max(0, ...maiores.slice(Math.max(0, total - 5), total - 1));
   // plano curto: vale também a corrida mais longa das últimas 4 semanas informada na entrevista (se a pessoa não está parada)
-  if (pf.nivel >= 1 && total <= 4 && pf.retorno === 0) maior = Math.max(maior, Math.min(pf.longoAtual, 0.6 * pf.kmSemana));
+  if (comData && pf.nivel >= 1 && total <= 4 && pf.retorno === 0) maior = Math.max(maior, Math.min(pf.longoAtual, 0.6 * pf.kmSemana));
   return { maior, total };
 }
 // Prazos mínimos dos programas estudados. Do zero: 5 km em 9 semanas (nhs_c25k); 10 km em 13 semanas (ryan2003); meia maratona
@@ -1339,13 +1661,14 @@ const PRAZO_MIN = [{ 5: 9, 10: 13, 21: 14, 42: 17 }, { 21: 14, 42: 17 }];
 function ajustarMeta(pf, c, grade) {
   if (!pf.dist) return pf;
   const pedida = pf.semanasProva;
-  const cabe = (dist, sem) => { const r = maiorAntes({ ...pf, dist }, c, grade, sem); return r1(r.maior) * 2 >= r1(DIST[dist]) - 0.15 && r.total >= ((PRAZO_MIN[pf.nivel] || {})[dist] || 0); };
+  const cabe = (dist, sem) => { const r = maiorAntes({ ...pf, dist }, c, grade, sem, !!pedida && sem === pedida && dist === pf.dist); return r1(r.maior) * 2 >= r1(DIST[dist]) - 0.15 && r.total >= ((PRAZO_MIN[pf.nivel] || {})[dist] || 0); };
   if (cabe(pf.dist, pedida)) return pf;
   const objetivo = pf.objetivo === 'prova' ? 'distancia' : pf.objetivo;
   for (const dist of [42, 21, 10, 5]) {
     if (dist > pf.dist) continue;
     let min = 0;
-    for (let t = dist === pf.dist && pedida ? pedida + 1 : 2; t <= 60 && !min; t++) if (cabe(dist, t)) min = t;
+    // sem data, o plano tem pelo menos a duração mínima da distância (DURACAO)
+    for (let t = dist === pf.dist && pedida ? Math.max(pedida + 1, 2) : DURACAO[dist][0]; t <= 60 && !min; t++) if (cabe(dist, t)) min = t;
     if (!min) continue;
     return { ...pf, objetivo, dist, semanasProva: null, semanasPlano: cabe(dist, null) ? null : min, alvoSeg: dist === pf.dist ? pf.alvoSeg : null, meta: { dist: pf.dist, semanas: pedida, min, nova: dist } };
   }
@@ -1384,6 +1707,12 @@ export function gerarPlano(respostas, opcoes) {
   const acompanha = !!(op.inicio && op.hoje);
   // "Em quantas semanas é a prova?" conta a semana da entrevista; se o plano só começa na segunda seguinte, sobra uma a menos
   if (pf.semanasProva && op.adiado) pf = { ...pf, semanasProva: Math.max(1, pf.semanasProva - 1) };
+  // corrida e musculação: a prioridade escolhida muda quantas corridas, quanto tempo e quantos treinos fortes (aplicarFoco)
+  if (op.foco) {
+    pf = aplicarFoco(pf, op.foco, op.diasPernas);
+    if (op.foco === 'musculacao') ajustes.push({ texto: 'Corrida como complemento da musculação: até 3 corridas por semana, de até 40 minutos, e no máximo 1 treino forte.', motivo: 'Você escolheu a musculação como prioridade. A corrida atrapalha o ganho de força e de massa das pernas quando é frequente e longa (acima de 3 dias por semana e de 20 a 30 minutos por sessão); com 2 a 3 corridas curtas, não. O fôlego se mantém por semanas com menos corrida, desde que um treino forte continue. No dia dos dois treinos, faça a musculação primeiro e corra 6 horas depois (3, no mínimo).', refs: REFS_FOCO.musculacao });
+    else if (op.foco === 'equilibrio') ajustes.push({ texto: 'Corrida e musculação por igual: até 4 corridas por semana e 1 treino forte.', motivo: 'Você escolheu evoluir nos dois. Passar de 4 dias de corrida por semana trava o ganho de força e de massa; um treino forte por semana deixa recuperação para o treino de pernas. Treino forte e longão ficam a 24 horas ou mais do treino pesado de pernas; no mesmo dia, 6 horas entre os dois (3, no mínimo).', refs: REFS_FOCO.equilibrio });
+  }
 
   // ----- calendário: as semanas que o plano pulou em uma pausa não existem na numeração -----
   const saltos = op.paradas.filter((p) => p.semanas > 0);
@@ -1394,6 +1723,11 @@ export function gerarPlano(respostas, opcoes) {
   const desde = op.desde || base0;
   const desdeInicio = acompanha ? op.registros.filter((r) => r.data >= desde && r.data <= op.hoje) : [];
   const temRegistros = desdeInicio.length > 0;
+  // O que o plano MOSTROU em cada semana que passou (state.run.mostrados): só vale com a semana inteira guardada.
+  const corridaMostrada = (m) => m.tipo && m.tipo !== 'caminhada' && m.tipo !== 'descanso';
+  const mostradosDa = (w) => { const a = iniSemana(w), b = somaDias(a, 6); const l = op.mostrados.filter((m) => m.data >= a && m.data <= b); return l.length === 7 ? l.filter(corridaMostrada) : null; };
+  const mostradoKm = (w) => { const l = mostradosDa(w); return l ? l.reduce((x, m) => x + m.distKm, 0) : null; };
+  const maiorMostrado = (w) => { const l = mostradosDa(w); return l ? Math.max(0, ...l.map((m) => m.distKm)) : null; };
 
   // ----- a meta cabe no prazo? Decidido só pelas respostas, para o plano não mudar de formato no meio do caminho -----
   {
@@ -1435,13 +1769,13 @@ export function gerarPlano(respostas, opcoes) {
   const exausto = temRegistros && ultimos3.length === 3 && ultimos3.every((r) => r.pse >= 7);
 
   // ----- dores -----
-  const efeitos = op.dores.map((d) => ({ d, ef: efeitoDaDor(d) })).filter((x) => x.ef.nivel > 0);
+  const efeitos = op.dores.map((d) => ({ d, ef: efeitoDaDor(d, pf) })).filter((x) => x.ef.nivel > 0);
   // dor de 4 ou mais anotada em uma corrida dos últimos 7 dias também conta, a não ser que haja um relato do mesmo local
   // (ativo, ou marcado como melhorado depois dessa corrida)
   if (acompanha) for (const r of op.registros) {
-    if (!r.dor || r.dor.nivel < 4 || r.data > op.hoje || diasEntre(r.data, op.hoje) > 7 || op.dores.some((d) => d.onde === r.dor.onde) || op.encerradas.some((d) => d.onde === r.dor.onde && d.fim >= r.data)) continue;
+    if (!r.dor || r.dor.nivel < 4 || r.data > op.hoje || diasEntre(r.data, op.hoje) > 7 || op.dores.some((d) => d.onde === r.dor.onde && diaValido(d.data) && d.data > r.data) || op.encerradas.some((d) => d.onde === r.dor.onde && d.fim >= r.data)) continue;
     const d = { onde: r.dor.onde, nivel: r.dor.nivel, tipo: 'articular', quando: 'durante', dias: diasEntre(r.data, op.hoje) };
-    const ef = efeitoDaDor(d);
+    const ef = efeitoDaDor(d, pf);
     if (ef.nivel > 0) efeitos.push({ d, ef });
   }
   const pior = efeitos.reduce((m, x) => (x.ef.nivel > m.nivel || (x.ef.nivel === m.nivel && x.ef.corte > m.corte) ? x.ef : m), { nivel: 0, corte: 0 });
@@ -1450,14 +1784,19 @@ export function gerarPlano(respostas, opcoes) {
   // ----- ritmos, com os ajustes de VDOT -----
   // Na volta de pausa, o VDOT cai conforme o tempo parado (vdoto2_pausa). Sem prova nova e com o treino em dia, sobe 1 ponto
   // a cada 6 semanas, o lado conservador da orientação de Daniels ("a cada 4 a 6 semanas, não mais": vdoto2_ajuste).
-  let P = null, lento = false;
+  let P = null, lento = false, chaveBase = '', pontosDados = 0;
   if (base) {
     const pausaDias = base.origem === 'entrevista' ? pf.pausaDias : 0;
     const naVolta = volta && (base.origem === 'entrevista' || base.data <= volta.de) ? volta.dias : 0;
     const fatorV = Math.min(fatorPausa(pausaDias), fatorPausa(naVolta));
     const semanasDesde = base.origem === 'registro' ? Math.floor(diasEntre(base.data, op.hoje) / 7) : acompanha ? semAtual - 1 : 0;
     const emDia = temRegistros && contaveis.length >= 3 && contaveis.every((w) => diasCorridos(w) > 0) && !pesado && !exausto && !volta && pior.nivel === 0 && fatorV === 1;
-    const pontos = emDia ? Math.floor(semanasDesde / 6) : 0;
+    const rapido = acompanha && padraoRapidoFacil(op.registros, op.hoje);
+    // degrau já concedido para este mesmo resultado não é retirado (state.run.degrau)
+    chaveBase = base.origem === 'registro' ? base.data : 'entrevista';
+    const concedido = op.degrau && op.degrau.base === chaveBase ? op.degrau.pontos : 0;
+    const pontos = Math.max(concedido, emDia ? Math.floor(semanasDesde / (rapido ? 4 : 6)) : 0);
+    pontosDados = pontos;
     P = ritmosDe(base.distKm, base.seg, { pontos, fator: fatorV });
     // Ritmo leve mais lento que a velocidade em que as pessoas trocam a caminhada pela corrida (cerca de 7,2 km/h: hreljac2005,
     // rotstein2005): faixas de ritmo não fazem sentido. O plano vai por tempo e esforço, com corrida e caminhada.
@@ -1465,7 +1804,7 @@ export function gerarPlano(respostas, opcoes) {
     if (P) {
       P.base = { ...P.base, origem: base.origem, data: base.data };
       ajustes.push(...txtRitmos);
-      if (pontos > 0) ajustes.push({ texto: `Ritmos de treino ${pontos === 1 ? 'um degrau' : pontos + ' degraus'} mais rápidos (VDOT ${virg(r1(P.vdot - pontos))} → ${virg(P.vdot)}).`, motivo: 'Você treina em dia há 6 semanas ou mais desde o último resultado. Sem prova nova, a orientação de Daniels é subir 1 ponto de VDOT a cada 4 a 6 semanas, não mais que isso. Um teste de 3 km ou 5 km acerta os ritmos de vez.', refs: ['vdoto2_ajuste', 'smyth2022'] });
+      if (pontos > 0) ajustes.push({ texto: `Ritmos de treino ${pontos === 1 ? 'um degrau' : pontos + ' degraus'} mais rápidos (VDOT ${virg(r1(P.vdot - pontos))} → ${virg(P.vdot)}).`, motivo: (rapido ? 'Seus treinos leves têm saído mais rápidos que a faixa, com esforço baixo, e você treina em dia há 4 semanas ou mais desde o último resultado. ' : 'Você treina em dia há 6 semanas ou mais desde o último resultado. ') + 'Sem prova nova, a orientação de Daniels é subir 1 ponto de VDOT a cada 4 a 6 semanas, não mais que isso. Um teste de 3 km ou 5 km acerta os ritmos de vez.', refs: ['vdoto2_ajuste', 'smyth2022'] });
       if (fatorV < 1) ajustes.push({ texto: `Ritmos ${Math.round((1 - fatorV) * 100)}% mais lentos por causa do tempo parado.`, motivo: 'O condicionamento cai com a pausa: cerca de 3% em 2 semanas, 7% em 4 semanas e 15% em 8 semanas. Os ritmos voltam ao normal com as semanas de treino ou com um novo teste.', refs: ['vdoto2_pausa', 'zheng2022'] });
     }
   }
@@ -1578,7 +1917,8 @@ export function gerarPlano(respostas, opcoes) {
         let contadas = 0;
         for (let w = semAtual - 1; w >= semAtual - 6 && feitos.length < 3; w--) {
           if (w < 1) feitos.push(cv[0].vol);
-          else if (conta(w)) { feitos.push(feitoKm(w)); previstos.push(cv[w - 1].vol); contadas++; }
+          // conta o que foi feito até o limite do que o plano mostrava: correr a mais não aumenta a semana seguinte
+          else if (conta(w)) { const prev = mostradoKm(w) ?? cv[w - 1].vol; feitos.push(Math.min(feitoKm(w), prev)); previstos.push(prev); contadas++; }
         }
         if (contadas && feitos.length >= 2) {
           const feito = Math.max(...feitos);
@@ -1588,7 +1928,7 @@ export function gerarPlano(respostas, opcoes) {
       }
       if (temRegistros) {
         // treino longo: até 10% acima da corrida mais longa dos últimos 30 dias (frandsen2025)
-        const m30 = Math.max(0, ...corridas.filter((r) => r.data < iniSemana(semAtual) && diasEntre(r.data, iniSemana(semAtual)) <= 30).map((r) => kmDe(r, est)));
+        const m30 = Math.max(0, ...corridas.filter((r) => r.data < iniSemana(semAtual) && diasEntre(r.data, iniSemana(semAtual)) <= 30).map((r) => { const w = r.data >= base0 ? semanaDe(r.data) : 0; const lim = w >= 1 && w <= T ? (maiorMostrado(w) ?? (cv[w - 1].longo || cv[w - 1].vol)) : Infinity; return Math.min(kmDe(r, est), lim); }));
         const piso = !volta && semAtual <= 4 ? cfg.longo0 : 0; // nas 4 primeiras semanas vale também o longo informado na entrevista
         const ref = Math.max(m30, piso);
         if (ref > 0) {
@@ -1624,7 +1964,7 @@ export function gerarPlano(respostas, opcoes) {
       // aplica os tetos e deixa as semanas seguintes subirem de novo, dentro do passo
       let ref = null;
       for (let i = i0; i < T; i++) {
-        const s = cv[i], k = i - i0;
+        const s = cv[i], k = i - i0, vol0 = s.vol, n0 = s.corridas;
         if (k === 0) { if (teto < s.vol) { s.vol = teto; ref = teto; } if (semForte) s.q = 0; if (tetoLongo < s.longo) s.longo = tetoLongo; }
         else {
           if (ref != null) { const lim = Math.max(ref * (1 + pf.passo), ref + 1.5); if (!s.descarga && !s.polimento) { if (lim < s.vol) { s.vol = lim; ref = lim; } else ref = null; } else s.vol = Math.min(s.vol, ref); }
@@ -1634,7 +1974,8 @@ export function gerarPlano(respostas, opcoes) {
         if (k < semForteN) s.q = 0;
         if (k < semAcelN) s.semAcel = true;
         while (s.corridas > 2 && s.vol / s.corridas < cfg.minPorCorrida) s.corridas--;
-        s.longo = Math.min(s.longo, limiteLongo(s.corridas, s.vol, cfg.dist, cfg.longo0));
+        // a proporção do longo só é refeita quando o ajuste mexeu no volume ou no número de corridas da semana
+        if (s.vol < vol0 - 1e-9 || s.corridas !== n0) s.longo = Math.min(s.longo, limiteLongo(s.corridas, s.vol, cfg.dist, cfg.longo0));
         if (s.corridas < 5) s.q = Math.min(s.q, 1); // 2 treinos fortes só em semana com 5 ou mais corridas (munoz2014)
         if (s.vol / s.corridas < cfg.minPorCorrida || (s.corridas === 2 && (pf.dias.length > 2 || s.vol - s.longo < cfg.minPorCorrida))) s.q = 0;
       }
@@ -1643,6 +1984,21 @@ export function gerarPlano(respostas, opcoes) {
     semanas = cv.map((s) => ({ n: s.n, fase: s.fase, foco: focoDe(s, cfg), descarga: s.descarga, dias: diasDaSemana(s, pf, c, cfg, cont, op.diasPernas) }));
   }
   aparar(semanas, c);
+
+  // ----- treino forte feito na véspera (fora do plano): o forte de hoje ou de amanhã vira rodagem leve. Depois de um treino
+  // intenso, a recuperação leva 48 horas ou mais (stanley2013); dois fortes em dias seguidos só somam cansaço (seiler2009) -----
+  if (acompanha && semAtual >= 1) {
+    for (const k of [0, 1]) {
+      const dia = somaDias(op.hoje, k), vespera = somaDias(dia, -1);
+      if (!corridas.some((r) => r.data === vespera && (TIPOS_FORTES_REG.has(r.tipo) || (r.pse != null && r.pse >= 7))) || corridas.some((r) => r.data === dia)) continue;
+      const sem = semanas[Math.floor(diasEntre(op.inicio, dia) / 7)];
+      const j = sem ? sem.dias.findIndex((d) => d.wd === diaDaSemana(dia)) : -1;
+      if (j < 0 || sem.dias[j].intensidade !== 'forte' || ehEventoDia(sem.dias[j])) continue;
+      const d = sem.dias[j];
+      sem.dias[j] = { wd: d.wd, ...tLeve(Math.max(1, Math.min(d.distKm, (pf.tempo * 60) / est)), c), trocado: true };
+      ajustes.push({ texto: `${d.nome} de ${fmtDia(dia)} trocado por rodagem leve.`, motivo: 'Você fez um treino forte (ou com esforço de 7 ou mais) na véspera. Depois de um treino intenso, o corpo leva 48 horas ou mais para se recuperar: dois fortes em dias seguidos somam cansaço, não condicionamento.', refs: ['stanley2013', 'seiler2009'] });
+    }
+  }
 
   // ----- dor: muda os dias de hoje em diante (janela de 7 dias, refeita a cada dia enquanto a dor estiver registrada) -----
   if (acompanha && pior.nivel > 0) {
@@ -1665,7 +2021,7 @@ export function gerarPlano(respostas, opcoes) {
     let maior = 0;
     for (const s of semanas.slice(Math.max(0, T - 5), T - 1)) if (!parada(s.n)) for (const d of s.dias) if (ehCorridaDia(d)) maior = Math.max(maior, d.tipo === 'corrida_caminhada' ? d.corridaKm || 0 : d.distKm);
     if (acompanha) { const dataEv = somaDias(iniSemana(T), pos(ev.wd)); for (const r of corridas) if (r.data < dataEv && diasEntre(r.data, dataEv) <= 30) maior = Math.max(maior, kmDe(r, est)); }
-    if (pf.nivel >= 1 && T <= 4 && pf.retorno === 0) maior = Math.max(maior, Math.min(pf.longoAtual, 0.6 * pf.kmSemana));
+    if (pf.semanasProva && pf.nivel >= 1 && T <= 4 && pf.retorno === 0) maior = Math.max(maior, Math.min(pf.longoAtual, 0.6 * pf.kmSemana));
     const naVolta = volta ? T - semAtual + volta.semana : 0; // semana da volta em que a prova cai
     const curto = maior * 2 < r1(DIST[pf.dist]) - 0.15; // as distâncias dos treinos têm uma casa decimal
     if (curto || (volta && naVolta <= volta.tier.semAcel)) {
@@ -1699,6 +2055,7 @@ export function gerarPlano(respostas, opcoes) {
   return {
     semanas, totalSemanas, tipo: tipoPlano, semanaAtual: acompanha ? semAtual : 1, ritmos: P, zonas, modo: pf.modo,
     avisos: [...extras.map((x) => ({ ...x, destaque: true })), ...avisos(pf, P, { semanas, limitado })], orientacoes: orientacoes(pf, P, op), ajustes, perfil: pf, provaRetirada,
+    degrau: P && chaveBase ? { pontos: pontosDados, base: chaveBase } : null, sinais: { pesado, exausto },
     inicios: op.inicio ? semanas.map((s) => iniSemana(s.n)) : [],
     prova: evFinal && pf.dist && op.inicio ? { distKm: DIST[pf.dist], data: somaDias(iniSemana(totalSemanas), pos(evFinal.wd)), tipo: evFinal.tipo } : null,
   };
@@ -1721,7 +2078,7 @@ function avisos(pf, P, { semanas, limitado }) {
     const m = pf.meta, pedida = ROTULO.distancia[m.dist];
     const porque = 'o maior treino do plano não chegaria à metade da distância, e correr de uma vez mais que o dobro da sua corrida mais longa do último mês mais que dobra o risco de lesão';
     if (m.nova === m.dist) av('danger', `Em ${nSemanas(m.semanas)} não dá para preparar ${pedida} com segurança: ${porque}. No seu nível, o prazo mínimo é de ${m.min} semanas. Não marquei a prova: montei a preparação sem data. Escolha uma prova mais adiante ou uma distância menor.`, ['frandsen2025', 'nhs_c25k', 'ryan2003', 'damsted2017', 'dsilva2020']);
-    else if (m.nova) av('danger', `${m.semanas ? `Não marquei a prova de ${pedida} em ${nSemanas(m.semanas)}. ` : ''}Com o seu nível e o tempo que você tem por treino, ${pedida} não cabe em um único plano: ${porque}. Montei a preparação para ${ROTULO.distancia[m.nova]}; ao terminar, refaça a entrevista para o passo seguinte.`, ['frandsen2025', 'daniels', 'fokkema2020', 'dsilva2020']);
+    else if (m.nova) av('danger', `${m.semanas ? `Não marquei a prova de ${pedida} em ${nSemanas(m.semanas)}. ` : ''}${pf.foco === 'musculacao' ? 'Com a musculação em primeiro lugar (até 3 corridas de até 40 minutos)' : 'Com o seu nível e o tempo que você tem por treino'}, ${pedida} não cabe em um único plano: ${porque}. Montei a preparação para ${ROTULO.distancia[m.nova]}; ao terminar, refaça a entrevista para o passo seguinte.`, ['frandsen2025', 'daniels', 'fokkema2020', 'dsilva2020']);
     else av('danger', `Não consegui montar uma preparação segura para ${pedida} com os dias e o tempo que você tem. Montei um plano de saúde; quando ele estiver confortável, refaça a entrevista.`, ['frandsen2025']);
     a[a.length - 1].destaque = true;
   }
@@ -1729,10 +2086,11 @@ function avisos(pf, P, { semanas, limitado }) {
   if (pf.gestante) av('warn', pf.nivel === 0 ? 'Gestação: como você não corria antes, o plano é de caminhada em ritmo de conversa, até somar 150 minutos por semana. Não há evidência de segurança para começar a correr agora.' : 'Gestação: mantive só corridas leves, em ritmo de conversa, sem aumentar o volume. Pare e procure atendimento se houver sangramento, perda de líquido, contrações dolorosas, dor abdominal, tontura, dor de cabeça, dor no peito, falta de ar que não passa ou dor e inchaço na panturrilha.', ['mottola2018', 'acog804', 'oms2020']);
   if (pf.posparto) av('warn', 'Pós-parto: o plano recomeça por trechos de 30 segundos de corrida entre caminhadas, com um dia de descanso entre as corridas. Se houver escape de urina, peso ou pressão na vagina ou dor pélvica durante a corrida, pare e caminhe, e procure uma fisioterapeuta pélvica. Amamente ou tire o leite antes de correr.', ['deering2024', 'christopher2024', 'goom2019']);
   if (pf.hipertensao) av('warn', pf.liberado ? 'Pressão alta: corra só com a pressão controlada, e não treine no dia em que a pressão de repouso estiver acima de 160 por 105. Se usa betabloqueador, guie-se pelo esforço, não pela frequência cardíaca, e tenha cuidado extra no calor.' : 'Pressão alta sem liberação médica: deixei só treinos em intensidade leve a moderada. Para treinos fortes, peça avaliação médica. Não treine no dia em que a pressão de repouso estiver acima de 160 por 105.', ['sbc2020', 'pescatello2004']);
-  if (pf.diabetes) av('warn', 'Diabetes: meça a glicemia antes de correr (o ideal é entre 90 e 250 mg/dL; abaixo de 90, coma 15 a 30 g de carboidrato). A hipoglicemia pode aparecer horas depois. Olhe os pés todos os dias.', ['colberg2016', 'riebe2015']);
+  if (pf.diabetes) av('warn', 'Diabetes: meça a glicemia antes de correr (o ideal é entre 90 e 250 mg/dL; abaixo de 90, coma 15 a 30 g de carboidrato). A hipoglicemia pode aparecer horas depois. Olhe os pés todos os dias. O plano fica sem treinos fortes: intensidade alta, só com orientação do seu médico.', ['colberg2016', 'riebe2015']);
   if (pf.cardiaco || pf.renal) av('warn', 'Com doença do coração ou dos rins, o plano fica em intensidade leve. Treino forte só com orientação do seu médico.', ['riebe2015', 'pescatello2004']);
   if (pf.cronica) av(pf.liberado ? 'info' : 'warn', pf.liberado ? 'Doença crônica: siga o que o seu médico orientou sobre o tipo e a quantidade de exercício, e pare se surgirem sintomas novos.' : 'Você marcou outra doença crônica e ainda não tem liberação médica: deixei só treinos leves, sem treinos fortes. Para quem tem doença crônica, a recomendação é conversar com um profissional de saúde sobre o tipo e a quantidade de exercício. Com a liberação, refaça a entrevista.', ['oms2020', 'bredin2013', 'riebe2015']);
   if (pf.retorno) av('info', ['', 'Volta depois de 2 a 4 semanas parado: comecei com metade do volume, sem treinos fortes nas duas primeiras semanas e com ritmos um pouco mais lentos.', 'Volta depois de 1 a 3 meses parado: comecei com um terço do volume de antes, só corrida leve nas 9 primeiras semanas e ritmos mais lentos.', 'Volta depois de 3 a 6 meses parado: o volume de antes não serve mais de base. Montei o plano um nível abaixo, começando com um terço do volume antigo (no máximo 15 km por semana), só corrida leve nas 9 primeiras semanas e ritmos mais lentos.', 'Volta depois de mais de 6 meses parado: é um recomeço, com no máximo 15 km na primeira semana e só corrida leve nas 9 primeiras. Quem já correu recupera mais depressa, mas tendões e ossos precisam de tempo.'][pf.retorno], ['daniels', 'caterisano2019', 'vdoto2_pausa', 'mujika2000', 'coyle1984', 'ramskov2016']);
+  if (pf.irregular) av('info', 'Você corre de vez em quando, sem regularidade. Quem corre menos de 2 vezes ou de 2 horas por semana se lesiona mais, e com menos de 2 treinos por semana o fôlego quase não melhora. Por isso o plano começa com 3 corridas curtas por semana, por tempo e esforço (sem ritmo), sobe 7% por semana e só traz treino forte depois de 8 semanas. Pode caminhar 1 minuto de vez em quando: não atrapalha.', ['malisoux2015risco', 'pollock1998', 'vanpoppel2021', 'hottenrott2016', 'reed2014']);
   if (pf.jovem) av('info', `Menores de 18 anos: treine com acompanhamento de um adulto ou profissional, pratique outros esportes e tenha 1 a 2 dias de descanso por semana.${pf.idade < 14 ? ' Antes dos 14, no máximo 3 corridas por semana, sem treino forte e sem prova oficial de rua.' : pf.idade < 16 ? ' Até os 15, sem treino forte: o treino específico para provas fica para os 15 a 16 anos.' : ' Aos 16 e 17, no máximo 1 treino forte por semana.'}`, ['krabak2021', 'brenner2024', 'fitmodel2025', 'cbat_norma12', 'paz2021']);
   if (pf.distPedida && pf.distPedida > pf.distMax) av('warn', `Pela idade, limitei a distância do plano a ${ROTULO.distancia[pf.distMax]}. Pela norma da Confederação Brasileira de Atletismo, quem faz 14 ou 15 anos no ano da prova corre até 5 km; 16 ou 17, até 10 km; 18 ou 19, até a meia maratona; a maratona, só a partir dos 20.`, ['cbat_norma12', 'fitmodel2025', 'krabak2021']);
   if (pf.idoso) av('info', 'Aos 60 anos ou mais: um treino forte por semana (o piso da faixa de 1 a 2 indicada para amadores), porque a força muscular leva 48 a 72 horas para voltar depois de esforços pesados, e progressão de 7% por semana. Mantenha exercícios de força, em especial para a panturrilha, e, a partir dos 65, atividades de equilíbrio em 3 dias da semana.', ['boullosa2020', 'borges2016', 'tanaka2008', 'oms2020', 'chodzko2009']);
@@ -1740,7 +2098,12 @@ function avisos(pf, P, { semanas, limitado }) {
   if (pf.obeso && pf.nivel === 0) av('info', 'Para proteger as articulações, o plano começa com trechos bem curtos de corrida: menos de 3 km de corrida na primeira semana.', ['nielsen2014imc', 'bertelsen2018']);
   else if (pf.obeso) av('info', 'Com IMC de 30 ou mais, a progressão do volume é mais lenta.', ['nielsen2014imc']);
   if (pf.lesaoPrevia) av('info', 'Lesão nos últimos 12 meses é o fator de risco mais consistente para uma nova: o volume sobe mais devagar (7% por semana, dentro da faixa de 5 a 9% dos planos publicados).', ['saragiotto2014', 'vangent2007', 'vanderworp2015', 'knopp2024']);
-  if (pf.limitacoes.length) av('info', 'Você marcou dor em alguma região. O plano sobe mais devagar; use “Contar uma dor” com a intensidade para ele se ajustar ao que você sente. Dor que muda o seu jeito de correr é sinal para parar.', ['esculier2018', 'silbernagel2015']);
+  // dor informada na entrevista: é uma dor leve a moderada daquele local (nhs_dor: de 4 a 6, adaptar) — sem treinos fortes
+  // nas 2 primeiras semanas, progressão de 7% e a orientação do local
+  for (const k of pf.limitacoes) {
+    const local = { coxa: 'coxa-tras' }[k] || k, o = Object.prototype.hasOwnProperty.call(DOR_CORRIDA, local) ? DOR_CORRIDA[local] : null;
+    if (o) av('warn', `Você disse que sente dor: ${o.nome.toLowerCase()}. Por isso as 2 primeiras semanas ficam sem treinos fortes e o plano sobe mais devagar (7% por semana). ${o.reduzir} Conte a dor com a intensidade em “Contar uma dor”: o plano se ajusta ao que você sente.`, [...new Set(['nhs_dor', ...o.f])].slice(0, 5));
+  }
   if (pf.descansoForcado != null) av('info', `Você marcou os 7 dias. Deixei ${DIAS_NOME[pf.descansoForcado]} como descanso: pelo menos um dia sem treino por semana.`, ['meeusen2013', 'warden2021']);
   if (pf.nivel === 0 && !pf.gestante && pf.tempo <= 30) av('info', 'Com cerca de 30 minutos por treino, o programa chega a 26 minutos seguidos de corrida. Para chegar aos 30, as últimas semanas pedem treinos de 35 a 40 minutos, contando a caminhada do começo e do fim.', ['nhs_c25k']);
   if (limitado) av('info', `Com os dias e o tempo que você tem, o plano chega a cerca de ${limitado} km por semana. Para evoluir mais, abra mais um dia ou mais tempo por treino.`, ['fokkema2020', 'knopp2024']);
@@ -1759,6 +2122,11 @@ function avisos(pf, P, { semanas, limitado }) {
     if (maior < minimo) av('warn', `O maior treino do plano chega a ${fmtKm(maior)}, pouco para ${ROTULO.distancia[pf.dist]} (${fmtKm(km)}). O plano não acelera além do seguro, e nenhum treino passa de 2h30. ${pf.dist === 42 ? 'Na maratona, quem fica abaixo de 25 km no maior treino termina, em média, 13 minutos mais lento. ' : ''}Considere mais semanas de preparação ou completar a prova alternando corrida e caminhada.`, ['frandsen2025', 'fokkema2020', 'daniels']);
     // 5 e 10 km: prazo menor que o dos programas estudados (9 a 10 semanas: nhs_c25k, munoz2014)
     if (pf.dist <= 10 && pf.semanasProva && pf.semanasProva < DURACAO[pf.dist][0]) av('warn', `${pf.semanasProva === 1 ? 'Falta 1 semana' : `Faltam ${pf.semanasProva} semanas`}, menos do que os programas estudados para essa distância (9 a 10 semanas). O plano não acelera além do seguro: vá para completar, sem meta de tempo.`, ['nhs_c25k', 'munoz2014', 'frandsen2025']);
+    {
+      const ev = semanas[semanas.length - 1].dias.find(ehEventoDia);
+      if (ev && ev.durMin > pf.tempoLongoDito + 15) av(pf.objetivo === 'prova' ? 'warn' : 'danger', `${pf.objetivo === 'prova' ? 'A prova' : 'O desafio do fim do plano'} deve levar cerca de ${fmtTempo(ev.durMin * 60)}, mais do que o tempo que você disse ter no dia mais longo (${fmtTempo(pf.tempoLongoDito * 60)}). Reserve esse tempo para o dia${pf.objetivo === 'prova' ? '' : ', ou escolha uma distância menor'}.`, ['daniels', 'frandsen2025']);
+      if (ev && ev.durMin > pf.tempoLongoDito + 15 && pf.objetivo !== 'prova') a[a.length - 1].destaque = true;
+    }
     if (pf.dist === 42 && pf.provas !== 'maratona') av('info', 'Primeira maratona: a meta é completar bem. Cerca de 1 em cada 4 corredores “quebra” depois do km 30, quase sempre por sair rápido demais.', ['smyth2021muro', 'smyth2020vc']);
   }
   if (pf.alvoSeg && P && pf.dist) {
@@ -1770,7 +2138,7 @@ function avisos(pf, P, { semanas, limitado }) {
 function orientacoes(pf, P, op) {
   const o = [];
   const medir = pf.nivel <= 1
-    ? 'Seus treinos são por tempo e esforço: é a forma usada nos programas para iniciantes que foram estudados. ' + (pf.aparelho === 'gps' ? 'Use o relógio ou o aplicativo só para registrar a distância; não persiga um ritmo.' : pf.aparelho === 'esteira' || pf.local === 'esteira' ? 'Na esteira, escolha a velocidade em que ainda dá para conversar.' : 'Basta um cronômetro.')
+    ? 'Seus treinos são por tempo e esforço: é a forma usada nos programas para iniciantes que foram estudados. ' + (pf.aparelho === 'gps' ? 'Use o relógio ou o aplicativo só para registrar a distância; não persiga um ritmo.' : pf.aparelho === 'esteira' || pf.local === 'esteira' ? 'Na esteira, escolha a velocidade em que ainda dá para conversar.' : pf.aparelho === 'nada' ? 'Você não mede as corridas: use o cronômetro guiado de cada treino, que avisa as trocas.' : 'Basta um cronômetro.')
     : pf.modo === 'gps' ? (P ? 'Seus treinos saem em distância e faixa de ritmo, calculada pelo seu resultado recente. A faixa é um guia: em dia quente, cansado ou em subida, vale o esforço.' : 'Seus treinos saem em distância; o ritmo é guiado pelo esforço, até você registrar um teste.')
       : pf.modo === 'esteira' ? 'Seus treinos saem em distância e velocidade (km/h). Deixe 1% de inclinação se quiser aproximar do esforço da rua.'
         : 'Seus treinos saem em tempo e esforço. Sem aparelho, o teste da fala é o melhor guia.';
@@ -1779,10 +2147,14 @@ function orientacoes(pf, P, op) {
   o.push(['Como o plano cresce', `O volume sobe em passos de até cerca de ${Math.round(pf.passo * 100)}% por semana, com uma semana mais leve a cada quatro, e o treino longo não passa de cerca de 10% acima da sua corrida mais longa do último mês. O limite de 10% é uma convenção prudente; o que os estudos mostram é que saltos grandes aumentam o risco.`, ['frandsen2025', 'nielsen2014prog', 'buist2008', 'knopp2024']]);
   o.push(['Treinos perdidos', 'Não tente repor. Perdeu um treino: siga o plano. Perdeu vários: registre o que fez e o plano retoma de onde você está.', ['feely2023', 'frandsen2025']]);
   if (pf.nivel >= 1 && !pf.cautela) o.push(['Aquecimento', 'Antes de treinos fortes, 10 minutos de corrida leve. Alongar antes de correr não previne lesões.', ['helgerud2007', 'yeung2011']]);
+  // ordem e distância entre os dois treinos, conforme a prioridade escolhida (methenitis2018, murach2016, doma2017, robineau2016)
+  const ordem = op.foco === 'musculacao' ? 'No mesmo dia, faça a musculação primeiro e corra pelo menos 6 horas depois (3, no mínimo).'
+    : op.foco === 'corrida' ? 'No mesmo dia, corra primeiro e faça a força pelo menos 6 horas depois (3, no mínimo).'
+      : 'No mesmo dia, comece pelo treino que é a sua prioridade e deixe 6 horas entre os dois (3, no mínimo).';
   const forca = op.diasForca.length
-    ? 'Você também faz musculação. Deixe pelo menos 24 horas entre o treino pesado de pernas e o treino forte ou longo de corrida (48 horas se a musculação é novidade). No mesmo dia, corra primeiro e faça a força pelo menos 3 horas depois; se a prioridade do dia for a força de pernas, inverta.'
-    : 'Dois treinos de força por semana melhoram a economia de corrida e o tempo de prova. Deixe 24 horas entre pernas pesado e o treino forte ou longo.';
-  o.push(['Corrida e musculação', forca, ['blagrove2018', 'doma2017', 'robineau2016', 'eddens2018', 'schumann2022']]);
+    ? `Você também faz musculação. Deixe pelo menos 24 horas entre o treino pesado de pernas e o treino forte ou longo de corrida (48 horas se a musculação é novidade). ${ordem}`
+    : 'Dois treinos de força por semana melhoram a economia de corrida e o tempo de prova; depois, um por semana mantém o ganho. Deixe 24 horas entre pernas pesado e o treino forte ou longo.';
+  o.push(['Corrida e musculação', forca, ['blagrove2018', 'berryman2018', 'ronnestad2014', 'doma2017', 'robineau2016', 'methenitis2018', 'murach2016']]);
   o.push(['Calor e água', 'No calor, corra mais cedo ou à noite e aceite um ritmo mais lento. Até 60 a 90 minutos em clima ameno, beba conforme a sede; em treinos mais longos, leve água. Nunca beba a ponto de ganhar peso.', ['armstrong2007', 'kenefick2018', 'hewbutler2017']]);
   o.push(['Sinais para parar', 'Dor no peito, tontura ou falta de ar fora do normal: pare e procure atendimento. Dor que muda o seu jeito de correr, dor em um ponto do osso ou dor que aumenta a cada corrida: pare e procure avaliação.', ['riebe2015', 'hoenig2022', 'warden2021']]);
   if (pf.dist) o.push(['Dia da prova', 'Não estreie tênis, roupa nem comida. Largue um pouco abaixo do ritmo planejado. Na semana da prova o treino diminui de propósito: é o polimento, que rende 2 a 3% de melhora.', ['bosquet2007', 'smyth2021taper', 'smyth2021muro']]);
@@ -1813,11 +2185,11 @@ export function diaLocal(iso) {
 }
 // Períodos em que a corrida ficou suspensa por dor (relatos com efeito "sem corrida"), já encerrados: cada um vai do relato até
 // o "Melhorou", até um relato novo do mesmo local ou até o relato deixar de valer.
-function suspensoes(dores, hoje) {
+function suspensoes(dores, hoje, pf) {
   const l = (Array.isArray(dores) ? dores : []).filter((d) => isObj(d) && typeof d.onde === 'string' && LOCAIS_DOR[d.onde] && diaValido(d.data) && d.data <= hoje).sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0));
   const out = [];
   l.forEach((d, i) => {
-    if (efeitoDaDor({ ...d, dias: 0 }).nivel < 4) return;
+    if (efeitoDaDor({ ...d, dias: 0 }, pf).nivel < 4) return;
     const prox = l.slice(i + 1).find((x) => x.onde === d.onde && (x.lado || '') === (d.lado || ''));
     const fim = [d.fim, prox ? prox.data : '', somaDias(d.data, DIAS_ATIVA + 1)].filter((x) => diaValido(x) && x >= d.data).sort()[0];
     if (fim > hoje) return;
@@ -1836,9 +2208,10 @@ function opcoesDoEstado(st, hoje) {
   const dores = Array.isArray(st.dores) ? st.dores : [];
   return {
     inicio: run.inicio, hoje, registros: Array.isArray(st.runs) ? st.runs : [], diasForca: forca, diasPernas: pernas, dores: doresAtivas(st, hoje), desde,
+    foco: comboAtual(st).foco, mostrados: run.mostrados, degrau: run.degrau,
     // o plano começou na segunda-feira seguinte ao aceite? (as pausas adiam o início guardado: desconta)
     adiado: !!desde && segundaDe(desde) < somaDias(run.inicio, -7 * pausas.reduce((s, p) => s + (p && Number.isInteger(p.semanas) ? p.semanas : 0), 0)),
-    encerradas: dores.filter((d) => isObj(d) && d.fim), paradas: [...pausas.map((p) => ({ ...p, motivo: 'pausa' })), ...suspensoes(dores, hoje)],
+    encerradas: dores.filter((d) => isObj(d) && d.fim), paradas: [...pausas.map((p) => ({ ...p, motivo: 'pausa' })), ...suspensoes(dores, hoje, (() => { try { return perfil(run.answers); } catch { return null; } })())],
   };
 }
 // plano do estado atual, já ajustado (ou null sem plano aceito, pausado, bloqueado ou com a entrevista incompleta)
@@ -1859,34 +2232,96 @@ export function retomarPlano(run, hoje) {
   return { ...r, inicio: somaDias(r.inicio, semanas * 7), pausadoEm: '', pausas: [...r.pausas, { de, ate: hoje, semanas }].slice(-MAX_PAUSAS) };
 }
 const melhorRegistro = (l) => (l.length ? l.slice().sort((a, b) => (b.distKm || 0) - (a.distKm || 0) || b.durMin - a.durMin)[0] : null);
-// Semana atual do plano, por dia da semana: dias[wd] = null ou { ...treino, data, feito: registro | null }
+// treino de um dia que já passou, como o plano o mostrou naquele dia (sem os blocos: só o que a tela resumia)
+const diaGuardado = (m, p) => ({
+  tipo: m.tipo, nome: m.nome || TIPOS_TREINO[m.tipo].nome, resumo: m.resumo, detalhe: '', distKm: m.distKm, durMin: m.durMin, intensidade: INTENS[m.tipo],
+  ritmo: m.ritmo ? { de: m.ritmo[0], ate: m.ritmo[1] } : null, blocos: [], pse: m.pse || PSE[m.tipo], fala: FALA[m.tipo], modo: p.modo, un: m.un, guardado: true,
+});
+// Uma semana do plano, por dia da semana: dias[wd] = null ou { ...treino, data, forte, chave, feito: registro | null }.
+// forte = intensidade alta (ou a prova); chave = forte ou o longão (os dois pedem distância do treino pesado de pernas);
+// diaLongo = dia da semana do longão (ou null). Nos dias que já passaram vale o treino que o plano MOSTROU no dia
+// (`guardado: true`); sem ele, o treino previsto pelo plano de hoje, marcado `estimado: true`.
+// extras[wd] = corridas registradas em dia sem treino do plano: [{ id, data, tipo, distKm, durMin }].
+function semanaDoPlano(p, st, n, ini, hoje) {
+  const s = p.semanas[n - 1];
+  const dias = new Array(7).fill(null), extras = Array.from({ length: 7 }, () => []);
+  const runs = Array.isArray(st.runs) ? st.runs.filter((r) => isObj(r)) : [];
+  let diaLongo = null;
+  for (let k = 0; k < 7; k++) {
+    const data = somaDias(ini, k), wd = diaDaSemana(data);
+    const doPlano = s.dias.find((x) => x.wd === wd) || null;
+    const m = data < hoje ? mostradoEm(st, data) : null;
+    const d = m ? (m.tipo ? diaGuardado(m, p) : null) : doPlano ? (data < hoje ? { ...doPlano, estimado: true } : doPlano) : null;
+    const doDia = runs.filter((r) => r.data === data);
+    if (!d) { extras[wd] = doDia.map((r) => ({ id: r.id, data: r.data, tipo: r.tipo, distKm: r.distKm || 0, durMin: r.durMin || 0 })); continue; }
+    const forte = d.intensidade === 'forte';
+    if (d.tipo === 'longo') diaLongo = wd;
+    dias[wd] = { ...d, wd, data, forte, chave: forte || d.tipo === 'longo', feito: melhorRegistro(doDia) };
+  }
+  return { semana: n, totalSemanas: p.totalSemanas, semanaAtual: p.semanaAtual, fase: ROTULO.fase[s.fase] + (s.descarga ? ' · semana leve' : ''), foco: s.foco, descarga: s.descarga, dias, extras, diaLongo, inicioDaSemana: ini };
+}
+const semTreinos = () => ({ dias: new Array(7).fill(null), extras: Array.from({ length: 7 }, () => []), diaLongo: null });
+// Semana atual do plano
 export function planoDaSemana(st, hoje) {
   const p = planoAtual(st, hoje);
   if (!p) return null;
   const run = st.run;
-  const vazio = () => new Array(7).fill(null);
-  if (hoje < run.inicio) return { semana: 1, totalSemanas: p.totalSemanas, fase: `Começa na ${fmtDia(run.inicio)}`, dias: vazio(), antesDoInicio: true };
+  if (hoje < run.inicio) return { semana: 1, totalSemanas: p.totalSemanas, semanaAtual: p.semanaAtual, fase: `Começa na ${fmtDia(run.inicio)}`, ...semTreinos(), antesDoInicio: true, comecaEm: run.inicio };
   const n = p.semanaAtual;
-  if (n > p.totalSemanas) return { semana: p.totalSemanas, totalSemanas: p.totalSemanas, fase: 'Plano concluído', dias: vazio(), concluido: true };
-  const s = p.semanas[n - 1];
-  const ini = somaDias(run.inicio, (n - 1) * 7);
-  const dias = vazio();
-  const runs = Array.isArray(st.runs) ? st.runs : [];
-  for (const d of s.dias) {
-    const data = somaDias(ini, pos(d.wd));
-    dias[d.wd] = { ...d, data, feito: melhorRegistro(runs.filter((r) => r && r.data === data)) };
-  }
-  return { semana: n, totalSemanas: p.totalSemanas, fase: ROTULO.fase[s.fase] + (s.descarga ? ' · semana leve' : ''), foco: s.foco, descarga: s.descarga, dias };
+  if (n > p.totalSemanas) return { semana: p.totalSemanas, totalSemanas: p.totalSemanas, semanaAtual: n, fase: 'Plano concluído', ...semTreinos(), concluido: true };
+  return semanaDoPlano(p, st, n, somaDias(run.inicio, (n - 1) * 7), hoje);
 }
-// treino planejado para uma data (ou null)
+// A semana que começa em `segunda` ('AAAA-MM-DD'), na mesma forma de planoDaSemana: passada (como o plano a mostrou em cada
+// dia, com `feito`), atual ou futura (como está prevista hoje). `semana` e `totalSemanas` são os da semana VISTA; `semanaAtual`
+// é a semana em que a pessoa está hoje. Marca `antesDoInicio` (com `comecaEm`; a 1ª semana do plano já vem com os treinos),
+// `concluido` (depois da última semana) ou `foraDoPlano` (semana pulada por uma pausa).
+export function planoDaSemanaEm(st, hoje, segunda) {
+  const p = planoAtual(st, hoje);
+  if (!p || !diaValido(segunda) || !p.inicios.length) return null;
+  const seg = segundaDe(segunda), primeira = p.inicios[0];
+  const runs = Array.isArray(st.runs) ? st.runs.filter((r) => isObj(r)) : [];
+  // fora das semanas do plano, toda corrida registrada é um extra
+  const vazio = (extra) => { const v = semTreinos(); for (let k = 0; k < 7; k++) { const data = somaDias(seg, k); v.extras[diaDaSemana(data)] = runs.filter((r) => r.data === data).map((r) => ({ id: r.id, data: r.data, tipo: r.tipo, distKm: r.distKm || 0, durMin: r.durMin || 0 })); } return { totalSemanas: p.totalSemanas, semanaAtual: p.semanaAtual, ...v, inicioDaSemana: seg, ...extra }; };
+  const n = p.inicios.indexOf(seg) + 1;
+  if (n) { const w = semanaDoPlano(p, st, n, seg, hoje); return hoje < primeira ? { ...w, antesDoInicio: true, comecaEm: primeira } : w; }
+  if (seg < primeira) return vazio({ semana: 1, fase: `Começa na ${fmtDia(primeira)}`, antesDoInicio: true, comecaEm: primeira });
+  if (seg > p.inicios[p.inicios.length - 1]) return vazio({ semana: p.totalSemanas, fase: 'Plano concluído', concluido: true });
+  return vazio({ semana: 0, fase: 'Plano pausado nesta semana', foraDoPlano: true });
+}
+// Treino planejado para uma data (ou null). Em data que já passou, é o treino que o plano MOSTROU naquele dia (`guardado: true`);
+// se ele não ficou guardado, vem o previsto pelo plano de hoje, marcado `estimado: true` (serve para mostrar, não para comparar).
 export function treinoDoDia(st, hoje, data) {
   const p = planoAtual(st, hoje);
   if (!p || !diaValido(data)) return null;
   const n = p.inicios.findIndex((ini) => data >= ini && data <= somaDias(ini, 6)) + 1;
   const s = n ? p.semanas[n - 1] : null;
   if (!s) return null;
+  if (data < hoje) {
+    const m = mostradoEm(st, data);
+    if (m) return m.tipo ? { ...diaGuardado(m, p), wd: diaDaSemana(data), data, semana: n, fase: s.fase, plano: p } : null;
+  }
   const d = s.dias.find((x) => x.wd === diaDaSemana(data));
-  return d ? { ...d, data, semana: n, fase: s.fase, plano: p } : null;
+  return d ? { ...d, ...(data < hoje ? { estimado: true } : {}), data, semana: n, fase: s.fase, plano: p } : null;
+}
+// O que guardar no estado ao desenhar o dia de hoje (ou ao registrar): o treino mostrado em cada dia, de hoje até o fim da
+// semana (os dias que já passaram não são tocados), e o degrau de ritmo já concedido. Devolve { mostrados, degrau } para
+// gravar em state.run, ou null quando nada mudou.
+export function guardarDoDia(st, hoje) {
+  const run = st && isObj(st.run) ? st.run : null;
+  if (!run || !diaValido(hoje)) return null;
+  let p = null;
+  try { p = planoAtual(st, hoje); } catch { p = null; }
+  if (!p) return null;
+  const atuais = limparMostrados(run.mostrados), antigo = limparDegrau(run.degrau);
+  const mapa = new Map(atuais.map((m) => [m.data, m]));
+  const n = p.semanaAtual;
+  if (n >= 1 && n <= p.totalSemanas) {
+    const ini = p.inicios[n - 1];
+    for (let k = 0; k < 7; k++) { const data = somaDias(ini, k); if (data >= hoje) mapa.set(data, mostradoDe(p.semanas[n - 1].dias.find((x) => x.wd === diaDaSemana(data)), data)); }
+  }
+  const mostrados = limparMostrados([...mapa.values()]);
+  const degrau = p.degrau && p.degrau.pontos > 0 ? limparDegrau(p.degrau) : antigo && p.degrau && antigo.base === p.degrau.base ? antigo : null;
+  return JSON.stringify(mostrados) !== JSON.stringify(atuais) || JSON.stringify(degrau) !== JSON.stringify(antigo) ? { mostrados, degrau } : null;
 }
 // segunda-feira da semana 1 para um plano aceito hoje: esta semana, se ainda há treino de hoje em diante; senão, a próxima
 // (a prova continua na semana pedida: ver `adiado` em gerarPlano)
@@ -1967,8 +2402,8 @@ export function alertas(registros, hoje) {
   if (u4.length >= 3 && u4.filter((r) => r.pse >= 8).length >= 3) out.push({ tipo: 'warn', texto: 'Três dos seus últimos treinos ficaram com esforço de 8 ou mais. Se o cansaço não passa em uma semana ou o rendimento cai, reduza os treinos; se durar mais de 4 semanas, procure um médico.', refs: ['meeusen2013', 'saw2016'] });
   // dor repetida no mesmo local
   const dores = {};
-  for (const r of rs) if (r.dor && diasEntre(r.data, hoje) <= 14) dores[r.dor.onde] = (dores[r.dor.onde] || 0) + 1;
-  for (const k of Object.keys(dores)) if (dores[k] >= 2 && LOCAIS_DOR[k]) out.push({ tipo: 'warn', texto: `Você anotou dor em ${LOCAIS_DOR[k].toLowerCase()} em ${dores[k]} corridas nas últimas 2 semanas. Dor que se repete pede avaliação de um médico ou fisioterapeuta.`, refs: ['saragiotto2014', 'esculier2018'] });
+  for (const r of rs) if (r.dor && temLocal(r.dor.onde) && diasEntre(r.data, hoje) <= 14) dores[r.dor.onde] = (dores[r.dor.onde] || 0) + 1;
+  for (const k of Object.keys(dores)) if (dores[k] >= 2 && temLocal(k)) out.push({ tipo: 'warn', texto: `Você anotou dor em ${LOCAIS_DOR[k].toLowerCase()} em ${dores[k]} corridas nas últimas 2 semanas. Dor que se repete pede avaliação de um médico ou fisioterapeuta.`, refs: ['saragiotto2014', 'esculier2018'] });
   // 7 dias seguidos correndo (meeusen2013, warden2021)
   const dias = new Set(rs.map((r) => r.data));
   let seguidos = 0;
@@ -1983,7 +2418,7 @@ export function dicas(respostas) {
   const t = (titulo, texto, refs) => d.push({ titulo, texto, refs });
   if (pf.nivel <= 1) t('Devagar é o certo', 'Se você consegue conversar enquanto corre, está no ritmo certo. Ganhar fôlego vem do tempo correndo, não da velocidade.', ['foster2008', 'milanovic2015']);
   else t('Leve de verdade nos dias leves', 'Amadores costumam correr o leve rápido demais e acabam cansados para os treinos fortes. Guarde a força para os dias que pedem.', ['seiler2009', 'rosenblat2025']);
-  t('Força ajuda a correr', 'Dois treinos de força por semana melhoram a economia de corrida em 2 a 8%. Uma sessão por semana mantém o ganho.', ['blagrove2018', 'llanos2024']);
+  t('Força ajuda a correr', 'Dois treinos de força por semana, com carga alta, por 8 a 12 semanas, melhoram a economia de corrida em 2 a 8%, sem ganho de peso. Depois, uma sessão por semana mantém o ganho.', ['blagrove2018', 'llanos2024', 'berryman2018', 'ronnestad2014']);
   t('Tênis: escolha pelo conforto', 'Não há evidência de que o tênis “certo para a sua pisada” previna lesões. Alternar dois pares esteve ligado a menos lesões em um estudo.', ['relph2022', 'malisoux2015']);
   if (pf.limitacoes.includes('joelho')) t('Passos mais curtos aliviam o joelho', 'Aumentar a cadência em 5 a 10% (passos mais curtos e rápidos, no mesmo ritmo) reduz a carga no joelho em cerca de 20 a 34%.', ['heiderscheit2011', 'esculier2018']);
   if (pf.master) t('Cuide da panturrilha', 'Elevação de calcanhar (ficar na ponta dos pés), 3 séries de 15, duas ou três vezes por semana.', ['mckean2006', 'silbernagel2015']);

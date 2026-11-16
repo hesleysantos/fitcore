@@ -1,10 +1,12 @@
 // Tela do Treinador virtual.
-import { h, btn, icon, note, badge, sectionTitle, toggle, toast, confirmSheet, plural, fmtDate, dateKey } from '../ui.js';
+import { h, btn, icon, note, badge, sectionTitle, toggle, toast, confirmSheet, plural, fmtDate, dateKey, uid } from '../ui.js';
 import { state, update, activePlan } from '../store.js';
 import { go, refresh } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { FAQ_TREINO } from '../data/knowledge.js';
-import { PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, sugerirTrocas, perfil, volumeSemanal, imcTexto, nomeGrupo, outraVersao, avisosDoPlano, orientacaoDaDor, ajustesPorDor, aplicarTrocasDor, voltasPorDor, aplicarVoltasDor } from '../logic/trainer.js';
+import { PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, sugerirTrocas, perfil, volumeSemanal, imcTexto, nomeGrupo, outraVersao, avisosDoPlano, orientacaoDaDor, ajustesPorDor, aplicarTrocasDor, voltasPorDor, aplicarVoltasDor, resumoCombinado, doresDoTreino, doresPendentes } from '../logic/trainer.js';
+import { comboAtual, chaveCombo, faltaPerguntar, temOsDois, temCorrida } from '../logic/combinado.js';
+import { cartaoCombinado, perguntarCombinado } from './combinado.js';
 import { doresAtivas, LOCAIS_DOR } from '../logic/dor.js';
 import { cartaoDores } from './dor.js';
 import { estagnados } from '../logic/progress.js';
@@ -19,8 +21,28 @@ let modo = 'auto'; // 'auto' | 'entrevista' | 'proposta' | 'trocas'
 let novos = null; // { versao, dias: [Set de ids] }
 // O número da versão é guardado até 9999 (store.js). As combinações se repetem a cada 12 versões; 9996 é múltiplo de 12.
 const guardarVersao = (v) => v % 9996;
-const doresDeHoje = () => doresAtivas(state, dateKey(new Date()));
+// dores que valem para o Treinador: as ativas, as que deixaram de contar por tempo sem resposta e as que estão em volta gradual
+const doresDeHoje = () => doresDoTreino(state, dateKey(new Date()), state.trainer.answers);
+// Dor de alerta (ou acima do aceitável) que deixou de contar por tempo, sem "Melhorou": o Treinador pergunta antes de
+// voltar ao treino normal. Até a resposta, a região continua poupada.
+function cartoesDeDorPendente(aoMudar) {
+  const hoje = dateKey(new Date());
+  return doresPendentes(state, hoje, state.trainer.answers).map((d) => {
+    const nome = LOCAIS_DOR[d.onde].toLowerCase() + (d.lado === 'e' ? ' esquerdo' : d.lado === 'd' ? ' direito' : '');
+    return h('div', { class: 'card hl col gap-s', 'data-dor-pendente': d.id },
+      h('h3', { text: `Como está a dor (${nome})?` }),
+      h('p', { class: 'small muted', text: `Você contou essa dor há ${d.dias} dias e não atualizou. Até responder, o Treinador continua poupando essa região.` }),
+      h('div', { class: 'row par-de-botoes' },
+        btn('Melhorou', () => { update((s) => { const x = s.dores.find((y) => y.id === d.id); if (x) x.fim = hoje; }); toast('Que bom! A região volta aos poucos, por 2 semanas.'); if (aoMudar) aoMudar(); refresh(); }, 'primary grow sm', 'check'),
+        btn('Ainda dói', () => { update((s) => { s.dores.push({ id: 'd' + uid(), data: hoje, onde: d.onde, lado: d.lado || '', tipo: d.tipo, quando: d.quando, nivel: d.nivel, nota: typeof d.nota === 'string' ? d.nota : '', fim: '' }); }); toast('Anotado. Dor que dura semanas pede avaliação de um médico ou fisioterapeuta.'); if (aoMudar) aoMudar(); refresh(); }, 'ghost grow sm')));
+  });
+}
+// avisos de dor que o cartão de dores não mostra (dor pendente de resposta ou em volta gradual)
+const avisoDeDorForaDoCartao = (av) => !!av.dor && !doresAtivas(state, dateKey(new Date())).some((d) => d.onde === av.dor);
 const MARCA_DOR = 'Adaptado para dor';
+// corrida da semana e a escolha de prioridade (null para quem não corre): muda o encaixe dos treinos e tira o cardio
+const corridaDeHoje = () => resumoCombinado(state, dateKey(new Date()));
+const pedeFortalecimento = (c) => !!c.fortalecimento && c.fortalecimento !== 'nao';
 const SEMANA = 7 * 86400000;
 
 export function revisaoPendente() {
@@ -70,7 +92,8 @@ function proposta() {
   const a = state.trainer.answers;
   const versao = state.trainer.versao || 0;
   const dores = doresDeHoje();
-  const p = gerarPlano(a, state.gym, versao, dores);
+  const comb = corridaDeHoje();
+  const p = gerarPlano(a, state.gym, versao, dores, comb);
   const body = [cabecalho(), cartaoObjetivos()].filter(Boolean);
   // contar uma dor ou marcar "Melhorou" refaz a proposta (quem chama redesenha a tela)
   const dorCard = () => cartaoDores({ extra: (d) => (orientacaoDaDor(d, a) || {}).texto || '', aoMudar: () => { novos = null; } });
@@ -82,7 +105,8 @@ function proposta() {
   const pf = p.perfil;
   if (!p.dias.length) {
     body.push(dorCard());
-    for (const av of p.avisos) if (!av.dor) body.push(note(av.tipo, av.texto));
+    for (const c of cartoesDeDorPendente(() => { novos = null; })) body.push(c);
+    for (const av of p.avisos) if (!av.dor || avisoDeDorForaDoCartao(av)) body.push(note(av.tipo, av.texto));
     body.push(note('warn', 'Com essas respostas e os aparelhos disponíveis não consegui montar um treino seguro. Marque mais aparelhos em “Minha academia” ou procure um profissional de educação física.'));
     body.push(btn('Mudar respostas', () => { modo = 'entrevista'; refresh(); }, 'block'));
     return body;
@@ -98,7 +122,8 @@ function proposta() {
       p.focoFora.length ? h('div', { class: 'tiny muted', text: `Com este tempo de treino, priorizo até ${plural(p.foco.length, 'músculo', 'músculos')} por vez. Ficou de fora: ${p.focoFora.join(', ').toLowerCase()}.` }) : null));
   }
   body.push(dorCard());
-  for (const av of p.avisos) if (!av.dor) body.push(note(av.tipo, av.texto));
+  for (const c of cartoesDeDorPendente(() => { novos = null; })) body.push(c);
+  for (const av of p.avisos) if (!av.dor || avisoDeDorForaDoCartao(av)) body.push(note(av.tipo, av.texto));
   if (p.faltando.length) body.push(note('warn', `Com os aparelhos disponíveis, não encontrei exercícios suficientes para: ${p.faltando.join(', ')}. Marque mais aparelhos em “Minha academia” ou complete esses treinos manualmente.`));
   if (pf.imc) body.push(h('p', { class: 'small muted', text: `IMC: ${String(Math.round(pf.imc * 10) / 10).replace('.', ',')} (${imcTexto(pf.imc, pf.idade)}) — só uma referência.` }));
   const marca = novos && novos.versao === versao ? novos.dias : null;
@@ -111,9 +136,13 @@ function proposta() {
     if (!ciente) return;
     const dias = p.dias.map((d) => ({ ...d, itens: d.itens.map((i) => ({ ...i })) }));
     if (!criarPlano({ nome: 'Plano do Treinador', origem: 'treinador', dias, agenda: p.agenda, info: `Feito para: ${paraQue} · ${plural(p.dias.length, 'treino', 'treinos')} por semana.` + (pf.dor ? ` ${MARCA_DOR}: ${[...new Set(p.avisos.filter((x) => x.dor).map((x) => LOCAIS_DOR[x.dor].toLowerCase()))].join(', ')}.` : '') })) return;
-    update((s) => { const now = Date.now(); s.trainer.aceitoEm = new Date(now).toISOString(); s.trainer.revisaoEm = new Date(now + p.revisaoSemanas * SEMANA).toISOString(); s.trainer.adiadoAte = ''; });
+    // a escolha de prioridade com que este plano foi montado fica guardada: se ela mudar, o painel propõe o ajuste
+    update((s) => { const now = Date.now(); s.trainer.aceitoEm = new Date(now).toISOString(); s.trainer.revisaoEm = new Date(now + p.revisaoSemanas * SEMANA).toISOString(); s.trainer.adiadoAte = ''; s.trainer.combo = chaveCombo(comboAtual(s)); });
     modo = 'auto'; novos = null;
     toast('Treino ativado! Ele já está na aba Treinos.');
+    // quem corre: falta dizer o que vem primeiro ou se quer fortalecimento? A pergunta abre aqui, no painel do Treinador
+    const falta = faltaPerguntar(state);
+    if (falta.foco || falta.fortalecimento) { refresh(); window.scrollTo(0, 0); perguntarCombinado({ aoMudar: () => refresh() }); return; }
     go('treinos');
   }, 'primary lg block', 'check');
   aceitar.disabled = !ciente;
@@ -122,7 +151,7 @@ function proposta() {
   }
   body.push(aceitar);
   // "Outra versão": procura a próxima combinação que muda de fato os exercícios (os principais e a dose ficam)
-  const prox = outraVersao(a, state.gym, versao, { dores, plano: p });
+  const prox = outraVersao(a, state.gym, versao, { dores, plano: p, combinado: comb });
   body.push(h('div', { class: 'row par-de-botoes' },
     prox ? btn('Outra versão', () => {
       const antes = p.dias.map((d) => new Set(d.itens.map((i) => i.ex)));
@@ -159,6 +188,32 @@ function painel() {
     extra: (d) => { const o = orientacaoDaDor(d, a); const n = trocadosPor(d.onde); return o ? o.texto + (n ? ` ${plural(n, 'exercício trocado', 'exercícios trocados')} no seu treino.` : '') : ''; },
     aoMudar: (d) => { if (!d) desfazer(); },
   }));
+  for (const c of cartoesDeDorPendente(null)) body.push(c);
+  // região em volta gradual depois de uma dor de alerta que melhorou
+  for (const d of dores.filter((x) => x.volta)) { const o = orientacaoDaDor(d, a); if (o) body.push(note('info', `${LOCAIS_DOR[d.onde]}: ${o.texto.charAt(0).toLowerCase() + o.texto.slice(1)}`)); }
+  // corrida e musculação: a escolha, e o ajuste do treino quando ela mudou depois de o plano ser aceito
+  const comb = corridaDeHoje();
+  const cc = cartaoCombinado({ aoMudar: () => refresh() });
+  if (cc) body.push(cc);
+  const escolha = comboAtual(state);
+  if (plan && plan.origem === 'treinador' && comb && temOsDois(state) && state.trainer.combo !== chaveCombo(escolha) && (escolha.foco || pedeFortalecimento(escolha))) {
+    const novo = gerarPlano(a, state.gym, state.trainer.versao || 0, dores, comb);
+    const guardar = () => { update((s) => { s.trainer.combo = chaveCombo(comboAtual(s)); }); refresh(); };
+    const exs = (d) => d.itens.map((i) => i.ex).sort().join(',');
+    const semana = (pl) => [0, 1, 2, 3, 4, 5, 6].map((wd) => pl.dias.findIndex((d) => d.id === pl.agenda[wd])).join(',');
+    const igual = !novo || !novo.dias.length || (novo.dias.length === plan.dias.length && novo.dias.every((d, i) => exs(d) === exs(plan.dias[i])) && semana(novo) === semana(plan));
+    const card = h('div', { class: 'card hl col gap-s' }, h('h2', { text: 'Sua prioridade mudou' }));
+    if (igual) {
+      card.appendChild(h('p', { class: 'small', text: 'O seu treino já está de acordo com essa escolha: não há o que trocar.' }));
+      card.appendChild(btn('Entendi', guardar, 'block', 'check'));
+    } else {
+      const linhas = novo.avisos.filter((x) => x.combo).map((x) => x.texto).slice(0, 3);
+      for (const l of linhas.length ? linhas : ['O Treinador refez o plano com a nova escolha.']) card.appendChild(h('p', { class: 'small', text: l }));
+      card.appendChild(btn('Ver o treino ajustado', () => { novos = null; modo = 'proposta'; refresh(); window.scrollTo(0, 0); }, 'primary block', 'right'));
+      card.appendChild(btn('Manter o treino como está', guardar, 'block ghost'));
+    }
+    body.push(card);
+  }
   const voltas = plan ? voltasPorDor(plan, a, dores) : [];
   if (voltas.length) {
     body.push(h('div', { class: 'card col gap-s' }, h('h3', { text: 'A dor passou?' }),
@@ -256,9 +311,12 @@ function painel() {
   body.push(resumo);
   // Avisos e orientações do perfil, sem as dores: o que as dores mudam no treino ATIVO está no cartão de ajustes, acima.
   // (Com as dores, os avisos falariam de um plano novo — "este plano ficou sem..." —, que não é o que a pessoa está usando.)
-  const pBase = gerarPlano(a, state.gym, state.trainer.versao || 0);
-  const p0 = dores.length ? gerarPlano(a, state.gym, state.trainer.versao || 0, dores) : pBase;
-  if (pBase) for (const av of pBase.avisos) body.push(note(av.tipo, av.texto));
+  // (O mesmo vale para os avisos do encaixe com a corrida: eles aparecem na proposta, não aqui.)
+  const pBase = gerarPlano(a, state.gym, state.trainer.versao || 0, null, comb);
+  const p0 = dores.length ? gerarPlano(a, state.gym, state.trainer.versao || 0, dores, comb) : pBase;
+  if (pBase) for (const av of pBase.avisos) if (!av.combo) body.push(note(av.tipo, av.texto));
+  // treino sem cardio de quem tinha plano de corrida e não tem mais: o cardio volta num treino novo
+  if (plan && plan.origem === 'treinador' && !comb && !temCorrida(state) && Object.keys(state.run.answers || {}).length && pBase && pBase.minCardio > 0 && !plan.dias.some((d) => d.itens.some((it) => (EX_POR_ID.get(it.ex) || {}).registro === 'minutos'))) body.push(note('info', 'Este treino está sem cardio e você não tem plano de corrida ativo. Para o cardio voltar, monte um novo treino.'));
   // avisos dos exercícios que a pessoa pôs no treino à mão (ex.: testar a mesa antes da remada sob a mesa)
   if (plan) for (const av of avisosDoPlano(plan.dias)) body.push(note(av.tipo, av.texto));
   // plano que foi montado poupando uma região dolorida, quando a dor já não pede isso
@@ -270,7 +328,7 @@ function painel() {
       const ok = !plan || await confirmSheet({ title: 'Montar um novo treino?', text: 'Crio um novo plano com as suas respostas. O atual fica guardado em “Outros planos”.', okLabel: 'Montar' });
       if (!ok) return;
       // abre a proposta na próxima versão que seja diferente do treino atual (se existir)
-      const prox = plan ? outraVersao(a, state.gym, state.trainer.versao || 0, { dores, plano: plan }) : null;
+      const prox = plan ? outraVersao(a, state.gym, state.trainer.versao || 0, { dores, plano: plan, combinado: comb }) : null;
       if (prox) update((s) => { s.trainer.versao = guardarVersao(prox.versao); });
       novos = null;
       modo = 'proposta'; refresh(); window.scrollTo(0, 0);

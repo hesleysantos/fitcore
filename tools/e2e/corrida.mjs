@@ -42,6 +42,16 @@ export default async (page) => {
   }
   const preencher = (rotulo, valor) => page.eval(`const i = document.querySelector('input[aria-label="${rotulo}"]'); if (!i) return false; i.value = ${JSON.stringify(valor)}; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); return true;`);
 
+  // depois de aceitar o plano, o aplicativo pergunta sobre o fortalecimento (e, com musculação, sobre a prioridade)
+  const responderFortalecimento = async () => {
+    const tem = (await texto()).includes('Quer treinos de fortalecimento para a corrida?');
+    if (tem) {
+      await page.eval(`[...document.querySelectorAll('.sheet .opt')].find((e) => e.textContent.includes('Não agora')).click(); return true;`); await page.sleep(150);
+      await page.eval(`[...document.querySelectorAll('.sheet-ft .btn')].find((e) => e.textContent.trim() === 'Salvar').click(); return true;`); await page.sleep(600);
+    }
+    return tem;
+  };
+
   console.log('1. Abertura e abas do Treinador');
   await page.goto(B, 2500);
   await page.click('Agora não');
@@ -68,6 +78,8 @@ export default async (page) => {
   ok(t.includes('1 min correndo + 2 min caminhando'), 'primeira semana alterna corrida e caminhada');
   await foto('2-proposta-iniciante');
   await page.click('Aceitar e usar este plano'); await page.sleep(700);
+  ok(await responderFortalecimento(), 'logo depois do aceite, a pergunta sobre fortalecimento para a corrida');
+  ok((await estado('s.combo.fortalecimento')) === 'nao' && (await texto()).includes('Fortalecimento: sem fortalecimento'), 'a escolha fica gravada e aparece no cartão do painel');
   t = await texto();
   ok(t.includes('Semana 1 de 14') && t.includes('Esta semana'), 'painel mostra a semana 1 de 14');
   const st1 = await estado(`{ aceito: !!s.run.aceitoEm, inicio: s.run.inicio, wd: new Date(s.run.inicio + 'T12:00:00').getDay(), dias: s.run.answers.dias }`);
@@ -107,7 +119,8 @@ export default async (page) => {
   if ((await estado('s.runs.length')) === 1) { await page.click('Editar'); await page.sleep(300); }
   await preencher('Distância em quilômetros', '2,6');
   await preencher('Tempo em minutos, ou minutos e segundos', '28:30');
-  await page.click('Aumentar Esforço percebido'); await page.sleep(100);
+  ok(await page.eval(`return !!document.querySelector('[aria-label="Tipo de corrida"] .chip.on') && !document.querySelector('[aria-label="Esforço percebido"] .chip.on');`), 'o formulário oferece o tipo da corrida, e o esforço começa sem nada marcado');
+  await page.eval(`document.querySelector('[aria-label="Esforço percebido"] .chip:nth-child(5)').click(); return true;`); await page.sleep(100);
   await page.eval(`const sw = document.querySelector('input[aria-label="Senti dor"]'); sw.click(); return true;`); await page.sleep(200);
   await page.eval(`const c = [...document.querySelectorAll('[aria-label="Onde doeu"] .chip')].find((e) => e.textContent === 'Joelho'); c.click(); return true;`); await page.sleep(150);
   await page.click('Aumentar Intensidade da dor'); await page.sleep(100);
@@ -121,12 +134,16 @@ export default async (page) => {
   t = await texto();
   ok(t.includes('registrada') && t.includes('2,6 km') && t.includes('Primeira corrida <b>do plano</b>') && !(await page.eval(`return !!document.querySelector('main b:not(.stat b)') && [...document.querySelectorAll('main b')].some((b) => b.textContent === 'do plano');`)), 'registro aparece na tela e o texto digitado não vira HTML');
   await foto('6-registrado');
+  t = await texto();
+  ok(t.includes('Análise do treino') && (t.includes('Acima do plano') || t.includes('Abaixo do plano') || t.includes('Dentro do plano')) && t.includes('O plano:'), 'a corrida registrada vem com a análise contra o treino do dia');
+  ok(await estado(`!!s.runs[0].plan && s.runs[0].plan.tipo === 'corrida_caminhada'`), 'o registro guarda o treino que estava no plano');
 
   console.log('4. Ajuste do plano, evolução e dor');
   await page.goto(B + '#/corrida', 900);
   t = await texto();
   ok(t.includes('O que ajustei no plano') && t.includes('Joelho:'), 'painel explica o ajuste feito por causa da dor no joelho');
   ok(t.includes('Sua evolução') && t.includes('corrida registrada') && t.includes('Constância'), 'evolução mostra volume, corridas e constância');
+  ok(t.includes('Como foram os seus treinos') && (await page.eval(`return document.querySelectorAll('#como-foram .item').length === 1;`)), 'painel resume como foram os treinos, com o selo de cada corrida');
   ok(t.includes('Dor que você contou') && t.includes('Feita'), 'cartão de dores e treino marcado como feito');
   await page.eval(`const d = [...document.querySelectorAll('details.pq summary')].find((e) => e.textContent === 'Por quê?'); d.click(); return true;`); await page.sleep(150);
   ok((await texto()).includes('Você contou dor de intensidade 4'), 'o motivo do ajuste abre ao toque, com as fontes');
@@ -158,8 +175,11 @@ export default async (page) => {
   await page.eval(`[...document.querySelectorAll('.item')].find((e) => e.textContent.includes('Feita')).click(); return true;`); await page.sleep(600);
   await page.click('Editar'); await page.sleep(300);
   await preencher('Distância em quilômetros', '3');
+  await preencher('Tempo em minutos, ou minutos e segundos', '28.30');
   await page.click('Salvar alterações'); await page.sleep(500);
   ok((await estado('s.runs[0].distKm')) === 3 && (await estado('s.runs.length')) === 1, 'registro editado sem duplicar');
+  ok((await estado('s.runs[0].durMin')) === 28.5 && (await estado('s.runs[0].pse')) === 5, '“28.30” é lido como 28 min 30 s, e o esforço gravado é o que estava marcado');
+  ok((await estado('s.run.mostrados.length')) >= 1 && (await estado(`s.run.mostrados.some((m) => m.tipo === 'corrida_caminhada')`)), 'o treino mostrado em cada dia fica guardado para a análise das semanas passadas');
   await page.click('Apagar'); await page.sleep(300);
   ok((await texto()).includes('Apagar este registro?'), 'apagar pede confirmação');
   await page.eval(`[...document.querySelectorAll('.sheet-ft .btn')].find((e) => e.textContent.trim() === 'Apagar').click(); return true;`); await page.sleep(500);
@@ -194,6 +214,52 @@ export default async (page) => {
   ok(t.includes('liberação médica') && t.includes('vigoroso') && !t.includes('Aceitar e usar este plano'), 'doença do coração sem liberação: sem plano, com a explicação');
   t = await propor({ ...corredor, condicoes: ['nenhuma'], resultado: '5', resultadoMin: 45 });
   ok(t.includes('caminhada rápida') && t.includes('tempo e esforço') && !/\d:\d\d a \d\d?:\d\d por km/.test(t), 'resultado muito lento: treinos por tempo e esforço, sem faixas de ritmo');
+  t = await propor({ experiencia: 'irregular', longoAtual: 4, objetivo: 'saude', dias: ['1', '3', '5', '6'], diaLongo: 'auto', tempo: '45', aparelho: 'gps', local: 'rua', idade: 35, peso: 72, altura: 175, lesao12m: 'nao', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'] });
+  ok(t.includes('sem regularidade') && t.includes('3 corridas por semana') && t.includes('tempo e esforço') && !/\d:\d\d a \d\d?:\d\d por km/.test(t), 'corredor irregular: 3 corridas por semana, por tempo e esforço, com a explicação');
+  // a opção aparece na entrevista
+  await page.click('Mudar respostas'); await page.sleep(400);
+  ok((await texto()).includes('Corro de vez em quando, devagar'), 'a entrevista oferece a opção de quem corre de vez em quando, devagar');
+  await page.reload(1200);
+
+  console.log('5c. Corrida e musculação: prioridade e análise do treino feito');
+  const hojeK = await page.eval(`const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');`);
+  const doisTreinos = async (foco) => {
+    const respostas = { ...corredor, condicoes: ['nenhuma'], experiencia: 'avancado', kmSemana: 45, longoAtual: 14, provas: 'meia', dias: ['1', '2', '3', '4', '5', '6'], resultado: '10', resultadoMin: 52 };
+    await page.eval(`const st = await import('/js/store.js'); st.update((x) => {
+      x.run = { answers: ${JSON.stringify(respostas)}, aceitoEm: new Date().toISOString(), inicio: ${JSON.stringify(hojeK)}, pausadoEm: '', cron: null, pausas: [] };
+      x.plans = [{ id: 'pe2e', nome: 'Meu treino', origem: 'modelo', criadoEm: new Date().toISOString(), dias: [{ id: 'de2e', nome: 'Treino A', foco: '', itens: [{ ex: 'agachamento', series: 3, reps: '8-12' }] }], agenda: { 2: 'de2e', 4: 'de2e' }, info: '' }];
+      x.activePlan = 'pe2e';
+      x.combo = { foco: ${JSON.stringify(foco)}, fortalecimento: 'nao', em: new Date().toISOString() };
+      x.runs = [{ id: 'ce2e', data: ${JSON.stringify(hojeK)}, tipo: 'leve', distKm: 8, durMin: 40, pse: 6, dor: null, nota: '', planejado: '', plan: { tipo: 'leve', durMin: 30, distKm: 0, ritmo: [350, 370], pse: [2, 4] } }];
+      x.dores = [];
+    }); return true;`);
+    await page.goto(B + '#/treinos', 500); await page.goto(B + '#/corrida', 900);
+    return texto();
+  };
+  t = await doisTreinos('');
+  ok(t.includes('Corrida e musculação: o que vem primeiro?'), 'com os dois treinos e sem escolha, o painel pergunta o que vem primeiro');
+  const corridasSemFoco = await page.eval(`return document.querySelectorAll('.list .item[data-data]').length;`);
+  t = await doisTreinos('musculacao');
+  ok(t.includes('Prioridade: musculação') && t.includes('Corrida como complemento da musculação') && (await page.eval(`return document.querySelectorAll('.list .item[data-data]').length;`)) <= 3 && corridasSemFoco >= 5, 'prioridade para a musculação: corrida vira complemento (até 3 por semana), e o ajuste aparece explicado');
+  t = await doisTreinos('equilibrio');
+  ok(t.includes('Prioridade: os dois por igual') && t.includes('até 4 corridas por semana') && (await page.eval(`return document.querySelectorAll('.list .item[data-data]').length;`)) <= 4, 'os dois por igual: até 4 corridas por semana');
+  ok(t.includes('Como foram os seus treinos') && t.includes('Acima do plano'), 'corrida de 40 min em treino de 30, mais rápida e com esforço 6: selo “Acima do plano”');
+  await page.goto(B + '#/corrida/dia/' + hojeK, 800);
+  t = await texto();
+  ok(t.includes('10 min a mais que o planejado (30 min)') && t.includes('mais rápido que a faixa (5:50 a 6:10)') && t.includes('virou moderado') && t.includes('O plano:'), 'análise diz o que foi diferente (mais tempo, mais rápido, esforço alto) e o que o plano faz');
+  if (process.env.FOTOS_CORRIDA) {
+    await page.send('Emulation.setDeviceMetricsOverride', { width: 360, height: 760, deviceScaleFactor: 1, mobile: true });
+    for (const tema of ['claro', 'escuro']) {
+      const aplicar = `if (${JSON.stringify(tema)} === 'claro') document.documentElement.dataset.theme = 'light'; else delete document.documentElement.dataset.theme;`;
+      await page.goto(B + '#/corrida', 800); await page.eval(aplicar + ' window.scrollTo(0, 0); return true;'); await page.sleep(200); await foto('r4-painel-' + tema);
+      await page.eval(`document.getElementById('cartao-combinado').scrollIntoView({ block: 'start' }); return true;`); await page.sleep(200); await foto('r4-combinado-' + tema);
+      await page.eval(`document.getElementById('como-foram').scrollIntoView({ block: 'start' }); return true;`); await page.sleep(200); await foto('r4-como-foram-' + tema);
+      await page.goto(B + '#/corrida/dia/' + hojeK, 800); await page.eval(aplicar + ` document.querySelector('[data-analise]').scrollIntoView({ block: 'center' }); return true;`); await page.sleep(200); await foto('r4-analise-' + tema);
+      ok(await page.eval(`return document.documentElement.scrollWidth <= 361;`), `análise cabe em 360 px (${tema})`);
+    }
+    await page.eval(`delete document.documentElement.dataset.theme; return true;`);
+    await page.send('Emulation.clearDeviceMetricsOverride', {});
+  }
 
   console.log('6. Perfil avançado: maratona com ritmos');
   await page.eval(`const s = await import('/js/store.js'); await s.resetAll(); return true;`);
@@ -218,6 +284,7 @@ export default async (page) => {
   ok(t.includes('Polimento') && t.includes('(leve)') && t.includes('Específico'), 'as semanas mostram base, construção, específico, semanas leves e polimento');
   await foto('9-proposta-avancado');
   await page.click('Aceitar e usar este plano'); await page.sleep(700);
+  await responderFortalecimento();
   t = await texto();
   ok(t.includes('Semana 1 de 16') && t.includes('Prova de maratona'), 'painel do avançado com a data da prova');
   const plano = await page.eval(`const c = await import('/js/logic/corrida.js'); const s = (await import('/js/store.js')).state; const d = new Date(); const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); const p = c.planoAtual(s, k); const n = c.resumoParaNutricao(s, k); return { tipos: [...new Set(p.semanas.flatMap((x) => x.dias.map((y) => y.tipo)))], hoje: (c.planoDaSemana(s, k).dias[d.getDay()] || {}).tipo, n };`);

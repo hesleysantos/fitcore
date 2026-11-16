@@ -62,13 +62,66 @@ const PISO = { m: 1500, f: 1200 };   // abaixo disso, só com acompanhamento pro
 const GASTO_MIN = 1000;              // estimativa abaixo disso: fora da faixa em que a fórmula é confiável (ref frankenfield2005)
 const numero = (v, min, max, padrao) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : padrao);
 
+// O que as OUTRAS entrevistas dizem e que muda a segurança da Nutricionista: a idade informada ao Treinador, ao
+// Treinador de corrida e na tela do sono, e as condições que a Nutricionista também trata (gestação, pós-parto, doença
+// nos rins, diabetes e pressão alta) marcadas ao Treinador ou ao Treinador de corrida. Pura: só lê o estado.
+// Devolve { idades: [{ valor, origem }], condicoes: [{ id, origem }] }, com origem = 'treinador' | 'corrida' | 'sono'.
+const ONDE = { treinador: 'ao Treinador', corrida: 'ao Treinador de corrida', sono: 'na tela do sono' };
+const COND_DE_FORA = { gestante: 'gestação', posparto: 'pós-parto', renal: 'doença nos rins', diabetes: 'diabetes', hipertensao: 'pressão alta' };
+const proprio = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
+const idadeValida = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 1 && v <= 130;
+export function contextoDasEntrevistas(st) {
+  const s = st && typeof st === 'object' && !Array.isArray(st) ? st : {};
+  const resp = (o) => (o && typeof o === 'object' && o.answers && typeof o.answers === 'object' && !Array.isArray(o.answers) ? o.answers : {});
+  const out = { idades: [], condicoes: [] };
+  for (const [origem, a] of [['treinador', resp(s.trainer)], ['corrida', resp(s.run)]]) {
+    if (idadeValida(a.idade)) out.idades.push({ valor: Math.floor(a.idade), origem });
+    for (const c of Array.isArray(a.condicoes) ? a.condicoes : []) if (proprio(COND_DE_FORA, c) && !out.condicoes.some((x) => x.id === c)) out.condicoes.push({ id: c, origem });
+  }
+  if (s.sono && typeof s.sono === 'object' && idadeValida(s.sono.idade)) out.idades.push({ valor: Math.floor(s.sono.idade), origem: 'sono' });
+  return out;
+}
+// o contexto que chega a calcular() é validado de novo (pode vir de qualquer lugar)
+function limparContexto(c) {
+  const out = { idades: [], condicoes: [] };
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return out;
+  for (const x of Array.isArray(c.idades) ? c.idades : []) if (x && typeof x === 'object' && idadeValida(x.valor) && proprio(ONDE, x.origem)) out.idades.push({ valor: Math.floor(x.valor), origem: x.origem });
+  for (const x of Array.isArray(c.condicoes) ? c.condicoes : []) if (x && typeof x === 'object' && proprio(COND_DE_FORA, x.id) && proprio(ONDE, x.origem) && !out.condicoes.some((y) => y.id === x.id)) out.condicoes.push({ id: x.id, origem: x.origem });
+  return out;
+}
+
 // `corrida` (opcional) é o resumo do plano de corrida — logic/corrida.js, resumoParaNutricao(). Sem ele, nada muda.
-export function calcular(respostas, corrida = null) {
+// `contexto` (opcional) é o que as outras entrevistas dizem — contextoDasEntrevistas(state). Sem ele, nada muda. Com
+// ele, vale sempre a resposta MAIS PROTEGIDA: menor de 18 anos, gestação, pós-parto ou doença nos rins em qualquer
+// entrevista levam ao modo educativo (sem metas nem déficit); diabetes, à manutenção; pressão alta, às orientações de
+// sal e cafeína. Cada proteção vinda de fora ganha um aviso curto dizendo de onde veio e pedindo para conferir as
+// entrevistas, e entra em `protecoes` ([{ k, origem }]).
+export function calcular(respostas, corrida = null, contexto = null) {
   const a = respostas && typeof respostas === 'object' ? respostas : {};
   // fora da faixa das perguntas (ou vazio), vale o limite mais próximo (ou o valor padrão da pergunta)
-  const peso = numero(a.peso, 30, 250, 70), alt = numero(a.altura, 120, 220, 170), idade = numero(a.idade, 10, 99, 30);
+  const peso = numero(a.peso, 30, 250, 70), alt = numero(a.altura, 120, 220, 170), idadeAqui = numero(a.idade, 10, 99, 30);
   const lista = (x) => (Array.isArray(x) ? x.filter((y) => typeof y === 'string') : []);
   const cond = lista(a.condicoes).filter((x) => x !== 'nenhuma');
+  // outras entrevistas: a menor idade abaixo de 18 vale no lugar da informada aqui; as condições se somam
+  const ctx = limparContexto(contexto);
+  const protecoes = [], conferir = [];
+  let idade = idadeAqui;
+  const maisNovo = ctx.idades.filter((x) => x.valor < 18 && x.valor < idadeAqui).sort((x, y) => x.valor - y.valor)[0];
+  if (maisNovo) {
+    idade = Math.max(10, maisNovo.valor);
+    protecoes.push({ k: 'idade', origem: maisNovo.origem });
+    conferir.push(`Você informou ${maisNovo.valor} anos ${ONDE[maisNovo.origem]} e ${idadeAqui} aqui. Por segurança, vale a menor idade: confira as entrevistas.`);
+  } else {
+    // idades de adulto que não batem (2 anos ou mais de diferença): não muda a conta, mas pede conferência
+    const outra = ctx.idades.find((x) => Math.abs(x.valor - idadeAqui) >= 2 && (x.valor >= 18 || idadeAqui < 18));
+    if (outra) conferir.push(`As idades informadas não batem: ${idadeAqui} anos aqui e ${outra.valor} ${ONDE[outra.origem]}. Confira as entrevistas.`);
+  }
+  for (const c of ctx.condicoes) {
+    if (cond.includes(c.id) || (c.id === 'posparto' && cond.includes('gestante'))) continue;   // aqui, "gestação ou amamentação" já cobre o pós-parto
+    cond.push(c.id);
+    protecoes.push({ k: c.id, origem: c.origem });
+    conferir.push(`Você informou ${COND_DE_FORA[c.id]} ${ONDE[c.origem]}, mas não aqui. Por segurança, vale a resposta mais protegida: confira as entrevistas.`);
+  }
   const rest = lista(a.restricoes).filter((x) => x !== 'nenhuma');
   const sexo = a.sexo === 'm' ? 'm' : 'f';
   const imc = peso / ((alt / 100) ** 2);
@@ -102,6 +155,8 @@ export function calcular(respostas, corrida = null) {
   let modo = 'completo';
   if (idade < 18) { modo = 'educativo'; avisos.push({ tipo: 'warn', texto: 'Para menores de 18 anos não calculo calorias nem metas de peso. O corpo ainda está em crescimento: a alimentação deve ser acompanhada por nutricionista ou pediatra.' }); }
   if (cond.includes('gestante')) { modo = 'educativo'; avisos.push({ tipo: 'warn', texto: 'Na gestação e na amamentação as necessidades mudam e não se deve fazer dieta para emagrecer. Siga o acompanhamento do pré-natal e de um nutricionista.' }); }
+  // pós-parto (só chega por outra entrevista): mesma proteção da amamentação
+  if (cond.includes('posparto') && !cond.includes('gestante')) { modo = 'educativo'; avisos.push({ tipo: 'warn', texto: 'No pós-parto e na amamentação as necessidades mudam e não se deve fazer dieta para emagrecer por conta própria. Procure um nutricionista.' }); }
   if (cond.includes('transtorno')) { modo = 'educativo'; avisos.push({ tipo: 'warn', texto: 'Com histórico de transtorno alimentar, contar calorias pode fazer mal. Não mostro números: procure acompanhamento com nutricionista e psicólogo. Se precisar conversar agora, o CVV atende pelo telefone 188.' }); }
   if (cond.includes('renal')) { modo = 'educativo'; avisos.push({ tipo: 'danger', texto: 'Com doença nos rins, a quantidade de proteína, sódio, potássio e líquidos precisa ser definida pelo seu médico e nutricionista. Não siga metas de proteína de aplicativos.' }); }
   // estimativa de gasto muito baixa (pessoas muito leves, baixas ou de idade avançada): a fórmula erra demais para virar meta
@@ -130,6 +185,8 @@ export function calcular(respostas, corrida = null) {
   // com obesidade, comer acima do gasto não é indicado: dá para ganhar músculo treinando e comendo na manutenção
   // (Slater 2019; AHA/ACC/TOS 2013 — refs slater2019, jensen2013)
   if (modo === 'completo' && objetivo === 'ganhar' && obeso) { modo = 'manutencao'; avisos.push({ tipo: 'warn', texto: 'Com o seu IMC, comer acima do gasto tende a aumentar a gordura. Mostro a meta de manutenção com proteína alta: com treino de força, dá para ganhar músculo assim. Se o seu peso alto é de músculo, ajuste com um nutricionista.' }); }
+  // de onde veio cada proteção trazida de outra entrevista, com o pedido de conferência
+  for (const texto of conferir) avisos.push({ tipo: 'info', texto });
   if (modo !== 'educativo' && imc >= 40) avisos.push({ tipo: 'info', texto: 'Com IMC de 40 ou mais, o tratamento do peso deve ser acompanhado por médico e nutricionista. Use estes números só como referência inicial.' });
   if (cond.includes('hipertensao')) avisos.push({ tipo: 'info', texto: 'Pressão alta: limite o sal a 5 g por dia (1 colher de chá, contando o sal dos alimentos prontos), evite ultraprocessados e embutidos, e coma frutas, verduras, legumes, feijões e laticínios magros todos os dias (padrão DASH). Não use cafeína como suplemento.' });
   if (cond.includes('outra')) avisos.push({ tipo: 'info', texto: 'Com doença crônica, confirme estas orientações com seu médico ou nutricionista antes de mudar a alimentação.' });
@@ -139,6 +196,7 @@ export function calcular(respostas, corrida = null) {
 
   const out = { modo, imc, baixoPeso, tmb: r10(tmb), gasto: r10(gasto), fator: Math.round((gasto / tmb) * 1000) / 1000, pesoRef, avisos, restricoes: rest, condicoes: cond, peso, treina, objetivo, refeicoes: [3, 4, 5, 6].includes(Number(a.refeicoes)) ? Number(a.refeicoes) : 4, horario: a.horario || 'varia', sexo, idade };
   out.preco = a.preco === 'barato' ? 'barato' : 'tanto_faz';
+  if (protecoes.length) out.protecoes = protecoes;
   // Água TOTAL do dia (bebidas + a água dos alimentos), em litros: 35 mL por quilo (regra prática da nutrição clínica),
   // nunca abaixo da ingestão adequada da EFSA — 2,0 L (mulheres) e 2,5 L (homens), para clima ameno e atividade moderada
   // — nem acima de 4 L (percentil 95 da EFSA para homens). Ref efsa2010, conferida no relatório-resumo oficial (efsa2017);
@@ -345,7 +403,7 @@ function porcao(id, g) {
 // medida caseira aproximada: "200 g (4 unidades)", "150 g (3 colheres de sopa cheias)"
 const PLURAL = { pacote: 'pacotes', espiga: 'espigas', posta: 'postas', unidade: 'unidades', fatia: 'fatias', colher: 'colheres', pegador: 'pegadores', 'xícara': 'xícaras', escumadeira: 'escumadeiras', 'pedaço': 'pedaços', concha: 'conchas', 'filé': 'filés', bife: 'bifes', gomo: 'gomos', copo: 'copos', pote: 'potes', cacho: 'cachos', 'sachê': 'sachês', pires: 'pires', punhado: 'punhados', lata: 'latas', garrafa: 'garrafas', dosador: 'dosadores', barra: 'barras', folha: 'folhas', ramo: 'ramos', 'média': 'médias', 'médio': 'médios', grossa: 'grossas', pequena: 'pequenas', pequeno: 'pequenos', grande: 'grandes', cheia: 'cheias', cheio: 'cheios', rasa: 'rasas' };
 const SINGULAR = Object.fromEntries(Object.entries(PLURAL).map(([s, p]) => [p, s]));
-function medida(f, g) {
+export function medida(f, g) {
   const m = /^(\d+)\s+([^()]+?)\s*(\(.*\))?$/.exec(f.porcao.desc);
   if (!m) return g === f.porcao.g ? `${g} g (${f.porcao.desc})` : `${g} g`;
   const base = Number(m[1]);

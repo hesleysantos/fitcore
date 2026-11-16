@@ -78,12 +78,3 @@ out('www/icons/icon-maskable-512.png', 512, { bg: 'full', scale: 0.64 });
 out('www/icons/apple-touch-icon.png', 180, { bg: 'full', scale: 0.8 });
 fs.writeFileSync(path.join(ROOT, 'www/icons/icon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0e1116"/><g transform="rotate(-36 50 50)" fill="#ff6b2c"><rect x="26" y="47" width="48" height="6" rx="3"/><rect x="29" y="34" width="6.500" height="32" rx="3"/><rect x="64.500" y="34" width="6.500" height="32" rx="3"/><rect x="21.500" y="39" width="5.500" height="22" rx="2.700"/><rect x="73" y="39" width="5.500" height="22" rx="2.700"/></g></svg>\n`);
 
-// Android (só se o projeto Capacitor já existir)
-const res = path.join(ROOT, 'android/app/src/main/res');
-if (fs.existsSync(res)) {
-  for (const [d, s] of [['mdpi', 48], ['hdpi', 72], ['xhdpi', 96], ['xxhdpi', 144], ['xxxhdpi', 192]]) {
-    out(`android/app/src/main/res/mipmap-${d}/ic_launcher.png`, s, { bg: 'round', scale: 0.86 });
-    out(`android/app/src/main/res/mipmap-${d}/ic_launcher_round.png`, s, { bg: 'circle', scale: 0.72 });
-    out(`android/app/src/main/res/mipmap-${d}/ic_launcher_foreground.png`, Math.round(s * 2.25), { bg: 'none', scale: 0.46 });
-  }
-}

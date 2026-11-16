@@ -1,12 +1,7 @@
 node_modules/
 .tools/
-dist/
-android/app/build/
-android/build/
-android/.gradle/
-android/local.properties
-android/keystore.properties
-android/*.jks
+chave-apk-antiga/
+*.jks
 *.keystore
 .claude/
 *.log

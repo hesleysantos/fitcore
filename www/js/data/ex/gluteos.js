@@ -181,7 +181,7 @@ export default [
       'Usar impulso em vez de controlar o movimento.',
     ],
     cuidado: ['lombar'],
-    aliases: ['glute kickback machine', 'coice na máquina', 'máquina de glúteo', 'glúteo quatro apoios máquina', 'donkey kick machine'],
+    aliases: ['glute kickback machine', 'coice na máquina', 'máquina de glúteo', 'glúteo quatro apoios máquina', 'donkey kick machine', 'glúteo em pé', 'coice em pé', 'standing kick back'],
     fontes: [
       { org: 'StrengthLog', titulo: 'How to Do Machine Glute Kickbacks', url: 'https://www.strengthlog.com/machine-glute-kickbacks/' },
     ],

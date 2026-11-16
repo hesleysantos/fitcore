@@ -527,3 +527,96 @@ test('em casa: a sugestão do que comprar nunca é um alimento já marcado', () 
   const tudo = faltasDaCasa(r, emCasa, { p: 10, kcal: 500 });
   assert.ok(tudo.some((f) => f.grupo === 'proteina') && tudo.every((f) => f.sugestoes.every((s) => !emCasa.includes(s.id))));
 });
+
+// ---------- sétima rodada: o que as outras entrevistas dizem vale também na Nutricionista ----------
+test('contexto das entrevistas: menor de 18, gestação, pós-parto e doença renal em QUALQUER entrevista tiram metas e déficit', async () => {
+  const { contextoDasEntrevistas, suplementos, textosDoPeso } = await import('../www/js/logic/nutrition.js');
+  const { modoDoDiario, metaDoDia, resumoDeHoje } = await import('../www/js/logic/diario.js');
+  const ESCONDIDOS = ['kcal', 'prot', 'carb', 'gord', 'gkg', 'fibra', 'protRefeicao', 'objetivoCalc', 'ritmo', 'deficit', 'perdaSemana', 'perdaMax', 'piso'];
+  const ONDE = { treinador: 'ao Treinador', corrida: 'ao Treinador de corrida', sono: 'na tela do sono' };
+  const estados = [];
+  // cada condição protegida × cada entrevista de origem
+  for (const [chave, origem] of [['trainer', 'treinador'], ['run', 'corrida']]) {
+    for (const [id, nome] of [['gestante', 'gestação'], ['posparto', 'pós-parto'], ['renal', 'doença nos rins']]) estados.push({ k: id, origem, st: { [chave]: { answers: { idade: 30, condicoes: [id] } } }, aviso: `Você informou ${nome} ${ONDE[origem]}, mas não aqui.` });
+    for (const idade of [8, 12, 15, 17]) estados.push({ k: 'idade', origem, st: { [chave]: { answers: { idade, condicoes: ['nenhuma'] } } }, aviso: `Você informou ${idade} anos ${ONDE[origem]} e 30 aqui. Por segurança, vale a menor idade` });
+  }
+  for (const idade of [6, 14, 17]) estados.push({ k: 'idade', origem: 'sono', st: { sono: { idade } }, aviso: `Você informou ${idade} anos na tela do sono e 30 aqui.` });
+  let n = 0;
+  for (const { k, origem, st, aviso } of estados) for (const objetivo of ['emagrecer', 'manter', 'ganhar']) for (const [sexo, peso, altura] of [['f', 60, 165], ['f', 95, 160], ['m', 80, 178], ['m', 120, 175]]) {
+    const a = { ...base, objetivo, sexo, peso, altura, idade: 30 };
+    const livre = calcular(a);
+    assert.notEqual(livre.modo, 'educativo');
+    const r = calcular(a, null, contextoDasEntrevistas(st));
+    const rot = `${k} ${origem} ${objetivo} ${sexo}${peso}`;
+    n++;
+    assert.equal(r.modo, 'educativo', rot);
+    for (const campo of ESCONDIDOS) assert.equal(r[campo], undefined, `${rot}: o modo educativo não mostra ${campo}`);
+    assert.deepEqual(r.protecoes, [{ k, origem }], rot);
+    assert.ok(r.avisos.some((x) => x.tipo === 'info' && x.texto.startsWith(aviso) && /confira as entrevistas\.$/.test(x.texto) && x.texto.length <= 200), `${rot}: aviso de onde veio — ${r.avisos.map((x) => x.texto.slice(0, 50)).join(' | ')}`);
+    assert.ok(r.avisos.some((x) => x.tipo !== 'info'), rot + ': o modo educativo explica o motivo');
+    // nada adiante mostra número ou déficit
+    assert.equal(cardapio(r, 0), null, rot); assert.equal(emVoltaDoTreino(r).semNumeros, true, rot); assert.equal(suplementos(r).semDoses, true, rot);
+    assert.deepEqual(textosDoPeso(r), { ritmo: null, linhas: [] }, rot);
+    assert.equal(modoDoDiario(r), k === 'idade' ? 'alimentos' : 'soma', rot);
+    if (k === 'idade') assert.ok(r.idade < 18, rot);
+    // o diário e o Início enxergam a mesma proteção
+    const estado = { ...st, nutri: { answers: a }, diario: { dias: [] } };
+    const meta = metaDoDia(estado, '2026-11-16');
+    assert.equal(meta.modo, 'educativo', rot); assert.equal(meta.kcal, undefined, rot);
+    const ini = resumoDeHoje(estado, '2026-11-16');
+    assert.equal(ini.metaKcal, null, rot); assert.equal(ini.difKcal, null, rot); assert.equal(ini.modo, k === 'idade' ? 'alimentos' : 'soma', rot);
+  }
+  assert.equal(n, estados.length * 3 * 4);
+  // diabetes e pressão alta vindos de outra entrevista: manutenção (sem déficit) e as orientações de sal e cafeína
+  for (const [chave, origem] of [['trainer', 'treinador'], ['run', 'corrida']]) {
+    const d = calcular({ ...base, objetivo: 'emagrecer' }, null, contextoDasEntrevistas({ [chave]: { answers: { condicoes: ['diabetes'] } } }));
+    assert.equal(d.modo, 'manutencao'); assert.equal(d.kcal, d.gasto); assert.equal(d.perdaSemana, undefined); assert.deepEqual(d.protecoes, [{ k: 'diabetes', origem }]);
+    assert.ok(d.avisos.some((x) => /hipoglicemia/.test(x.texto)) && d.avisos.some((x) => x.texto.startsWith(`Você informou diabetes ${ONDE[origem]}, mas não aqui.`)));
+    const h = calcular(base, null, contextoDasEntrevistas({ [chave]: { answers: { condicoes: ['hipertensao'] } } }));
+    assert.ok(h.avisos.some((x) => /sal a 5 g/.test(x.texto)) && /pressão alta, não use/.test(suplementos(h).linhas[1]) && h.condicoes.includes('hipertensao'));
+  }
+});
+
+test('contexto das entrevistas: sem contexto (ou concordando com a Nutricionista) o resultado é idêntico; contradição pede conferência', async () => {
+  const { contextoDasEntrevistas, PERGUNTAS: P } = await import('../www/js/logic/nutrition.js');
+  const op = (k) => P.find((q) => q.k === k).op.map((o) => o[0]);
+  let s = 12345;
+  const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  const um = (l) => l[Math.floor(rnd() * l.length)];
+  const vazios = [undefined, null, {}, [], 'x', 5, { idades: 'x', condicoes: 7 }, { idades: [null, 5, { valor: 'a', origem: 'treinador' }, { valor: 15, origem: 'padaria' }, { valor: 999, origem: 'sono' }], condicoes: [{ id: 'transtorno', origem: 'corrida' }, { id: 'gestante', origem: 'vizinha' }, { id: '__proto__', origem: 'corrida' }, null] },
+    contextoDasEntrevistas(null), contextoDasEntrevistas({}), contextoDasEntrevistas({ trainer: 'x', run: [], sono: 7 }), contextoDasEntrevistas({ trainer: { answers: { idade: 'quinze', condicoes: 'gestante' } }, run: { answers: { idade: NaN, condicoes: [7, null, 'cronica', 'cardiaco'] } }, sono: { idade: -2 } })];
+  for (let i = 0; i < 3000; i++) {
+    const a = { objetivo: um(op('objetivo')), sexo: um(op('sexo')), idade: 10 + Math.floor(rnd() * 90), peso: 35 + Math.round(rnd() * 150), altura: 130 + Math.round(rnd() * 80), atividade: um(op('atividade')), treinos: um(op('treinos')), horario: um(op('horario')), refeicoes: um(op('refeicoes')), restricoes: [um(op('restricoes'))], condicoes: [um(op('condicoes'))] };
+    const cor = rnd() < 0.3 ? { kmSemana: Math.round(rnd() * 80), minSemana: Math.round(rnd() * 500), sessoesSemana: 4, longoKm: 15, longoMin: 100 } : null;
+    const antes = calcular(a, cor);
+    assert.deepEqual(calcular(a, cor, um(vazios)), antes, 'sem contexto válido, nada muda: ' + JSON.stringify(a));
+    // outras entrevistas dizendo o mesmo (mesma idade, ou 1 ano de diferença; mesmas condições): nada muda
+    const cond = a.condicoes.filter((c) => ['gestante', 'renal', 'diabetes', 'hipertensao'].includes(c));
+    const igual = contextoDasEntrevistas({ trainer: { answers: { idade: a.idade, condicoes: cond } }, run: { answers: { idade: Math.min(99, a.idade + 1), condicoes: cond.length ? cond : ['nenhuma'] } }, sono: { idade: a.idade } });
+    assert.deepEqual(calcular(a, cor, igual), antes, 'contexto que concorda não muda nada: ' + JSON.stringify(a));
+  }
+  // o levantamento: a idade de cada entrevista e só as condições que a Nutricionista trata
+  assert.deepEqual(contextoDasEntrevistas({ trainer: { answers: { idade: 31.9, condicoes: ['hipertensao', 'cronica'] } }, run: { answers: { idade: 16, condicoes: ['gestante', 'hipertensao', 'cardiaco'] } }, sono: { idade: 16 }, nutri: { answers: { idade: 99, condicoes: ['renal'] } } }),
+    { idades: [{ valor: 31, origem: 'treinador' }, { valor: 16, origem: 'corrida' }, { valor: 16, origem: 'sono' }], condicoes: [{ id: 'hipertensao', origem: 'treinador' }, { id: 'gestante', origem: 'corrida' }] });
+  // contradições: vale o mais protegido e a tela pede para conferir
+  const r = calcular({ ...base, idade: 30 }, null, contextoDasEntrevistas({ trainer: { answers: { idade: 15 } }, run: { answers: { idade: 12 } } }));
+  assert.equal(r.modo, 'educativo'); assert.equal(r.idade, 12, 'vale a menor idade informada');
+  assert.ok(r.avisos.some((x) => x.texto === 'Você informou 12 anos ao Treinador de corrida e 30 aqui. Por segurança, vale a menor idade: confira as entrevistas.'));
+  // menor na Nutricionista e adulto em outra: continua menor (o mais protegido), com o pedido de conferência
+  const m = calcular({ ...base, idade: 16, peso: 60, altura: 170 }, null, contextoDasEntrevistas({ trainer: { answers: { idade: 30 } } }));
+  assert.equal(m.modo, 'educativo'); assert.equal(m.idade, 16); assert.equal(m.protecoes, undefined);
+  assert.ok(m.avisos.some((x) => x.texto === 'As idades informadas não batem: 16 anos aqui e 30 ao Treinador. Confira as entrevistas.'));
+  // adultos com idades diferentes: a conta não muda, mas pede conferência; 1 ano de diferença não é contradição
+  const dif = calcular(base, null, contextoDasEntrevistas({ run: { answers: { idade: 52 } } }));
+  assert.deepEqual({ ...dif, avisos: [] }, { ...calcular(base), avisos: [] }); assert.ok(dif.avisos.some((x) => /^As idades informadas não batem: 30 anos aqui e 52 ao Treinador de corrida\./.test(x.texto)));
+  assert.deepEqual(calcular(base, null, contextoDasEntrevistas({ trainer: { answers: { idade: 31 } } })), calcular(base));
+  // gestação marcada aqui e também na corrida: nenhuma linha a mais; pós-parto na corrida com gestação aqui: idem
+  const g = { ...base, condicoes: ['gestante'] };
+  assert.deepEqual(calcular(g, null, contextoDasEntrevistas({ run: { answers: { idade: 30, condicoes: ['gestante', 'posparto'] } } })), calcular(g));
+  // todo aviso novo é curto e sem lixo
+  for (const st of [{ trainer: { answers: { idade: 9, condicoes: ['gestante', 'diabetes', 'hipertensao'] } }, run: { answers: { idade: 130, condicoes: ['renal', 'posparto'] } }, sono: { idade: 6 } }]) {
+    const x = calcular(base, null, contextoDasEntrevistas(st));
+    assert.equal(x.modo, 'educativo'); assert.deepEqual(x.protecoes.map((p) => p.k), ['idade', 'gestante', 'diabetes', 'hipertensao', 'renal'], 'pós-parto não repete a gestação');
+    for (const av of x.avisos) assert.ok(av.texto.length <= 330 && !/undefined|NaN|null|\[object/.test(av.texto), av.texto);
+  }
+});

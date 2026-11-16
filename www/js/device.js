@@ -1,21 +1,12 @@
 // Recursos do aparelho usados durante o treino: manter a tela ligada, bipe e vibração.
 import { state } from './store.js';
 
-const native = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-function plugin(method, args) {
-  try {
-    if (native() && window.Capacitor.nativePromise) return window.Capacitor.nativePromise('Aparelho', method, args || {}).catch(() => null);
-  } catch { /* ignore */ }
-  return Promise.resolve(null);
-}
-
 // ---------- tela ligada ----------
 let lock = null;
 let wanted = false;
 let pedindo = false;
 async function acquire() {
   if (!wanted || document.visibilityState !== 'visible') return;
-  if (native()) { plugin('telaLigada', { ligada: true }); return; }
   try {
     if ('wakeLock' in navigator && !lock && !pedindo) {
       pedindo = true;
@@ -32,10 +23,7 @@ document.addEventListener('visibilitychange', () => { if (wanted) acquire(); });
 export function keepAwake(on) {
   wanted = on && state.settings.telaLigada;
   if (wanted) acquire();
-  else {
-    if (native()) plugin('telaLigada', { ligada: false });
-    if (lock) { lock.release().catch(() => {}); lock = null; }
-  }
+  else if (lock) { lock.release().catch(() => {}); lock = null; }
 }
 
 // ---------- som ----------
@@ -50,6 +38,7 @@ export function unlockAudio() {
 export function beep(times = 2) {
   if (!state.settings.som || !ctx) return;
   try {
+    if (ctx.state !== 'running') ctx.resume().catch(() => {});
     const t0 = ctx.currentTime + 0.02;
     for (let i = 0; i < times; i++) {
       const o = ctx.createOscillator();
@@ -70,23 +59,46 @@ export function beep(times = 2) {
 export function vibrate(pattern = [220, 120, 220]) {
   if (!state.settings.vibrar) return;
   try {
-    if (native()) { plugin('vibrar', { ms: 400 }); return; }
     if (navigator.vibrate) navigator.vibrate(pattern);
   } catch { /* ignore */ }
 }
 // ---------- aviso do fim do descanso com o app em segundo plano ----------
-// No aplicativo Android, o próprio sistema dispara a vibração e o bipe no horário certo, mesmo com outro aplicativo
-// na frente ou com a tela apagada (nesses casos o cronômetro da página fica suspenso). Com o FitCore na frente, quem
-// avisa é a própria tela, e o Android não repete. No navegador não há como agendar: o aviso depende da página aberta.
-export function agendarAviso(quando) {
-  if (!native() || !Number.isFinite(quando) || quando <= Date.now()) return;
-  if (!state.settings.som && !state.settings.vibrar) return;
-  plugin('agendarAviso', { em: Math.round(quando), som: !!state.settings.som, vibrar: !!state.settings.vibrar });
+// O aplicativo é uma página instalada (PWA): com ele na frente, quem avisa é a própria tela (bipe e vibração). Se a
+// pessoa trocar de aplicativo durante o descanso, o aviso sai como notificação do navegador, quando ela ligou a opção em
+// Ajustes e deu a permissão. É o melhor possível sem servidor: no Android costuma funcionar; no iPhone o sistema pausa
+// a página em segundo plano e o aviso pode só aparecer ao voltar (por isso a tela fica ligada durante o treino).
+const TAG_AVISO = 'fitcore-descanso';
+let avisoT = 0;
+export const avisoDisponivel = () => typeof Notification !== 'undefined' && 'serviceWorker' in navigator;
+export const avisoPermitido = () => { try { return avisoDisponivel() && Notification.permission === 'granted'; } catch { return false; } };
+export async function pedirPermissaoDeAviso() {
+  if (!avisoDisponivel()) return false;
+  try { return (await Notification.requestPermission()) === 'granted'; } catch { return false; }
 }
-export function cancelarAviso() { if (native()) plugin('cancelarAviso'); }
-
-export const isNativeApp = native;
-export const nativeCall = (pluginName, method, args) => {
-  try { if (native() && window.Capacitor.nativePromise) return window.Capacitor.nativePromise(pluginName, method, args || {}); } catch { /* ignore */ }
-  return Promise.reject(new Error('indisponível'));
-};
+async function fecharAvisos() {
+  try {
+    if (!avisoDisponivel()) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg) for (const n of await reg.getNotifications({ tag: TAG_AVISO })) n.close();
+  } catch { /* ignore */ }
+}
+export function agendarAviso(quando) {
+  clearTimeout(avisoT); avisoT = 0;
+  if (!state.settings.avisoFundo || !avisoPermitido() || !Number.isFinite(quando) || quando <= Date.now()) return;
+  avisoT = setTimeout(async () => {
+    avisoT = 0;
+    if (document.visibilityState === 'visible') return; // com o app na frente, a tela já avisa
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.showNotification('Descanso terminado', { body: 'Hora da próxima série.', tag: TAG_AVISO, renotify: true, silent: !state.settings.som, vibrate: state.settings.vibrar ? [220, 120, 220] : undefined, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png' });
+    } catch { /* sem permissão ou sem suporte: segue só com o aviso da tela */ }
+  }, Math.min(quando - Date.now(), 3600000));
+}
+export function cancelarAviso() { clearTimeout(avisoT); avisoT = 0; fecharAvisos(); }
+// O descanso chegou ao fim sozinho. Com o app na frente, a tela já avisou: limpa o agendamento. Em segundo plano, deixa
+// o agendamento e a notificação em paz (o cronômetro da página e o aviso disparam quase juntos: cancelar aqui apagava
+// a notificação logo depois de ela aparecer); ela é fechada quando a pessoa volta para o app.
+export function fimDoDescanso() { if (document.visibilityState === 'visible') cancelarAviso(); }
+// o aparelho consegue manter a tela ligada?
+export const telaLigadaDisponivel = () => typeof navigator !== 'undefined' && 'wakeLock' in navigator;
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fecharAvisos(); });

@@ -4,7 +4,7 @@
 // Convenção igual à dos outros arquivos: frames[0] = posição inicial descrita no exercício; último quadro = fim do movimento.
 // As peças que não existem em equip.js são desenhadas aqui, com o tipo 'fn' (desenho livre).
 import { L, solveSide } from './rig.js';
-import { AK, H, X, SHY, D2R, CHAO, add, foot, frame, shOf, stand, seated, POLIA_F } from './base.js';
+import { AK, H, X, SHY, D2R, CHAO, add, foot, frame, shOf, stand, seated, POLIA_F, ankleFromToe } from './base.js';
 import { P } from './equip.js';
 import * as U from './upper.js';
 
@@ -366,6 +366,195 @@ export function wallBall() {
   };
 }
 
+// ---------- APARELHOS ACRESCENTADOS NA TERCEIRA RODADA ----------
+// Agachamento articulado (V-squat), como nos modelos da Hammer Strength, da Total Health (Squat Articulado) e da Movement
+// (Squat Machine): o encosto e as ombreiras ficam presos numa alavanca cujo eixo fica atrás da pessoa, a meia altura; a
+// plataforma dos pés é uma rampa à frente, com a ponta dos pés mais alta. Como o encosto gira com a alavanca, em pé o
+// corpo fica reclinado para trás e, ao descer, o tronco vem para a vertical: o movimento é um arco, não uma linha reta.
+// As anilhas ficam num pino na ponta de baixo da coluna do encosto, atrás do quadril.
+export function vSquat() {
+  const PV = [58, 44], R = 47;
+  const fa = -20, an = [120, 18];
+  const fd = [Math.cos(fa * D2R), -Math.sin(fa * D2R)], sola = [-fd[1], fd[0]];
+  const mk = (g) => {
+    const sh = [PV[0] + R * Math.cos(g * D2R), PV[1] + R * Math.sin(g * D2R)];
+    const torso = -(g - 26);
+    return { hip: add(sh, frame(torso).up, -L.torso), torso, leg: { foot: an, footAng: fa }, arm: { rel: [6.5, -3] } };
+  };
+  const pc = add(add(an, sola, -(L.ankle * 0.55 + 1)), fd, 2); // meio da rampa
+  return {
+    view: 'side', pega: 'neutra',
+    frames: [49, 43.5, 37.5, 31.5, 26].map(mk),
+    equip: [
+      sapata(40, 148),
+      // quadro de trás, que sustenta o eixo
+      { k: 'frame', pts: [[PV[0] - 13, CHAO], PV, [PV[0] + 11, CHAO]], w: 2.2, z: 'back' },
+      // rampa dos pés com os dois suportes
+      { k: 'fn', z: 'back', f: (o) => {
+        P.tubo(o, [add(pc, fd, 12), [add(pc, fd, 12)[0], CHAO]], 1.8);
+        P.tubo(o, [add(pc, fd, -11), [add(pc, fd, -11)[0], CHAO]], 1.8);
+        P.chapa(o, pc, fd, 14, 1, 'fg-steel');
+      } },
+      // alavanca com a coluna do encosto, as ombreiras, os pegadores e o pino das anilhas
+      { k: 'fn', z: 'back', f: (o, J) => {
+        const up = J.up, back = [-up[1], up[0]], front = [up[1], -up[0]];
+        const q = (u, b = 12) => add(add(J.hip, back, b), up, u);
+        P.tubo(o, [PV, q(31)], 2.2);
+        o.line(q(-17), q(33), 'fg-eq', 3);
+        P.tubo(o, [q(-17), q(-17, 18)], 1.4);
+        P.anilha(o, q(-17, 18), 7.5);
+        P.estofado(o, q(-2, 9.4), q(14, 9.4), 1.9);
+        P.estofado(o, q(18, 9.4), q(35, 9.4), 1.9);
+        const om = add(J.sh, up, 4.8);
+        o.line(add(om, back, 12), add(om, back, 4), 'fg-eq', 1.6);
+        P.estofado(o, add(om, back, 4.5), add(om, front, 3.5), 2);
+        o.line(add(om, front, 3.5), J.handN, 'fg-eq', 1.4);
+        P.eixo(o, PV, 2.3);
+      } },
+      { k: 'handle' },
+    ],
+  };
+}
+
+// Agachamento hack invertido: a mesma hack machine, usada de frente para o encosto. Os ombros ficam sob as ombreiras e
+// andam com o carro pelo trilho; os pés ficam na plataforma, atrás; ao descer, o quadril vai para trás e o tronco inclina
+// mais do que o trilho (o peito sai do encosto), com a coluna reta. Os pés ficam inteiros na plataforma: por isso a
+// descida para quando o tornozelo chega ao limite.
+export function reverseHack() {
+  const INC = 35;
+  const f = frame(INC), r = f.up; // o trilho sobe para a frente, na mesma inclinação do tronco em pé
+  const fa = 35, an = [76.4, 10.65];
+  const sh0 = add([107.48, 38.38], r, L.torso);
+  const mk = (s) => {
+    const sh = add(sh0, r, -10.5 * s), torso = INC + 25 * s;
+    const m = add(add(sh, f.front, 5), r, -4);
+    return { hip: add(sh, frame(torso).up, -L.torso), torso, head: -18 - 10 * s, leg: { foot: an, footAng: fa }, arm: { hand: m, la: 0.6, lb: 0.6 } };
+  };
+  const trilho = add([96, 22], f.front, 14);
+  return {
+    view: 'side', label: 'De frente para o encosto: o quadril vai para trás',
+    frames: [0, 0.5, 1].map(mk),
+    equip: [
+      sapata(63, 151),
+      { k: 'frame', pts: [add(trilho, r, -15), add(trilho, r, 69)], w: 1.6, z: 'back' },
+      { k: 'frame', pts: [add(trilho, r, 69), [add(trilho, r, 69)[0] + 1.5, CHAO]], w: 2, z: 'back' },
+      { k: 'frame', pts: [[75.5, 8], [73, CHAO]], w: 1.8, z: 'back' },
+      { k: 'fn', z: 'back', f: (o, J) => {
+        const c = add(add(J.heelN, J.fdN, 4), J.fuN, -1.1);
+        P.chapa(o, c, J.fdN, 10.5, 1, 'fg-steel');
+        o.line(add(c, J.fdN, -9), [65, CHAO], 'fg-eq', 1.5);
+      } },
+      // carro: anda no trilho junto com os ombros (o ponto de referência é o quadril de quem está em pé, reto)
+      { k: 'fn', z: 'back', f: (o, J) => {
+        const h = add(J.sh, r, -L.torso);
+        const q = add(h, f.front, 14);
+        P.anilha(o, add(add(h, f.front, 22.5), r, 27), 9);
+        o.line(add(q, r, -4), add(q, r, 39), 'fg-eq', 3);
+        P.estofado(o, add(add(h, f.front, 9.4), r, -2), add(add(h, f.front, 9.4), r, 36), 1.9);
+        const om = add(J.sh, r, 4.8);
+        o.line(add(om, f.front, 9), add(om, f.front, 4), 'fg-eq', 1.6);
+        P.estofado(o, add(om, f.front, 4.5), add(om, f.back, 3.5), 2);
+        o.line(add(J.handN, f.front, 7), J.handN, 'fg-eq', 1.4);
+      } },
+      { k: 'handle' },
+    ],
+  };
+}
+
+// Abdutora em pé (standing abductor), vista de costas, como a Standing Abductor da Movement e a da Booty Builder: a
+// pessoa fica na plataforma, em meio agachamento, com o quadril um pouco para trás e as mãos no apoio da frente; as
+// almofadas encostam por fora dos joelhos e os dois joelhos empurram para fora ao mesmo tempo, com os pés parados.
+// Cada almofada fica num braço articulado junto da plataforma; as anilhas vão em pinos baixos, à frente, um de cada lado.
+export function standingAbductor() {
+  const top = 7;
+  const pe = [L.hpw + 9, top + AK];
+  const base = { hip: [X, top + AK + 34.1], lt: 0.82, arm: { a: 62, la: 0.2, b: 62, lb: 0.03 } };
+  const perna = (la, lb) => ({ foot: pe, la, lb });
+  const lados = (J) => [[J.knR, 1], [J.knL, -1]];
+  const X0 = L.hpw + 3.8; // distância do joelho ao centro com as pernas fechadas
+  return {
+    view: 'back', label: 'Vista de costas: os joelhos empurram as almofadas para fora', maos: 'oculta',
+    frames: [{ ...base, leg: perna(0.66, 0.95) }, { ...base, leg: perna(0.81, 0.91) }],
+    equip: [
+      { k: 'box', x0: -27, x1: 27, h: top },
+      // apoio da frente (atrás do corpo, nesta vista): arco alto com a barra para as mãos
+      { k: 'frame', pts: [[-18, top], [-15, 82], [15, 82], [18, top]], w: 2.2, z: 'back' },
+      { k: 'frame', pts: [[-16, 60], [16, 60]], w: 1.6, z: 'back' },
+      { k: 'fn', z: 'back', f: (o, J) => {
+        for (const [kn, s] of lados(J)) {
+          const sobe = Math.max(0, (Math.abs(kn[0] - X) - X0)) * 0.5; // as anilhas sobem um pouco quando as pernas abrem
+          P.tubo(o, [[X + s * 19, 13 + sobe], [X + s * 33, 13 + sobe]], 1.5);
+          for (const dx of [26.5, 29.4]) P.chapa(o, [X + s * dx, 13 + sobe], [0, 1], 7.5, 1.15, 'fg-rub');
+          P.tubo(o, [[X + s * 9, top + 1.2], [kn[0] + s * 6.3, kn[1] - 8]], 1.8); // braço da almofada
+          P.eixo(o, [X + s * 9, top + 1.2], 1.6);
+        }
+      } },
+      { k: 'fn', f: (o, J) => { for (const [kn, s] of lados(J)) P.estofado(o, [kn[0] + s * 6.3, kn[1] - 8], [kn[0] + s * 6.3, kn[1] + 7], 2); } },
+    ],
+  };
+}
+
+// Puxada alta articulada de frente para o aparelho, como nos modelos nacionais (Movement Lat Pull, Total Health Front
+// Pulldown, Natural Fitness, Cimerian): a pessoa senta virada para a coluna do aparelho, com as coxas presas sob o rolo.
+// Cada braço da máquina é uma alavanca com o eixo na coluna da frente, mais ou menos na altura do queixo: a ponta de
+// trás sobe até o pegador, acima e um pouco à frente da cabeça; a ponta da frente leva o pino das anilhas. Puxar o
+// pegador faz ele descer em arco, de cima e da frente até o alto do peito, enquanto as anilhas sobem do outro lado.
+export function frontLeverPulldown() {
+  const hx = 84, hy = 26.5;
+  const s = seated({ hx, hy, noBack: true });
+  const t0 = -3, t1 = -8;
+  const sh0 = shOf(s.hip, t0), sh1 = shOf(s.hip, t1);
+  const m0 = [sh0[0] + 12, sh0[1] + 25];   // pegador no alto: braços estendidos para cima e um pouco para a frente
+  const m1 = [sh1[0] + 8.5, sh1[1] + 1.5];    // pegador embaixo: à frente do alto do peito
+  // o eixo fica à mesma distância das duas posições do pegador (sobre a mediatriz), 33 unidades à frente
+  const meio = mix(m0, m1, 0.5), v = norm(sub(m1, m0));
+  const PV = add(meio, [-v[1], v[0]], 33);
+  const R = dist(m0, PV);
+  const a0 = Math.atan2(m0[1] - PV[1], m0[0] - PV[0]), a1 = Math.atan2(m1[1] - PV[1], m1[0] - PV[0]) + 2 * Math.PI;
+  const base = { hip: s.hip, leg: s.leg };
+  const xr = hx + 15.5, yr = hy + 7; // rolo das coxas
+  return {
+    view: 'side', pega: 'pronada',
+    frames: [0, 0.5, 1].map((k) => {
+      const a = lerp(a0, a1, k);
+      return { ...base, torso: lerp(t0, t1, k), arm: { hand: [PV[0] + R * Math.cos(a), PV[1] + R * Math.sin(a)] } };
+    }),
+    equip: [
+      ...s.equip,
+      sapata(hx + 15, PV[0] + 21),
+      // coluna da frente com a escora e o braço do rolo das coxas
+      { k: 'frame', pts: [[PV[0] + 3, CHAO], PV], w: 2.4, z: 'back' },
+      { k: 'frame', pts: [[PV[0] + 18, CHAO], [PV[0] + 2, 31]], w: 1.8, z: 'back' },
+      { k: 'frame', pts: [[PV[0] + 2, yr], [xr, yr]], w: 1.6, z: 'back' },
+      { k: 'roller', at: [xr, yr], r: 3, z: 'front' },
+      // alavanca dobrada: do pegador ao eixo e do eixo ao pino das anilhas
+      { k: 'fn', f: (o, J) => {
+        const h = J.handN;
+        const ang = Math.atan2(h[1] - PV[1], h[0] - PV[0]) - 150 * D2R;
+        const p = [PV[0] + 27 * Math.cos(ang), PV[1] + 27 * Math.sin(ang)];
+        P.tubo(o, [h, PV, p], 2);
+        P.anilha(o, p, 8);
+        P.eixo(o, PV, 2.4);
+      } },
+      { k: 'handle' },
+    ],
+  };
+}
+
+// Panturrilha em pé no chão, com os dois pés: de frente para a parede, a um ou dois palmos dela, mãos apoiadas na altura
+// do peito só para equilibrar. As pontas dos pés ficam paradas no chão; os calcanhares sobem devagar, com os joelhos
+// estendidos, e descem até o chão.
+export function calfRaiseFloor() {
+  const ponta = [X + 6, 2.14];
+  const mk = (fa) => {
+    const an = ankleFromToe(ponta, fa);
+    // o quadril fica sobre a parte da frente dos pés desde o começo: é ali que o peso se apoia quando os calcanhares sobem
+    const hx = ponta[0] - 0.8;
+    return { hip: [hx, an[1] + Math.sqrt(43.8 ** 2 - (hx - an[0]) ** 2)], torso: 3, leg: { foot: an, footAng: fa }, arm: { hand: [X + 15.6, 61] } };
+  };
+  return { view: 'side', frames: [mk(0), mk(19), mk(38)], equip: [{ k: 'wall', x: X + 18.3, top: 100, dir: 1 }] };
+}
+
 export const ANIMS_MAIS = {
   'supino-no-chao-halteres': [floorPress],
   'desenvolvimento-halteres-em-pe': [U.ohp, { seat: false }],
@@ -385,4 +574,9 @@ export const ANIMS_MAIS = {
   'elevacao-joelhos-barra-fixa': [hangingKneeRaise],
   'ergometro-de-braco': [armErgometer],
   'arremesso-medicine-ball-parede': [wallBall],
+  'agachamento-articulado': [vSquat],
+  'agachamento-hack-invertido': [reverseHack],
+  'abdutora-em-pe-maquina': [standingAbductor],
+  'puxada-articulada-de-frente': [frontLeverPulldown],
+  'panturrilha-em-pe-no-chao': [calfRaiseFloor],
 };

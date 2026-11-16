@@ -3,6 +3,7 @@ import { h, btn, icon, sheet, toast, norm, badge, chip, uid, plural } from '../u
 import { state, update, hasEquip, activePlan } from '../store.js';
 import { EXERCICIOS, EX_POR_ID } from '../data/exercises.js';
 import { MUSCULOS, GRUPOS, MODALIDADES, NIVEIS } from '../data/muscles.js';
+import { EQUIPAMENTOS } from '../data/equipment.js';
 import { thumb } from '../figure.js';
 import { perfil } from '../logic/trainer.js';
 
@@ -64,7 +65,10 @@ export function folha(opts) {
 }
 
 // ---------- busca e filtros ----------
-const INDEX = new Map(EXERCICIOS.map((e) => [e.id, norm([e.nome, GRUPOS[e.grupo], MODALIDADES[e.modalidade], nomeMusculos(e.primarios), ...(e.aliases || [])].join(' '))]));
+// o índice tem o nome do exercício, o grupo, a modalidade, os músculos, os apelidos e o NOME DOS APARELHOS que ele usa
+const INDEX = new Map(EXERCICIOS.map((e) => [e.id, norm([e.nome, GRUPOS[e.grupo], MODALIDADES[e.modalidade], nomeMusculos(e.primarios), ...(e.aliases || []), ...(e.equip || []).map((k) => (EQUIPAMENTOS[k] && EQUIPAMENTOS[k].nome) || '')].join(' '))]));
+// "articulado" acha "articulada", "halter" acha "halteres": palavras de 5 letras ou mais valem pela raiz (sem o final a/o/s)
+const raiz = (t) => (t.length >= 5 ? t.replace(/(as|os|es|a|o|s)$/, '') : t);
 export function filtrar({ q = '', grupo = '', mods = null, nivel = 0, tipo = '', soMinha = false, semCuidado = false, padrao = '', excluir = null } = {}) {
   const termos = norm(q).split(/\s+/).filter(Boolean);
   const cuid = semCuidado ? cuidadosDoUsuario() : [];
@@ -77,7 +81,7 @@ export function filtrar({ q = '', grupo = '', mods = null, nivel = 0, tipo = '',
     if (soMinha && !hasEquip(e)) return false;
     if (excluir && excluir.has(e.id)) return false;
     if (cuid.length && e.cuidado.some((c) => cuid.includes(c))) return false;
-    if (termos.length) { const idx = INDEX.get(e.id); if (!termos.every((t) => idx.includes(t))) return false; }
+    if (termos.length) { const idx = INDEX.get(e.id); if (!termos.every((t) => idx.includes(t) || idx.includes(raiz(t)))) return false; }
     return true;
   });
 }

@@ -448,7 +448,7 @@ export default [
       'Dobrar os joelhos, transformando em agachamento.',
       'Puxar a cabeça com as mãos.',
     ],
-    cuidado: ['lombar'],
+    cuidado: ['lombar', 'cervical'],
     aliases: ['good morning', 'bodyweight good morning', 'hip hinge', 'dobradiça de quadril', 'bom dia'],
     fontes: [
       { org: 'Healthline', titulo: 'Bodyweight Back Exercises: What They Are and How to Do Them (Hip Hinge / Good Morning)', url: 'https://www.healthline.com/nutrition/bodyweight-back-exercises' },

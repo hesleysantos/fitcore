@@ -8,8 +8,18 @@
 .input.sono-hora { width: auto; min-width: 118px; flex: none; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
 .sono-graf .bar.dentro { fill: var(--ok); }
 .sono-graf .bar.abaixo { fill: var(--warn); }
-.sono-graf .bar.acima { fill: var(--info); }
+.sono-graf .bar.acima { fill: var(--muted); }
+.sono-graf .bar.cochilo { fill: var(--info); } /* o cochilo fica por cima da barra da noite, em outra cor */
 .sono-graf .alvo { stroke: var(--ok); stroke-width: 1.4; stroke-dasharray: 4 3; }
+.sono-legenda { display: flex; gap: 14px; padding-left: 6.25%; }
+.sono-legenda span { display: inline-flex; align-items: center; gap: 5px; }
+.sono-legenda i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.sono-legenda i.cochilo { background: var(--info); }
+.sono-dia .sono-mais { font-style: normal; font-size: 0.66rem; color: var(--info); font-variant-numeric: tabular-nums; }
+/* cochilos de um dia: cada um é um botão que abre a folha para corrigir */
+.sono-cochilo { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); color: var(--text); text-align: left; font-variant-numeric: tabular-nums; }
+.sono-cochilo .ic:first-child { color: var(--info); }
+.sono-cochilo:active { background: var(--border); }
 /* os dias ficam embaixo das barras: o recuo acompanha a margem esquerda do gráfico (20 de 320) */
 .sono-dias { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding-left: 6.25%; }
 .sono-dia { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 48px; padding: 4px 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); color: var(--text); font-size: 0.72rem; }

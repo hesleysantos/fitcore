@@ -34,22 +34,30 @@ function estadoCheio() {
   const corrida = responder(P_CORRIDA, 1);
   return {
     v: store.VERSAO,
-    settings: { tema: 'claro', descanso: 75, som: false, vibrar: false, telaLigada: false, animar: false },
+    settings: { tema: 'claro', descanso: 75, som: false, vibrar: false, telaLigada: false, animar: false, avisoFundo: true },
     gym: { all: false, has: Object.fromEntries(Object.keys(EQUIPAMENTOS).slice(0, 3).map((k) => [k, true])) },
     plans: [plano],
     activePlan: 'p1',
     sessions: [sessao('s1', '03'), sessao('s2', '05')],
     current: null,
-    trainer: { answers: treino, aceitoEm: '2026-11-01T10:00:00.000Z', revisaoEm: '2026-12-27T10:00:00.000Z', adiadoAte: '2026-11-20T10:00:00.000Z', versao: 3 },
+    trainer: { answers: treino, aceitoEm: '2026-11-01T10:00:00.000Z', revisaoEm: '2026-12-27T10:00:00.000Z', adiadoAte: '2026-11-20T10:00:00.000Z', versao: 3, combo: 'corrida|sim' },
+    combo: { foco: 'corrida', fortalecimento: 'sim', em: '2026-11-03T10:00:00.000Z' },
     nutri: { answers: nutri, calculadoEm: '2026-11-02T10:00:00.000Z', seed: 7, emCasa: ALIMENTOS.slice(0, 12).map((f) => f.id), soCasa: true },
     body: [{ data: '2026-11-01', peso: 78.4, cintura: 84 }, { data: '2026-11-08', peso: 78.1, cintura: null }],
-    run: { answers: corrida, aceitoEm: '2026-11-02T10:00:00.000Z', inicio: '2026-11-02', pausadoEm: '' },
+    run: { answers: corrida, aceitoEm: '2026-11-02T10:00:00.000Z', inicio: '2026-11-02', pausadoEm: '', cron: null, pausas: [{ de: '2026-11-10', ate: '2026-11-26', semanas: 2 }],
+      // o treino que o plano mostrou em cada dia e o degrau de ritmo já concedido
+      mostrados: [{ data: '2026-11-03', tipo: 'leve', nome: 'Rodagem leve', resumo: '5 km em ritmo leve', durMin: 32, distKm: 5, ritmo: [360, 420], pse: [2, 4], un: 'd' }, { data: '2026-11-04', tipo: '', nome: '', resumo: '', durMin: 0, distKm: 0, ritmo: null, pse: null, un: 't' }],
+      degrau: { pontos: 1, base: 'entrevista' } },
     runs: [
       { id: 'r1', data: '2026-11-03', tipo: 'leve', distKm: 5.2, durMin: 33.5, pse: 4, dor: null, nota: 'tranquilo', planejado: 'Rodagem leve' },
       { id: 'r2', data: '2026-11-06', tipo: 'longo', distKm: 10, durMin: 68, pse: 6, dor: { onde: 'joelho', nivel: 3 }, nota: '', planejado: 'Longo' },
     ],
     dores: [{ id: 'dor1', data: '2026-11-06', onde: 'joelho', lado: 'd', tipo: 'articular', quando: 'durante', nivel: 3, nota: 'na descida', fim: '' }, { id: 'dor2', data: '2026-10-20', onde: 'lombar', lado: '', tipo: 'muscular', quando: 'depois', nivel: 4, nota: '', fim: '2026-10-25' }],
-    sono: { acordar: '06:30', idade: 31, registros: [{ data: '2026-11-11', horas: 7.5 }, { data: '2026-11-12', horas: 6.25, qualidade: 2 }, { data: '2026-11-13', horas: 8, qualidade: 4 }] },
+    sono: { acordar: '06:30', idade: 31, registros: [{ data: '2026-11-11', horas: 7.5 }, { data: '2026-11-12', horas: 6.25, qualidade: 2 }, { data: '2026-11-13', horas: 8, qualidade: 4 }], cochilos: [{ data: '2026-11-12', min: 25, inicio: '13:40' }, { data: '2026-11-13', min: 20, inicio: '14:10' }, { data: '2026-11-13', min: 45 }] },
+    diario: { dias: [
+      { data: '2026-11-12', itens: [{ id: 'i1', ref: 'cafe', al: ALIMENTOS[0].id, g: 150, m: true }, { id: 'i2', ref: 'almoco', al: ALIMENTOS[5].id, g: 80, m: false }] },
+      { data: '2026-11-13', itens: [{ id: 'i1', ref: 'outro', nome: 'Bolo de cenoura', kcal: 310, p: 4.5 }, { id: 'i2', ref: 'jantar', nome: 'Sopa da casa', kcal: 180, p: null }] },
+    ] },
     ui: { onboarded: true, installDismissedAt: '2026-11-01T09:00:00.000Z', backupEm: '2026-11-07T09:00:00.000Z', backupAdiadoEm: '2026-11-05T09:00:00.000Z', objetivosOk: 'hipertrofia|emagrecer' },
   };
 }
@@ -71,6 +79,8 @@ test('backup: o estado completo sai no arquivo e volta idêntico', () => {
   assert.deepEqual(limpo.runs, cheio.runs);
   assert.deepEqual(limpo.dores, [cheio.dores[1], cheio.dores[0]], 'dores preservadas (em ordem de data)');
   assert.deepEqual(limpo.sono, cheio.sono, 'hora de acordar, idade e noites registradas preservadas');
+  assert.deepEqual(limpo.diario, cheio.diario, 'diário alimentar preservado: dias, refeições, alimentos da lista e fora dela');
+  assert.deepEqual(limpo.combo, cheio.combo);
   assert.deepEqual(limpo.ui, cheio.ui);
   // validar duas vezes não muda mais nada
   assert.deepEqual(store.sanitize(J(limpo)), limpo);
@@ -92,6 +102,7 @@ test('backup: o estado completo sai no arquivo e volta idêntico', () => {
   assert.equal(resumo.treinos, 2); assert.equal(resumo.planos, 1); assert.equal(resumo.pesos, 2);
   assert.equal(resumo.corridas, 2); assert.equal(resumo.dores, 2);
   assert.deepEqual(dados.sono, cheio.sono, 'o sono volta do arquivo igual ao que foi registrado');
+  assert.deepEqual(dados.diario, cheio.diario, 'o diário alimentar volta do arquivo igual ao que foi registrado');
   // segunda ida e volta: continua igual
   store.update((s) => { for (const k of Object.keys(dados)) s[k] = J(dados[k]); });
   assert.deepEqual(store.readBackup(store.exportData()).dados, dados);

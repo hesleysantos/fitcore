@@ -6,9 +6,10 @@ import { EX_POR_ID } from '../data/exercises.js';
 import { FAQ_NUTRI, REFS } from '../data/knowledge.js';
 import { resumoParaNutricao } from '../logic/corrida.js';
 import { ALIMENTOS, CATEGORIAS_ALIMENTO, NOME_FAIXA } from '../data/foods.js';
-import { PERGUNTAS, ROTULO, respostasCompletas, calcular, cardapio, proximaSemente, limparEmCasa, USADOS_EM_CASA, orientacaoCorrida, faltaDeCarboidrato, emVoltaDoTreino, imcFaixa, suplementos, textosDoPeso } from '../logic/nutrition.js';
+import { PERGUNTAS, ROTULO, respostasCompletas, calcular, cardapio, proximaSemente, limparEmCasa, USADOS_EM_CASA, orientacaoCorrida, faltaDeCarboidrato, emVoltaDoTreino, imcFaixa, suplementos, textosDoPeso, contextoDasEntrevistas } from '../logic/nutrition.js';
 import { interview, faqBlock, notaObjetivo, conferirObjetivos, cartaoObjetivos } from './coach.js';
 import { nutriPara } from '../logic/objetivos.js';
+import { blocoDiario, acoesDaRefeicao } from './diario.js';
 
 let modo = 'auto';
 const dec = (n, d = 1) => String(Math.round(n * 10 ** d) / 10 ** d).replace('.', ',');
@@ -108,7 +109,8 @@ function treinoDeHoje() {
 
 function resultado() {
   const a = state.nutri.answers;
-  const r = calcular(a, resumoDaCorrida());
+  // as outras entrevistas entram na conta: vale sempre a resposta mais protegida (menor de 18, gestação, doença renal...)
+  const r = calcular(a, resumoDaCorrida(), contextoDasEntrevistas(state));
   const body = [cabecalho(), cartaoObjetivos()].filter(Boolean);
   for (const av of r.avisos) body.push(note(av.tipo, av.texto));
 
@@ -141,6 +143,9 @@ function resultado() {
   } else {
     body.push(h('p', { class: 'small muted', text: `IMC: ${dec(r.imc)} (${imcFaixa(r.imc, r.idade)}) — só uma referência.` }));
   }
+
+  // diário: o que a pessoa comeu de fato, comparado com a meta do dia (views/diario.js)
+  body.push(...blocoDiario(r));
 
   // hoje
   const hoje = treinoDeHoje();
@@ -204,6 +209,8 @@ function resultado() {
       body.push(h('details', { class: 'acc refeicao' },
         h('summary', null, h('div', { class: 'grow' }, h('div', { text: ref.nome }), h('div', { class: 'tiny muted resumo', text: ref.itens.map((it) => it.nome.split(' (')[0].split(',')[0]).join(', ') })), h('span', { class: 'small muted nowrap', text: `${fmtInt(ref.kcal)} kcal · ${Math.round(ref.p)} g` })),
         inner));
+      // "Comi isso" copia a refeição para o diário de hoje; "Comi outra coisa" abre a escolha de alimentos
+      body.push(acoesDaRefeicao(ref));
     }
     if (c.refeicoes.length) body.push(h('div', { class: 'card col gap-s' }, h('h3', { text: 'Total do dia de exemplo' }),
       h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Calorias' }), h('span', { text: `${fmtInt(c.kcal)} kcal (meta ${fmtInt(r.kcal)})` })),
@@ -258,6 +265,7 @@ export function nutritionView() {
         body: [cabecalho(),
           h('div', { class: 'bubble' }, h('p', { text: 'Olá! Eu ajudo você a comer de acordo com o seu objetivo.' }), h('p', { class: 'small muted', text: `São ${PERGUNTAS.length} perguntas rápidas. Você recebe metas, o que comer em volta do treino e um cardápio de exemplo. As respostas ficam só neste aparelho.` })),
           btn('Começar', () => { modo = 'entrevista'; refresh(); }, 'primary lg block', 'play'),
+          ...blocoDiario(null, { aoResponder: () => { modo = 'entrevista'; refresh(); } }),
           h('div', { class: 'mt' }), faqBlock(FAQ_NUTRI, 'Pergunte à Nutricionista', 'Ex.: proteína, jejum, pré-treino, creatina')],
       };
     }

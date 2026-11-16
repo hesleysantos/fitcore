@@ -8,6 +8,8 @@ import { parValido } from './logic/objetivos.js';
 import { limparDores } from './logic/dor.js';
 import { limparCorrida, limparRegistros } from './logic/corrida.js';
 import { limparSono, sonoPadrao } from './logic/sono.js';
+import { limparCombo, comboPadrao, chaveValida } from './logic/combinado.js';
+import { limparDiario, diarioPadrao } from './logic/diario.js';
 
 const DB_NAME = 'fitcore';
 const STORE = 'kv';
@@ -21,20 +23,23 @@ export const MAX_PLANOS = 60;
 
 const defaults = () => ({
   v: VERSAO,
-  settings: { tema: 'auto', descanso: 90, som: true, vibrar: true, telaLigada: true, animar: true },
+  settings: { tema: 'auto', descanso: 90, som: true, vibrar: true, telaLigada: true, animar: true, avisoFundo: false },
   gym: { all: true, has: {} },
   plans: [],
   activePlan: '',
   sessions: [],
   current: null,
-  trainer: { answers: {}, aceitoEm: '', revisaoEm: '', adiadoAte: '', versao: 0 },
+  // combo: "foco|fortalecimento" com que o plano aceito foi montado (logic/combinado.js)
+  trainer: { answers: {}, aceitoEm: '', revisaoEm: '', adiadoAte: '', versao: 0, combo: '' },
   nutri: { answers: {}, calculadoEm: '', seed: 0, emCasa: [], soCasa: false },
   body: [],
   // Treinador de corrida (logic/corrida.js): entrevista e plano aceito; runs = corridas registradas
-  run: { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [] },
+  run: { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [], mostrados: [], degrau: null },
   runs: [],
   dores: [], // dores contadas ao Treinador (logic/dor.js); valem para musculação e corrida
   sono: sonoPadrao(), // meta de sono e noites registradas (logic/sono.js)
+  combo: comboPadrao(), // corrida + musculação: foco e fortalecimento (logic/combinado.js)
+  diario: diarioPadrao(), // diário alimentar: o que a pessoa comeu de fato (logic/diario.js)
   // objetivosOk: par "treino|alimentação" que o usuário escolheu manter diferente (logic/objetivos.js)
   // backupAdiadoEm: quando a pessoa tocou em "Depois" no lembrete de backup da tela inicial
   ui: { onboarded: false, installDismissedAt: '', backupEm: '', backupAdiadoEm: '', objetivosOk: '' },
@@ -150,7 +155,7 @@ function cleanPlan(p) {
   const dias = arr(p.dias, 14, cleanDay).filter((d) => (vistos.has(d.id) ? false : vistos.add(d.id)));
   const agenda = {};
   if (isObj(p.agenda)) for (let i = 0; i < 7; i++) { const v = p.agenda[i]; if (typeof v === 'string' && vistos.has(v)) agenda[i] = v; }
-  return { id, nome: str(p.nome, 60, 'Meu treino'), origem: oneOf(p.origem, ['treinador', 'modelo', 'manual'], 'manual'), criadoEm: iso(p.criadoEm), dias, agenda, info: str(p.info, 600) };
+  return { id, nome: str(p.nome, 60, 'Meu treino'), origem: oneOf(p.origem, ['treinador', 'modelo', 'manual', 'fortalecimento'], 'manual'), criadoEm: iso(p.criadoEm), dias, agenda, info: str(p.info, 600) };
 }
 const cleanBody = (b) => {
   if (!isObj(b)) return null;
@@ -161,14 +166,18 @@ const cleanBody = (b) => {
 };
 
 // Reconstrói o estado campo a campo a partir de dados não confiáveis (arquivo de backup ou armazenamento).
-export function sanitize(raw) {
+// `doAparelho`: os dados vêm do armazenamento deste aparelho (e não de um arquivo de backup). Nesse caso não se corta
+// o que está "no futuro": se o relógio do aparelho estiver atrasado, noites, cochilos e diário recentes pareceriam
+// futuros e seriam apagados ao abrir. Em backup importado o corte continua valendo.
+export function sanitize(raw, { doAparelho = false } = {}) {
+  const semCorte = doAparelho ? { semCorteDeFuturo: true } : undefined;
   const d = defaults();
   if (!isObj(raw)) return d;
   const s = isObj(raw.settings) ? raw.settings : {};
   d.settings = {
     tema: oneOf(s.tema, ['auto', 'escuro', 'claro'], 'auto'),
     descanso: Math.round(num(s.descanso, 15, 600, 90)),
-    som: bool(s.som, true), vibrar: bool(s.vibrar, true), telaLigada: bool(s.telaLigada, true), animar: bool(s.animar, true),
+    som: bool(s.som, true), vibrar: bool(s.vibrar, true), telaLigada: bool(s.telaLigada, true), animar: bool(s.animar, true), avisoFundo: bool(s.avisoFundo, false),
   };
   const g = isObj(raw.gym) ? raw.gym : {};
   d.gym.all = bool(g.all, true);
@@ -185,13 +194,15 @@ export function sanitize(raw) {
   for (const x of d.sessions) x.id = unico(x.id, idsSessao, 's');
   d.current = raw.current ? cleanSession(raw.current, true) : null;
   const t = isObj(raw.trainer) ? raw.trainer : {};
-  d.trainer = { answers: cleanAnswers(t.answers, P_TREINO), aceitoEm: iso(t.aceitoEm), revisaoEm: iso(t.revisaoEm), adiadoAte: iso(t.adiadoAte), versao: Math.round(num(t.versao, 0, 9999, 0)) };
+  d.trainer = { answers: cleanAnswers(t.answers, P_TREINO), aceitoEm: iso(t.aceitoEm), revisaoEm: iso(t.revisaoEm), adiadoAte: iso(t.adiadoAte), versao: Math.round(num(t.versao, 0, 9999, 0)), combo: chaveValida(t.combo) ? t.combo : '' };
   const n = isObj(raw.nutri) ? raw.nutri : {};
   d.nutri = { answers: cleanAnswers(n.answers, P_NUTRI), calculadoEm: iso(n.calculadoEm), seed: Math.round(num(n.seed, 0, 1e6, 0)), emCasa: limparEmCasa(n.emCasa), soCasa: n.soCasa === true };
   const dias = new Set();
   d.body = arr(raw.body, 3000, cleanBody).filter((b) => (dias.has(b.data) ? false : dias.add(b.data))).sort((a, b) => (a.data < b.data ? -1 : 1));
   d.dores = limparDores(raw.dores);
-  d.sono = limparSono(raw.sono);
+  d.sono = limparSono(raw.sono, undefined, semCorte);
+  d.combo = limparCombo(raw.combo);
+  d.diario = limparDiario(raw.diario, undefined, semCorte);
   d.run = limparCorrida(raw.run);
   d.runs = limparRegistros(raw.runs); // até 3000 registros, sem id repetido
   const u = isObj(raw.ui) ? raw.ui : {};
@@ -282,7 +293,7 @@ async function recarregar() {
   const r = await idbGet(KEY);
   const reg = r.ok ? desembrulha(r.value) : null;
   if (!reg) return false;
-  state = sanitize(reg.dados);
+  state = sanitize(reg.dados, { doAparelho: true });
   rev = reg.rev;
   dirty = false;
   clearTimeout(saveT);
@@ -307,7 +318,7 @@ export async function load() {
   const reservaVale = daReserva && !(daReserva.semBanco && doBanco);
   const reg = doBanco && reservaVale ? (daReserva.rev > doBanco.rev ? daReserva : doBanco) : doBanco || daReserva;
   if (daReserva && !reservaVale) { try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ } }
-  state = sanitize(reg ? reg.dados : undefined);
+  state = sanitize(reg ? reg.dados : undefined, { doAparelho: true });
   rev = reg ? reg.rev : 0;
   // Há base confiável quando o banco respondeu ou quando os dados vieram de uma reserva feita a partir de dados reais.
   // Só o caso "abriu vazio sem banco" (ou continuou uma reserva assim) fica marcado como sem base.
@@ -406,7 +417,7 @@ export function readBackup(text) {
   dados.current = null;
   const bruto = Array.isArray(parsed.dados.sessions) ? parsed.dados.sessions.length : 0;
   if (JSON.stringify(dados).length > MAX_ESTADO) throw new Error('Arquivo grande demais ou inválido.');
-  return { dados, resumo: { treinos: dados.sessions.length, planos: dados.plans.length, pesos: dados.body.length, corridas: dados.runs.length, dores: dados.dores.length, noites: dados.sono.registros.length, exportadoEm: iso(parsed.exportadoEm), descartados: Math.max(0, bruto - dados.sessions.length) } };
+  return { dados, resumo: { treinos: dados.sessions.length, planos: dados.plans.length, pesos: dados.body.length, corridas: dados.runs.length, dores: dados.dores.length, noites: dados.sono.registros.length, diasDeDiario: Array.isArray(dados.diario.dias) ? dados.diario.dias.length : 0, exportadoEm: iso(parsed.exportadoEm), descartados: Math.max(0, bruto - dados.sessions.length) } };
 }
 export async function applyBackup(dados) {
   // guarda o estado atual para permitir "desfazer"
@@ -426,13 +437,13 @@ export function importData(text) {
 export async function previousInfo() {
   const r = await idbGet(KEY_PREV);
   if (!r.ok || !isObj(r.value) || !isObj(r.value.dados)) return null;
-  const d = sanitize(r.value.dados);
+  const d = sanitize(r.value.dados, { doAparelho: true });
   return { salvoEm: iso(r.value.salvoEm), treinos: d.sessions.length, planos: d.plans.length };
 }
 export async function restorePrevious() {
   const r = await idbGet(KEY_PREV);
   if (!r.ok || !isObj(r.value) || !isObj(r.value.dados)) return false;
-  state = sanitize(r.value.dados); // inclui o treino que estava em andamento na hora da restauração
+  state = sanitize(r.value.dados, { doAparelho: true }); // inclui o treino que estava em andamento na hora da restauração
   await idbDelete(KEY_PREV);
   save();
   avisar();

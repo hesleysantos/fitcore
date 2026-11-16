@@ -28,7 +28,7 @@ globalThis.document = { addEventListener() {}, visibilityState: 'visible' };
 
 let n = 0;
 const abrirApp = async () => { const m = await import(`../www/js/store.js?abertura=${++n}`); await m.load(); return m; };
-const esperar = (ms = 320) => new Promise((r) => setTimeout(r, ms));
+const esperar = (ms = 700) => new Promise((r) => setTimeout(r, ms)); // folga para a gravação terminar mesmo com a máquina ocupada
 const peso = (dia, kg) => ({ data: `2026-11-${String(dia).padStart(2, '0')}`, peso: kg, cintura: null });
 const zerar = () => { aparelho.banco.clear(); aparelho.ls.clear(); aparelho.abrir = 'ok'; aparelho.gravar = 'ok'; };
 

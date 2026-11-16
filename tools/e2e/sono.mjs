@@ -1,5 +1,5 @@
 // Teste de ponta a ponta da meta de sono, clicando como um usuário: definir a idade, ver a meta e o porquê, informar a
-// hora de acordar, registrar, corrigir e apagar noites (com confirmação), conferir a semana, as dicas e as perguntas,
+// hora de acordar, registrar, corrigir e apagar noites e cochilos (com confirmação), conferir a semana, as dicas e as perguntas,
 // recarregar e ver que tudo persiste, o cartão da tela inicial, o perfil vindo das entrevistas (dias de treino, plano de
 // corrida fora do período, dia vazio da agenda), a virada do dia com a tela aberta e a tela em 360 px (claro e escuro).
 // Uso, com "npm start" rodando: node tools/e2e/navegador.mjs tools/e2e/sono.mjs
@@ -9,16 +9,23 @@ const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sáb
 
 export default async (page) => {
   const falhas = [];
-  const ok = (cond, msg) => { console.log((cond ? '  ✔ ' : '  ✖ ') + msg); if (!cond) falhas.push(msg); };
+  const ok = (cond, msg) => { console.log((cond ? '  ✔ ' : '  ✖ ') + msg); if (!cond) { falhas.push(msg); pendente = true; } };
+  let pendente = false;
+  // Avisos que o app mostrou (toasts), para explicar uma falha: se o estado foi recarregado por fora (outra janela ou
+  // conflito de gravação), os registros feitos pelo roteiro somem e as conferências seguintes falham por tabela.
+  const espiar = () => page.eval(`if (!window.__avisos) { window.__avisos = []; new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.classList && n.classList.contains('toast')) window.__avisos.push(n.textContent); }).observe(document.body, { childList: true }); } return true;`);
+  const avisos = async (onde) => { const l = await page.eval(`return (window.__avisos || []).splice(0);`); const fora = l.filter((x) => /outra janela|não foi possível salvar/.test(x)); if (fora.length || pendente) console.log('    [' + onde + '] avisos do app: ' + JSON.stringify(pendente ? l : fora) + ' · folhas abertas: ' + (await page.eval(`return document.querySelectorAll('.sheet').length;`)) + ' · noites: ' + (await page.eval(`return (await import('/js/store.js')).state.sono.registros.length;`))); pendente = false; };
   const texto = () => page.text();
   const estado = (expr) => page.eval(`const s = (await import('/js/store.js')).state; return ${expr};`);
-  const foto = async (nome) => { if (process.env.FOTOS_SONO) await page.shot('_sono_' + nome); };
+  // a captura às vezes não responde com a máquina ocupada: tenta uma segunda vez antes de desistir
+  const foto = async (nome) => { if (!process.env.FOTOS_SONO) return; try { await page.shot('_sono_' + nome); } catch { await page.sleep(500); await page.shot('_sono_' + nome); } };
   const ver = async (sel) => { await page.eval(`const e = document.querySelector(${JSON.stringify(sel)}); if (e) e.scrollIntoView({ block: 'start' }); window.scrollBy(0, -70); return true;`); await page.sleep(150); };
   const hojeKey = await page.eval(`const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');`);
   const chave = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const diaMenos = (n) => { const d = new Date(hojeKey + 'T12:00:00'); d.setDate(d.getDate() - n); return chave(d); };
   const wd = (k) => new Date(k + 'T12:00:00').getDay();
   const entreDias = (k) => `${DIAS[(wd(k) + 6) % 7]} para ${DIAS[wd(k)]}`;
+  const diaTxt = (k) => `${DIAS[wd(k)]}, ${Number(k.slice(8, 10))}/${k.slice(5, 7)}`;
   const noiteTxt = (k) => `Noite de ${entreDias(k)}, ${Number(k.slice(8, 10))}/${k.slice(5, 7)}`;
   const segunda = diaMenos((wd(hojeKey) + 6) % 7); // segunda-feira desta semana
   // dentro de `escopo`, toca n vezes em − ou + das horas
@@ -46,6 +53,7 @@ export default async (page) => {
   console.log('1. Tela inicial sem meta: o cartão convida a definir');
   await page.goto(B, 2500);
   await page.click('Agora não');
+  await espiar();
   let t = await texto();
   ok(await page.eval(`const c = document.getElementById('cartao-sono'); return !!c && c.tagName === 'A' && c.getAttribute('href') === '#/sono' && c.textContent.includes('Quantas horas você precisa dormir?');`), 'cartão do Início convida a definir a meta (é um link para a tela)');
   await page.eval(`document.getElementById('cartao-sono').click(); return true;`); await page.sleep(600);
@@ -121,6 +129,7 @@ export default async (page) => {
   await page.eval(`const b = document.querySelector('.sono-dia[data-dia="${diaMenos(4)}"]'); b.click(); return true;`); await comFolhas(1);
   await naFolha('Apagar'); const pediu = await comFolhas(2);
   t = await texto();
+  if (!pediu) console.log('    rodapé da folha: ' + JSON.stringify(await page.eval(`return [...document.querySelectorAll('.sheet')].map((f) => [...f.querySelectorAll('.sheet-ft .btn')].map((e) => e.textContent.trim()));`)) + ' · noites: ' + JSON.stringify(await estado('s.sono.registros.map((r) => r.data.slice(5) + "=" + r.horas)')));
   ok(pediu && t.includes('Apagar esta noite?') && t.includes(`${noiteTxt(diaMenos(4))}: 5 h 30. Não dá para desfazer.`) && (await estado('s.sono.registros.length')) === 5, 'apagar pede confirmação e ainda não apaga');
   await naFolha('Cancelar');
   ok((await comFolhas(1)) && (await estado('s.sono.registros.length')) === 5, 'cancelar a confirmação mantém a noite e a folha aberta');
@@ -135,6 +144,58 @@ export default async (page) => {
   ok((await horas('#sono-noite', 0)) === '8 h', 'só com uma noite de 0 h registrada, o registro abre no alvo (8 h), não em 0 h');
   await page.eval(`const st = await import('/js/store.js'); const lg = await import('/js/logic/sono.js'); st.update((s) => { lg.apagarNoite(s.sono, '${diaMenos(5)}'); for (const [d, h, q] of [['${diaMenos(3)}', 8], ['${diaMenos(2)}', 6.5], ['${diaMenos(1)}', 6, 2], ['${hojeKey}', 7.75, 4]]) lg.gravarNoite(s.sono, { data: d, horas: h, ...(q ? { qualidade: q } : {}) }); }); return true;`); await redesenhar(); await page.sleep(300);
 
+  await avisos('6');
+  console.log('6b. Cochilos: registrar, corrigir, apagar (com confirmação) e como entram na semana');
+  const cochilos = () => estado('s.sono.cochilos');
+  // na folha de cima, toca n vezes em − ou + dos minutos do cochilo
+  const minutos = (delta) => page.eval(`const f = [...document.querySelectorAll('.sheet')].pop(); const b = f && f.querySelector('.sono-passo button[aria-label="${delta < 0 ? 'Menos' : 'Mais'} 5 minutos de cochilo"]'); if (!b) return false; for (let i = 0; i < ${Math.abs(delta)}; i++) b.click(); return f.querySelector('.sono-passo output').textContent;`);
+  const botaoCochilo = (escopo) => page.eval(`const e = document.querySelector(${JSON.stringify(escopo)}); const b = e && [...e.querySelectorAll('.btn')].find((x) => /Registrar cochilo|Outro cochilo/.test(x.textContent)); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true;`);
+  t = await texto();
+  ok(t.includes(`Cochilos de hoje, ${DIAS[wd(hojeKey)]}`) && t.includes('Para adultos, a meta é a da noite. O cochilo aparece à parte'), 'a tela tem o cartão dos cochilos e diz como eles contam para o adulto');
+  await botaoCochilo('#sono-cochilo'); await comFolhas(1);
+  ok((await page.eval(`const e = document.getElementById('sono-folha-cochilo'); return e ? e.textContent : '';`)) === `Cochilo de ${diaTxt(hojeKey)}`, 'a folha diz de que dia é o cochilo: ' + diaTxt(hojeKey));
+  ok((await minutos(2)) === '30 min', 'dois toques em + levam de 20 para 30 minutos');
+  await page.eval(`const i = document.querySelector('.sheet input[aria-label="Hora em que o cochilo começou"]'); i.value = '14:10'; i.dispatchEvent(new Event('change', { bubbles: true })); return true;`);
+  await naFolha('Salvar'); await comFolhas(0); await page.sleep(300);
+  let ck = await cochilos();
+  ok(ck.length === 1 && ck[0].data === hojeKey && ck[0].min === 30 && ck[0].inicio === '14:10', 'cochilo gravado no dia de hoje: ' + JSON.stringify(ck));
+  t = await texto();
+  ok(t.includes('14:10 · 30 min') && t.includes('Cochilos de hoje: 30 min. Não entram na meta, que é a da noite.'), 'o cochilo aparece no cartão, à parte da meta');
+  ok(await page.eval(`const g = document.querySelector('#sono-semana svg.sono-graf'); const m = document.querySelector('.sono-dia.hoje .sono-mais'); return g.querySelectorAll('rect.bar.cochilo').length === 1 && g.querySelectorAll('rect.bar:not(.cochilo)').length === 4 && !!document.querySelector('#sono-semana .sono-legenda') && !!m && m.textContent === '+30m';`), 'semana: o cochilo é uma barra separada da noite, com legenda, e aparece no dia');
+  const stats3 = await page.eval(`return [...document.querySelectorAll('#sono-semana .stat')].map((e) => e.textContent);`);
+  ok(stats3[0].includes('7 h 04') && t.includes('Cochilos: em 1 dia, 30 min em média por dia. Não entram na média da noite.'), 'adulto: a média continua sendo a da noite e os cochilos aparecem em separado: ' + stats3[0]);
+  // corrigir
+  await page.eval(`document.querySelector('#sono-cochilo .sono-cochilo').click(); return true;`); await comFolhas(1);
+  ok((await texto()).includes('Corrigir o cochilo') && (await minutos(-1)) === '25 min', 'a folha de correção abre com os 30 minutos e desce para 25');
+  await naFolha('Salvar'); await comFolhas(0); await page.sleep(300);
+  ck = await cochilos();
+  ok(ck.length === 1 && ck[0].min === 25 && ck[0].inicio === '14:10', 'cochilo corrigido sem duplicar');
+  // cochilo de ontem, pela folha do dia
+  await page.eval(`const b = document.querySelector('.sono-dia[data-dia="${diaMenos(1)}"]'); b.scrollIntoView({ block: 'center' }); b.click(); return true;`); await comFolhas(1);
+  ok((await texto()).includes(`Cochilos de ${DIAS[wd(diaMenos(1))]}`), 'a folha do dia mostra os cochilos daquele dia');
+  await botaoCochilo('.sheet'); await page.sleep(500);
+  ok((await folhas()) === 1 && (await page.eval(`const e = document.getElementById('sono-folha-cochilo'); return e ? e.textContent : '';`)) === `Cochilo de ${diaTxt(diaMenos(1))}`, 'da folha do dia abre a do cochilo, com a data certa');
+  ok((await minutos(8)) === '1 h', '60 minutos aparecem como 1 h');
+  await naFolha('Salvar'); await comFolhas(0); await page.sleep(300);
+  ck = await cochilos();
+  ok(ck.length === 2 && ck[0].data === diaMenos(1) && ck[0].min === 60 && !('inicio' in ck[0]) && ck[1].data === hojeKey, 'cochilo de ontem gravado, sem hora, em ordem de data');
+  ok((await page.eval(`const m = document.querySelector('.sono-dia[data-dia="${diaMenos(1)}"] .sono-mais'); return m ? m.textContent : '';`)) === '+1h' && (await texto()).includes('Cochilos: em 2 dias, 43 min em média por dia.'), 'a semana soma os cochilos por dia');
+  // apagar pede confirmação
+  await page.eval(`document.querySelector('#sono-cochilo .sono-cochilo').click(); return true;`); await comFolhas(1);
+  await naFolha('Apagar'); const pediuCochilo = await comFolhas(2);
+  t = await texto();
+  ok(pediuCochilo && t.includes('Apagar este cochilo?') && t.includes(`Cochilo de ${diaTxt(hojeKey)}: 14:10 · 25 min. Não dá para desfazer.`) && (await cochilos()).length === 2, 'apagar o cochilo pede confirmação e ainda não apaga');
+  await naFolha('Cancelar');
+  ok((await comFolhas(1)) && (await cochilos()).length === 2, 'cancelar mantém o cochilo');
+  await naFolha('Apagar'); await comFolhas(2); await naFolha('Apagar'); await comFolhas(0); await page.sleep(300);
+  ck = await cochilos();
+  ok(ck.length === 1 && ck[0].data === diaMenos(1), 'confirmando, o cochilo de hoje é apagado');
+  // um cochilo de hoje sem hora, para os próximos passos
+  await botaoCochilo('#sono-cochilo'); await comFolhas(1); await naFolha('Salvar'); await comFolhas(0); await page.sleep(300);
+  ok((await cochilos()).length === 2 && (await texto()).includes('Cochilos de hoje: 20 min.'), 'cochilo de 20 minutos registrado em dois toques');
+  await ver('#sono-cochilo'); await foto('4b-cochilos');
+
+  await avisos('6b');
   console.log('7. Perguntas frequentes com busca e fontes');
   ok(await page.eval(`return document.querySelectorAll('details.acc').length === 4;`), 'quatro perguntas aparecem de início');
   await page.eval(`const i = document.querySelector('.search input'); i.value = 'café'; i.dispatchEvent(new Event('input', { bubbles: true })); return true;`); await page.sleep(200);
@@ -143,13 +204,16 @@ export default async (page) => {
   ok((await page.eval(`return document.querySelector('details.acc').textContent;`)).includes('Drake C') && (await texto()).includes('6 horas antes de deitar'), 'a resposta traz os números e as fontes');
   await page.eval(`const i = document.querySelector('.search input'); i.value = 'qwertyzx'; i.dispatchEvent(new Event('input', { bubbles: true })); return true;`); await page.sleep(200);
   ok((await texto()).includes('Não encontrei isso na minha base'), 'busca sem resultado avisa e não inventa resposta');
+  await page.eval(`const i = document.querySelector('.search input'); i.value = 'cochilo'; i.dispatchEvent(new Event('input', { bubbles: true })); return true;`); await page.sleep(200);
+  ok(await page.eval(`const q = [...document.querySelectorAll('details.acc summary')].map((e) => e.textContent); return q.length >= 4 && q.includes('O cochilo conta para a meta?') && q.includes('Cochilar faz mal à saúde?');`), 'a busca por “cochilo” traz as perguntas novas');
   await page.eval(`const i = document.querySelector('.search input'); i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); return true;`); await page.sleep(200);
   await page.click('Ver todas as'); await page.sleep(200);
   ok(await page.eval(`return document.querySelectorAll('details.acc').length >= 18;`), 'todas as perguntas abrem');
 
   console.log('8. Recarregar: tudo persiste');
   await page.reload(1800); await page.goto(B + '#/sono', 900);
-  const st2 = await estado(`{ acordar: s.sono.acordar, idade: s.sono.idade, n: s.sono.registros.length, hoje: s.sono.registros[s.sono.registros.length - 1] }`);
+  const st2 = await estado(`{ acordar: s.sono.acordar, idade: s.sono.idade, n: s.sono.registros.length, hoje: s.sono.registros[s.sono.registros.length - 1], cochilos: s.sono.cochilos }`);
+  ok(st2.cochilos.length === 2 && st2.cochilos[0].min === 60 && st2.cochilos[1].data === hojeKey && st2.cochilos[1].min === 20 && (await texto()).includes('Cochilos de hoje: 20 min.') && (await page.eval(`return document.querySelectorAll('#sono-semana rect.bar.cochilo').length;`)) === 2, 'os cochilos continuam depois de recarregar');
   ok(st2.acordar === '06:30' && st2.idade === 34 && st2.n === 4 && st2.hoje.data === hojeKey && st2.hoje.horas === 7.75, 'hora de acordar, idade e noites continuam depois de recarregar: ' + JSON.stringify(st2));
   t = await texto();
   ok(t.includes('faixa: 7 a 9 h') && t.includes('7 h 45') && t.includes('4 de 7 noites') && (await page.eval(`return document.querySelector('input[aria-label="Hora de acordar"]').value;`)) === '06:30' && t.includes('apague a luz às 22:30'), 'a tela mostra os mesmos dados');
@@ -161,6 +225,7 @@ export default async (page) => {
   let c = await page.eval(`const e = document.getElementById('cartao-sono'); return e ? e.textContent : '';`);
   ok(c.includes('Meta: 8 h (7 a 9 h)') && c.includes(`Noite de ${entreDias(hojeKey)}: 7 h 45`) && c.includes('Dentro da faixa') && c.includes('Para acordar às 06:30, deite até as 22:30.'), 'cartão: meta, noite (com os dias) e hora de deitar: ' + c.slice(0, 150));
   ok(await page.eval(`const k = document.getElementById('cartao-sono'); const a = k.querySelector('a.sono-abrir'); return !!a && !a.hasAttribute('aria-label') && a.textContent.includes('Meta: 8 h') && !k.querySelector('button h2, a h2, button h3, a h3') && !!k.querySelector(':scope > .row > h2');`), 'acessibilidade: o link lê a meta (sem rótulo que a esconda) e o título não fica dentro de botão');
+  ok((await page.eval(`const e = document.getElementById('cartao-sono-cochilo'); return e ? e.textContent : '';`)) === 'Cochilo de hoje: 20 min', 'o cartão do Início mostra o cochilo de hoje');
   await foto('5-inicio');
   // sem a noite de hoje, o cartão registra em um toque
   await page.eval(`const st = await import('/js/store.js'); const lg = await import('/js/logic/sono.js'); st.update((s) => { lg.apagarNoite(s.sono, '${hojeKey}'); }); return true;`); await redesenhar(); await page.sleep(400);
@@ -203,16 +268,22 @@ export default async (page) => {
   pf = await perfilCom({ dias: [1, 2, 3, 4, 5] });
   t = await texto();
   ok(pf.alvo === '9 h 30' && t.includes('faixa: 8 a 10 h'), 'aos 16 anos com 5 dias de treino: faixa de 8 a 10 h e alvo de 9 h 30');
-  ok(t.includes('Aos 16 anos, os consensos de sono recomendam de 8 a 10 h por noite.') && t.includes('Você treina em 5 dias nesta semana') && t.includes('Idade: 16 anos, informada ao Treinador.') && pf.motivos.length === 2, 'a meta explica em duas linhas: a idade e a carga de treino');
+  ok(t.includes('Aos 16 anos, os consensos de sono recomendam de 8 a 10 h por dia: os cochilos contam.') && t.includes('Você treina em 5 dias nesta semana') && t.includes('Idade: 16 anos, informada ao Treinador.') && pf.motivos.length === 2, 'a meta explica em duas linhas: a idade e a carga de treino');
   ok(!(await page.eval(`return [...document.querySelectorAll('#sono-meta .btn')].some((e) => e.textContent.trim() === 'Alterar');`)), 'idade vinda da entrevista não se altera aqui');
   ok((await page.eval(`return document.getElementById('sono-deitar').textContent;`)) === 'Para dormir 9 h 30, apague a luz às 21:00.', 'a hora de deitar acompanha o novo alvo');
+  const stats16 = await page.eval(`return [...document.querySelectorAll('#sono-semana .stat')].map((e) => e.textContent);`);
+  ok(t.includes('Noite + cochilos: 7 h 20 (abaixo da faixa).') && stats16[0].includes('média 24 h') && stats16[1].includes('dias curtos') && t.includes('Já estão somados na média acima.'), 'aos 16 anos o cochilo soma à noite: 7 h + 20 min = 7 h 20, na média em 24 h: ' + stats16[0]);
   const dicas2 = await page.eval(`return [...document.querySelectorAll('.dica')].map((e) => e.dataset.dica);`);
-  ok(dicas2.includes('jovem') && t.includes('Adolescentes que treinam e dormem menos de 8 horas') && !dicas2.some((x) => ['alcool', 'cafeina', 'treinoNoite', 'musculo'].includes(x)), 'aos 16 anos as dicas são as da idade (sem álcool, corte de café ou estudos de adultos): ' + dicas2.join(', '));
+  ok(dicas2.includes('jovem') && t.includes('Adolescentes que treinam e dormem menos de 8 horas') && !dicas2.some((x) => ['alcool', 'cafeina', 'treinoNoite', 'musculo', 'cochilo', 'cochiloLongo', 'cochiloFrequente', 'cochiloTarde', 'cochiloNoite', 'semCochilo'].includes(x)), 'aos 16 anos as dicas são as da idade (sem álcool, corte de café, dicas de cochilo ou estudos de adultos): ' + dicas2.join(', '));
+  // cochilo em dia sem noite registrada: não entra na média em 24 horas, e a tela diz isso
+  await page.eval(`const st = await import('/js/store.js'); const lg = await import('/js/logic/sono.js'); st.update((s) => { lg.gravarCochilo(s.sono, { data: '${diaMenos(5)}', min: 120 }); }); return true;`); await redesenhar(); await page.sleep(400);
+  ok((await page.eval(`return document.getElementById('sono-semana-cochilos').textContent;`)).includes('Entram na média em 24 horas só nos dias com a noite registrada: 1 dia de cochilo ficou de fora.'), 'cochilo em dia sem noite registrada: a tela avisa que ele ficou fora da média em 24 horas');
+  await page.eval(`const st = await import('/js/store.js'); const lg = await import('/js/logic/sono.js'); st.update((s) => { lg.apagarCochilo(s.sono, '${diaMenos(5)}', 0); }); return true;`); await redesenhar(); await page.sleep(300);
   await foto('6-perfil-jovem');
 
   console.log('11. A dica do café acompanha a hora de acordar; virada do dia com a tela aberta');
   // adulto de novo, sem treinos: só dicas gerais. Escolhe um dia (hoje ou um dos próximos 4) em que a dica do café aparece.
-  await page.eval(`const st = await import('/js/store.js'); st.update((s) => { s.trainer.answers = {}; s.nutri.answers = {}; s.plans = []; s.activePlan = ''; s.sono.registros = []; }); return true;`);
+  await page.eval(`const st = await import('/js/store.js'); st.update((s) => { s.trainer.answers = {}; s.nutri.answers = {}; s.plans = []; s.activePlan = ''; s.sono.registros = []; s.sono.cochilos = []; }); return true;`);
   const relogio = (dias) => page.eval(dias ? `if (!window.__Date) window.__Date = Date; const D = window.__Date; const off = ${dias} * 86400000; window.Date = class extends D { constructor(...a) { if (a.length) super(...a); else super(D.now() + off); } static now() { return D.now() + off; } }; return true;` : `if (window.__Date) window.Date = window.__Date; return true;`);
   const k = await page.eval(`const lg = await import('/js/logic/sono.js'); const s = (await import('/js/store.js')).state; for (let i = 0; i < 5; i++) { const d = new Date(Date.now() + i * 86400000); const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); if (lg.dicasDeSono(s, key).some((x) => x.id === 'cafeina')) return i; } return -1;`);
   ok(k >= 0, 'há um dia próximo em que a dica do café aparece');
@@ -242,11 +313,19 @@ export default async (page) => {
   await page.eval(`[...document.querySelectorAll('#cartao-sono .btn')].find((e) => e.textContent.trim() === 'Registrar').click(); return true;`); await page.sleep(500);
   ok((await estado('s.sono.registros.length')) === 0 && (await page.eval(`return document.getElementById('cartao-sono').textContent;`)).includes(`Noite de ${entreDias(amanha)}`), 'cartão do Início: com o dia virado, não grava e passa a mostrar a noite nova');
   await relogio(0);
+  // cochilos de 1 h 30 em 3 dias, adulto com a noite na faixa: aparece a dica de saúde, com a ressalva
+  await page.eval(`const st = await import('/js/store.js'); const lg = await import('/js/logic/sono.js'); const dias = ${JSON.stringify([0, 1, 2, 3, 4, 5, 6].map(diaMenos))}; st.update((s) => { s.sono.registros = []; s.sono.cochilos = []; for (const d of dias) lg.gravarNoite(s.sono, { data: d, horas: 8 }); for (const d of dias.slice(0, 3)) lg.gravarCochilo(s.sono, { data: d, min: 90 }); }); return true;`);
+  await page.goto(B + '#/sono', 900);
+  const longo = await page.eval(`const e = document.querySelector('.dica[data-dica="cochiloLongo"]'); return e ? e.textContent : '';`);
+  ok(longo.includes('Cochilos de 1 hora ou mais') && longo.includes('Pode ser sinal de noite ruim, e não a causa') && longo.includes('Yamada T'), 'cochilos longos em 3 dias: a dica de saúde aparece, com a ressalva e as fontes');
+  ok((await texto()).includes('ou cochilos longos quase todos os dias'), 'o bloco “Quando procurar um médico” fala dos cochilos');
+  await page.eval(`const st = await import('/js/store.js'); st.update((s) => { s.sono.registros = []; s.sono.cochilos = []; }); return true;`);
   // devolve os dados para as fotos em 360 px
   await page.eval(`const st = await import('/js/store.js'); const lg = await import('/js/logic/sono.js'); st.update((s) => {
     s.trainer.answers = { idade: 16, objetivo: 'hipertrofia' }; s.nutri.answers = { horario: 'noite' };
     s.plans = [{ id: 'pz', nome: 'Teste', origem: 'manual', criadoEm: '', dias: [{ id: 'd1', nome: 'A', foco: '', itens: [{ ex: 'supino-reto-barra', series: 3, reps: '10', descanso: 90, nota: '' }] }], agenda: { 1: 'd1', 2: 'd1', 3: 'd1', 4: 'd1', 5: 'd1' }, info: '' }]; s.activePlan = 'pz';
     for (const [d, h, q] of [['${diaMenos(3)}', 8], ['${diaMenos(2)}', 6.5], ['${diaMenos(1)}', 6, 2], ['${hojeKey}', 7, 4]]) lg.gravarNoite(s.sono, { data: d, horas: h, ...(q ? { qualidade: q } : {}) });
+    lg.gravarCochilo(s.sono, { data: '${hojeKey}', min: 20, inicio: '14:10' }); lg.gravarCochilo(s.sono, { data: '${diaMenos(1)}', min: 60 });
   }); return true;`);
 
   console.log('12. Tela estreita (360 px), tema claro e escuro');
@@ -260,6 +339,11 @@ export default async (page) => {
     ok(await page.eval(`const r = [...document.querySelectorAll('#conteudo *')].filter((e) => e.getClientRects().length && !e.closest('svg')).map((e) => e.getBoundingClientRect()); return r.every((x) => x.right <= 360.5 && x.left >= -0.5);`), `nenhum elemento passa da largura da tela (${tema})`);
     await foto(`7-360-${tema}-topo`);
     await ver('#sono-noite'); await foto(`8-360-${tema}-noite`);
+    await ver('#sono-cochilo'); await foto(`8b-360-${tema}-cochilos`);
+    await page.eval(`document.querySelector('#sono-cochilo .sono-cochilo').click(); return true;`); await comFolhas(1); await page.sleep(200);
+    ok(await page.eval(`const s = document.querySelector('.sheet'); const r = s.getBoundingClientRect(); return r.right <= 360.5 && document.documentElement.scrollWidth <= 361;`), `folha do cochilo cabe em 360 px (${tema})`);
+    await foto(`8c-360-${tema}-folha-cochilo`);
+    await page.eval(`const b = document.querySelector('.sheet .iconbtn[aria-label="Fechar"]'); if (b) b.click(); return true;`); await comFolhas(0);
     await ver('#sono-semana'); await foto(`9-360-${tema}-semana`);
     await ver('.dica'); await foto(`10-360-${tema}-dicas`);
     await ver('.sono-sinais'); await foto(`11-360-${tema}-sinais`);

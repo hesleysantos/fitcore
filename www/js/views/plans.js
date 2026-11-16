@@ -1,6 +1,6 @@
 // Treinos: planos, dias, agenda da semana e editor de cada treino.
-import { h, btn, icon, iconBtn, confirmSheet, promptSheet, toast, badge, sectionTitle, note, uid, DIAS_CURTO, DIAS_LONGO, plural, dateKey } from '../ui.js';
-import { planoDaSemana } from '../logic/corrida.js';
+import { h, btn, icon, iconBtn, confirmSheet, promptSheet, toast, badge, sectionTitle, note, uid, DIAS_CURTO, DIAS_LONGO, plural, dateKey, pad2 } from '../ui.js';
+import * as Corrida from '../logic/corrida.js';
 import { state, update, activePlan, planById, MAX_PLANOS } from '../store.js';
 import { go, refresh, replace } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
@@ -9,10 +9,12 @@ import { MODELOS } from '../data/templates.js';
 import { thumb } from '../figure.js';
 import { novoItem, alvoTexto, duracaoEstimada, pickExercises, subtitulo, folha } from './common.js';
 import { startSession, startFree } from './session.js';
+import { cartaoCombinado } from './combinado.js';
+import { cartaoAvaliacaoDoDia, cartaoAvaliacaoDoPlano } from './avaliacao.js';
 
 const ORDEM_SEMANA = [1, 2, 3, 4, 5, 6, 0];
 const AGENDA_PADRAO = { 1: [1], 2: [1, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5], 6: [1, 2, 3, 4, 5, 6], 7: [1, 2, 3, 4, 5, 6, 0] };
-const ORIGEM = { treinador: 'Do Treinador', modelo: 'Modelo pronto', manual: 'Montado por você' };
+const ORIGEM = { treinador: 'Do Treinador', modelo: 'Modelo pronto', manual: 'Montado por você', fortalecimento: 'Fortalecimento para corrida' };
 
 function mut(planId, fn) {
   update((s) => { const p = s.plans.find((x) => x.id === planId); if (p) fn(p, s); });
@@ -102,7 +104,41 @@ function planMenu(plan) {
 }
 
 // Corrida planejada para cada dia desta semana (Treinador de corrida): { semana, totalSemanas, fase, dias: Array(7) } ou null.
-const corridaSemana = () => { try { return planoDaSemana(state, dateKey(new Date())); } catch { return null; } };
+// ---------- semana mostrada na aba (a atual, por padrão; dá para avançar e voltar) ----------
+let semanaVista = 0; // 0 = esta semana, 1 = a que vem, -1 = a passada…
+let semanaBase = ''; // segunda-feira da semana atual quando a pessoa mudou de semana: virou a semana, volta para a atual
+const segundaDe = (d) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+const maisDias = (d, n) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; };
+const diaMes = (d) => `${d.getDate()}/${pad2(d.getMonth() + 1)}`;
+// Outras telas podem abrir a aba já em outra semana (ex.: o plano de corrida que começa na segunda que vem).
+// Guarda o treino de corrida que o plano está mostrando hoje (e até domingo), para a análise e as semanas passadas
+// compararem com o que a pessoa de fato viu. Só grava quando algo mudou.
+export function guardarCorridaMostrada() {
+  try {
+    if (typeof Corrida.guardarDoDia !== 'function') return;
+    const g = Corrida.guardarDoDia(state, dateKey(new Date()));
+    if (g) update((s) => { if (s.run) { s.run.mostrados = g.mostrados; s.run.degrau = g.degrau; } });
+  } catch { /* segue sem guardar */ }
+}
+export function mostrarSemana(n) { semanaVista = Math.max(-12, Math.min(52, Math.round(Number(n) || 0))); semanaBase = dateKey(segundaDe(new Date())); }
+// Corrida da semana que começa em `segunda` (Date). Devolve { dias[wd], antesDoInicio?, ... } ou null.
+function corridaDaSemana(segunda, n) {
+  try {
+    const hojeK = dateKey(new Date());
+    if (typeof Corrida.planoDaSemanaEm === 'function') return Corrida.planoDaSemanaEm(state, hojeK, dateKey(segunda));
+    if (n === 0) return Corrida.planoDaSemana(state, hojeK);
+    // sem a função por semana: monta com o treino previsto para cada data
+    const atual = Corrida.planoDaSemana(state, hojeK);
+    if (!atual) return null;
+    const dias = new Array(7).fill(null);
+    for (let i = 0; i < 7; i++) {
+      const d = maisDias(segunda, i), k = dateKey(d);
+      const t = Corrida.treinoDoDia(state, hojeK, k);
+      if (t) dias[d.getDay()] = { ...t, data: k, feito: (Array.isArray(state.runs) ? state.runs.find((r) => r && r.data === k) : null) || null };
+    }
+    return { dias };
+  } catch { return null; }
+}
 
 // folha para escolher em que dia da semana fica um treino que ainda não tem dia
 function diaSheet(plan, d) {
@@ -116,8 +152,14 @@ function diaSheet(plan, d) {
 }
 
 export function plansView() {
+  guardarCorridaMostrada();
   const plan = activePlan();
-  const corrida = corridaSemana();
+  const hojeD = new Date();
+  const segundaAtual = segundaDe(hojeD);
+  if (semanaVista !== 0 && semanaBase !== dateKey(segundaAtual)) semanaVista = 0; // a semana virou: volta para a atual
+  const segunda = maisDias(segundaAtual, semanaVista * 7);
+  const corrida = corridaDaSemana(segunda, semanaVista);
+  const corridaAtual = semanaVista === 0 ? corrida : corridaDaSemana(segundaAtual, 0);
   const body = [];
   if (state.current) {
     body.push(h('div', { class: 'card hl row' }, icon('timer', 'accent'), h('div', { class: 'grow' }, h('div', { class: 'bold', text: 'Treino em andamento' }), h('div', { class: 'small muted', text: state.current.nome })), btn('Continuar', () => go('sessao'), 'primary sm')));
@@ -144,8 +186,32 @@ export function plansView() {
     body.push(h('h2', { text: 'Sua semana' }));
   }
 
+  // quem tem corrida: o que priorizar e o fortalecimento (pergunta enquanto falta responder; depois, resumo com "Mudar")
+  { let cc = null; try { cc = cartaoCombinado({ aoMudar: () => refresh() }); } catch { cc = null; } if (cc) body.push(cc); }
+
+  // ---------- qual semana está na tela ----------
+  const ir = (n) => { mostrarSemana(n); refresh(); };
+  const nomeDaSemana = semanaVista === 0 ? 'Esta semana' : semanaVista === 1 ? 'Semana que vem' : semanaVista === -1 ? 'Semana passada' : semanaVista > 0 ? `Daqui a ${semanaVista} semanas` : `Há ${-semanaVista} semanas`;
+  body.push(h('div', { class: 'row between nav-semana' },
+    (() => { const b = iconBtn('back', 'Semana anterior', () => ir(semanaVista - 1), 'soft'); if (semanaVista <= -12) b.disabled = true; return b; })(),
+    h('div', { class: 'center grow', 'aria-live': 'polite' }, h('div', { class: 'bold', text: nomeDaSemana }), h('div', { class: 'small muted', text: `${diaMes(segunda)} a ${diaMes(maisDias(segunda, 6))}` })),
+    (() => { const b = iconBtn('right', 'Próxima semana', () => ir(semanaVista + 1), 'soft'); if (semanaVista >= 52) b.disabled = true; return b; })()));
+  if (semanaVista !== 0) {
+    body.push(h('div', { class: 'note warn', id: 'aviso-outra-semana' }, icon('warn'), h('div', { class: 'grow' },
+      h('div', { text: `Esta não é a semana atual. Você está vendo a semana de ${diaMes(segunda)} a ${diaMes(maisDias(segunda, 6))}.` }),
+      h('div', { class: 'small', text: 'A musculação é a mesma agenda de todas as semanas: trocar um treino aqui vale para todas. Para treinar, volte à semana atual.' }),
+      btn('Voltar para esta semana', () => ir(0), 'sm mt', 'history'))));
+  } else if (corridaAtual && corridaAtual.antesDoInicio && state.run && state.run.inicio) {
+    // o plano de corrida começa numa semana que ainda não chegou: avisa e leva até ela
+    const ini = new Date(state.run.inicio + 'T12:00:00');
+    const n = Math.round((segundaDe(ini).getTime() - segundaAtual.getTime()) / (7 * 86400000));
+    if (n >= 1) body.push(h('div', { class: 'card row', id: 'corrida-comeca' }, icon('run', 'accent'), h('div', { class: 'grow' }, h('div', { class: 'bold', text: `Seu plano de corrida começa ${n === 1 ? 'na semana que vem' : 'em ' + n + ' semanas'}` }), h('div', { class: 'small muted', text: `${DIAS_LONGO[ini.getDay()]}, ${diaMes(ini)}.` })), btn('Ver', () => ir(n), 'sm')));
+  }
+
   // ---------- a semana, um cartão por dia, com corrida e musculação em seções separadas ----------
-  const hojeWd = new Date().getDay();
+  const hojeWd = semanaVista === 0 ? hojeD.getDay() : -1; // em outra semana nenhum dia é "hoje"
+  const dataDe = (wd) => maisDias(segunda, (wd + 6) % 7);
+  const feitoEm = (d, wd) => { const k = dateKey(dataDe(wd)); return state.sessions.some((s) => s.diaId === d.id && dateKey(new Date(s.inicio)) === k); };
   const rotulo = (ic, t, extra) => h('div', { class: 'sec-rot' }, icon(ic, 's'), h('span', { text: t }), extra || null);
   // botão que troca o treino de musculação de um dia (o rótulo diz o dia e o treino atual)
   const chipAgenda = (wd, d) => h('button', { class: 'chip sm' + (d ? ' on' : ''), type: 'button', 'aria-label': `${DIAS_LONGO[wd]}: ${d ? d.nome : 'descanso'}`, onClick: () => agendaSheet(plan, wd) }, d ? 'Trocar' : 'Definir treino');
@@ -156,7 +222,7 @@ export function plansView() {
       wd != null ? chipAgenda(wd, d) : h('button', { class: 'chip sm', type: 'button', onClick: () => diaSheet(plan, d) }, 'Definir dia')),
     h('div', { class: 'row' },
       btn('Editar', () => go(`treino/${plan.id}/${d.id}`), 'ghost grow', 'edit'),
-      btn('Iniciar', () => startSession(plan.id, d.id), 'primary grow', 'play')));
+      semanaVista === 0 || wd == null ? btn('Iniciar', () => startSession(plan.id, d.id), 'primary grow', 'play') : null));
   const blocoCorrida = (c) => h('div', { class: 'treino col gap-s' },
     h('div', { class: 'row top' },
       h('div', { class: 'grow' }, h('h3', { text: String(c.nome || 'Corrida') }), c.resumo ? h('div', { class: 'small muted', text: String(c.resumo) }) : null),
@@ -167,15 +233,23 @@ export function plansView() {
     const d = plan ? plan.dias.find((x) => x.id === plan.agenda[wd]) : null;
     const c = corrida && Array.isArray(corrida.dias) ? corrida.dias[wd] : null;
     const card = h('div', { class: 'card col dia' + (wd === hojeWd ? ' hl' : ''), 'data-wd': String(wd) },
-      h('div', { class: 'row between' }, h('div', { class: 'dia-nome', text: DIAS_LONGO[wd] }), wd === hojeWd ? badge('Hoje', 'acc') : null));
-    if (c) { card.appendChild(rotulo('run', 'Corrida')); card.appendChild(blocoCorrida(c)); }
+      h('div', { class: 'row between' }, h('div', { class: 'dia-nome' }, DIAS_LONGO[wd], h('span', { class: 'small muted', text: ' · ' + diaMes(dataDe(wd)) })), wd === hojeWd ? badge('Hoje', 'acc') : d && feitoEm(d, wd) ? badge('Feito', 'ok') : null));
+    const extras = corrida && Array.isArray(corrida.extras) && Array.isArray(corrida.extras[wd]) ? corrida.extras[wd] : [];
+    if (c || extras.length) card.appendChild(rotulo('run', 'Corrida'));
+    if (c) { card.appendChild(blocoCorrida(c)); if (c.estimado && !c.feito) card.appendChild(h('div', { class: 'tiny muted', text: 'Previsão de hoje para esse dia (o que foi mostrado na época não ficou guardado).' })); }
+    for (const x of extras) {
+      const partes = [x.distKm ? String(x.distKm).replace('.', ',') + ' km' : '', x.durMin ? Math.round(x.durMin) + ' min' : ''].filter(Boolean).join(' · ');
+      card.appendChild(h('div', { class: 'treino row', 'data-extra': String(x.id || '') }, h('div', { class: 'grow' }, h('div', { class: 'bold', text: 'Corrida feita fora do plano' }), h('div', { class: 'small muted', text: partes || 'Registrada neste dia' })), btn('Ver', () => go('corrida/dia/' + x.data), 'sm ghost')));
+    }
     if (plan) {
       card.appendChild(rotulo('dumbbell', 'Musculação', d ? null : chipAgenda(wd, null)));
-      card.appendChild(d ? blocoTreino(d, wd) : h('div', { class: 'small muted', text: c ? 'Sem musculação neste dia.' : 'Descanso.' }));
-    } else if (!c) card.appendChild(h('div', { class: 'small muted', text: 'Descanso.' }));
+      card.appendChild(d ? blocoTreino(d, wd) : h('div', { class: 'small muted', text: c || extras.length ? 'Sem musculação neste dia.' : 'Descanso.' }));
+    } else if (!c && !extras.length) card.appendChild(h('div', { class: 'small muted', text: 'Descanso.' }));
     semana.appendChild(card);
   }
   body.push(semana);
+  // análise do plano: o que ele trabalha mais e menos, para que serve e se combina com o perfil
+  if (plan) { let av = null; try { av = cartaoAvaliacaoDoPlano(plan); } catch { av = null; } if (av) body.push(av); }
 
   if (plan) {
     // treinos do plano que ainda não têm dia da semana
@@ -198,8 +272,8 @@ export function plansView() {
 
   // corrida
   body.push(sectionTitle('Corrida'));
-  body.push(corrida
-    ? h('div', { class: 'card row' }, icon('run', 'accent'), h('div', { class: 'grow' }, h('div', { class: 'bold', text: `Plano de corrida: semana ${corrida.semana} de ${corrida.totalSemanas}` }), corrida.fase ? h('div', { class: 'small muted', text: String(corrida.fase) }) : null), btn('Abrir', () => go('corrida'), 'sm'))
+  body.push(corrida || corridaAtual
+    ? h('div', { class: 'card row' }, icon('run', 'accent'), h('div', { class: 'grow' }, h('div', { class: 'bold', text: corridaAtual && corridaAtual.semana >= 1 && corridaAtual.totalSemanas ? `Plano de corrida: semana ${corridaAtual.semana} de ${corridaAtual.totalSemanas}` : 'Plano de corrida' }), corridaAtual && corridaAtual.fase ? h('div', { class: 'small muted', text: String(corridaAtual.fase) }) : null), btn('Abrir', () => go('corrida'), 'sm'))
     : h('div', { class: 'opts' }, opcaoCorrida()));
 
   // outros planos
@@ -246,6 +320,8 @@ export function dayView(planId, dayId) {
   body.push(h('label', { class: 'field' }, h('span', { text: 'O que este treino trabalha (opcional)' }), foco));
   if (!day.itens.length) body.push(h('div', { class: 'empty' }, icon('dumbbell'), h('p', { text: 'Este treino ainda está vazio. Adicione os exercícios que você quer fazer neste dia.' })));
   else body.push(h('p', { class: 'small muted', text: `${plural(day.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(day)} minutos` }));
+  // análise deste treino (foco, músculo mais e menos trabalhado, para que serve, se serve para o perfil)
+  if (day.itens.length) { let av = null; try { av = cartaoAvaliacaoDoDia(plan, day); } catch { av = null; } if (av) body.push(av); }
 
   day.itens.forEach((it, i) => {
     const ex = EX_POR_ID.get(it.ex);

@@ -7,10 +7,10 @@ import { EQUIPAMENTOS, CATEGORIAS_EQUIP } from '../data/equipment.js';
 import { REFS } from '../data/knowledge.js';
 import { REFS_CORRIDA } from '../data/corrida.js';
 import { REFS_SONO } from '../data/sono.js';
-import { isNativeApp, nativeCall, cancelarAviso } from '../device.js';
-import { canSuggestInstall, openInstall } from '../install.js';
+import { cancelarAviso, avisoDisponivel, avisoPermitido, pedirPermissaoDeAviso, telaLigadaDisponivel } from '../device.js';
+import { canSuggestInstall, openInstall, isIos } from '../install.js';
 
-export const APP_VERSAO = '1.1.0';
+export const APP_VERSAO = '1.2.0';
 
 // ---------- Minha academia ----------
 export function gymView() {
@@ -45,30 +45,28 @@ async function exportar() {
   const nome = `fitcore-backup-${dateKey()}.json`; // data local do aparelho
   try { readBackup(text); } catch { toast('O histórico ficou grande demais para um backup. Fale com o suporte do app.'); return; }
   const marcar = () => update((st) => { st.ui.backupEm = new Date().toISOString(); });
-  if (isNativeApp()) {
-    try {
-      await nativeCall('Aparelho', 'compartilharBackup', { nome, texto: text });
-      marcar(); refresh();
-      return;
-    } catch { /* cai para a cópia manual */ }
-    copiar(text, marcar);
-    return;
-  }
   try {
     const blob = new Blob([text], { type: 'application/json' });
-    const file = typeof File !== 'undefined' ? new File([blob], nome, { type: 'application/json' }) : null;
-    if (file && navigator.canShare && navigator.canShare({ files: [file] }) && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-      await navigator.share({ files: [file], title: 'Backup do FitCore' });
-      marcar(); refresh();
-      return;
+    const noCelular = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || isIos();
+    const candidatos = typeof File !== 'undefined' ? [new File([blob], nome, { type: 'application/json' }), new File([text], nome, { type: 'text/plain' })] : [];
+    const file = noCelular && navigator.canShare ? candidatos.find((f) => { try { return navigator.canShare({ files: [f] }); } catch { return false; } }) : null;
+    if (file) {
+      try {
+        await navigator.share({ files: [file], title: 'Backup do FitCore' });
+        marcar(); refresh();
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return; // a pessoa fechou a folha de compartilhar: não é erro
+        // outro erro: segue para o download
+      }
     }
     const url = URL.createObjectURL(blob);
     const link = h('a', { href: url, download: nome });
     document.body.appendChild(link);
     link.click();
     link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
-    marcar(); toast('Backup salvo na pasta de downloads'); refresh();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    marcar(); toast('Backup gerado. Confira a pasta de downloads; se o arquivo não apareceu, use “Copiar o backup como texto”.'); refresh();
   } catch (e) {
     if (e && e.name === 'AbortError') return;
     copiar(text, marcar);
@@ -93,7 +91,7 @@ function importar() {
     let lido;
     try { lido = readBackup(text); } catch (e) { toast(e.message || 'Não foi possível ler o backup.'); return; }
     const r = lido.resumo;
-    const partes = [`Este backup tem ${plural(r.treinos, 'treino', 'treinos')} no histórico, ${plural(r.corridas || 0, 'corrida', 'corridas')}, ${plural(r.noites || 0, 'noite de sono', 'noites de sono')} e ${plural(r.planos, 'plano', 'planos')}${r.exportadoEm ? `, feito em ${fmtDate(r.exportadoEm, true)}` : ''}.`,
+    const partes = [`Este backup tem ${plural(r.treinos, 'treino', 'treinos')} no histórico, ${plural(r.corridas || 0, 'corrida', 'corridas')}, ${plural(r.noites || 0, 'noite de sono', 'noites de sono')}, ${plural(r.diasDeDiario || 0, 'dia de diário alimentar', 'dias de diário alimentar')}, ${plural(r.dores || 0, 'dor contada', 'dores contadas')} e ${plural(r.planos, 'plano', 'planos')}${r.exportadoEm ? `, feito em ${fmtDate(r.exportadoEm, true)}` : ''}.`,
       `Hoje este aparelho tem ${plural(state.sessions.length, 'treino', 'treinos')}, ${plural(state.runs.length, 'corrida', 'corridas')} e ${plural(state.plans.length, 'plano', 'planos')}, que serão substituídos.`];
     if (state.current) partes.push('O treino em andamento será descartado.');
     if (r.descartados) partes.push(`${plural(r.descartados, 'registro inválido foi ignorado', 'registros inválidos foram ignorados')}.`);
@@ -135,9 +133,14 @@ export function settingsView() {
     linha('Figuras em movimento', 'As demonstrações tocam sozinhas, como um vídeo.', toggle(st.animar !== false, (v) => set('animar', v), 'Figuras em movimento'))));
   body.push(sectionTitle('Durante o treino'));
   body.push(h('div', { class: 'card tight' },
-    linha('Manter a tela ligada', 'Enquanto o treino está aberto.', toggle(st.telaLigada, (v) => set('telaLigada', v), 'Manter a tela ligada')),
-    linha('Som ao fim do descanso', 'Dois bipes.', toggle(st.som, (v) => set('som', v), 'Som ao fim do descanso')),
-    linha('Vibrar ao fim do descanso', 'Só no Android.', toggle(st.vibrar, (v) => set('vibrar', v), 'Vibrar ao fim do descanso'))));
+    telaLigadaDisponivel() ? linha('Manter a tela ligada', isIos() ? 'Enquanto o treino está aberto. Em iPhones com sistema mais antigo pode não funcionar.' : 'Enquanto o treino está aberto.', toggle(st.telaLigada, (v) => set('telaLigada', v), 'Manter a tela ligada')) : linha('Manter a tela ligada', 'Este navegador não oferece esse recurso. Aumente o tempo de bloqueio da tela nas configurações do aparelho.', h('span', { class: 'small muted', text: 'Indisponível' })),
+    linha('Som ao fim do descanso', isIos() ? 'Dois bipes. No iPhone, não toca com o modo silencioso ligado.' : 'Dois bipes.', toggle(st.som, (v) => set('som', v), 'Som ao fim do descanso')),
+    linha('Vibrar ao fim do descanso', isIos() ? 'O iPhone não deixa páginas vibrarem: o aviso é o som e a tela.' : 'Só no Android.', toggle(st.vibrar, (v) => set('vibrar', v), 'Vibrar ao fim do descanso')),
+    // aviso por notificação quando a pessoa troca de aplicativo durante o descanso (só onde o navegador oferece)
+    avisoDisponivel() ? linha('Avisar com o app em segundo plano', isIos() ? 'Notificação ao fim do descanso. No iPhone o sistema pausa o app em segundo plano: o aviso pode atrasar.' : 'Notificação ao fim do descanso, se você trocar de aplicativo.', toggle(!!st.avisoFundo && avisoPermitido(), async (v) => {
+      if (!v) { set('avisoFundo', false); return; }
+      if (await pedirPermissaoDeAviso()) { set('avisoFundo', true); toast('Aviso ligado.'); } else { set('avisoFundo', false); toast('O navegador não deu permissão para notificações. Libere nas configurações do site e tente de novo.'); refresh(); }
+    }, 'Avisar com o app em segundo plano')) : null));
   body.push(h('div', { class: 'card row between' }, h('div', { class: 'grow' }, h('div', { class: 'bold', text: 'Descanso padrão' }), h('div', { class: 'small muted', text: 'Para o treino livre, em segundos.' })), stepper({ value: st.descanso, min: 15, max: 600, step: 15, label: 'Descanso padrão em segundos', cls: 'sm', onChange: (v) => set('descanso', v) })));
 
   body.push(sectionTitle('Seus dados'));
@@ -145,7 +148,9 @@ export function settingsView() {
   body.push(h('div', { class: 'card col' },
     h('div', { class: 'small muted', text: state.ui.backupEm ? `Último backup gerado em ${fmtDate(state.ui.backupEm, true)}` : 'Você ainda não fez nenhum backup.' }),
     btn('Fazer backup agora', exportar, 'block primary', 'download'),
-    btn('Restaurar um backup', importar, 'block', 'upload')));
+    btn('Restaurar um backup', importar, 'block', 'upload'),
+    // caminho que funciona em qualquer aparelho, quando o arquivo não baixa nem compartilha
+    btn('Copiar o backup como texto', async () => { const ok = await confirmSheet({ title: 'Copiar o backup', text: AVISO_BACKUP, okLabel: 'Continuar' }); if (!ok) return; const texto = exportData(); try { readBackup(texto); } catch { toast('O histórico ficou grande demais para um backup.'); return; } copiar(texto, () => update((x) => { x.ui.backupEm = new Date().toISOString(); })); }, 'block plain sm', 'copy')));
   const desfazer = h('div');
   body.push(desfazer);
   previousInfo().then((p) => {
@@ -164,7 +169,6 @@ export function settingsView() {
     if (!ok2) return;
     cancelarAviso();
     const apagou = await resetAll();
-    if (isNativeApp()) nativeCall('Aparelho', 'limparBackups', {}).catch(() => {});
     toast(apagou ? 'Dados apagados' : 'Não foi possível apagar tudo: o armazenamento do aparelho não respondeu. Feche o aplicativo, abra de novo e repita.');
     replace('');
   }, 'block plain danger', 'trash'));
@@ -183,11 +187,11 @@ export function aboutView() {
     'O “Treinador” e a “Nutricionista” do aplicativo são assistentes virtuais que seguem regras fixas. Não são profissionais registrados.',
   ]));
   body.push(bloco('Privacidade e seus dados', [
-    'Tudo o que você registra (treinos, corridas, peso, dores, alimentos de casa e respostas ao Treinador e à Nutricionista) fica guardado somente neste aparelho. O aplicativo não tem cadastro, não envia dados para servidores, não usa anúncios, rastreadores nem serviços de terceiros.',
-    'Como os dados não saem do aparelho, só você tem acesso a eles. O arquivo de backup, quando você decide criá-lo, não tem senha e fica sob sua responsabilidade: guarde-o em lugar seguro, pois contém informações de saúde. No Android, a cópia temporária usada para compartilhar o backup é apagada quando você faz um novo backup ou apaga os dados.',
+    'Tudo o que você registra (treinos, corridas, peso, dores, noites de sono e cochilos, o que você comeu, alimentos de casa e respostas ao Treinador e à Nutricionista) fica guardado somente neste aparelho. O aplicativo não tem cadastro, não envia dados para servidores, não usa anúncios, rastreadores nem serviços de terceiros.',
+    'Como os dados não saem do aparelho, só você tem acesso a eles. O arquivo de backup, quando você decide criá-lo, não tem senha e fica sob sua responsabilidade: guarde-o em lugar seguro, pois contém informações de saúde.',
     'Você pode apagar todos os dados a qualquer momento em Ajustes → Apagar todos os meus dados. Desinstalar o aplicativo ou limpar os dados do navegador também apaga tudo.',
     'O aplicativo funciona sem internet. Na versão aberta ou instalada pelo navegador (iPhone, Android ou computador), a conexão só é usada para baixar o próprio aplicativo e suas atualizações.',
-    'Permissões usadas no Android: vibração e alarme na hora exata, as duas só para avisar o fim do descanso, mesmo com a tela apagada. O aplicativo Android nem sequer pede acesso à internet: o próprio sistema impede qualquer conexão. Nenhuma permissão de localização, câmera, microfone, contatos ou arquivos.',
+    'O aplicativo não pede localização, câmera, microfone nem contatos. A única permissão opcional é a de notificações, para avisar o fim do descanso quando você liga essa opção em Ajustes.',
   ]));
   const refs = h('div', { class: 'col gap-s' });
   // a mesma publicação pode estar nas duas listas: aparece uma vez só

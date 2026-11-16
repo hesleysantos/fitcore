@@ -2,7 +2,7 @@
 // Cada plano é conferido contra as regras de segurança, de progressão e de estrutura, de forma independente da lógica.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PERGUNTAS, respostasCompletas, perfil, gerarPlano, avisosBloqueio, limparRegistro, limparRegistros, limparCorrida, planoDaSemana, resumoParaNutricao, treinoDoDia, expandirBlocos, evolucao, alertas, dicas, efeitoDaDor, somaDias, segundaDe, diaDaSemana, ritmosDe, inicioPara, recordeSeg, diasEntre } from '../www/js/logic/corrida.js';
+import { PERGUNTAS, respostasCompletas, perfil, gerarPlano, avisosBloqueio, limparRegistro, limparRegistros, limparCorrida, planoDaSemana, resumoParaNutricao, treinoDoDia, expandirBlocos, evolucao, alertas, dicas, efeitoDaDor, somaDias, segundaDe, diaDaSemana, ritmosDe, inicioPara, recordeSeg, diasEntre, planejadoDe, analiseDoRegistro, analiseRecente, planoDaSemanaEm, efeitoDoFoco, guardarDoDia, planoAtual } from '../www/js/logic/corrida.js';
 import { TIPOS_TREINO, REFS_CORRIDA, FAQ_CORRIDA, DOR_CORRIDA, FONTES_TELA } from '../www/js/data/corrida.js';
 import { LOCAIS_DOR, TIPOS_DOR } from '../www/js/logic/dor.js';
 
@@ -28,6 +28,8 @@ function respostas(r, fixo = {}) {
   const a = {};
   a.experiencia = fixo.experiencia || um(r, EXP);
   const corre = ['iniciante', 'regular', 'avancado'].includes(a.experiencia);
+  // quem corre de vez em quando, sem regularidade, só informa a corrida mais longa
+  if (a.experiencia === 'irregular') a.longoAtual = inteiro(r, 1, 8);
   if (corre) {
     a.kmSemana = a.experiencia === 'iniciante' ? inteiro(r, 0, 15) : a.experiencia === 'regular' ? inteiro(r, 5, 45) : inteiro(r, 15, 110);
     a.longoAtual = Math.max(1, Math.min(40, Math.round(a.kmSemana * (0.25 + r() * 0.3))));
@@ -68,6 +70,7 @@ const pos = (wd) => (wd + 6) % 7;
 const viz = (a, b) => { const d = Math.abs(pos(a) - pos(b)); return d === 1 || d === 6; };
 const TIPOS_BLOCO = new Set(['aquecer', 'correr', 'caminhar', 'trote', 'forte', 'desaquecer']);
 const numOk = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const ritmoOk = (f) => f && numOk(f.de) && numOk(f.ate) && f.de >= 137 && f.ate <= 600 && f.de <= f.ate;
 
 // Confere um plano contra todas as regras. `adaptado` = plano recalculado com registros (algumas regras da curva original não valem).
@@ -77,7 +80,7 @@ function conferir(p, a, rot, F, adaptado = false) {
   const ehEv = (d) => d.tipo === 'prova' || d.tipo === 'teste';
   const longosMin = [];
   if (!Array.isArray(p.semanas) || p.semanas.length !== p.totalSemanas || p.totalSemanas < 1 || p.totalSemanas > 70) { F.add('número de semanas inválido', rot + ' ' + p.totalSemanas); return; }
-  const nDias = Math.min(new Set(a.dias).size, 6);
+  const nDias = pf.foco ? pf.dias.length : Math.min(new Set(a.dias).size, 6); // com prioridade para a musculação ou para os dois, sobram menos dias de corrida
   let picoKm = 0;
   const longos = [];
   p.semanas.forEach((s, i) => {
@@ -132,6 +135,18 @@ function conferir(p, a, rot, F, adaptado = false) {
       if ((d.tipo === 'prova' || d.tipo === 'teste') && d.distKm > KM[pf.distMax] + 2) F.add('menor de idade com distância acima do limite', `${rot}: ${d.distKm}`);
     }
     if (pf.idade < 14 && s.dias.filter((d) => d.tipo !== 'caminhada' && d.tipo !== 'descanso').length > 3) F.add('menor de 14 com mais de 3 corridas na semana', rot);
+    // quem corre sem regularidade: até 3 corridas por semana, sem ritmo e sem treino forte nas 8 primeiras semanas
+    if (pf.irregular) {
+      if (s.dias.filter(ehCorr).length > 3) F.add('corredor irregular com mais de 3 corridas na semana', `${rot} sem ${w}`);
+      if (s.dias.some((d) => d.ritmo)) F.add('corredor irregular com ritmo prescrito', rot);
+      if (w <= 8 && s.dias.some((d) => d.intensidade === 'forte' && !ehEv(d))) F.add('corredor irregular com treino forte nas 8 primeiras semanas', `${rot} sem ${w}`);
+    }
+    // prioridade escolhida entre corrida e musculação
+    if (pf.foco === 'musculacao' || pf.foco === 'equilibrio') {
+      if (s.dias.filter(ehCorr).length > (pf.foco === 'musculacao' ? 3 : 4)) F.add('foco: corridas demais na semana', `${rot} sem ${w}`);
+      if (s.dias.filter((d) => d.intensidade === 'forte' && !ehEv(d)).length > 1) F.add('foco: mais de 1 treino forte', `${rot} sem ${w}`);
+      if (pf.foco === 'musculacao' && s.dias.some((d) => !ehEv(d) && d.durMin > 42)) F.add('foco na musculação: corrida de mais de 40 min', `${rot} sem ${w}`);
+    }
     if ((pf.jovem || pf.idoso) && fortes.length > 1 && !s.dias.some((d) => d.tipo === 'prova' || d.tipo === 'teste')) F.add('menor de 18 ou 60+ com mais de 1 treino forte', `${rot} sem ${w}`);
     if (pf.nivel === 0 && s.fase === 'adaptacao') {
       const corr = s.dias.filter((d) => d.tipo === 'corrida_caminhada').map((d) => d.wd);
@@ -287,6 +302,27 @@ test('estresse: grade de nível × objetivo × distância × dias × idade × co
   assert.equal(F.m.size, 0, `${n} planos, ${bloqueados} bloqueados\n` + relatorio(F));
 });
 
+test('estresse: prioridade entre corrida e musculação em perfis sorteados', () => {
+  const F = coletor();
+  const r = semente(2024);
+  let n = 0;
+  for (let i = 0; i < 4000; i++) {
+    const a = respostas(r, { condicoes: ['nenhuma'], triagem: ['nenhum'] });
+    const foco = um(r, ['musculacao', 'equilibrio', 'corrida']);
+    const pernas = um(r, [[], [1], [2, 5], [1, 3, 5]]);
+    let p;
+    try { p = gerarPlano(a, { foco, diasPernas: pernas, diasForca: pernas }); } catch (e) { F.add('erro com foco', e.message); continue; }
+    if (!p) continue;
+    n++;
+    if (p.perfil.foco !== foco) F.add('foco não aplicado', foco);
+    conferir(p, a, `foco ${foco} ${a.experiencia}/${a.objetivo}${a.distancia || ''}/${a.dias.join('')}`, F);
+    if (foco === 'corrida' && JSON.stringify(p.semanas) !== JSON.stringify(gerarPlano(a, { diasPernas: pernas, diasForca: pernas }).semanas)) F.add('foco na corrida mudou a corrida', a.experiencia);
+    if (foco !== 'corrida' && p.perfil.nivel >= 1 && !p.ajustes.some((x) => x.refs.length && x.motivo.length > 60)) F.add('foco sem explicação em “O que ajustei”', foco);
+  }
+  assert.ok(n > 2500);
+  assert.equal(F.m.size, 0, relatorio(F));
+});
+
 test('estresse: bloqueios de segurança (idade, sinais de alerta, gestação, pós-parto e doença sem liberação)', () => {
   const r = semente(77);
   for (let i = 0; i < 3000; i++) {
@@ -331,10 +367,14 @@ test('estresse: respostas, opções e registros estranhos não quebram nada', ()
       if (/NaN|Infinity/.test(txt)) F.add('NaN com entrada estranha', JSON.stringify(a).slice(0, 200));
       for (const s of p.semanas) for (const d of s.dias) if (!numOk(d.distKm) || !numOk(d.durMin)) F.add('número inválido com entrada estranha', d.tipo);
     }
-    try { evolucao(registros, '2026-11-12'); alertas(registros, '2026-11-12'); evolucao(um(r, lixo), um(r, lixo)); alertas(um(r, lixo), um(r, lixo)); efeitoDaDor(um(r, lixo)); expandirBlocos(um(r, lixo)); } catch (e) { F.add('erro nas análises com entrada estranha', e.message); }
+    try { evolucao(registros, '2026-11-12'); alertas(registros, '2026-11-12'); evolucao(um(r, lixo), um(r, lixo)); alertas(um(r, lixo), um(r, lixo)); efeitoDaDor(um(r, lixo)); expandirBlocos(um(r, lixo)); planejadoDe(um(r, lixo)); efeitoDoFoco(um(r, lixo), um(r, lixo)); } catch (e) { F.add('erro nas análises com entrada estranha', e.message); }
     try {
       const st = { run: limparCorrida({ answers: a, aceitoEm: '2026-10-20T10:00:00.000Z', inicio: '2026-10-19' }), runs: limparRegistros(registros), dores: [], plans: um(r, lixo), activePlan: um(r, lixo) };
-      planoDaSemana(st, um(r, ['2026-11-12', 'x', null])); resumoParaNutricao(st, '2026-11-12'); treinoDoDia(st, '2026-11-12', um(r, ['2026-11-13', 'x', null, '1999-01-01']));
+      planoDaSemana(st, um(r, ['2026-11-12', 'x', null])); planoDaSemanaEm(st, um(r, ['2026-11-12', 'x', null]), um(r, ['2026-11-09', '2026-10-05', '2031-01-06', 'x', null, 7]));
+      st.combo = um(r, [{ foco: 'musculacao', fortalecimento: 'nao', em: '' }, ...lixo]);
+      analiseRecente(st, um(r, ['2026-11-12', 'x', null])); analiseRecente(um(r, lixo), '2026-11-12');
+      for (const x of [...registros.slice(0, 3), um(r, lixo)]) { const an = analiseDoRegistro(st, '2026-11-12', isObj(x) ? { ...x, plan: um(r, [{ tipo: 'leve', durMin: 30, distKm: 5, ritmo: [350, 380], pse: [2, 4] }, { tipo: 'x' }, ...lixo]) } : x); if (an && (!an.titulo || !Array.isArray(an.itens) || !an.itens.length || typeof an.plano !== 'string' || an.refs.some((k) => !REFS_CORRIDA[k]))) F.add('análise malformada', JSON.stringify(an).slice(0, 200)); }
+      resumoParaNutricao(st, '2026-11-12'); treinoDoDia(st, '2026-11-12', um(r, ['2026-11-13', 'x', null, '1999-01-01']));
       planoDaSemana(um(r, lixo), '2026-11-12'); resumoParaNutricao(um(r, lixo), '2026-11-12');
     } catch (e) { F.add('erro no calendário com entrada estranha', e.message); }
   }
@@ -345,10 +385,12 @@ test('estresse: sanitização rejeita lixo e mantém os limites', () => {
   const r = semente(123);
   const lixo = [null, undefined, 0, -1, 1e99, NaN, Infinity, '', 'x', '<img onerror=x>', [], {}, { a: { b: 1 } }, true, '__proto__', 'constructor', 2026, '2026-13-40', '2026-11-12'];
   for (let i = 0; i < 20000; i++) {
-    const raw = r() < 0.1 ? um(r, lixo) : { id: um(r, ['a1', 'x-y_z', ...lixo]), data: um(r, ['2026-11-12', '2026-02-30', '1800-01-01', '2999-01-01', ...lixo]), tipo: um(r, ['leve', 'longo', 'prova', 'descanso', ...lixo]), distKm: um(r, [5, 0.01, 119.999, 500, -3, ...lixo]), durMin: um(r, [30, 0.04, 899.96, 5000, -3, ...lixo]), pse: um(r, [1, 10, 5.5, 0, 11, ...lixo]), dor: um(r, [{ onde: 'joelho', nivel: 4 }, { onde: 'x', nivel: 4 }, { onde: 'joelho', nivel: 40 }, { onde: 'constructor', nivel: 2 }, ...lixo]), nota: um(r, ['ok', 'n'.repeat(999), ...lixo]), planejado: um(r, ['p'.repeat(999), ...lixo]), extra: { x: 1 } };
+    const raw = r() < 0.1 ? um(r, lixo) : { id: um(r, ['a1', 'x-y_z', ...lixo]), data: um(r, ['2026-11-12', '2026-02-30', '1800-01-01', '2999-01-01', ...lixo]), tipo: um(r, ['leve', 'longo', 'prova', 'descanso', ...lixo]), distKm: um(r, [5, 0.01, 119.999, 500, -3, ...lixo]), durMin: um(r, [30, 0.04, 899.96, 5000, -3, ...lixo]), pse: um(r, [1, 10, 5.5, 0, 11, ...lixo]), dor: um(r, [{ onde: 'joelho', nivel: 4 }, { onde: 'x', nivel: 4 }, { onde: 'joelho', nivel: 40 }, { onde: 'constructor', nivel: 2 }, ...lixo]), nota: um(r, ['ok', 'n'.repeat(999), ...lixo]), planejado: um(r, ['p'.repeat(999), ...lixo]), plan: um(r, [{ tipo: 'leve', durMin: 30.04, distKm: 5, ritmo: [350, 380], pse: [2, 4], x: '<b>' }, { tipo: 'longo', durMin: 1e9, distKm: -1, ritmo: ['a', 2], pse: [5, 2] }, { tipo: '__proto__' }, ...lixo]), extra: { x: 1 } };
     const x = limparRegistro(raw);
     if (x === null) continue;
-    assert.deepEqual(Object.keys(x).sort(), ['data', 'distKm', 'dor', 'durMin', 'id', 'nota', 'planejado', 'pse', 'tipo']);
+    // `plan` (o treino que estava no plano) só existe quando é válido
+    assert.deepEqual(Object.keys(x).filter((k) => k !== 'plan').sort(), ['data', 'distKm', 'dor', 'durMin', 'id', 'nota', 'planejado', 'pse', 'tipo']);
+    if ('plan' in x) assert.ok(TIPOS_TREINO[x.plan.tipo] && Object.keys(x.plan).length === 6 && ['t', 'd'].includes(x.plan.un) && x.plan.durMin >= 0 && x.plan.durMin <= 900 && x.plan.distKm >= 0 && x.plan.distKm <= 120 && (x.plan.ritmo === null || (x.plan.ritmo.length === 2 && x.plan.ritmo.every(Number.isInteger))) && (x.plan.pse === null || x.plan.pse.every((n) => Number.isInteger(n) && n >= 0 && n <= 10)));
     assert.match(x.id, /^[A-Za-z0-9_-]{1,40}$/); assert.notEqual(x.id, '__proto__'); assert.notEqual(x.id, 'constructor');
     assert.match(x.data, /^\d{4}-\d{2}-\d{2}$/);
     assert.ok(x.distKm >= 0 && x.distKm <= 120 && x.durMin >= 0 && x.durMin <= 900 && (x.distKm > 0 || x.durMin > 0));
@@ -359,8 +401,10 @@ test('estresse: sanitização rejeita lixo e mantém os limites', () => {
     assert.ok(typeof x.nota === 'string' && x.nota.length <= 200 && typeof x.planejado === 'string' && x.planejado.length <= 160);
   }
   for (let i = 0; i < 2000; i++) {
-    const c = limparCorrida(r() < 0.2 ? um(r, lixo) : { answers: r() < 0.5 ? respostas(r) : um(r, lixo), aceitoEm: um(r, ['2026-11-02T10:00:00.000Z', ...lixo]), inicio: um(r, ['2026-11-05', ...lixo]), pausas: um(r, [[{ de: '2026-11-06', ate: '2026-11-30', semanas: 3 }, { de: 'x', ate: 5 }, 7], ...lixo]), pausadoEm: um(r, ['2026-11-09T10:00:00.000Z', ...lixo]), cron: um(r, [{ data: '2026-11-10', i: 2, fim: 1794000000000, pausadoEm: 0, inicio: 1793999000000, parado: 0, inicioPasso: 1793999500000, terminado: 0, chave: 77 }, { data: '2026-11-10', i: -3, fim: 'x' }, { data: 'x', i: 1e99 }, ...lixo]), x: 1 });
-    assert.deepEqual(Object.keys(c).sort(), ['aceitoEm', 'answers', 'cron', 'inicio', 'pausadoEm', 'pausas']);
+    const c = limparCorrida(r() < 0.2 ? um(r, lixo) : { answers: r() < 0.5 ? respostas(r) : um(r, lixo), aceitoEm: um(r, ['2026-11-02T10:00:00.000Z', ...lixo]), inicio: um(r, ['2026-11-05', ...lixo]), pausas: um(r, [[{ de: '2026-11-06', ate: '2026-11-30', semanas: 3 }, { de: 'x', ate: 5 }, 7], ...lixo]), pausadoEm: um(r, ['2026-11-09T10:00:00.000Z', ...lixo]), mostrados: um(r, [[{ data: '2026-11-06', tipo: 'leve', nome: 'n'.repeat(99), resumo: 5, durMin: 1e9 }, { data: '2026-11-06', tipo: '__proto__' }, { data: 'x' }, 7], ...lixo]), degrau: um(r, [{ pontos: 2, base: 'entrevista' }, { pontos: 2.5, base: 'x' }, { pontos: 99, base: '2026-11-01' }, ...lixo]), cron: um(r, [{ data: '2026-11-10', i: 2, fim: 1794000000000, pausadoEm: 0, inicio: 1793999000000, parado: 0, inicioPasso: 1793999500000, terminado: 0, chave: 77 }, { data: '2026-11-10', i: -3, fim: 'x' }, { data: 'x', i: 1e99 }, ...lixo]), x: 1 });
+    assert.deepEqual(Object.keys(c).sort(), ['aceitoEm', 'answers', 'cron', 'degrau', 'inicio', 'mostrados', 'pausadoEm', 'pausas']);
+    assert.ok(Array.isArray(c.mostrados) && c.mostrados.length <= 400 && c.mostrados.every((m) => Object.keys(m).length === 9 && /^\d{4}-\d{2}-\d{2}$/.test(m.data) && (m.tipo === '' || TIPOS_TREINO[m.tipo]) && m.nome.length <= 60 && m.resumo.length <= 160) && (c.inicio !== '' || !c.mostrados.length));
+    assert.ok(c.degrau === null || (c.inicio !== '' && Number.isInteger(c.degrau.pontos) && c.degrau.pontos >= 1 && c.degrau.pontos <= 10));
     assert.ok(Array.isArray(c.pausas) && c.pausas.length <= 20 && c.pausas.every((p) => Object.keys(p).length === 3 && p.de <= p.ate && Number.isInteger(p.semanas) && p.semanas >= 0 && p.semanas * 7 <= diasEntre(p.de, p.ate)) && (c.inicio !== '' || !c.pausas.length));
     assert.ok(c.cron === null || (Object.keys(c.cron).length === 9 && c.inicio !== '' && Object.values(c.cron).every((v) => typeof v === 'string' || (Number.isInteger(v) && v >= 0))));
     assert.ok(c.inicio === '' || (diaDaSemana(c.inicio) === 1 && c.aceitoEm !== ''));
@@ -409,7 +453,7 @@ test('estresse: acompanhamento simulado por 10 semanas, com faltas, esforço var
       if (pausaEm && w >= pausaEm && w < pausaEm + 3) continue; // semanas paradas
       for (const d of s.dias) {
         if (d.tipo === 'descanso' || r() > aderencia) continue;
-        registros.push({ id: `s${i}w${w}d${d.wd}`, data: somaDias(hoje, pos(d.wd)), tipo: d.tipo, distKm: d.distKm, durMin: d.durMin, pse: Math.max(1, Math.min(10, Math.round((d.pse[0] + d.pse[1]) / 2) + esforco)), dor: r() < 0.05 ? { onde: 'joelho', nivel: inteiro(r, 1, 6) } : null, nota: '', planejado: d.resumo });
+        registros.push({ id: `s${i}w${w}d${d.wd}`, data: somaDias(hoje, pos(d.wd)), tipo: d.tipo, distKm: d.distKm, durMin: d.durMin, pse: Math.max(1, Math.min(10, Math.round((d.pse[0] + d.pse[1]) / 2) + esforco)), plan: planejadoDe(d), dor: r() < 0.05 ? { onde: 'joelho', nivel: inteiro(r, 1, 6) } : null, nota: '', planejado: d.resumo });
       }
     }
   }
@@ -499,4 +543,78 @@ test('base de conhecimento: toda fonte citada existe e toda fonte é usada', () 
   const sobrando = Object.keys(REFS_CORRIDA).filter((k) => !usadas.has(k));
   // toda fonte da lista tem de ser citada em algum texto que a pessoa vê
   assert.deepEqual(sobrando, [], 'referências sem uso');
+});
+
+// ---------- análise do treino feito: propriedades em pares sorteados e em cenários vividos dia a dia ----------
+test('estresse: análise do treino feito — selo coerente, excesso nunca tranquilizado, correr a mais nunca aumenta o plano', () => {
+  const F = coletor();
+  const r = semente(909);
+  const inicio = '2026-09-07';
+  const reg = (id, data, tipo, distKm, durMin, pse) => ({ id, data, tipo, distKm, durMin, pse, dor: null, nota: '', planejado: '' });
+  const corr = (d) => d.tipo !== 'caminhada' && d.tipo !== 'descanso';
+  const estado = (a) => ({ run: limparCorrida({ answers: a, aceitoEm: inicio + 'T12:00:00.000Z', inicio }), runs: [], dores: [], plans: [], activePlan: '' });
+  // 1) pares planejado × feito sorteados
+  const tipos = ['leve', 'longo', 'regenerativo', 'fartlek', 'tempo', 'intervalado', 'tiros', 'progressivo', 'ritmo', 'corrida_caminhada', 'prova', 'teste', 'caminhada', 'descanso'];
+  const st = estado(base);
+  for (let i = 0; i < 30000; i++) {
+    const tipo = um(r, tipos), un = um(r, ['t', 'd']);
+    const pse0 = inteiro(r, 1, 8);
+    const plan = { tipo, durMin: um(r, [0, 20, 30, 45, 60, 90, 150]), distKm: um(r, [0, 3, 5, 8, 12, 21.1]), un, ritmo: r() < 0.5 ? [330 + inteiro(r, 0, 60), 400 + inteiro(r, 0, 80)] : null, pse: r() < 0.9 ? [pse0, Math.min(10, pse0 + inteiro(r, 0, 2))] : null };
+    const fq = um(r, [0.3, 0.7, 0.95, 1, 1.1, 1.3, 1.7, 2, 3.2]);
+    const feito = reg('q', somaDias(inicio, 40), um(r, [tipo === 'descanso' ? 'leve' : tipo, 'leve', 'livre', 'intervalado', 'caminhada']), r() < 0.8 ? Math.round(plan.distKm * fq * 10) / 10 : 0, r() < 0.8 ? Math.round(plan.durMin * fq) : 0, r() < 0.8 ? inteiro(r, 1, 10) : null);
+    if (!feito.distKm && !feito.durMin) continue;
+    const hist = r() < 0.5 ? [reg('h', somaDias(inicio, 30), 'leve', um(r, [3, 6, 10, 18]), um(r, [20, 40, 65, 110]), 3)] : [];
+    let a;
+    try { a = analiseDoRegistro({ ...st, runs: hist }, somaDias(inicio, 40), { ...feito, plan }); } catch (e) { F.add('erro na análise', e.message); continue; }
+    if (!a) continue;
+    const rot = JSON.stringify({ plan, feito, hist: hist.length, selo: a.selo, itens: a.itens.map((x) => x.tom + ':' + x.texto.slice(0, 50)) }).slice(0, 600);
+    if (!['dentro', 'acima', 'abaixo', 'livre', 'sem'].includes(a.selo) || !a.titulo || !a.itens.length || !a.plano || a.refs.some((k) => !REFS_CORRIDA[k])) F.add('análise malformada', rot);
+    if (a.selo === 'dentro' && (a.itens.some((x) => x.tom === 'warn') || a.plano !== 'Nada muda no plano.')) F.add('“Dentro do plano” com alerta ou com mudança no plano', rot);
+    if (a.selo !== 'livre' && a.itens.some((x) => x.tom === 'warn') && a.selo !== 'acima') F.add('alerta sem selo “Acima do plano”', rot);
+    if (a.selo === 'dentro' && a.itens.some((x) => /mais rápido que a faixa|a mais que|a menos que|bem acima|ficou menor|não foi completada/.test(x.texto))) F.add('“Dentro do plano” com desvio no texto', rot);
+    // excesso de 60% ou mais sobre o planejado e sobre o histórico nunca recebe "não é um salto"
+    const f = plan.un === 't' ? feito.durMin : feito.distKm, p = plan.un === 't' ? plan.durMin : plan.distKm, h = hist.length ? (plan.un === 't' ? hist[0].durMin : hist[0].distKm) : 0;
+    if (p > 0 && f >= p * 1.6 && f > h * 1.15 && feito.tipo !== 'caminhada' && tipo !== 'prova' && tipo !== 'teste' && tipo !== 'descanso' && a.itens.some((x) => x.tom === 'ok' && /salto|acréscimo/.test(x.texto))) F.add('excesso grande tranquilizado', rot);
+    // plano por tempo e registro sem tempo (ou por distância sem distância): nada de excesso por estimativa
+    if (!f && /a mais que o planejado|a menos que o planejado/.test(a.itens.map((x) => x.texto).join(' '))) F.add('comparação por estimativa, fora da unidade do plano', rot);
+    if (plan.un === 'd' && a.itens.some((x) => /Duração dentro/.test(x.texto))) F.add('texto de duração em treino por distância', rot);
+  }
+  // 2) cenários vividos: plano cortado por semanas fracas, depois uma semana com o mostrado ou com excesso
+  const viver = (s0, de, ate, fator) => {
+    let s = s0;
+    for (let k = 0; somaDias(de, k) < ate; k++) {
+      const hoje = somaDias(de, k);
+      const g = guardarDoDia(s, hoje);
+      if (g) s = { ...s, run: { ...s.run, ...g } };
+      const t = treinoDoDia(s, hoje, hoje);
+      if (t && corr(t)) s = { ...s, runs: [...s.runs, { ...reg('v' + hoje, hoje, t.tipo, Math.round(t.distKm * fator * 10) / 10, Math.round(t.durMin * fator), 3), plan: planejadoDe(t) }] };
+    }
+    const g = guardarDoDia(s, ate);
+    return g ? { ...s, run: { ...s.run, ...g } } : s;
+  };
+  let cenarios = 0;
+  for (let i = 0; i < 300 && cenarios < 25; i++) {
+    const a = respostas(r, { condicoes: ['nenhuma'], triagem: ['nenhum'], idade: um(r, [24, 38, 47]), experiencia: um(r, ['iniciante', 'regular', 'avancado']) });
+    if (a.objetivo === 'prova') a.semanasProva = 16;
+    const p = gerarPlano(a);
+    if (!p || p.tipo !== 'geral' || p.totalSemanas < 8) continue;
+    cenarios++;
+    const corte = um(r, [0.5, 0.7, 1]), exc = um(r, [1.5, 2.2, 3]);
+    const fraco = viver(estado(a), inicio, somaDias(inicio, 21), corte);
+    const exato = viver(fraco, somaDias(inicio, 21), somaDias(inicio, 28), 1), excesso = viver(fraco, somaDias(inicio, 21), somaDias(inicio, 28), exc);
+    for (const k of [4, 5]) {
+      const hoje = somaDias(inicio, k * 7);
+      const pe = planoAtual(k === 4 ? exato : viver(exato, somaDias(inicio, 28), hoje, 1), hoje), px = planoAtual(k === 4 ? excesso : viver(excesso, somaDias(inicio, 28), hoje, 1), hoje);
+      const lg = (q) => Math.max(0, ...q.semanas[k].dias.filter((d) => d.tipo === 'longo').map((d) => d.distKm));
+      if (px.semanas[k].volumeKm > pe.semanas[k].volumeKm + 0.2 || lg(px) > lg(pe) + 0.1) F.add('correr a mais aumentou uma semana seguinte', `${a.experiencia}/${a.objetivo} corte ${corte} excesso ${exc} semana ${k + 1}: ${px.semanas[k].volumeKm} > ${pe.semanas[k].volumeKm}`);
+    }
+    // semana passada: o que a tela mostrou em cada dia é o que aparece depois
+    const depois = somaDias(inicio, 35);
+    for (const m of exato.run.mostrados.filter((x) => x.data < somaDias(inicio, 28))) {
+      const t = treinoDoDia(exato, depois, m.data);
+      if ((m.tipo === '') !== (t === null) || (t && (t.tipo !== m.tipo || t.distKm !== m.distKm || !t.guardado))) F.add('dia passado diferente do que a tela mostrou', m.data);
+    }
+  }
+  assert.ok(cenarios >= 20, String(cenarios));
+  assert.equal(F.m.size, 0, relatorio(F));
 });

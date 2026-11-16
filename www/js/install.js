@@ -7,7 +7,6 @@ import { refresh } from './router.js';
 let deferred = null;
 let installedNow = false;
 
-export const isNative = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 export const isStandalone = () => (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
 export const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isIosSafari = () => isIos() && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent);
@@ -19,7 +18,7 @@ export function initInstall() {
 }
 
 export function canSuggestInstall() {
-  if (isNative() || isStandalone() || installedNow) return false;
+  if (isStandalone() || installedNow) return false;
   return true;
 }
 function dismissedRecently() {
@@ -44,8 +43,8 @@ export function openInstall() {
   if (isIos()) {
     const s = sheet({
       title: 'Instalar o FitCore no iPhone',
-      body: [why, ...iosSteps(), h('div', { class: 'note warn' }, icon('warn'), h('div', { text: 'Instale antes de registrar treinos: no iPhone, os dados do navegador e os do aplicativo instalado ficam separados.' }))],
-      footer: [btn('Agora não', () => { dismiss(); s.close(); }, 'ghost'), btn('Entendi', () => s.close(), 'primary')],
+      body: [why, ...iosSteps(), h('div', { class: 'note warn' }, icon('warn'), h('div', { text: 'Instale antes de registrar treinos: no iPhone, os dados do navegador e os do aplicativo instalado ficam separados, e o Safari pode apagar os dados de um site que fica 7 dias sem ser aberto. Instalado na Tela de Início, isso não acontece.' }))],
+      footer: [btn('Agora não', () => { dismiss(); s.close(); }, 'ghost'), btn('Entendi', () => { dismiss(); s.close(); }, 'primary')],
     });
     return;
   }
@@ -70,7 +69,7 @@ export function openInstall() {
     body: [why, h('div', { class: 'ios-steps' },
       h('div', { class: 'st' }, h('span', { class: 'n', text: '1' }), h('div', null, 'Abra o menu do navegador ', h('b', { text: '(⋮)' }))),
       h('div', { class: 'st' }, h('span', { class: 'n', text: '2' }), h('div', null, 'Toque em ', h('b', { text: isAndroid() ? 'Adicionar à tela inicial' : 'Instalar aplicativo' }))))],
-    footer: [btn('Agora não', () => { dismiss(); s.close(); }, 'ghost'), btn('Entendi', () => s.close(), 'primary')],
+    footer: [btn('Agora não', () => { dismiss(); s.close(); }, 'ghost'), btn('Entendi', () => { dismiss(); s.close(); }, 'primary')],
   });
 }
 
