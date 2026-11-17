@@ -91,8 +91,18 @@ test('diário alimentar segue as proteções da tela: calorias para adultos, só
   const ta = estado({ nutri: { answers: { condicoes: ['transtorno'] } } });
   assert.equal(planilha(ta, 'diario', HOJE), null);
   assert.ok(!planilhasDisponiveis(ta).some((x) => x.id === 'diario'));
-  assert.deepEqual(planilhasDisponiveis(estado()).map((x) => [x.id, x.linhas]), [['musculacao', 6], ['corridas', 2], ['peso', 3], ['sono', 3], ['diario', 2], ['dores', 2]]);
-  assert.equal(TIPOS_PLANILHA.length, 6);
+  assert.deepEqual(planilhasDisponiveis(estado()).map((x) => [x.id, x.linhas]), [['musculacao', 6], ['corridas', 2], ['peso', 3], ['sono', 3], ['diario', 2], ['dores', 2], ['saude', 0]]);
+  assert.equal(TIPOS_PLANILHA.length, 7);
+});
+
+test('problemas de saúde fora do treino: planilha e resumo', () => {
+  const st = { saudeFora: [{ id: 'a1', data: '2026-03-02', tipo: 'pancada', onde: 'joelho', grau: 'moderada', fim: '2026-03-05' }, { id: 'a2', data: '2026-03-04', tipo: 'febre' }] };
+  const l = ler(planilha(st, 'saude', HOJE).texto);
+  assert.deepEqual(l[0], ['Data', 'Problema', 'Local', 'Intensidade', 'Avaliado em', 'Melhorou em']);
+  assert.equal(l.length, 3);
+  assert.equal(l[1][2], 'Joelho');
+  const r = montarResumo(st, { dias: 0, hoje: HOJE });
+  assert.equal(r.saude.length, 2);
 });
 
 test('estado vazio ou estranho não quebra as planilhas nem o resumo', () => {

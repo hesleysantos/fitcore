@@ -6,12 +6,14 @@ import { PERGUNTAS as P_TREINO } from './logic/trainer.js';
 import { PERGUNTAS as P_NUTRI, limparEmCasa, limparAjustes } from './logic/nutrition.js';
 import { parValido } from './logic/objetivos.js';
 import { limparDores } from './logic/dor.js';
+import { limparSaudeFora } from './logic/saude-fora.js';
 import { limparCorrida, limparRegistros } from './logic/corrida.js';
 import { limparSono, sonoPadrao } from './logic/sono.js';
 import { limparCombo, comboPadrao, chaveValida } from './logic/combinado.js';
 import { limparDiario, diarioPadrao } from './logic/diario.js';
 import { diaValido } from './logic/saude.js';
 import { limparPerdidos } from './logic/perdido.js';
+import { limparEsteira } from './logic/esteira.js';
 
 const DB_NAME = 'fitcore';
 const STORE = 'kv';
@@ -39,9 +41,11 @@ const defaults = () => ({
   nutri: { answers: {}, calculadoEm: '', seed: 0, emCasa: [], soCasa: false, ajustes: {} },
   body: [],
   // Treinador de corrida (logic/corrida.js): entrevista e plano aceito; runs = corridas registradas
-  run: { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [], mostrados: [], degrau: null },
+  // esteira: dias em que a corrida do plano vai para a esteira (logic/esteira.js)
+  run: { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [], mostrados: [], degrau: null, esteira: [] },
   runs: [],
   dores: [], // dores contadas ao Treinador (logic/dor.js); valem para musculação e corrida
+  saudeFora: [], // problemas de saúde que não vêm do treino: febre, pancada, corte... (logic/saude-fora.js)
   sono: sonoPadrao(), // meta de sono e noites registradas (logic/sono.js)
   combo: comboPadrao(), // corrida + musculação: foco e fortalecimento (logic/combinado.js)
   diario: diarioPadrao(), // diário alimentar: o que a pessoa comeu de fato (logic/diario.js)
@@ -218,10 +222,12 @@ export function sanitize(raw, { doAparelho = false } = {}) {
   const dias = new Set();
   d.body = arr(raw.body, 3000, cleanBody).filter((b) => (dias.has(b.data) ? false : dias.add(b.data))).sort((a, b) => (a.data < b.data ? -1 : 1));
   d.dores = limparDores(raw.dores);
+  d.saudeFora = limparSaudeFora(raw.saudeFora);
   d.sono = limparSono(raw.sono, undefined, semCorte);
   d.combo = limparCombo(raw.combo);
   d.diario = limparDiario(raw.diario, undefined, semCorte);
   d.run = limparCorrida(raw.run);
+  d.run.esteira = limparEsteira(isObj(raw.run) ? raw.run.esteira : null); // só datas válidas e recentes (logic/esteira.js)
   d.runs = limparRegistros(raw.runs); // até 3000 registros, sem id repetido
   d.perdidos = limparPerdidos(raw.perdidos);
   const u = isObj(raw.ui) ? raw.ui : {};

@@ -240,7 +240,8 @@ function perguntaMotivo(P, ref) {
 const TROCAR = {
   id: 'nutri-trocar', coach: 'nutri', titulo: 'Trocar uma refeição do cardápio', resumo: 'trocar uma refeição do cardápio',
   palavras: ['trocar alimento', 'trocar refeicao', 'trocar cardapio', 'troca cardapio', 'trocar almoco', 'trocar jantar', 'trocar lanche', 'trocar cafe da manha', 'trocar ceia', 'mudar almoco', 'mudar jantar',
-    'substituir', 'substituto', 'substituicao', 'outra opcao', 'nao gosto', 'nao gostei', 'odeio', 'nao tenho em casa', 'acabou', 'faltou', 'alergia', 'alergico', 'alergica', 'nao posso comer', 'intolerancia'],
+    'substituir', 'substituto', 'substituicao', 'outra opcao', 'nao gosto', 'nao gostei', 'odeio', 'nao tenho em casa', 'acabou', 'faltou', 'alergia', 'alergico', 'alergica', 'nao posso comer', 'intolerancia',
+    'acabou+casa', 'nao tem+casa', 'trocar janta', 'mudar janta', 'outra coisa almoco', 'outra coisa jantar', 'nao curto', 'detesto', 'enjoei', 'nao tem em casa', 'trocar refeicao hoje'],
   // quem não tem cardápio (modo educativo) não troca refeição; sem entrevista, o assunto convida a responder
   disponivel: (ctx) => { const P = perfilNutri(ctx); return !P.res || P.res.modo !== 'educativo'; },
   inicio: (ctx) => {
@@ -261,8 +262,9 @@ const TROCAR = {
 // ---------- comi fora do plano ----------
 const EXAGEREI = {
   id: 'nutri-exagerei', coach: 'nutri', titulo: 'Comi fora do plano', resumo: 'ter comido fora do plano',
-  palavras: ['!exagerei', '!exagero', 'exagerar', 'comi demais', 'comi muito', 'comi besteira', 'sai da dieta', 'fugi da dieta', 'furei a dieta', 'chutei o balde', 'jaquei', 'pe na jaca', 'fora do plano',
-    'passei da meta', 'estourei', 'comi doce', 'comi pizza', 'comi lanche', 'rodizio', 'festa', 'churrasco', 'aniversario', 'compensar', 'culpa', 'culpado', 'culpada', 'arrependido', 'arrependida'],
+  palavras: ['!exagerei', '!exagero', 'exagerar', 'comi demais', 'comi muito', 'comi besteira', 'sai da dieta', 'fugi da dieta', 'furei a dieta', 'chutei o balde', 'pe na jaca', 'fora do plano',
+    'passei da meta', 'estourei', 'comi doce', 'comi pizza', 'comi lanche', 'rodizio', 'festa', 'churrasco', 'aniversario', 'compensar', 'culpa', 'culpado', 'culpada', 'arrependido', 'arrependida',
+    '!jaquei', 'enfiei o pe na jaca', 'comi hamburguer', 'comi chocolate', 'comi bolo', 'comi besteira ontem', 'fim de semana comi', 'final de semana comi', 'sai dieta', 'comilanca', 'larica', 'atacar geladeira'],
   inicio: (ctx) => {
     const P = perfilNutri(ctx);
     return {
@@ -356,7 +358,8 @@ function passoMeta(P, qual) {
 const METAS = {
   id: 'nutri-metas', coach: 'nutri', titulo: 'Quanto comer de proteína e água', resumo: 'as suas metas de proteína, água e refeições',
   palavras: ['quanto de proteina', 'quanta proteina', 'proteina por dia', 'gramas de proteina', 'meta de proteina', 'quanto de agua', 'quanta agua', 'litros de agua', 'agua por dia', 'beber agua', 'hidratacao',
-    'quantas refeicoes', 'numero de refeicoes', 'refeicoes por dia', 'quanto devo comer', 'quanto comer', 'minhas metas', 'minha meta', 'calorias por dia', 'quantas calorias', 'meta de calorias', 'macros', 'macronutrientes'],
+    'quantas refeicoes', 'numero de refeicoes', 'refeicoes por dia', 'quanto devo comer', 'quanto comer', 'minhas metas', 'minha meta', 'calorias por dia', 'quantas calorias', 'meta de calorias', 'macros', 'macronutrientes',
+    'quanto beber', 'quantos litros', 'quanta agua beber', 'beber quanto', 'meta agua', 'meta proteina', 'proteina preciso', 'quanto proteina', 'quantas gramas proteina', 'kcal'],
   inicio: (ctx) => {
     const P = perfilNutri(ctx);
     if (!P.res) return convite('Para eu calcular as suas metas, responda primeiro à entrevista da Nutricionista.');
@@ -446,8 +449,11 @@ export function alimentoNoTexto(texto) {
 }
 const ALIMENTO = {
   id: 'nutri-alimento', coach: 'nutri', titulo: 'Dúvida sobre um alimento', resumo: 'uma dúvida sobre um alimento',
+  // um alimento conhecido com uma dúvida sobre ele ("tapioca engorda?", "cuscuz é saudável?")
+  bonus: (i) => (/\b(engorda\w*|emagrece\w*|saudavel|faz mal|faz bem|posso comer|pode comer|e bom|e ruim|liberado|pode tomar|posso tomar)\b/.test(i.texto) && !/\b(creatina|whey|cafeina|suplement\w*|pre treino|termogenic\w*|bcaa|glutamina|albumina)\b/.test(i.texto) && alimentoNoTexto(i.texto) ? 2 : 0),
   palavras: ['posso comer', 'pode comer', 'engorda', 'emagrece', 'faz mal', 'faz bem', 'porcao', 'tamanho da porcao', 'quanto de arroz', 'quanto de feijao', 'quanto de carne', 'quanto de pao', 'medida caseira',
-    'e saudavel', 'ultraprocessado', 'industrializado', 'pao', 'arroz', 'feijao', 'ovo', 'banana', 'refrigerante', 'chocolate', 'doces', 'tapioca', 'cuscuz', 'pizza', 'acai'],
+    'saudavel', 'ultraprocessado', 'industrializado', 'pao', 'arroz', 'feijao', 'ovo', 'banana', 'refrigerante', 'chocolate', 'doces', 'tapioca', 'cuscuz', 'pizza', 'acai',
+    'faz mal comer', 'e ruim', 'tem problema comer', 'liberado', 'pode tomar', 'leite', 'queijo', 'macarrao', 'batata', 'frango', 'carne', 'fruta', 'iogurte', 'granola', 'aveia', 'mel', 'suco', 'cerveja', 'pao integral'],
   inicio: (ctx) => {
     const P = perfilNutri(ctx);
     const f = isObj(ctx) && typeof ctx.texto === 'string' ? alimentoNoTexto(ctx.texto) : null;
@@ -531,7 +537,8 @@ function passoJejum(P) {
 const TREINO = {
   id: 'nutri-treino', coach: 'nutri', titulo: 'O que comer antes e depois do treino', resumo: 'o que comer antes e depois do treino',
   palavras: ['antes do treino', 'depois do treino', 'pos treino', 'comer antes de treinar', 'comer depois de treinar', 'o que comer antes', 'o que comer depois', 'antes de correr', 'depois de correr',
-    'durante a corrida', 'gel de carboidrato', 'gel', 'janela anabolica', 'treinar em jejum', 'treino em jejum', 'correr em jejum', 'refeicao pre treino', 'refeicao pos treino'],
+    'durante a corrida', 'gel de carboidrato', 'gel', 'janela anabolica', 'treinar em jejum', 'treino em jejum', 'correr em jejum', 'refeicao pre treino', 'refeicao pos treino',
+    'antes de malhar', 'depois de malhar', 'antes da academia', 'depois da academia', 'comer antes', 'comer depois', 'treinar sem comer', 'correr sem comer', 'antes da corrida', 'depois da corrida'],
   inicio: (ctx) => {
     const P = perfilNutri(ctx);
     return {
@@ -589,7 +596,7 @@ function passoSuplemento(P, qual) {
 }
 const SUPLEMENTOS = {
   id: 'nutri-suplementos', coach: 'nutri', titulo: 'Suplementos: creatina, whey, cafeína', resumo: 'suplementos',
-  palavras: ['!suplemento', '!suplementos', '!creatina', '!whey', 'creatina+mal', 'whey+mal', 'proteina em po', '!cafeina', 'pre treino', '!termogenico', 'queimador', 'bcaa', 'glutamina', 'beta alanina', 'multivitaminico', 'vitamina d',
+  palavras: ['!suplemento', '!suplementos', '!creatina', '!whey', 'creatina+mal', 'whey+mal', 'cafeina+mal', 'suplemento+mal', 'proteina em po', '!cafeina', 'pre treino', '!termogenico', 'queimador', 'bcaa', 'glutamina', 'beta alanina', 'multivitaminico', 'vitamina d',
     'ferro', 'bicarbonato', 'nitrato', 'albumina', 'hipercalorico', 'energetico', 'tribulus', 'anabolizante'],
   inicio: (ctx) => {
     const P = perfilNutri(ctx);
@@ -629,7 +636,8 @@ function passoPratico(P, qual) {
 const PRATICO = {
   id: 'nutri-pratico', coach: 'nutri', titulo: 'Sem fome, sem tempo ou comendo fora', resumo: 'falta de fome, de tempo ou comer fora de casa',
   palavras: ['sem fome', 'nao tenho fome', 'sem apetite', 'falta de apetite', 'sem tempo', 'nao tenho tempo', 'correria', 'sem tempo para cozinhar', 'nao sei cozinhar', 'cozinhar', 'marmita',
-    'comer fora', 'vou comer fora', 'restaurante', 'lanchonete', 'almoco fora', 'comida a quilo', 'self service', 'fast food', 'delivery', 'pedir comida', 'viagem', 'viajar'],
+    'comer fora', 'vou comer fora', 'restaurante', 'lanchonete', 'almoco fora', 'comida a quilo', 'self service', 'fast food', 'delivery', 'pedir comida', 'viagem', 'viajar', '!restaurante', '!lanchonete', 'almocar fora', 'jantar fora', 'almocar restaurante', 'comer restaurante',
+    'fome nenhuma', 'nao consigo comer muito', 'trabalho fora', 'marmita trabalho', 'ifood', 'lanche rua', 'sem tempo comer'],
   inicio: (ctx) => {
     const P = perfilNutri(ctx);
     return {
@@ -745,4 +753,40 @@ const APOIO = {
   inicio: (ctx) => passoDeRisco(['geral'], ctx),
 };
 
-export const INTENCOES = [TROCAR, EXAGEREI, METAS, ALIMENTO, TREINO, SUPLEMENTOS, PRATICO, PLANO, APOIO];
+// ---------- o cardápio de um dia ("o que eu como hoje?", "e amanhã?") ----------
+// O mesmo cardápio da tela da Nutrição, para o dia da conversa (ctx.data). Sem quantidades no balão (os nomes dos
+// alimentos só); quem não tem cardápio (modo educativo, sem entrevista) recebe o prato do Guia Alimentar.
+const diaDoCtx = (ctx) => (isObj(ctx) && diaOk(ctx.data) ? ctx.data : isObj(ctx) && diaOk(ctx.hoje) ? ctx.hoje : hojeLocal());
+const quandoTxt = (data, hoje) => (data === hoje ? 'hoje' : data === somarDias(hoje, 1) ? 'amanhã' : data === somarDias(hoje, -1) ? 'ontem' : ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][new Date(data + 'T12:00:00Z').getUTCDay()]);
+const CARDAPIO = {
+  id: 'nutri-cardapio', coach: 'nutri', titulo: 'O que eu como hoje', resumo: 'o seu cardápio de hoje', resumoNoDia: 'o seu cardápio', data: true,
+  // "o que eu como hoje?", "o que almoçar?": "como" sozinho é ambíguo ("como fica"); com "o que" na frente é o cardápio
+  bonus: (i) => (/\b(o que|que|oq|q) (eu )?(vou )?(como|comer|almoco|almocar|janto|jantar|lancho|lanchar|tomo de cafe)\b/.test(i.texto) && !/\b(antes|depois|durante|pre|pos|treino|treinar|correr|corrida)\b/.test(i.texto) ? 2.5 : 0),
+  palavras: ['!cardapio', 'o que vou comer', 'menu', 'refeicoes hoje', 'comer amanha', 'o que almocar', 'o que jantar', 'almoco hoje', 'jantar hoje', 'cafe da manha hoje', 'sugestao almoco', 'sugestao jantar', 'qual almoco', 'qual jantar', 'cardapio amanha', 'minhas refeicoes', 'tem pra comer', 'lanche agora', 'o que lanchar'],
+  inicio: (ctx) => {
+    const hoje = isObj(ctx) && diaOk(ctx.hoje) ? ctx.hoje : hojeLocal();
+    const data = diaDoCtx(ctx);
+    const P = perfilNutri({ ...(isObj(ctx) ? ctx : {}), hoje: data });
+    const q = quandoTxt(data, hoje);
+    const Q = q.charAt(0).toUpperCase() + q.slice(1);
+    if (!P.res) return convite('Para eu montar o seu cardápio, responda primeiro à entrevista da Nutricionista.');
+    const dia = cardapioDeHoje(P);
+    if (!dia) return { texto: ['No seu caso, não monto cardápio com quantidades.', motivoSemNumeros(P), 'Monte o prato assim: metade salada e legumes, um quarto arroz ou batata, um quarto de uma fonte de proteína, e feijão.'].filter(Boolean), ir: [IR_NUTRI], refs: refsOk(['guia2014']) };
+    if (!dia.refeicoes.length) return { texto: ['Com o que está marcado em casa, não dá para montar uma refeição.', 'Marque mais alimentos na tela da Nutrição.'], ir: [IR_NUTRI] };
+    const linhas = dia.refeicoes.slice(0, 6).map((r) => `• ${r.nome}: ${nomesDosItens(r)}`);
+    const out = {
+      texto: [`${Q}, o seu cardápio:`, ...linhas],
+      detalhes: ['As quantidades de cada alimento estão na tela da Nutrição, em medidas caseiras.', 'O cardápio segue o Guia Alimentar: comida de verdade como base.'],
+      refs: refsOk(['guia2014', 'pof2008medidas']), ir: [IR_NUTRI], data,
+    };
+    // trocar uma refeição: só a de hoje (a troca da tela vale para o dia)
+    if (data === hoje && dia.refeicoes.length > 1) {
+      out.texto.push('Quer trocar alguma refeição?');
+      out.opcoes = [{ rotulo: 'Sim, trocar uma', valor: 's' }, { rotulo: 'Não, está bom', valor: 'n' }];
+      out.proximo = (v, c) => (v === 's' ? TROCAR.inicio(c) : { texto: ['Bom apetite!'], ir: [IR_NUTRI] });
+    }
+    return out;
+  },
+};
+
+export const INTENCOES = [CARDAPIO, TROCAR, EXAGEREI, METAS, ALIMENTO, TREINO, SUPLEMENTOS, PRATICO, PLANO, APOIO];

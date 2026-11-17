@@ -99,6 +99,10 @@ export function resumoView(diasTxt) {
     algum = true;
     folha.appendChild(secao('Dores registradas', ...r.dores.map((x) => item(`${dataBR(x.data)} · ${x.local}`, `${x.tipo}, nível ${x.nivel} de 10, ${x.quando.toLowerCase()}${x.fim ? `; melhorou em ${dataBR(x.fim)}` : ''}`))));
   }
+  if (r.saude && r.saude.length) {
+    algum = true;
+    folha.appendChild(secao('Problemas de saúde fora do treino', ...r.saude.map((x) => item(`${dataBR(x.data)} · ${x.nome}${x.local ? ` (${x.local})` : ''}`, `${x.grau ? `intensidade ${x.grau}` : 'registrado'}${x.fim ? `; melhorou em ${dataBR(x.fim)}` : ''}`))));
+  }
   if (!algum) folha.appendChild(h('p', { class: 'muted', text: 'Sem registros neste período.' }));
   folha.appendChild(h('p', { class: 'tiny muted', text: 'Dados anotados pela própria pessoa no aplicativo FitCore. Não é laudo nem avaliação profissional.' }));
   body.push(folha);

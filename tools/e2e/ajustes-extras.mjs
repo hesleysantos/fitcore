@@ -57,7 +57,7 @@ export default async (page) => {
   await page.goto(B + '#/ajustes', 900);
   await page.click('Exportar para planilha ou PDF');
   const tipos = await page.eval(`return [...document.querySelectorAll('#exportar-planilhas [data-planilha]')].map((b) => b.dataset.planilha + (b.disabled ? ':vazio' : ''));`);
-  ok(tipos.join(',') === 'musculacao,corridas,peso,sono,diario,dores', 'um botão por tipo de registro: ' + tipos.join(', '));
+  ok(tipos.join(',') === 'musculacao,corridas,peso,sono,diario,dores,saude:vazio', 'um botão por tipo de registro: ' + tipos.join(', '));
   const csv = async (id) => {
     await page.eval(`window.__blobs = []; document.querySelector('#exportar-planilhas [data-planilha="${id}"]').click(); await new Promise((r) => setTimeout(r, 300)); return 1;`);
     return page.eval(`const b = window.__blobs[window.__blobs.length - 1]; return b ? { tipo: b.type, nome: window.__baixado, bom: new Uint8Array(await b.slice(0, 3).arrayBuffer()).join(','), texto: await b.text() } : null;`);

@@ -5,7 +5,10 @@
 // 4) sinal de alerta no texto (nos três chats);
 // 5) ações aplicadas: "Não vou conseguir treinar hoje" grava a marca e a versão curta começa o treino reduzido;
 // 6) o chat da corrida (chuva → esteira) e o da Nutricionista;
-// 7) letra "Muito grande" e alto contraste, claro e escuro, sem rolagem para o lado; zero erro no console.
+// 7) letra "Muito grande" e alto contraste, claro e escuro, sem rolagem para o lado; zero erro no console;
+// 8) conversa normal: continuação ("e sexta?", "e a corrida?"), outro dia, ritmo (pace), mudar a corrida de dia e como fica
+//    a semana, "pode" digitado para aceitar a proposta, aparelho que a academia não tem, esteira e a triagem do peito —
+//    também com a letra "Muito grande" a 360 px.
 // Fotos em .tools/shots/chat/. Uso, com "npm start" rodando: node tools/e2e/navegador.mjs tools/e2e/chat.mjs
 import * as store from '../../www/js/store.js';
 import { gerarPlano } from '../../www/js/logic/trainer.js';
@@ -87,9 +90,8 @@ export default async (page) => {
 
   console.log('2. O exemplo do dono, por texto livre');
   await escrever('hoje de manhã eu tinha corrida no plano mas choveu; tenho musculação hoje também — posso fazer um seguido do outro e qual a recomendação de acordo com minhas prioridades e meu perfil?');
-  ok(/Entendi que você quer falar sobre fazer corrida e musculação no mesmo dia\. É isso\?/.test(await ultima()), 'confirma a intenção antes');
-  ok(await botao('Sim'), 'tocou em "Sim"');
-  await page.sleep(300);
+  // assunto bem claro: o treinador responde direto; com folga pequena, confirma antes
+  if (/Entendi que você quer falar sobre fazer corrida e musculação no mesmo dia\. É isso\?/.test(await ultima())) { ok(await botao('Sim'), 'confirmou a intenção'); await page.sleep(300); }
   const resp = await ultima();
   ok(/Sua prioridade/.test(resp) && /6 horas entre os dois; no mínimo 3/.test(resp), 'resposta pela prioridade, com o intervalo: ' + resp.slice(0, 160));
   ok(await page.eval(`const d = [...document.querySelectorAll('.chat-msg.ativo details.pq')].pop(); if (!d) return false; d.open = true; return /FONTES/.test(d.innerText) && /Eddens|Methenitis|Petré/.test(d.innerText);`), '"Por quê?" fechado, com as fontes');
@@ -158,12 +160,12 @@ export default async (page) => {
   await page.sleep(250);
   ok(await botao('Correr na esteira'), 'esteira');
   await page.sleep(250);
-  ok(/inclinação/.test(await ultima()), 'esteira com a inclinação pesquisada');
+  ok(/inclinação/i.test(await ultima()), 'esteira com a inclinação pesquisada');
   ok(await page.eval(`const d = [...document.querySelectorAll('.chat-msg.ativo details.pq')].pop(); d.open = true; return /Miller/.test(d.innerText);`), 'fonte: Miller 2019');
   await foto('chat/corrida-esteira');
   await page.click('Começar de novo');
   await escrever('tá chovendo, não dá pra correr');
-  ok(/Entendi que você quer falar sobre chuva/.test(await ultima()), 'texto livre na corrida');
+  ok(/O que prefere\?|Entendi que você quer falar sobre chuva/.test(await ultima()), 'texto livre na corrida: ' + (await ultima()).slice(0, 80));
   await page.goto(B + '#/nutricao', 300); await page.reload(1400);
   ok(await page.click('Perguntar', '.topbar button'), 'entrada na Nutrição ("Perguntar" na barra do topo)');
   await espera('#chat');
@@ -190,6 +192,110 @@ export default async (page) => {
     await foto(`chat/letra-${tema}${contraste ? '-contraste' : ''}`);
   }
   await page.eval(`const st = await import('/js/store.js'); st.update((x) => { x.settings.letra = 'normal'; x.settings.contraste = false; x.settings.tema = 'claro'; }); return 1;`);
+
+  console.log('8. Conversa normal');
+  const recomecar = async (rota) => { await page.goto(B + '#/' + rota, 500); await page.click('Começar de novo'); await page.sleep(250); };
+  // continuação: outro dia e o outro treino, sem repetir o assunto
+  await carregar(estado());
+  await page.goto(B + '#/chat/treinador', 300); await page.reload(1400);
+  await escrever('qual o meu treino de hoje?');
+  ok(/^COACH: Hoje é /.test(await ultima()), 'o treino de hoje, direto: ' + (await ultima()).slice(0, 70));
+  await escrever('e amanhã?');
+  ok(/^COACH: Amanhã /.test(await ultima()), '"e amanhã?" fala de amanhã: ' + (await ultima()).slice(0, 70));
+  await escrever('e a corrida?');
+  ok(/^COACH: Amanhã /.test(await ultima()) && /corrida|regenerativo|rodagem|longão|fartlek|progressivo|tempo run|intervalado/i.test(await ultima()), '"e a corrida?" responde a corrida de amanhã: ' + (await ultima()).slice(0, 80));
+  await escrever('como fica a semana?');
+  ok(/Sua semana:/.test(await ultima()) && /\(hoje\)/.test(await ultima()), 'a semana, com o dia de hoje marcado');
+  await foto('chat/continuacao');
+  // "pode" digitado aceita a proposta em aberto (abre a mesma confirmação do botão)
+  await recomecar('chat/treinador');
+  await escrever('hoje não vou conseguir treinar');
+  await escrever('outro motivo');
+  const prop = await ultima();
+  ok(/Passar o .* para .*\?|Seguir a semana\?/.test(prop), 'o motivo digitado responde aos botões: ' + prop.slice(0, 90));
+  await escrever('pode');
+  ok(await espera('.sheet'), '"pode" abre a confirmação da ação');
+  ok(await confirmar(), 'confirmou');
+  ok((await estadoApp('s.perdidos')).some((m) => m.tipo === 'musculacao' && m.data === HOJE), 'marca gravada pelo "pode"');
+  ok(/^COACH: Pronto/.test(await ultima()), 'o treinador diz o que foi feito');
+  ok(await botao('Como fica a semana'), '"Como fica a semana" depois da ação');
+  await page.sleep(300);
+  ok(/não feito|passou para/.test(await ultima()), 'a semana mostra o treino remarcado: ' + (await ultima()).slice(0, 120));
+  // ritmo e mudar a corrida de dia, com a semana resultante
+  await carregar(estado());
+  await page.goto(B + '#/chat/corrida', 300); await page.reload(1400);
+  await escrever('qual o meu pace hoje?');
+  ok(/Ritmo:|esforço/i.test(await ultima()), 'o ritmo (ou o esforço) da corrida de hoje: ' + (await ultima()).slice(0, 90));
+  ok(await botao('Posso ir mais rápido?'), 'pergunta de continuação em botão');
+  await page.sleep(250);
+  ok(/volume até 10% por semana/.test(await ultima()), 'mais rápido: pela regra do plano');
+  await escrever('posso mudar a corrida de hoje para outro dia?');
+  let mv = await ultima();
+  if (/Para qual dia/.test(mv)) {
+    const dia = await page.eval(`const b = [...document.querySelectorAll('.chat-msg.ativo .chat-opcoes button.chat-op')].find((x) => !/Não vou correr/.test(x.textContent)); return b ? b.textContent.trim() : '';`);
+    ok(!!dia, 'dias possíveis em botões: ' + dia);
+    await botao(dia);
+    await page.sleep(300);
+    mv = await ultima();
+  }
+  ok(/Pode: a corrida de hoje/.test(mv) && /Assim fica a semana/.test(mv) && /veio de hoje/.test(mv), 'mudar a corrida: a proposta e a semana resultante');
+  const passar = await page.eval(`const b = document.querySelector('.chat-msg.ativo .chat-opcoes button.primary'); return b ? b.textContent.trim() : '';`);
+  ok(/^Passar para /.test(passar), 'ação: ' + passar);
+  await page.click(passar, '.chat-msg.ativo .chat-opcoes button');
+  ok(await confirmar(), 'confirmou');
+  const marcaMv = (await estadoApp('s.perdidos')).find((m) => m.tipo === 'corrida' && m.data === HOJE);
+  ok(!!(marcaMv && marcaMv.para > HOJE), 'corrida passou para outro dia: ' + JSON.stringify(marcaMv));
+  await foto('chat/mudar-corrida');
+  if (marcaMv) {
+    await page.goto(B + '#/corrida/dia/' + marcaMv.para, 900);
+    ok(!/Sem corrida|descanso/i.test((await page.text()).slice(0, 400)) || /Rodagem|Regenerativo|Fartlek|Longão|Corrida/i.test(await page.text()), 'a tela do dia novo mostra a corrida');
+    await page.goto(B + '#/treinos', 700);
+    ok(/Mudou de dia/.test(await page.text()) && /Passou para/.test(await page.text()), 'a semana em Treinos mostra a corrida que mudou de dia');
+  }
+  // esteira (logic/esteira.js): a versão do treino e "Fazer na esteira"
+  await carregar(estado());
+  await page.goto(B + '#/chat/corrida', 300); await page.reload(1400);
+  await escrever('quero fazer a corrida de hoje na esteira');
+  const est = await ultima();
+  ok(/esteira/i.test(est) && /Inclinação|inclinação/.test(est), 'a corrida de hoje na esteira: ' + est.slice(0, 90));
+  if (await page.click('Fazer na esteira', '.chat-msg.ativo .chat-opcoes button')) {
+    ok(await confirmar(), 'confirmou a esteira');
+    ok((await estadoApp('s.run.esteira || []')).includes(HOJE), 'esteira marcada para hoje');
+  } else ok(/Voltar para a rua/.test(await page.text()) || false, 'ação da esteira');
+  // aparelho que a academia não tem: troca no plano
+  await recomecar('chat/treinador');
+  await escrever('esse aparelho não tem na minha academia');
+  ok(/Qual exercício do plano/.test(await ultima()), 'pergunta qual exercício');
+  const exNome = await page.eval(`const b = document.querySelector('.chat-msg.ativo .chat-opcoes button.chat-op'); return b ? b.textContent.trim() : '';`);
+  await botao(exNome);
+  await page.sleep(300);
+  const troca = await page.eval(`const b = [...document.querySelectorAll('.chat-msg.ativo .chat-opcoes button.primary')].find((x) => /^Trocar por /.test(x.textContent.trim())); return b ? b.textContent.trim() : '';`);
+  if (troca) {
+    const antesPl = JSON.stringify(await estadoApp('s.plans[0].dias.map((d) => d.itens.map((i) => i.ex))'));
+    await page.click(troca, '.chat-msg.ativo .chat-opcoes button');
+    ok(await confirmar(), 'confirmou a troca');
+    ok(JSON.stringify(await estadoApp('s.plans[0].dias.map((d) => d.itens.map((i) => i.ex))')) !== antesPl, `o plano trocou ${exNome} (${troca})`);
+  } else ok(/não achei outro exercício/.test(await ultima()), 'sem troca segura: diz que não achou');
+  // triagem do peito
+  await recomecar('chat/treinador');
+  await escrever('peito dolorido do supino');
+  ok(/você tem algum destes\?/.test(await ultima()) && !!(await page.eval(`return !!document.querySelector('.chat-msg.ativo .note.warn');`)), 'triagem: uma pergunta com os sinais de alarme');
+  ok(await botao('Não: só dói ao apertar ou mexer'), 'sem sinais de alarme');
+  await page.sleep(250);
+  ok(/dor do músculo do treino/.test(await ultima()) && /192/.test(await ultima()), 'dor muscular, com o lembrete do 192');
+  await foto('chat/triagem-peito');
+  await escrever('dor no peito');
+  ok(/Pare o exercício agora/.test(await ultima()), '"dor no peito": direto ao alerta');
+  // letra Muito grande a 360 px numa conversa longa
+  await page.eval(`const st = await import('/js/store.js'); st.update((x) => { x.settings.letra = 'muito'; }); return 1;`);
+  await recomecar('chat/corrida');
+  await escrever('posso mudar a corrida para outro dia?');
+  await page.eval(`for (const d of document.querySelectorAll('.chat details')) d.open = true; return 1;`);
+  const larga2 = await page.eval(`return [...document.querySelectorAll('#chat *')].filter((e) => e.getBoundingClientRect().right > innerWidth + 1).map((e) => e.className || e.tagName).slice(0, 3);`);
+  ok(await semRolagem() && !larga2.length, 'conversa de mudar a corrida, letra muito grande: sem rolagem para o lado ' + larga2.join(' '));
+  ok(await campoVisivel(), 'campo de texto largo e à vista');
+  await foto('chat/letra-mudar-corrida');
+  await page.eval(`const st = await import('/js/store.js'); st.update((x) => { x.settings.letra = 'normal'; }); return 1;`);
 
   const erros = page.erros.filter((x) => !/favicon|SWv|vibrate/.test(x));
   ok(!erros.length, 'sem erro no console: ' + erros.join(' | ').slice(0, 300));

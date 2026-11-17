@@ -20,6 +20,7 @@ import { faltaPerguntar } from '../logic/combinado.js';
 import { cartaoCombinado, perguntarCombinado } from './combinado.js';
 import { LOCAIS_DOR, doresAtivas, limparDor, MAX_DORES } from '../logic/dor.js';
 import { botaoChat } from './chat.js';
+import { podeNaEsteira, versaoNaEsteira, naEsteira, marcarEsteira, etapasNaEsteira } from '../logic/esteira.js';
 
 let modo = 'auto'; // 'auto' | 'entrevista' | 'proposta'
 const ORDEM = [1, 2, 3, 4, 5, 6, 0];
@@ -131,7 +132,7 @@ const cuidadosCard = (lista) => (lista.length ? accId('corrida-cuidados', `Cuida
 function linhaDia(d, data, hoje, feito) {
   return h('button', { class: 'item' + (data === hoje ? ' hoje' : ''), type: 'button', 'data-data': data, onClick: () => go('corrida/dia/' + data) },
     h('div', { class: 'dia-wd', text: DIAS_CURTO[d.wd] }),
-    h('div', { class: 'grow' }, h('div', { class: 't', text: d.nome }), h('div', { class: 's', text: d.resumo })),
+    h('div', { class: 'grow' }, h('div', { class: 't', text: d.nome }), h('div', { class: 's', text: d.resumo + (naEsteira(state, data) ? ' · na esteira' : '') + (d.movidaDe ? ` · veio de ${DIAS_LONGO[new Date(d.movidaDe + 'T12:00:00').getDay()].toLowerCase().replace('-feira', '')}` : '') })),
     feito ? badge('Feita', 'ok') : data === hoje ? badge('Hoje', 'acc') : icon('right', 's muted'));
 }
 
@@ -334,7 +335,7 @@ function painel() {
       h('div', { class: 'row between' }, h('div', { class: 'tiny accent bold', text: `Semana ${sem.semana} de ${sem.totalSemanas} · ${sem.fase}` }), previstas ? h('span', { class: 'tiny muted nowrap', text: `${feitas} de ${previstas} feitos` }) : null),
       barra,
       h('div', { class: 'row between' }, h('h2', { text: treinoHoje ? `Hoje: ${dHoje.nome}` : 'Hoje: descanso' }), treinoHoje && dHoje.feito ? badge('Feita', 'ok') : null),
-      treinoHoje ? h('p', { class: 'small muted', text: dHoje.resumo }) : proxTxt ? h('p', { class: 'small muted', text: proxTxt }) : null,
+      treinoHoje ? h('p', { class: 'small muted', text: dHoje.resumo + (naEsteira(state, hoje) ? ' · na esteira' : '') }) : proxTxt ? h('p', { class: 'small muted', text: proxTxt }) : null,
       provaTxt,
       treinoHoje ? btn(dHoje.feito ? 'Ver a corrida de hoje' : 'Iniciar', () => go('corrida/dia/' + hoje), (dHoje.feito ? 'ghost' : 'primary') + ' block alvo', dHoje.feito ? 'right' : 'play') : null));
   }
@@ -361,7 +362,12 @@ function painel() {
     body.push(sectionTitle('Esta semana'));
     if (sem.foco) body.push(h('p', { class: 'small muted', text: sem.foco }));
     const lista = h('div', { class: 'list' });
-    for (const wd of ORDEM) { const d = sem.dias[wd]; if (d) lista.appendChild(linhaDia(d, d.data, hoje, d.feito)); }
+    for (const wd of ORDEM) {
+      const d = sem.dias[wd];
+      if (d) lista.appendChild(linhaDia(d, d.data, hoje, d.feito));
+      // corrida que mudou de dia (pelo chat): o dia de origem só lembra para onde ela foi
+      else if (sem.movidas && sem.movidas[wd]) lista.appendChild(h('div', { class: 'item passou' }, h('div', { class: 'dia-wd', text: DIAS_CURTO[wd] }), h('div', { class: 'grow' }, h('div', { class: 's', text: `${sem.movidas[wd].nome}: passou para ${DIAS_LONGO[new Date(sem.movidas[wd].para + 'T12:00:00').getDay()].toLowerCase().replace('-feira', '')}` }))));
+    }
     body.push(lista);
     const prox = p.semanas[sem.semana];
     if (prox) body.push(acc(`Semana que vem (${volumeTxt(prox)})`, ...prox.dias.map((d) => h('div', { class: 'row top' }, h('div', { class: 'dia-wd', text: DIAS_CURTO[d.wd] }), h('div', { class: 'grow' }, h('div', { class: 'bold small', text: d.nome }), h('div', { class: 'small muted', text: d.resumo })))), h('p', { class: 'tiny muted', text: 'Pode mudar conforme o que você registrar nesta semana.' })));
@@ -491,6 +497,7 @@ function resumoRegistro(r) {
   if (r.durMin) partes.push(fmtTempo(r.durMin * 60));
   if (r.distKm && r.durMin && r.tipo !== 'caminhada') partes.push(`${fmtRitmo((r.durMin * 60) / r.distKm)} por km`);
   if (r.pse) partes.push(`esforço ${r.pse}`);
+  if (r.local === 'esteira') partes.push('na esteira');
   for (const d of r.dores || []) partes.push(`${d.tipo === 'muscular' ? 'dor muscular' : 'dor'} em ${LOCAIS_DOR[d.onde].toLowerCase()} (${d.nivel})`);
   return partes.join(' · ');
 }
@@ -519,8 +526,10 @@ const emMin = (seg) => Math.round(seg) / 60;
 let cronT = 0;
 const NOME_PASSO = { aquecer: 'Aquecimento', correr: 'Corra', caminhar: 'Caminhe', trote: 'Trote leve', forte: 'Forte!', desaquecer: 'Volta à calma' };
 const VALIDADE_CRON = 12 * 3600000; // um cronômetro esquecido há mais de 12 horas é descartado
-function cronometro(data, treino, aoTerminar) {
-  const passos = expandirBlocos(treino.blocos, treino.ritmo ? (treino.ritmo.de + treino.ritmo.ate) / 2 : 0);
+// `esteira` (opcional): a versão do treino na esteira (logic/esteira.js); as etapas trazem a velocidade de cada uma
+function cronometro(data, treino, aoTerminar, esteira = null) {
+  const rp = treino.ritmo ? (treino.ritmo.de + treino.ritmo.ate) / 2 : 0;
+  const passos = esteira ? etapasNaEsteira(esteira.blocos, rp) : expandirBlocos(treino.blocos, rp);
   const box = h('div', { class: 'card cron col' });
   // só a troca de etapa é anunciada ao leitor de tela; o relógio muda a cada segundo e fica fora do anúncio
   const fase = h('div', { class: 'cron-fase', 'aria-live': 'polite' }), tempo = h('div', { class: 'cron-tempo', role: 'timer', 'aria-live': 'off' }), sub = h('div', { class: 'small muted' }), prox = h('div', { class: 'small' });
@@ -574,9 +583,9 @@ function cronometro(data, treino, aoTerminar) {
     const p = passos[cron.i];
     box.className = 'card cron col ' + p.tipo;
     fase.textContent = NOME_PASSO[p.tipo] || p.rotulo;
-    sub.textContent = `${p.rotulo} · etapa ${cron.i + 1} de ${passos.length}` + (p.m ? ` · ${p.m >= 1000 ? fmtKm(p.m / 1000) : p.m + ' m'}` : '') + (p.seg && p.estimado ? ' (tempo aproximado)' : !p.seg ? ' · toque em “Próxima” ao completar' : '');
+    sub.textContent = `${p.rotulo}${p.vel ? ' · ' + p.vel : ''} · etapa ${cron.i + 1} de ${passos.length}` + (p.m ? ` · ${p.m >= 1000 ? fmtKm(p.m / 1000) : p.m + ' m'}` : '') + (p.seg && p.estimado ? ' (tempo aproximado)' : !p.seg ? ' · toque em “Próxima” ao completar' : '');
     const n = passos[cron.i + 1];
-    prox.textContent = n ? `Depois: ${n.rotulo.toLowerCase()}${n.seg ? ' · ' + fmtClock(n.seg) : ''}` : 'Última etapa';
+    prox.textContent = n ? `Depois: ${n.rotulo.toLowerCase()}${n.seg ? ' · ' + fmtClock(n.seg) : ''}${n.vel ? ' · ' + n.vel : ''}` : 'Última etapa';
     acoes.appendChild(btn(cron.pausadoEm ? 'Continuar' : 'Pausar', () => {
       unlockAudio();
       if (cron.pausadoEm) { const d = agora() - cron.pausadoEm; cron.parado += d; if (cron.fim) cron.fim += d; cron.inicioPasso += d; cron.pausadoEm = 0; keepAwake(true); } else { cron.pausadoEm = agora(); keepAwake(false); }
@@ -614,6 +623,14 @@ function formulario(data, planejado, existente, aoFechar) {
     const draw = () => { while (chips.firstChild) chips.removeChild(chips.firstChild); for (const t of TIPOS_LIVRES) chips.appendChild(h('button', { type: 'button', class: 'chip' + (r.tipo === t ? ' on' : ''), role: 'radio', 'aria-checked': r.tipo === t ? 'true' : 'false', onClick: () => { r.tipo = t; draw(); } }, TIPOS_TREINO[t].nome)); };
     draw();
     card.appendChild(h('div', { class: 'col gap-s' }, h('div', { class: 'small bold muted', text: 'Tipo' }), chips, h('p', { class: 'tiny muted', text: 'Marque “Teste de ritmo” ou “Dia da prova” em uma corrida forte e contínua: o resultado atualiza os seus ritmos.' })));
+  }
+  // onde correu: na esteira, o registro guarda local 'esteira' (conta igual na semana — logic/esteira.js)
+  {
+    if (!existente) r.local = naEsteira(state, data) || (planejado && planejado.modo === 'esteira') || (perfilAtual() || {}).local === 'esteira' ? 'esteira' : '';
+    const locais = h('div', { class: 'chips wrap', role: 'radiogroup', 'aria-label': 'Onde você correu' });
+    const drawLocal = () => { while (locais.firstChild) locais.removeChild(locais.firstChild); for (const [v, nome] of [['', 'Rua ou pista'], ['esteira', 'Esteira']]) locais.appendChild(h('button', { type: 'button', class: 'chip' + ((r.local || '') === v ? ' on' : ''), role: 'radio', 'aria-checked': (r.local || '') === v ? 'true' : 'false', 'data-local': v || 'rua', onClick: () => { r.local = v; drawLocal(); } }, nome)); };
+    drawLocal();
+    card.appendChild(h('div', { class: 'col gap-s', id: 'registro-local' }, h('div', { class: 'small bold muted', text: 'Onde' }), locais));
   }
   const dist = h('input', { class: 'input', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: r.distKm ? virgula(r.distKm) : '', placeholder: 'Ex.: 5,2', 'aria-label': 'Distância em quilômetros' });
   const dur = h('input', { class: 'input', type: 'text', inputmode: 'text', autocomplete: 'off', value: tempoTxt(r.durMin), placeholder: 'Ex.: 32 ou 32:30', 'aria-label': 'Tempo em minutos, ou minutos e segundos' });
@@ -690,7 +707,7 @@ function formulario(data, planejado, existente, aoFechar) {
       const semTipo = r.dores.find((x) => !x.tipo);
       if (semTipo) { toast(`Diga como foi a dor em ${LOCAIS_DOR[semTipo.onde].toLowerCase()}.`); const el = dorBox.querySelector(`[data-onde="${semTipo.onde}"]`); if (el) el.scrollIntoView({ block: 'center' }); return; }
       // "não sei dizer" vale como dor em um ponto (articulação, osso ou tendão), o lado mais cauteloso
-      const limpo = limparRegistro({ ...r, dores: r.dores.map((x) => ({ ...x, tipo: x.tipo === 'naosei' ? 'articular' : x.tipo })), distKm: d, durMin: t, nota: nota.value });
+      const limpo = limparRegistro({ ...r, dores: r.dores.map((x) => ({ ...x, tipo: x.tipo === 'naosei' ? 'articular' : x.tipo })), distKm: d, durMin: t, nota: nota.value, local: r.local === 'esteira' ? 'esteira' : '' });
       if (!limpo) { toast('Esse ritmo não parece possível. Confira a distância e o tempo.'); return; }
       update((s) => {
         const i = s.runs.findIndex((x) => x.id === limpo.id);
@@ -722,6 +739,32 @@ function formulario(data, planejado, existente, aoFechar) {
   return { card, definirTempo: (min) => { if (!dur.value.trim()) dur.value = String(min); } };
 }
 
+// Fazer na esteira / Voltar para a rua. Marcado: o que muda na esteira (poucas linhas), os cuidados de segurança e o
+// "Por quê?" com as fontes. Sem marcar: só um botão discreto, quando o dia pode ir para a esteira.
+function cartaoEsteira(data, hoje, planejado, ves) {
+  if (!planejado || planejado.tipo === 'descanso') return null;
+  const trocar = (sim) => {
+    let ok = false;
+    update((s) => { ok = marcarEsteira(s, data, sim, hojeKey()); });
+    if (ok) toast(sim ? 'Treino ajustado para a esteira.' : 'Treino de volta para a rua.');
+    else toast(sim ? podeNaEsteira(state, data, hojeKey()).motivo || 'Não deu para trocar.' : 'Com o cronômetro rodando, termine ou encerre antes de trocar.');
+    refresh();
+  };
+  if (!ves) {
+    const pode = podeNaEsteira(state, data, hoje);
+    return pode.pode ? btn('Fazer na esteira', () => trocar(true), 'block ghost sm', 'swap') : null;
+  }
+  const rodando = state.run.cron && state.run.cron.data === data && !state.run.cron.terminado;
+  const feito = state.runs.some((r) => r.data === data);
+  return h('div', { class: 'card col gap-s', id: 'corrida-esteira', 'data-inclinacao': ves.inclinacao },
+    h('div', { class: 'row between' }, h('h3', { text: 'Na esteira' }), badge('Inclinação ' + ves.inclinacao, 'acc')),
+    ves.velocidades.length ? h('div', { class: 'col gap-s' }, ...ves.velocidades.map((v) => h('div', { class: 'kv' }, h('span', { class: 'muted', text: v.trecho }), h('span', { class: 'nowrap', text: v.texto })))) : null,
+    h('ul', { class: 'small' }, ...ves.linhas.slice(1).map((t) => h('li', { text: t }))),
+    note('warn', ves.avisos.join(' ')),
+    porQue(ves.detalhes.join(' '), ves.refs),
+    !rodando && !feito ? btn('Voltar para a rua', () => trocar(false), 'block ghost sm', 'swap') : null);
+}
+
 export function corridaDiaView(data) {
   const hoje = hojeKey();
   if (!diaValido(data)) return { redirect: 'corrida' };
@@ -732,6 +775,8 @@ export function corridaDiaView(data) {
   const body = [];
   body.push(h('div', { class: 'row between' }, h('h2', { text: DIAS_LONGO[new Date(data + 'T12:00:00').getDay()] + ', ' + Number(data.slice(8, 10)) + '/' + data.slice(5, 7) }), data === hoje ? badge('Hoje', 'acc') : registros.length ? badge('Feita', 'ok') : null));
   let form = null;
+  // corrida do plano na esteira (logic/esteira.js): a versão ajustada, quando o dia está marcado
+  const ves = planejado && planejado.tipo !== 'descanso' && naEsteira(state, data) ? versaoNaEsteira(state, data, hoje) : null;
   if (planejado) {
     // longo que não passa das outras corridas da semana aparece como rodagem leve (comoRodagem): a explicação acompanha
     const t = TIPOS_TREINO[planejado.comoRodagem ? 'leve' : planejado.tipo];
@@ -741,13 +786,15 @@ export function corridaDiaView(data) {
     if (planejado.tipo !== 'descanso') {
       if (planejado.blocos.length > 1 || planejado.blocos.some((b) => b.repeticoes > 1)) {
         const ol = h('ol', { class: 'blocos' });
-        for (const b of planejado.blocos) ol.appendChild(h('li', { text: textoBloco(b, planejado.modo) }));
+        if (ves) for (const txt of ves.resumoBlocos) ol.appendChild(h('li', { text: txt }));
+        else for (const b of planejado.blocos) ol.appendChild(h('li', { text: textoBloco(b, planejado.modo) }));
         card.appendChild(ol);
       }
       card.appendChild(h('div', { class: 'col gap-s' },
         h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Esforço' }), h('span', { text: `${planejado.pse[0]} a ${planejado.pse[1]} em 10` })),
         h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Teste da fala' }), h('span', { text: planejado.fala })),
-        planejado.ritmo ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: planejado.modo === 'esteira' ? 'Velocidade' : 'Ritmo' }), h('span', { text: fmtFaixa(planejado.ritmo, planejado.modo) })) : null,
+        planejado.ritmo ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: planejado.modo === 'esteira' || ves ? 'Velocidade' : 'Ritmo' }), h('span', { text: fmtFaixa(planejado.ritmo, ves ? 'esteira' : planejado.modo) })) : null,
+        ves ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Inclinação' }), h('span', { text: ves.inclinacao })) : null,
         h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Duração' }), h('span', { text: `cerca de ${planejado.durMin} min` + (planejado.distKm && planejado.tipo !== 'caminhada' ? ` · ${fmtKm(planejado.distKm)}` : '') }))));
       if (t && t.paraQue) card.appendChild(porQue(t.paraQue + (t.sentir ? ' Como sentir: ' + t.sentir : ''), t.f, 'Para que serve este treino'));
       if (planejado.ajustado) card.appendChild(note('info', 'Este treino foi ajustado por causa de uma dor que você contou.'));
@@ -755,7 +802,9 @@ export function corridaDiaView(data) {
       if (planejado.estimado) card.appendChild(note('info', 'O que o plano mostrava neste dia não ficou guardado. Este é o treino previsto pelo plano de hoje, que pode ser diferente.'));
     }
     body.push(card);
-    if (planejado.tipo !== 'descanso' && !futuro && !registros.length && planejado.blocos.some((b) => b.seg || b.ritmo)) body.push(cronometro(data, planejado, (min) => { if (form) form.definirTempo(min); const el = document.getElementById('registro'); if (el) el.scrollIntoView({ block: 'start' }); }));
+    const est = cartaoEsteira(data, hoje, planejado, ves);
+    if (est) body.push(est);
+    if (planejado.tipo !== 'descanso' && !futuro && !registros.length && planejado.blocos.some((b) => b.seg || b.ritmo)) body.push(cronometro(data, planejado, (min) => { if (form) form.definirTempo(min); const el = document.getElementById('registro'); if (el) el.scrollIntoView({ block: 'start' }); }, ves));
   } else if (!registros.length) {
     body.push(h('div', { class: 'bubble' }, h('p', { text: state.run.aceitoEm && !state.run.pausadoEm ? 'Não há corrida do plano neste dia.' : 'Corrida livre.' }), h('p', { class: 'small muted', text: 'Se você correu, registre abaixo: o Treinador usa todas as corridas para acompanhar a sua evolução.' })));
   }

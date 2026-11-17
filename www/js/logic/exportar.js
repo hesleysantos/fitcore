@@ -11,6 +11,7 @@
 import { EX_POR_ID } from '../data/exercises.js';
 import { TIPOS_TREINO } from '../data/corrida.js';
 import { LOCAIS_DOR, TIPOS_DOR, QUANDO_DOR } from './dor.js';
+import { TIPOS_SAUDE, GRAUS_SAUDE, limparSaudeFora } from './saude-fora.js';
 import { REFEICOES, nutrientesDoItem, modoDoDiario } from './diario.js';
 import { e1rm, assistido } from './progress.js';
 
@@ -118,6 +119,12 @@ function dores(st) {
   const linhas = lista(st && st.dores).filter(dorOk).map((d) => [dataBR(d.data), LOCAIS_DOR[d.onde] || d.onde, ladoTxt(d.lado), (TIPOS_DOR[d.tipo] || [''])[0], QUANDO_DOR[d.quando] || '', d.nivel, d.fim ? dataBR(d.fim) : '', texto(d.nota)]);
   return { cab: ['Data', 'Local', 'Lado', 'Tipo', 'Quando aparece', 'Nível (1 a 10)', 'Melhorou em', 'Anotação'], linhas };
 }
+// problemas de saúde que não vêm do treino (febre, pancada, corte...: logic/saude-fora.js)
+const nomeSaude = (p) => (TIPOS_SAUDE[p.tipo] || { nome: p.tipo }).nome;
+function saude(st) {
+  const linhas = limparSaudeFora(st && st.saudeFora).map((p) => [dataBR(p.data), texto(nomeSaude(p)), p.onde ? LOCAIS_DOR[p.onde] || p.onde : '', p.grau ? GRAUS_SAUDE[p.grau][0] : '', p.avaliado ? dataBR(p.avaliado) : '', p.fim ? dataBR(p.fim) : '']);
+  return { cab: ['Data', 'Problema', 'Local', 'Intensidade', 'Avaliado em', 'Melhorou em'], linhas };
+}
 
 // Tipos de planilha, na ordem da tela: [id, nome, função]. `contagem` diz quantos registros cada uma tem.
 const PLANILHAS = [
@@ -127,6 +134,7 @@ const PLANILHAS = [
   ['sono', 'Sono e cochilos', sono],
   ['diario', 'Diário alimentar', diario],
   ['dores', 'Dores', dores],
+  ['saude', 'Problemas de saúde fora do treino', saude],
 ];
 export const TIPOS_PLANILHA = PLANILHAS.map(([id, nome]) => [id, nome]);
 // Planilhas que esta pessoa pode baixar, com o número de linhas de cada uma. O diário não aparece para quem marcou
@@ -176,7 +184,7 @@ export function montarResumo(st, { dias = 90, hoje = hojeLocal() } = {}) {
   let de;
   if (dias > 0) de = somaDias(hoje, -(dias - 1));
   else {
-    const todas = [...sess.map((x) => x.dia), ...runs.map((r) => r.data), ...body.map((b) => b.data), ...noites.map((r) => r.data), ...cochilos.map((c) => c.data), ...diasDiario.map((d) => d.data), ...doresSt.map((d) => d.data)].filter(Boolean).sort();
+    const todas = [...sess.map((x) => x.dia), ...runs.map((r) => r.data), ...body.map((b) => b.data), ...noites.map((r) => r.data), ...cochilos.map((c) => c.data), ...diasDiario.map((d) => d.data), ...doresSt.map((d) => d.data), ...limparSaudeFora(st && st.saudeFora).filter((p) => p.data <= hoje).map((p) => p.data)].filter(Boolean).sort();
     de = todas[0] || hoje;
   }
   const dentro = (k) => k >= de && k <= hoje;
@@ -238,5 +246,7 @@ export function montarResumo(st, { dias = 90, hoje = hojeLocal() } = {}) {
   // dores contadas no período
   const doresR = doresSt.filter((d) => dentro(d.data)).map((d) => ({ data: d.data, local: LOCAIS_DOR[d.onde] + (ladoTxt(d.lado) ? `, ${ladoTxt(d.lado)}` : ''), tipo: (TIPOS_DOR[d.tipo] || [''])[0], quando: QUANDO_DOR[d.quando] || '', nivel: d.nivel, fim: d.fim || '' }));
 
-  return { de, ate: hoje, dias: diasEntre(de, hoje) + 1, musc, corrida, peso: pesoR, sono: sonoR, diario: diarioR, dores: doresR };
+  // problemas de saúde fora do treino no período
+  const saudeR = limparSaudeFora(st && st.saudeFora).filter((p) => p.data <= hoje && dentro(p.data)).map((p) => ({ data: p.data, nome: nomeSaude(p), local: p.onde ? LOCAIS_DOR[p.onde] || p.onde : '', grau: p.grau ? GRAUS_SAUDE[p.grau][0].toLowerCase() : '', fim: p.fim || '' }));
+  return { de, ate: hoje, dias: diasEntre(de, hoje) + 1, musc, corrida, peso: pesoR, sono: sonoR, diario: diarioR, dores: doresR, saude: saudeR };
 }

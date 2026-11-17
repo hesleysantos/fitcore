@@ -6,6 +6,7 @@ import { EQUIPAMENTOS } from '../data/equipment.js';
 import { FAIXA_DA_RESPOSTA } from './pausa.js';
 import { MUSCULOS, GRUPOS, PADROES, CUIDADOS } from '../data/muscles.js';
 import { LOCAIS_DOR, TIPOS_DOR, DIAS_ATIVA, dorDeAlerta, doresAtivas } from './dor.js';
+import { doresForaDoTreino } from './saude-fora.js';
 import { planoDaSemana, planoDaSemanaEm } from './corrida.js';
 import { limparCombo, FOCOS, FORTALECIMENTOS } from './combinado.js';
 import { perguntaCondicoes, perguntaTriagem, perguntaRemedios, perguntaLiberado, condicoesDe, sinaisDe, remediosDe, soComSupervisao, respostasProtegidas } from './saude.js';
@@ -1856,6 +1857,8 @@ function limparDoresTreino(raw) {
       dias: typeof d.dias === 'number' && d.dias > 0 && Number.isFinite(d.dias) ? Math.round(d.dias) : 0,
       // `volta`: dor de alerta que melhorou há pouco (ver doresDoTreino): a região volta com menos carga
       volta: d.volta === true,
+      // `fora`: a "dor" vem de um problema de saúde que não é do treino (logic/saude-fora.js: pancada, corte...)
+      ...(typeof d.fora === 'string' && d.fora && d.fora.length <= 40 ? { fora: d.fora, foraRefs: Array.isArray(d.foraRefs) ? d.foraRefs.filter((k) => typeof k === 'string').slice(0, 6) : [] } : {}),
     });
     if (out.length >= 40) break;
   }
@@ -1978,6 +1981,7 @@ function avisosDeDor(dores, pf) {
   for (const d of dores) {
     const classe = classeDaDor(d, pf);
     const onde = LOCAL_TXT[d.onde];
+    if (d.fora) { const t = textoFora(d, classe, onde); if (t) out.push({ tipo: classe === 'alerta' ? 'warn' : 'info', dor: d.onde, texto: t.plano }); continue; }
     if (classe === 'volta') out.push({ tipo: 'info', dor: d.onde, texto: `Volta depois da dor ${onde}: por 2 semanas, os exercícios dessa região pedem menos carga e amplitude. Suba aos poucos; se a dor voltar, conte ao Treinador.` });
     else if (classe === 'alerta') out.push({ tipo: 'warn', dor: d.onde, texto: `Dor de alerta ${onde}: este plano não treina essa região. Procure um médico ou fisioterapeuta antes de voltar a treiná-la.` });
     else if (d.tipo !== 'muscular' && classe === 'forte') out.push({ tipo: 'info', dor: d.onde, texto: `Dor ${onde}: deixei de fora os exercícios que sobrecarregam essa região.` });
@@ -1985,7 +1989,17 @@ function avisosDeDor(dores, pf) {
   }
   return out;
 }
+// Textos para a "dor" que vem de um problema fora do treino (pancada, corte...): { plano, exercicio, ajuste } ou null
+const maiusc = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+function textoFora(d, classe, onde) {
+  const nome = maiusc(d.fora);
+  if (classe === 'volta') return { plano: `Volta depois de ${d.fora} ${onde}: nesta semana, menos carga e amplitude nessa região.`, exercicio: `Volta depois de ${d.fora} ${onde}: menos carga e só a amplitude sem dor. Pare se doer.`, ajuste: `Volta depois de ${d.fora} ${onde}: menos carga e amplitude nesta semana.` };
+  if (classe === 'alerta') return { plano: `${nome} ${onde}: os exercícios dessa região ficam de fora até melhorar.`, exercicio: `${nome} ${onde}: pule este exercício até melhorar.`, ajuste: `${nome} ${onde}: fica de fora até melhorar.` };
+  if (classe === 'media' || classe === 'forte' || classe === 'leve') return { plano: `${nome} ${onde}: nos exercícios dessa região, menos carga e só o que não dói.`, exercicio: `${nome} ${onde}: menos carga e só a amplitude sem dor. Pare se doer.`, ajuste: `${nome} ${onde}: menos carga e só a amplitude sem dor.` };
+  return null;
+}
 function refsDaDor(d, pf, classe) {
+  if (d.fora && d.foraRefs && d.foraRefs.length) return d.foraRefs;
   if (classe === 'volta') return ['dubois2020', 'caterisano2019', 'silbernagel2007'];
   if (classe === 'alerta') return [...new Set(['dubois2020', d.onde === 'lombar' ? 'verhagen2016' : '', pf.gestante ? 'acog804' : '', d.onde === 'peito' ? 'whitfield2017' : ''].filter(Boolean))];
   if (d.tipo === 'muscular') return ['hody2019', 'afonso2021'];
@@ -2048,6 +2062,8 @@ export function doresDoTreino(st, hoje, respostas = null) {
     if (out.some((x) => x.onde === d.onde && (x.lado || '') === (d.lado || ''))) continue;
     out.push({ ...d, fim: '', dias: diasEntreDatas(d.data, hoje), volta: true, diasDeVolta: desde });
   }
+  // problemas de saúde que não vêm do treino (pancada, corte...) com região bloqueada, com cuidado ou em volta
+  try { out.push(...doresForaDoTreino(st, hoje)); } catch { /* segue sem eles */ }
   return out;
 }
 // Respostas para os avisos de dor no treino em andamento: as do Treinador, se completas; senão, um perfil equivalente
@@ -2100,7 +2116,8 @@ export function alertaDoExercicio(exId, doresBrutas, respostas = null) {
   const a = avaliarDor(ex, dores, pf);
   if (!a) return null;
   const onde = LOCAL_TXT[a.d.onde];
-  const texto = a.classe === 'volta' ? `Volta depois da dor ${onde}: nestas 2 semanas, menos carga e só a amplitude sem dor. Pare se a dor voltar.`
+  const fora = a.d.fora ? textoFora(a.d, a.classe, onde) : null;
+  const texto = fora ? fora.exercicio : a.classe === 'volta' ? `Volta depois da dor ${onde}: nestas 2 semanas, menos carga e só a amplitude sem dor. Pare se a dor voltar.`
     : a.classe === 'alerta' ? `Dor de alerta ${onde}: não faça este exercício até um médico ou fisioterapeuta avaliar.`
     : a.grau === 3 ? `Dor ${onde} acima do aceitável: pule este exercício por enquanto.`
       : a.d.tipo === 'muscular' ? (a.grau === 2 ? `Músculo dolorido (dor ${onde}): hoje vá mais leve, com menos carga e uma série a menos.` : `Dor muscular ${onde}: este exercício usa esse músculo de leve; pare se a dor aumentar.`)
@@ -2136,6 +2153,8 @@ export function ajustesPorDor(plan, respostas, gymBruta, doresBrutas) {
       if (!a || a.grau < 2) return;
       const onde = LOCAL_TXT[a.d.onde];
       const base = { diaId: d.id, dia: d.nome, idx, de: ex.id, onde: a.d.onde, refs: refsDaDor(a.d, pf, a.classe) };
+      // problema fora do treino (pancada, corte...): é passageiro, nada é trocado no plano; o exercício fica de fora ou mais leve
+      if (a.d.fora) { const t = textoFora(a.d, a.classe, onde); out.push({ ...base, tipo: a.classe === 'alerta' ? 'pular' : 'aliviar', motivo: t ? t.ajuste : '' }); return; }
       if (a.classe === 'alerta') { out.push({ ...base, tipo: 'pular', motivo: `Dor de alerta ${onde}: fica de fora até a avaliação.` }); return; }
       // em volta gradual (depois de uma dor de alerta que melhorou), o exercício fica, mais leve: não se propõe troca
       if (a.classe === 'volta') { out.push({ ...base, tipo: 'aliviar', motivo: 'Volta depois da dor ' + onde + ': menos carga e amplitude por 2 semanas.' }); return; }

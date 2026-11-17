@@ -19,18 +19,20 @@ const VOLTA = { treinador: 'treinador', corrida: 'corrida', nutri: 'nutricao' };
 const ICONE = { treinador: 'coach', corrida: 'run', nutri: 'apple' };
 const MAX_MSGS = 80;
 const MAX_TEXTO = 300;
-// coach → { msgs: [{ de: 'coach', passo, feitas: Set } | { de: 'eu', texto }], rascunho }
+// coach → { msgs: [{ de: 'coach', passo, feitas: Set } | { de: 'eu', texto }], rascunho, mem }
+// mem = a memória da conversa (logic/chat/motor.js: assunto, dia, assunto pendente), para "e amanhã?" e "sim"
 const conversas = new Map();
-const ctx = (coach) => ({ st: state, hoje: dateKey(new Date()), agora: Date.now(), coach });
+const ctx = (coach) => ({ st: state, hoje: dateKey(new Date()), agora: Date.now(), coach, memoria: (conversas.get(coach) || {}).mem || null });
 
 function conversa(coach) {
   let c = conversas.get(coach);
-  if (!c) { c = { msgs: [], rascunho: '' }; conversas.set(coach, c); }
+  if (!c) { c = { msgs: [], rascunho: '', mem: null }; conversas.set(coach, c); }
   if (!c.msgs.length) c.msgs.push({ de: 'coach', passo: M.limparPasso(M.saudacao(coach, ctx(coach))) || { texto: ['Oi!'] }, feitas: new Set() });
   return c;
 }
 function falar(coach, passo) {
   const c = conversa(coach);
+  if (passo && passo.memoria) c.mem = passo.memoria;
   c.msgs.push({ de: 'coach', passo: passo || { texto: ['Não consegui responder agora. Escolha um assunto ou escreva de outro jeito.'] }, feitas: new Set() });
   if (c.msgs.length > MAX_MSGS) c.msgs.splice(1, c.msgs.length - MAX_MSGS);
 }
@@ -62,7 +64,8 @@ async function executar(coach, m, i) {
   if (!a || m.feitas.has(i)) return;
   const ok = await confirmSheet({ title: a.rotulo, text: a.confirmar, okLabel: a.iniciar ? 'Começar' : 'Confirmar' });
   if (!ok) return;
-  const c = ctx(coach);
+  // a ação vale para o dia de que a conversa falava (amanhã, sexta...), não só para hoje
+  const c = { ...ctx(coach), data: a.data || m.passo.data || dateKey(new Date()) };
   if (typeof a.aplicar === 'function') {
     let res = false;
     try { update((s) => { res = a.aplicar(s, c); }); } catch { res = false; }
@@ -71,7 +74,7 @@ async function executar(coach, m, i) {
   m.feitas.add(i);
   m.respondida = true;
   if (a.iniciar) { startSession(a.iniciar.planId, a.iniciar.diaId, { itens: a.iniciar.itens }); return; }
-  falar(coach, { texto: [a.depois || 'Pronto.'], opcoes: [{ rotulo: 'Ver os assuntos', valor: 'a' }], proximo: (v, cc) => M.saudacao(coach, cc) });
+  falar(coach, M.depoisDaAcao(a, coach, ctx(coach)));
   redesenhar(coach, true);
 }
 function irPara(coach, x) {
@@ -141,11 +144,20 @@ export function chatView(coach) {
     const t = campo.value.trim().slice(0, MAX_TEXTO);
     if (!t) { campo.focus(); return; }
     campo.value = ''; c.rascunho = '';
-    // a fala anterior perde os botões: a conversa segue pelo que foi escrito
+    // a pergunta em aberto: o que for escrito pode responder a ela ("sim", "pode", "não", o texto de um botão)
     const ult = [...c.msgs].reverse().find((x) => x.de === 'coach');
-    if (ult) ult.respondida = true;
+    const aberto = ult && !ult.respondida && ((ult.passo.opcoes && ult.passo.opcoes.length) || (ult.passo.acoes && ult.passo.acoes.length)) ? ult.passo : null;
+    const res = M.responder(t, coach, { ...ctx(coach), aberto });
     euDisse(coach, t);
-    falar(coach, M.limparPasso(M.responder(t, coach, ctx(coach))));
+    // "sim" para uma ação em aberto: abre a mesma confirmação do botão (nada muda sem ela)
+    if (res && Number.isInteger(res.executar) && ult && aberto && aberto.acoes && aberto.acoes[res.executar]) {
+      redesenhar(coach, true);
+      executar(coach, ult, res.executar);
+      return;
+    }
+    // a fala anterior perde os botões: a conversa segue pelo que foi escrito
+    if (ult) ult.respondida = true;
+    falar(coach, M.limparPasso(res));
     redesenhar(coach, true);
   };
   campo.addEventListener('input', () => { c.rascunho = campo.value; });

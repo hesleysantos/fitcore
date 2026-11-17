@@ -54,6 +54,7 @@ function estadoCheio() {
       { id: 'r2', data: '2026-11-06', tipo: 'longo', distKm: 10, durMin: 68, pse: 6, dores: [{ onde: 'joelho', nivel: 3, tipo: 'articular' }, { onde: 'coxa-tras', nivel: 2, tipo: 'muscular' }], nota: '', planejado: 'Longo' },
     ],
     dores: [{ id: 'dor1', data: '2026-11-06', onde: 'joelho', lado: 'd', tipo: 'articular', quando: 'durante', nivel: 3, nota: 'na descida', fim: '' }, { id: 'dor2', data: '2026-10-20', onde: 'lombar', lado: '', tipo: 'muscular', quando: 'depois', nivel: 4, nota: '', fim: '2026-10-25' }],
+    saudeFora: [{ id: 'sf1', data: '2026-10-28', tipo: 'pancada', onde: 'joelho', grau: 'moderada', piora: true, sinais: '', detalhe: '', avaliado: '', visto: '2026-10-30', fim: '2026-11-01' }, { id: 'sf2', data: '2026-11-05', tipo: 'febre', onde: '', grau: '', piora: false, sinais: 'atendimento', detalhe: '', avaliado: '2026-11-05', visto: '', fim: '' }],
     sono: { acordar: '06:30', idade: 31, registros: [{ data: '2026-11-11', horas: 7.5 }, { data: '2026-11-12', horas: 6.25, qualidade: 2 }, { data: '2026-11-13', horas: 8, qualidade: 4 }], cochilos: [{ data: '2026-11-12', min: 25, inicio: '13:40' }, { data: '2026-11-13', min: 20, inicio: '14:10' }, { data: '2026-11-13', min: 45 }] },
     diario: { dias: [
       { data: '2026-11-12', itens: [{ id: 'i1', ref: 'cafe', al: ALIMENTOS[0].id, g: 150, m: true }, { id: 'i2', ref: 'almoco', al: ALIMENTOS[5].id, g: 80, m: false }] },
@@ -94,6 +95,7 @@ test('backup: o estado completo sai no arquivo e volta idêntico', () => {
   assert.equal(store.sanitize(ruim).run.answers.liberadoEm, undefined);
   assert.deepEqual(limpo.runs, cheio.runs);
   assert.deepEqual(limpo.dores, [cheio.dores[1], cheio.dores[0]], 'dores preservadas (em ordem de data)');
+  assert.deepEqual(limpo.saudeFora, cheio.saudeFora, 'problemas de saúde fora do treino preservados');
   assert.deepEqual(limpo.sono, cheio.sono, 'hora de acordar, idade e noites registradas preservadas');
   assert.deepEqual(limpo.diario, cheio.diario, 'diário alimentar preservado: dias, refeições, alimentos da lista e fora dela');
   assert.deepEqual(limpo.combo, cheio.combo);

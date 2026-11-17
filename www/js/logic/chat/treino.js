@@ -15,31 +15,38 @@
 import * as P from '../perdido.js';
 import { perfil, duracaoEstimada, saudeDoTreinador, avisosBloqueio, orientacaoDaDor, sugerirTrocas, outraVersao, respostasCompletas, resumoCombinado, doresDoTreino, alertaDoExercicio, respostasParaAvisos } from '../trainer.js';
 import { doresAtivas, LOCAIS_DOR } from '../dor.js';
-import { temOsDois, comboAtual } from '../combinado.js';
+import { temOsDois, temCorrida, comboAtual } from '../combinado.js';
 import { treinoDoDia as corridaDoDia, efeitoDoFoco as efeitoNaCorrida, perfil as perfilCorrida, saudeDaCorrida, efeitoDaDor } from '../corrida.js';
 import { efeitoDoFoco as efeitoNaMusculacao } from '../trainer.js';
 import { noiteDe, metaDeSono, fmtHoras, fmtFaixa } from '../sono.js';
-import { aquecimentoRecomendado } from '../guiado.js';
+import { aquecimentoRecomendado, ocupados, aparelhoOcupado } from '../guiado.js';
+import { aplicarVariacao } from '../variacao.js';
+import { diasBloqueados } from '../dias-livres.js';
+import { EQUIPAMENTOS } from '../../data/equipment.js';
 import { recomendacao, contextoDoEstado } from '../carga.js';
 import { EX_POR_ID } from '../../data/exercises.js';
 import { MUSCULOS } from '../../data/muscles.js';
 import { FAQ_TREINO } from '../../data/knowledge.js';
 import { FAQ_CORRIDA } from '../../data/corrida.js';
-import { faqDe, plural, fmtDescanso, juntar } from './comum.js';
+import { faqDe, plural, fmtDescanso, juntar, diaValido, nomeDia, noDia, diaCurto, segundaDa } from './comum.js';
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const emIso = (ctx) => new Date(Number.isFinite(ctx && ctx.agora) ? ctx.agora : Date.now()).toISOString();
+// O dia de que a conversa fala (ctx.data, lido do texto pelo motor: "amanhã", "na sexta"...); sem ele, hoje
+export const diaDe = (ctx) => (ctx && diaValido(ctx.data) ? ctx.data : ctx.hoje);
+export const cap = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
 
 // ---------- leitura do estado ----------
 function pfDoTreino(ctx) {
   try { return perfil(saudeDoTreinador(ctx.st, ctx.hoje).respostas); } catch { return perfil({}); }
 }
 // O treino de musculação que vale hoje (com as marcas da semana): { plan, dia } ou null
-export function treinoDeHoje(ctx) {
+export const treinoDeHoje = (ctx) => treinoNoDia(ctx, ctx.hoje);
+export function treinoNoDia(ctx, data) {
   const plan = P.planoAtivo(ctx.st);
   if (!plan) return null;
   let t = null;
-  try { t = P.treinoDoDia(ctx.st, ctx.hoje); } catch { t = null; }
+  try { t = P.treinoDoDia(ctx.st, data); } catch { t = null; }
   const dia = t && t.diaId ? plan.dias.find((d) => d.id === t.diaId) : null;
   return dia && Array.isArray(dia.itens) && dia.itens.length ? { plan, dia } : null;
 }
@@ -78,42 +85,52 @@ const POR_QUE_PERDIDO = [
   'Entre dois treinos do mesmo músculo, 48 horas ou mais: o app não junta dois treinos no mesmo dia.',
   'Sem um dia assim, siga a semana: perder um treino tira pouca força.',
 ];
-function semTreinoHoje(motivo) {
+function semTreinoNoDia(motivo, data, hoje) {
+  const quando = noDia(data, hoje), de = data === hoje ? 'de hoje' : `de ${nomeDia(data, hoje)}`;
   const t = {
-    treinou: 'Você já treinou hoje. Bom trabalho!',
-    marcado: 'O treino de hoje já está marcado como não feito.',
+    treinou: data === hoje ? 'Você já treinou hoje. Bom trabalho!' : `Você já treinou ${quando}.`,
+    marcado: `O treino ${de} já está marcado como não feito.`,
     em_andamento: 'Você tem um treino em andamento.',
-    sem_treino: 'Hoje não tem musculação no seu plano.',
-  }[motivo] || 'Hoje não há treino do plano para marcar.';
+    sem_treino: `${cap(quando)} não tem musculação no seu plano.`,
+    outra_semana: 'Só dá para remarcar os dias desta semana. Na outra semana, fale comigo no dia.',
+    antes_do_plano: 'Esse dia é de antes do seu plano começar.',
+  }[motivo] || `${cap(quando)} não há treino do plano para marcar.`;
   return { texto: [t], ir: [motivo === 'em_andamento' ? { rotulo: 'Voltar ao treino', rota: 'sessao' } : { rotulo: 'Ver a semana', rota: 'treinos' }] };
 }
-// Ação que grava a marca "Não treinei" de hoje (a mesma da folha de views/perdido.js)
-function acaoMarcar(p, escolha, hoje) {
+const semTreinoHoje = (motivo, ctx) => semTreinoNoDia(motivo, ctx.hoje, ctx.hoje);
+// Ação que grava a marca "Não treinei" de `data` (a mesma da folha de views/perdido.js; para um dia que ainda não chegou,
+// a mesma regra com P.propor(..., { futuro: true }))
+function acaoMarcar(p, escolha, hoje, data = hoje) {
   const para = p.movs.length ? P.nomeDoDia(p.movs[0].para, hoje) : '';
+  const futuro = { futuro: data > hoje };
+  const doDia = data === hoje ? '' : ` de ${nomeDia(data, hoje)}`;
   return {
     rotulo: escolha === 'mover' ? `Passar para ${para}` : 'Seguir a semana',
-    confirmar: escolha === 'mover' ? `O ${p.nome} passa para ${para}. ${p.texto}` : `O ${p.nome} fica como não feito e volta ${P.naProxima(hoje)}.`,
+    confirmar: escolha === 'mover' ? `O ${p.nome}${doDia} passa para ${para}. ${p.texto}` : `O ${p.nome}${doDia} fica como não feito e volta ${P.naProxima(data)}.`,
     aplicar: (s, ctx) => {
-      const m = P.novaMarca(s, ctx.hoje, ctx.hoje, escolha, emIso(ctx));
+      const m = P.novaMarca(s, data, ctx.hoje, escolha, emIso(ctx), futuro);
       if (!m || (escolha === 'mover' && !m.movs.length)) return false;
       s.perdidos = P.limparPerdidos([...(Array.isArray(s.perdidos) ? s.perdidos : []), m]);
       return true;
     },
-    depois: escolha === 'mover' ? `Pronto: ${p.nome} passou para ${para}.` : `Pronto. O ${p.nome} volta ${P.naProxima(hoje)}.`,
+    data, semana: true,
+    depois: escolha === 'mover' ? `Pronto: ${p.nome} passou para ${para}.` : `Pronto. O ${p.nome} volta ${P.naProxima(data)}.`,
   };
 }
-// A proposta do app para o treino de hoje, com as mesmas escolhas da folha "Não treinei"
+// A proposta do app para o treino do dia da conversa (hoje, ou outro desta semana), com as escolhas da folha "Não treinei"
 export function passoPerdido(ctx, antes = [], detalhes = [], refs = []) {
+  const data = diaDe(ctx);
   let p;
-  try { p = P.propor(ctx.st, ctx.hoje, ctx.hoje); } catch { p = { pode: false, motivo: '' }; }
-  if (!p.pode) return semTreinoHoje(p.motivo);
+  try { p = P.propor(ctx.st, data, ctx.hoje, { futuro: data > ctx.hoje }); } catch { p = { pode: false, motivo: '' }; }
+  if (!p.pode) return semTreinoNoDia(p.motivo, data, ctx.hoje);
   const foco = (() => { try { return comboAtual(ctx.st).foco; } catch { return ''; } })();
   const ajusta = foco === 'corrida' || foco === 'equilibrio';
   return {
     texto: [...antes, p.titulo, p.texto],
     detalhes: [...detalhes, ...POR_QUE_PERDIDO, ...(ajusta ? ['Com a corrida, as pernas ficam a 24 horas ou mais da corrida forte e do longo.'] : [])],
     refs: [...refs, ...P.REFS_MUSCULACAO, ...(ajusta ? P.REFS_COMBINADO : [])],
-    acoes: p.movs.length ? [acaoMarcar(p, 'mover', ctx.hoje), acaoMarcar(p, 'seguir', ctx.hoje)] : [acaoMarcar(p, 'seguir', ctx.hoje)],
+    acoes: p.movs.length ? [acaoMarcar(p, 'mover', ctx.hoje, data), acaoMarcar(p, 'seguir', ctx.hoje, data)] : [acaoMarcar(p, 'seguir', ctx.hoje, data)],
+    data,
   };
 }
 
@@ -164,9 +181,15 @@ const TEMPOS = [20, 30, 45];
 function passoTempo(ctx) {
   const b = bloqueio(ctx);
   if (b) return b;
+  // outro dia: a versão curta só sai no dia (o treino começa na hora)
+  if (diaDe(ctx) !== ctx.hoje) {
+    const t = treinoNoDia(ctx, diaDe(ctx));
+    if (!t) return semTreinoNoDia('sem_treino', diaDe(ctx), ctx.hoje);
+    return { texto: [`O ${t.dia.nome} ${noDia(diaDe(ctx), ctx.hoje)} leva cerca de ${duracaoEstimada(t.dia)} min.`, 'No dia, me diga quanto tempo você tem: eu monto uma versão mais curta na hora.'], refs: ['iversen2021'], ir: [{ rotulo: 'Ver o treino', rota: `treino/${t.plan.id}/${t.dia.id}` }] };
+  }
   const t = treinoDeHoje(ctx);
-  if (!t) return semTreinoHoje('sem_treino');
-  if (ctx.st.current) return semTreinoHoje('em_andamento');
+  if (!t) return semTreinoHoje('sem_treino', ctx);
+  if (ctx.st.current) return semTreinoHoje('em_andamento', ctx);
   const dur = duracaoEstimada(t.dia);
   const op = TEMPOS.filter((m) => m < dur);
   if (!op.length) return { texto: [`O treino de hoje (${t.dia.nome}) já é curto: cerca de ${dur} min.`], ir: [{ rotulo: 'Ver o treino', rota: `treino/${t.plan.id}/${t.dia.id}` }] };
@@ -178,7 +201,7 @@ function passoTempo(ctx) {
 }
 export function passoCurto(ctx, minutos) {
   const t = treinoDeHoje(ctx);
-  if (!t) return semTreinoHoje('sem_treino');
+  if (!t) return semTreinoHoje('sem_treino', ctx);
   const pf = pfDoTreino(ctx);
   const r = versaoCurta(t.dia.itens, minutos, pf);
   if (!r.itens.length) return passoPerdido(ctx);
@@ -264,13 +287,14 @@ export function passoJuntar(ctx, focoDito = '') {
   return { texto, aviso, detalhes: det, refs, ir };
 }
 // "Não corri" de hoje (a mesma marca da folha de views/perdido.js)
-export function acaoNaoCorrer(rotulo = 'Marcar como não feita') {
+export function acaoNaoCorrer(rotulo = 'Marcar como não feita', data = '') {
   return {
     rotulo,
-    confirmar: 'A corrida de hoje fica marcada como não feita. Ela não se repõe: o plano segue.',
+    confirmar: `A corrida ${data ? 'desse dia' : 'de hoje'} fica marcada como não feita. Ela não se repõe: o plano segue.`,
     aplicar: (s, ctx) => {
-      if (!P.podeMarcarCorrida(s, ctx.hoje, ctx.hoje)) return false;
-      const m = P.marcaCorrida(ctx.hoje, emIso(ctx));
+      const dia = data || ctx.hoje;
+      if (!P.podeMarcarCorrida(s, dia, ctx.hoje)) return false;
+      const m = P.marcaCorrida(dia, emIso(ctx));
       if (!m) return false;
       s.perdidos = P.limparPerdidos([...(Array.isArray(s.perdidos) ? s.perdidos : []), m]);
       return true;
@@ -384,12 +408,17 @@ function passoMudar(ctx) {
   return {
     texto: ['O que você quer mudar?'],
     opcoes: [
-      { rotulo: 'Os dias ou o tempo de treino', valor: 'respostas' },
-      { rotulo: 'O lugar (casa ou academia)', valor: 'respostas' },
+      { rotulo: 'Dias, tempo ou lugar do treino', valor: 'respostas' },
       { rotulo: 'Trocar alguns exercícios', valor: 'trocas' },
+      { rotulo: 'Não tenho um aparelho', valor: 'aparelho' },
+      { rotulo: 'A ordem dos exercícios', valor: 'ordem' },
+      { rotulo: 'Séries, repetições ou carga', valor: 'dose' },
       { rotulo: 'Outro treino, mesmas respostas', valor: 'novo' },
     ],
     proximo: (v, c) => {
+      if (v === 'aparelho') return passoAparelhoFalta(c);
+      if (v === 'dose') return passoCarga(c);
+      if (v === 'ordem') return passoOrdem(c);
       if (v === 'respostas') return { texto: ['Isso muda nas respostas da entrevista.', 'O Treinador monta o plano novo e mostra antes de você aceitar.'], ir: [{ rotulo: 'Mudar as respostas', abrir: 'treinador-entrevista' }] };
       const plan = P.planoAtivo(c.st);
       let sd = null;
@@ -415,14 +444,297 @@ function passoMudar(ctx) {
   };
 }
 
+// ---------- a semana (logic/perdido.js: semanaEfetiva e semanaDoChat) ----------
+// Os 7 dias, com o que foi feito, o que ficou sem fazer e o que mudou de dia. `coach`: o treinador da conversa (a mesma
+// semana nos dois chats; o da corrida abre a tela da corrida).
+export function passoSemana(ctx, coach = 'treinador') {
+  const b = bloqueio(ctx);
+  if (b) return b;
+  const data = diaDe(ctx), hoje = ctx.hoje;
+  let sem = [];
+  try { sem = P.semanaDoChat(ctx.st, data, hoje); } catch { sem = []; }
+  if (!sem.length) return { texto: ['Não consegui montar a semana agora.'], ir: [{ rotulo: 'Ver a semana', rota: 'treinos' }] };
+  const livres = new Set((() => { try { return diasBloqueados(ctx.st); } catch { return []; } })());
+  const temPlano = !!P.planoAtivo(ctx.st);
+  const linhas = sem.map((d) => {
+    const partes = [];
+    if (d.feito && !d.nome) partes.push('musculação feita');
+    else if (d.nome) partes.push(d.nome + (d.feito ? ' (feito)' : d.veioDe ? ` (veio de ${nomeDia(d.veioDe, hoje)})` : ''));
+    if (d.perdido) partes.push(`${d.perdido.nome} não feito` + (d.perdido.para ? `, passou para ${nomeDia(d.perdido.para, hoje)}` : ''));
+    if (d.foiPara && d.saiu) partes.push(`${d.saiu} passou para ${nomeDia(d.foiPara, hoje)}`);
+    const c = d.corrida;
+    if (c) partes.push(c.nome + (c.feita ? ' (feita)' : c.movidaPara ? ` (passou para ${nomeDia(c.movidaPara, hoje)})` : c.perdida ? ' (não feita)' : c.movidaDe ? ` (veio de ${nomeDia(c.movidaDe, hoje)})` : ''));
+    if (d.extra) partes.push('corrida fora do plano');
+    if (!partes.length) partes.push(livres.has(d.wd) ? 'sem treino (dia livre)' : 'descanso');
+    return `• ${diaCurto(d.data)}${d.data === hoje ? ' (hoje)' : ''}: ${partes.join(' · ')}`;
+  });
+  const seg = segundaDa(data), segHoje = segundaDa(hoje);
+  const titulo = seg === segHoje ? 'Sua semana:' : seg > segHoje ? 'A semana que vem, como está prevista hoje:' : 'Aquela semana:';
+  const detalhes = [];
+  const refs = [];
+  if (temPlano) { detalhes.push(...POR_QUE_PERDIDO); refs.push(...P.REFS_MUSCULACAO); }
+  if (sem.some((d) => d.corrida)) { detalhes.push('Corrida perdida não se repõe: juntar duas faz uma corrida maior, e o risco de lesão sobe.'); refs.push(...P.REFS_CORRIDA); }
+  if (seg > segHoje) detalhes.push('As corridas da semana que vem ainda podem mudar com o que você registrar nesta.');
+  const ir = coach === 'corrida' ? [{ rotulo: 'Abrir a corrida', rota: 'corrida' }] : [{ rotulo: 'Ver a semana', rota: 'treinos' }];
+  return { texto: [titulo, ...linhas], detalhes, refs, ir, data };
+}
+
+// ---------- o treino de um dia, quanto tempo dura, dois dias seguidos, adiantar ----------
+const primeiros = (dia, n = 3) => dia.itens.filter((it) => EX_POR_ID.has(it.ex) && !ehCardio(it)).slice(0, n).map((it) => exDe(it).nome.toLowerCase());
+function corridaNoDia(ctx, data) {
+  try { const d = corridaDoDia(ctx.st, ctx.hoje, data); return d && d.tipo && d.tipo !== 'descanso' ? d : null; } catch { return null; }
+}
+export function passoDoDia(ctx) {
+  const b = bloqueio(ctx);
+  if (b) return b;
+  const data = diaDe(ctx), hoje = ctx.hoje, quando = noDia(data, hoje);
+  const t = treinoNoDia(ctx, data);
+  let ef = null;
+  try { ef = P.treinoDoDia(ctx.st, data); } catch { ef = null; }
+  const c = corridaNoDia(ctx, data);
+  const texto = [];
+  const plan = P.planoAtivo(ctx.st);
+  if (t) {
+    const dur = duracaoEstimada(t.dia);
+    texto.push(`${cap(quando)} é ${t.dia.nome}: ${plural(t.dia.itens.length, 'exercício', 'exercícios')}, cerca de ${dur} min.`);
+    const pr = primeiros(t.dia);
+    if (pr.length) texto.push(`Começa com ${juntar(pr)}.`);
+    if (ef && ef.veioDe) texto.push(`Ele veio de ${nomeDia(ef.veioDe, hoje)}.`);
+  } else if (ef && ef.perdido && plan) {
+    const d = plan.dias.find((x) => x.id === ef.perdido.diaId);
+    texto.push(`O ${d ? d.nome : 'treino'} ${data === hoje ? 'de hoje' : 'de ' + nomeDia(data, hoje)} está marcado como não feito${ef.perdido.para ? ` e passou para ${nomeDia(ef.perdido.para, hoje)}` : ''}.`);
+  } else if (ef && ef.foiPara && plan) {
+    const d = plan.dias.find((x) => x.id === plan.agenda[P.diaDaSemana(data)]);
+    texto.push(`O ${d ? d.nome : 'treino'} ${data === hoje ? 'de hoje' : 'de ' + nomeDia(data, hoje)} passou para ${nomeDia(ef.foiPara, hoje)}.`);
+  } else texto.push(`${cap(quando)} não tem musculação no seu plano.`);
+  if (c) texto.push(`${t ? 'E tem' : 'Tem'} corrida: ${String(c.nome).toLowerCase()}${c.resumo ? ` (${c.resumo})` : ''}.`);
+  const out = { texto, data, ir: t ? [{ rotulo: 'Ver o treino', rota: `treino/${t.plan.id}/${t.dia.id}` }] : [{ rotulo: 'Ver a semana', rota: 'treinos' }] };
+  if (c) out.ir.push({ rotulo: 'Abrir a corrida', rota: 'corrida/dia/' + data });
+  if (t && data === hoje && !treinouHoje(ctx) && !ctx.st.current) {
+    out.opcoes = [{ rotulo: 'Tenho pouco tempo', valor: 'tempo' }, { rotulo: 'Hoje não vou conseguir', valor: 'faltar' }];
+    out.proximo = (v, cc) => (v === 'tempo' ? passoTempo(cc) : passoPerdido({ ...cc, data }));
+  } else if (t && data > hoje && segundaDa(data) === segundaDa(hoje)) {
+    out.opcoes = [{ rotulo: 'Fazer hoje', valor: 'hoje' }, { rotulo: `Não vou poder ${quando}`, valor: 'faltar' }, { rotulo: 'Como fica a semana', valor: 'semana' }];
+    out.proximo = (v, cc) => (v === 'hoje' ? passoAntecipar({ ...cc, data }) : v === 'semana' ? passoSemana({ ...cc, data }) : passoPerdido({ ...cc, data }));
+  }
+  return out;
+}
+export function passoDuracao(ctx) {
+  const b = bloqueio(ctx);
+  if (b) return b;
+  const data = diaDe(ctx), hoje = ctx.hoje;
+  const t = treinoNoDia(ctx, data);
+  const c = corridaNoDia(ctx, data);
+  if (!t && !c) return semTreinoNoDia('sem_treino', data, hoje);
+  const texto = [];
+  if (t) texto.push(`O ${t.dia.nome} ${noDia(data, hoje)} leva cerca de ${duracaoEstimada(t.dia)} min, contando o descanso entre as séries.`);
+  if (c && c.durMin) texto.push(`A corrida (${String(c.nome).toLowerCase()}) leva cerca de ${Math.round(c.durMin)} min.`);
+  const out = { texto, data, detalhes: ['A conta soma as séries, o tempo de cada repetição e o descanso do plano: é a mesma das telas de treino.'] };
+  const dur = t ? duracaoEstimada(t.dia) : 0;
+  if (t && data === hoje && !ctx.st.current && TEMPOS.some((m) => m < dur)) {
+    out.opcoes = [{ rotulo: 'Tenho menos tempo', valor: 'menos' }, { rotulo: 'Está bom assim', valor: 'ok' }];
+    out.proximo = (v, cc) => (v === 'menos' ? passoTempo(cc) : { texto: ['Bom treino!'], ir: [{ rotulo: 'Ver o treino', rota: `treino/${t.plan.id}/${t.dia.id}` }] });
+  } else if (t) out.ir = [{ rotulo: 'Ver o treino', rota: `treino/${t.plan.id}/${t.dia.id}` }];
+  return out;
+}
+export function passoSeguidos(ctx) {
+  const b = bloqueio(ctx);
+  if (b) return b;
+  const pf = pfDoTreino(ctx);
+  const alternado = !!(pf.jovem || pf.diabetes);
+  const texto = alternado
+    ? ['Para você, a musculação fica em dias não seguidos: um dia de treino, outro de descanso.']
+    : ['Pode, se forem músculos diferentes: superiores num dia e pernas no outro, por exemplo.', 'O mesmo músculo, com treino pesado, pede 48 horas de descanso.'];
+  texto.push(pf.jovem ? 'Tenha pelo menos 2 dias sem treino na semana.' : 'Tenha pelo menos 1 dia sem treino na semana.');
+  const refs = ['garber2011', 'acsm2009', 'meeusen2013', ...(pf.jovem ? ['valovichmcleod2011', 'faigenbaum2009'] : []), ...(pf.diabetes ? ['colberg2016'] : [])];
+  const detalhes = ['É a regra que o plano já usa: ele nunca põe o mesmo músculo pesado em dias seguidos nem dois treinos no mesmo dia.'];
+  // a semana desta pessoa: dias seguidos com musculação, e se dividem músculos
+  const plan = P.planoAtivo(ctx.st);
+  if (plan) {
+    const sem = P.semanaEfetiva(plan, ctx.st.perdidos, segundaDa(diaDe(ctx)));
+    const diaPor = (id) => plan.dias.find((x) => x.id === id);
+    for (let k = 0; k < 6; k++) {
+      const a = sem[k].diaId && diaPor(sem[k].diaId), bb = sem[k + 1].diaId && diaPor(sem[k + 1].diaId);
+      if (a && bb && !P.choca(P.cargaDoTreino(a), P.cargaDoTreino(bb))) { detalhes.push(`Na sua semana, ${a.nome} e ${bb.nome} ficam em dias seguidos porque trabalham músculos diferentes.`); break; }
+    }
+  }
+  if (pf.diabetes) detalhes.push('Com diabetes, a recomendação é força em dias não seguidos.');
+  if (pf.jovem) detalhes.push('Antes dos 18 anos, a força fica em dias não seguidos, com 2 dias de descanso na semana.');
+  return { texto, detalhes, refs, ir: [{ rotulo: 'Ver a semana', rota: 'treinos' }] };
+}
+// O treino de outro dia desta semana feito hoje (marca "troca" de logic/perdido.js, avaliarTroca)
+export function passoAntecipar(ctx) {
+  const b = bloqueio(ctx);
+  if (b) return b;
+  const hoje = ctx.hoje, plan = P.planoAtivo(ctx.st);
+  if (!plan) return semTreinoNoDia('sem_treino', hoje, hoje);
+  let de = diaDe(ctx), para = hoje;
+  const ds = (Array.isArray(ctx.datas) ? ctx.datas : []).filter((x) => x && !x.semana && diaValido(x.data) && x.data >= hoje).map((x) => x.data).sort();
+  if (ds.length >= 2 && ds[0] !== ds[ds.length - 1]) { para = ds[0]; de = ds[ds.length - 1]; }
+  if (de <= hoje) {
+    // sem dia dito: o próximo treino da semana
+    const sem = P.semanaEfetiva(plan, ctx.st.perdidos, segundaDa(hoje));
+    const prox = sem.find((d) => d.data > hoje && d.diaId);
+    if (!prox) return { texto: ['Não há outro treino nesta semana para trazer para hoje.'], ir: [{ rotulo: 'Ver a semana', rota: 'treinos' }] };
+    de = prox.data;
+  }
+  let a;
+  try { a = P.avaliarTroca(ctx.st, de, para, hoje); } catch { a = { pode: false, motivo: '' }; }
+  const nomeDe = nomeDia(de, hoje), nomePara = nomeDia(para, hoje);
+  const refs = ['garber2011', 'acsm2009', 'meeusen2013'];
+  if (a.pode) {
+    return {
+      texto: [`Pode: o ${a.nome} de ${nomeDe} vem para ${nomePara}.`, `${cap(nomeDe)} fica sem musculação.`],
+      detalhes: ['Conferi as 48 horas de descanso para os mesmos músculos, os dias livres, a corrida da semana e pelo menos um dia sem treino.'],
+      refs,
+      acoes: [{
+        rotulo: `Fazer o ${a.nome} ${para === hoje ? 'hoje' : nomePara}`, confirmar: `O ${a.nome} sai de ${nomeDe} e passa para ${nomePara}. Os outros dias não mudam.`,
+        aplicar: (s, c) => { const m = P.marcaTroca(s, de, para, c.hoje, emIso(c)); if (!m) return false; s.perdidos = P.limparPerdidos([...(Array.isArray(s.perdidos) ? s.perdidos : []), m]); return true; },
+        depois: `Pronto: o ${a.nome} ficou para ${nomePara}.`, data: para, semana: true,
+      }],
+      data: de,
+    };
+  }
+  const porque = {
+    ocupado: `${cap(nomePara)} já tem o ${a.ocupadoPor || 'treino do dia'}: o app não junta dois treinos no mesmo dia.`,
+    treinou: 'Você já treinou hoje: o app não junta dois treinos no mesmo dia.',
+    bloqueado: `${cap(nomePara)} é um dos dias em que você não treina.`,
+    sem_descanso: `${cap(nomePara)}, o ${a.nome} ficaria sem as 48 horas de descanso para os mesmos músculos (ou a semana ficaria sem um dia livre).`,
+    corrida: `${cap(nomePara)}, o treino de pernas ficaria perto da corrida forte ou do longão.`,
+    feito: `O treino de ${nomeDe} já foi feito.`,
+  }[a.motivo] || `${cap(nomeDe)} não tem treino para trazer para hoje.`;
+  const out = { texto: [porque], refs, data: de, ir: [{ rotulo: 'Ver a semana', rota: 'treinos' }] };
+  if (a.motivo === 'ocupado' && para === hoje) { out.texto.push('Se hoje não der para treinar, posso remarcar o de hoje.'); out.opcoes = [{ rotulo: 'Remarcar o de hoje', valor: 'r' }, { rotulo: 'Como fica a semana', valor: 's' }]; out.proximo = (v, cc) => (v === 'r' ? passoPerdido({ ...cc, data: hoje }) : passoSemana(cc)); }
+  if (a.motivo === 'corrida') out.refs.push('blagrove2018', 'doma2017');
+  return out;
+}
+
+// ---------- a ordem dos exercícios ----------
+function passoOrdem(ctx) {
+  const t = treinoNoDia(ctx, diaDe(ctx));
+  return {
+    texto: ['No treino, toque nos três pontinhos do exercício e escolha “Fazer antes” ou “Fazer depois”: vale só para aquele dia.', 'Para mudar no plano, edite o treino.'],
+    detalhes: ['No plano, os exercícios de várias articulações e dos músculos grandes vêm antes dos isolados, como recomenda o ACSM: eles pedem mais força e técnica.'],
+    refs: ['acsm2009'],
+    ir: [t ? { rotulo: 'Editar o treino', rota: `treino/${t.plan.id}/${t.dia.id}` } : { rotulo: 'Ver os treinos', rota: 'treinos' }],
+  };
+}
+
+// ---------- "esse aparelho não tem na minha academia" ----------
+// Troca o exercício NO PLANO por um do mesmo movimento e músculo que dispensa o aparelho (logic/guiado.js aparelhoOcupado,
+// com as regras de alternativas() do Treinador: aparelhos, limitações, saúde e dores) e, se a pessoa quiser, desmarca o
+// aparelho em "Minha academia" (state.gym), para as próximas escolhas.
+const GENERICAS = new Set(['com', 'de', 'do', 'da', 'na', 'no', 'em', 'e', 'a', 'o', 'para', 'reto', 'reta', 'sentado', 'sentada', 'livre', 'pe', 'maquina', 'barra', 'halteres', 'halter', 'unilateral', 'alternado', 'alternada', 'pegada', 'aberta', 'fechada', 'neutra', 'banco', 'cabo', 'peso', 'corporal', 'aparelho', 'frente', 'costas', 'tipo', 'alta', 'baixa', 'apoio', 'apoiado', 'parado', 'chao', 'joelhos', 'ajoelhado', 'corda', 'inclinado', 'declinado', 'articulada', 'articulado']);
+const tokens = (t) => normalizarTxt(t).split(' ').filter((w) => w.length >= 3 && !GENERICAS.has(w));
+const normalizarTxt = (s) => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+// O item do plano citado no texto ("não tem leg press", "o smith está quebrado"): { it, ex } ou null; com o nome de um
+// aparelho que mais de um exercício do plano usa, { lista: [ex, ...] }
+export function exercicioNoTexto(texto, plan) {
+  const t = ' ' + normalizarTxt(texto) + ' ';
+  if (!plan || t.trim().length < 3) return null;
+  const itens = plan.dias.flatMap((d) => d.itens).filter((it) => EX_POR_ID.has(it.ex));
+  let melhor = null, pts = 0, empate = false;
+  const vistos = new Set(), doAparelho = [];
+  for (const it of itens) {
+    if (vistos.has(it.ex)) continue;
+    vistos.add(it.ex);
+    const ex = exDe(it);
+    let p = tokens(ex.nome).filter((w) => t.includes(' ' + w + ' ') || (w.length >= 6 && t.includes(' ' + w.slice(0, -1)))).length;
+    // o nome do aparelho ("leg press", "smith", "crossover") vale mais que uma palavra do exercício
+    for (const k of ocupados(ex)) { const n = EQUIPAMENTOS[k] ? tokens(EQUIPAMENTOS[k].nome.split(/[(/]/)[0]) : []; if (n.length && n.every((w) => t.includes(' ' + w + ' '))) { p += 2; doAparelho.push(ex); } }
+    if (p > pts) { melhor = { it, ex }; pts = p; empate = false; } else if (p && p === pts) empate = true;
+  }
+  if (pts > 0 && !empate) return melhor;
+  return doAparelho.length > 1 ? { lista: doAparelho } : null;
+}
+const nomesEquip = (ks) => juntar(ks.map((k) => (EQUIPAMENTOS[k] ? EQUIPAMENTOS[k].nome.split(' (')[0].toLowerCase() : k)));
+export function passoAparelhoFalta(ctx) {
+  const b = bloqueio(ctx);
+  if (b) return b;
+  const plan = P.planoAtivo(ctx.st);
+  if (!plan) return { texto: ['Você ainda não tem um plano ativo.'], ir: [{ rotulo: 'Abrir o Treinador', rota: 'treinador' }] };
+  const achou = typeof ctx.texto === 'string' ? exercicioNoTexto(ctx.texto, plan) : null;
+  if (achou && achou.ex) return passoFalta(ctx, achou.ex);
+  // sem o exercício no texto: escolhe entre os que usam um aparelho que "fica num lugar" (máquina, polia, Smith...)
+  const vistos = new Set();
+  const lista = achou && achou.lista ? achou.lista : plan.dias.flatMap((d) => d.itens).filter((it) => { if (!EX_POR_ID.has(it.ex) || vistos.has(it.ex)) return false; vistos.add(it.ex); return ocupados(exDe(it)).length > 0; }).map((it) => exDe(it));
+  if (!lista.length) return { texto: ['Os exercícios do seu plano usam pesos livres ou o peso do corpo.', 'Diga o nome do exercício que não dá para fazer.'], ir: [{ rotulo: 'Ver os treinos', rota: 'treinos' }] };
+  const pagina = (ini) => {
+    const vis = lista.slice(ini, ini + (lista.length - ini > 6 ? 5 : 6));
+    const opcoes = vis.map((ex) => ({ rotulo: ex.nome, valor: ex.id }));
+    if (ini + vis.length < lista.length) opcoes.push({ rotulo: 'Mais exercícios', valor: '#mais' });
+    if (opcoes.length === 1) return passoFalta(ctx, vis[0]);
+    return { texto: [ini ? 'Mais exercícios do plano:' : 'Qual exercício do plano não dá para fazer?'], opcoes, proximo: (v, c) => (v === '#mais' ? pagina(ini + vis.length) : passoFalta(c, EX_POR_ID.get(v))) };
+  };
+  return pagina(0);
+}
+function passoFalta(ctx, ex) {
+  if (!ex) return { texto: ['Não achei esse exercício no plano.'] };
+  const plan = P.planoAtivo(ctx.st);
+  const gym = isObj(ctx.st.gym) ? ctx.st.gym : { all: true, has: {} };
+  let falta = ocupados(ex);
+  if (!falta.length) falta = ex.equip.slice();
+  const has = {};
+  for (const k of Object.keys(EQUIPAMENTOS)) if ((gym.all || gym.has[k] === true) && !falta.includes(k)) has[k] = true;
+  const semAparelho = { all: false, has };
+  let respostas = null, dores = [];
+  try { respostas = respostasParaAvisos(ctx.st, ctx.hoje); } catch { respostas = null; }
+  try { dores = doresDoTreino(ctx.st, ctx.hoje, respostas); } catch { dores = []; }
+  const noPlano = new Set(plan.dias.flatMap((d) => d.itens.map((it) => it.ex)));
+  let ids = [];
+  try { ids = aparelhoOcupado(ex.id, { respostas, gym: semAparelho, dores, noTreino: noPlano, max: 2 }); } catch { ids = []; }
+  const nomeF = nomesEquip(falta);
+  const acoes = ids.map((id) => {
+    const nx = EX_POR_ID.get(id);
+    return {
+      rotulo: `Trocar por ${nx.nome}`,
+      confirmar: `No plano, ${ex.nome} vira ${nx.nome}, com as mesmas séries, repetições e descanso.`,
+      aplicar: (s, c) => {
+        const pl = P.planoAtivo(s);
+        if (!pl) return false;
+        const trocas = [];
+        for (const d of pl.dias) d.itens.forEach((it, idx) => { if (it && it.ex === ex.id) trocas.push({ diaId: d.id, idx, de: ex.id, para: id }); });
+        return trocas.length ? aplicarVariacao(pl, trocas, emIso(c), 'travado') > 0 : false;
+      },
+      depois: `Pronto: ${nx.nome} entrou no lugar de ${ex.nome}.`,
+    };
+  });
+  const aindaTem = gym.all || falta.some((k) => gym.has[k] === true);
+  if (aindaTem) {
+    acoes.push({
+      rotulo: falta.length === 1 ? `Marcar que não tenho ${nomeF}` : 'Marcar que não tenho esses aparelhos',
+      confirmar: `Em “Minha academia”, ${nomeF} fica desmarcado. Os outros aparelhos continuam como estão.`,
+      aplicar: (s) => {
+        if (!isObj(s.gym)) return false;
+        if (s.gym.all !== false) { s.gym.all = false; s.gym.has = {}; for (const k of Object.keys(EQUIPAMENTOS)) if (!falta.includes(k)) s.gym.has[k] = true; } else for (const k of falta) delete s.gym.has[k];
+        return true;
+      },
+      depois: 'Pronto: anotei em “Minha academia”.',
+    });
+  }
+  const texto = ids.length
+    ? [`Sem ${nomeF}, troco “${ex.nome}” por um destes:`, ...ids.map((id) => `• ${EX_POR_ID.get(id).nome}`), 'Mesmo movimento e mesmo músculo.']
+    : [`Sem ${nomeF}, não achei outro exercício do mesmo movimento para “${ex.nome}” que seja seguro para você.`, 'Peça outra versão do treino ao Treinador ou escolha um exercício na lista.'];
+  const local = (() => { try { return perfil(saudeDoTreinador(ctx.st, ctx.hoje).respostas).local; } catch { return ''; } })();
+  const detalhes = ['Séries, repetições e descanso continuam os do plano. A troca segue os aparelhos que sobram, as suas limitações e as dores que você contou.'];
+  if (local && local !== 'minha') detalhes.push('Para os próximos planos do Treinador usarem só o que a sua academia tem, escolha “Só os aparelhos que eu marcar” nas respostas da entrevista.');
+  return {
+    texto, detalhes, refs: ['bazvalle2019', 'iusca2021'], acoes,
+    ir: ids.length ? [{ rotulo: 'Minha academia', rota: 'academia' }] : [{ rotulo: 'Outra versão do treino', abrir: 'treinador-novo' }, { rotulo: 'Minha academia', rota: 'academia' }],
+  };
+}
+
 // ---------- os assuntos ----------
 const temPlano = (ctx) => !!P.planoAtivo(ctx.st);
 function passoPerdidoInicio(ctx) {
   const b = bloqueio(ctx);
   if (b) return b;
+  const data = diaDe(ctx);
   let pode;
-  try { pode = P.podeMarcar(ctx.st, ctx.hoje, ctx.hoje); } catch { pode = { pode: false, motivo: '' }; }
-  if (!pode.pode) return semTreinoHoje(pode.motivo);
+  try { pode = P.podeMarcar(ctx.st, data, ctx.hoje, { futuro: true }); } catch { pode = { pode: false, motivo: '' }; }
+  if (!pode.pode) return semTreinoNoDia(pode.motivo, data, ctx.hoje);
+  // outro dia desta semana (ontem, sexta...): direto à proposta, sem perguntar o motivo
+  if (data !== ctx.hoje) return passoPerdido(ctx, ['Tudo bem.']);
   return {
     texto: ['Tudo bem. O que aconteceu?'],
     opcoes: [
@@ -461,22 +773,65 @@ function passoCansaco(ctx) {
   };
 }
 
+
+// bônus de pontos ao reconhecer o texto (logic/chat/motor.js chama com { datas, hoje, texto, ctx }): só sinais que as
+// palavras não pegam, como as datas da frase ("hoje" é palavra de ligação no motor)
+const temHojeEFutura = (i) => i.datas.some((d) => d.data === i.hoje) && i.datas.some((d) => d.data > i.hoje && !d.semana);
+// "o que eu treino na quinta?": pergunta sobre o treino de um dia (sem negar e sem pedir para trazer para hoje)
+const perguntaDoDia = (i) => i.datas.some((d) => !d.semana && d.data !== i.hoje) && !temHojeEFutura(i) && !doisDias(i) && /\b(treino|treinos|treinar|treino|ficha|malhar|malho|treinamos)\b/.test(i.texto) && !/\b(nao|sem|nem|demora\w*|dura|duracao|leva|minutos|tempo)\b/.test(i.texto);
+// "não vou treinar sexta", "amanhã não rola ir": uma negação perto de treinar / ir / academia
+const faltaDe = (i) => /\b(nao|nem)\b( \w+){0,4} (treinar|treino|malhar|ir|academia|rola|rolar|vai dar|da)\b/.test(i.texto) && !/\b(aparelho|maquina|tem|tenho|sei|dor|doi)\b/.test(i.texto);
+// "dá para fazer o de sexta amanhã?": dois dias, o treino do dia mais adiante feito no mais perto
+const doisDias = (i) => i.datas.filter((d) => !d.semana).length >= 2 && /\b(fazer|faco|treinar|adiantar|antecipar|trazer|puxar|passar)\b/.test(i.texto) && !/\b(nao|nem)\b/.test(i.texto);
 export const INTENCOES = [
   {
-    id: 'treino-perdido', coach: 'treinador', titulo: 'Não vou conseguir treinar hoje', resumo: 'faltar ao treino de hoje',
-    palavras: ['nao vou treinar', 'nao vou conseguir treinar', 'nao consigo treinar', 'nao posso treinar', 'nao vou poder treinar', 'nao da treinar', 'nao deu treinar',
+    id: 'treino-perdido', coach: 'treinador', titulo: 'Não vou conseguir treinar hoje', resumo: 'faltar ao treino de hoje', resumoNoDia: 'faltar ao treino', data: true, prioridade: 1,
+    bonus: (i) => (faltaDe(i) ? 1.5 : 0),
+    palavras: ['furar treino', 'vou furar', 'sem treino', '!viagem', 'so po', 'to morto', 'nao rola', 'nao to afim', 'nao estou afim', 'sem pique', 'nao vou dar conta', 'trabalhar ate tarde', 'trabalho ate tarde', 'nao vou treinar', 'nao vou conseguir treinar', 'nao consigo treinar', 'nao posso treinar', 'nao vou poder treinar', 'nao da treinar', 'nao deu treinar',
       'nao vou academia', 'nao vou poder ir academia', 'nao posso ir academia', 'nao quero ir academia', 'nao quero treinar', 'sem vontade treinar', 'nao vou conseguir ir academia', 'nao consigo ir academia', 'faltar treino', 'faltar academia', 'perder treino', 'perdi treino', 'pular treino',
-      'nao treinei', 'nao vou malhar', 'faltar', 'remarcar treino', 'outro dia', 'adiar treino', 'deixar treino amanha', 'treinar amanha', 'imprevisto',
-      'viagem', 'vou viajar', 'estou viajando', 'doente', 'cansado', 'estou cansado', 'to cansado', 'cansado treinar', 'estou doente', 'to doente', 'dormir mal', 'dormir pouco', 'mal dormir', 'sem condicao treinar', 'sem animo', 'sem vontade treinar'],
+      'nao treinei', 'nao vou malhar', 'faltar', 'remarcar treino', 'adiar treino', 'deixar treino amanha', 'deixar treino outro dia', 'imprevisto', 'nao posso ir', 'nao vou poder ir', 'nao consigo ir', 'nao vou conseguir ir', 'nao vou ir', 'nao vai dar', 'nao vai dar ir', 'nao da ir', 'nao fui', 'vou faltar', 'compromisso', 'nao vai rolar',
+      'viagem', 'vou viajar', 'estou viajando', 'cansado', 'estou cansado', 'to cansado', 'cansado treinar', 'dormir mal', 'dormir pouco', 'mal dormir', 'sem condicao treinar', 'sem animo', 'sem vontade treinar'],
     disponivel: temPlano,
     inicio: passoPerdidoInicio,
   },
   {
     id: 'pouco-tempo', coach: 'treinador', titulo: 'Tenho pouco tempo hoje', resumo: 'um treino mais curto hoje',
-    palavras: ['pouco tempo', 'sem tempo', 'nao tenho tempo', 'tempo curto', 'pressa', 'treino curto', 'treino rapido', 'versao curta', 'minuto', 'meia hora',
-      'so tenho minuto', 'so minuto', 'tenho minuto', 'encurtar treino', 'reduzir treino', 'diminuir treino', 'treino menor', 'tempo apertado', 'dia corrido', 'quanto tempo', 'curto'],
+    palavras: ['pouco tempo', 'sem tempo', 'nao tenho tempo', 'tempo curto', '!pressa', '!correria', 'treino curto', 'treino rapido', 'versao curta', 'minuto', 'meia hora',
+      'so tenho minuto', 'so minuto', 'tenho minuto', 'encurtar treino', 'reduzir treino', 'diminuir treino', 'treino menor', 'tempo apertado', 'dia corrido', 'curto', 'treino mais curto', 'tempo contado'],
     disponivel: (ctx) => !!treinoDeHoje(ctx),
     inicio: passoTempo,
+  },
+  {
+    id: 'qual-treino', coach: 'treinador', titulo: 'Qual é o meu treino', resumo: 'o treino de hoje', resumoNoDia: 'o treino', data: true,
+    bonus: (i) => (perguntaDoDia(i) ? 2 : 0),
+    palavras: ['qual treino', 'qual ficha', 'ir treino', 'tenho treino', 'tem treino', 'treino amanha', 'treino perna', 'treino peito', 'treino costas', 'treino braco', 'treino superior', 'treino superiores', 'treino inferior', 'treino inferiores', 'treino ombro', 'dia perna', 'dia peito', 'qual exercicio', 'quais exercicio', 'que exercicio', 'qual e treino', 'treino de amanha', 'me fala treino', 'fala treino', 'qual musculo', 'que musculo', 'vou fazer', 'o que faco', 'programado'],
+    disponivel: temPlano,
+    inicio: passoDoDia,
+  },
+  {
+    id: 'duracao', coach: 'treinador', titulo: 'Quanto tempo dura o treino', resumo: 'quanto tempo dura o treino', resumoNoDia: 'quanto tempo dura o treino', data: true,
+    palavras: ['quanto tempo dura', 'quanto tempo leva', 'quanto dura', 'quanto demora', 'demora quanto', 'dura quanto', '!duracao', '!demora', '!demorar', 'quanto tempo treino', 'quantos minuto', 'tempo de treino', 'leva quanto tempo', 'vai demorar', 'termina que horas', 'quantos minuto treino', 'minuto treino', 'quanto tempo vou ficar'],
+    disponivel: temPlano,
+    inicio: passoDuracao,
+  },
+  {
+    id: 'semana', coach: 'treinador', titulo: 'Como fica a minha semana', resumo: 'a sua semana de treinos', data: true,
+    palavras: ['como fica semana', 'minha semana', 'semana', '!agenda', 'agenda semana', 'programacao', 'treinos semana', '!calendario', '!cronograma', 'tenho semana', 'tem semana', 'o que tenho semana', 'ver semana', 'mostra semana', 'mostrar semana', 'semana toda', 'semana inteira', 'semana treino', 'semana treinos', 'resto semana', 'proximos dia', 'proximos treinos', 'como ficou semana', 'quais dia treino', 'que dia treino', 'dias treino', 'como fica', 'como ficou', 'como ta', 'como esta', 'quais treinos semana'],
+    disponivel: (ctx) => temPlano(ctx) || temCorrida(ctx.st),
+    inicio: (ctx) => passoSemana(ctx, 'treinador'),
+  },
+  {
+    id: 'antecipar', coach: 'treinador', titulo: 'Fazer o treino de outro dia hoje', resumo: 'fazer hoje o treino de outro dia', resumoNoDia: 'fazer hoje o treino de {dia}', data: true,
+    palavras: ['!adiantar', '!antecipar', 'adiantar treino', 'antecipar treino', 'fazer treino amanha', 'treinar treino amanha', 'trazer treino', 'puxar treino', 'inverter treino', 'inverter dia', 'trocar ordem dia', 'fazer antes'],
+    bonus: (i) => (temHojeEFutura(i) ? 2.5 : doisDias(i) ? 2.5 : 0),
+    disponivel: temPlano,
+    inicio: passoAntecipar,
+  },
+  {
+    id: 'seguidos', coach: 'treinador', titulo: 'Treinar dois dias seguidos', resumo: 'treinar em dias seguidos',
+    palavras: ['dois dia seguido', 'dia seguido', 'treinar seguido', 'treino seguido', 'treinar todo dia', 'todo dia', 'todos dia', 'dia sim dia nao', 'dia consecutivo', '!consecutivo', '!consecutivos', 'treinar de novo amanha', 'treinar dois dia', 'mesmo musculo', 'descansar entre treinos', 'quantos dia descanso', 'descanso entre treinos', 'precisa descansar'],
+    disponivel: temPlano,
+    inicio: passoSeguidos,
   },
   {
     id: 'juntar-treino', coach: 'treinador', titulo: 'Corrida e musculação no mesmo dia', resumo: 'fazer corrida e musculação no mesmo dia',
@@ -488,24 +843,34 @@ export const INTENCOES = [
   {
     id: 'carga', coach: 'treinador', titulo: 'Carga, séries e repetições', resumo: 'carga, séries, repetições ou descanso de um exercício',
     palavras: ['aumentar carga', 'aumento carga', 'subir carga', 'subo carga', 'aumentar peso', 'muito facil', 'ta facil', 'muito leve', 'muito pesado', 'ta pesado', 'carga', 'quanto carga', 'quanto peso', 'quantos quilo', 'serie', 'quantas serie', 'repeticao', 'quantas repeticao', 'descanso', 'quanto descanso', 'quanto tempo descanso',
-      'aumentar carga', 'subir carga', 'progredir', 'progressao', 'evoluir', 'dose', 'exercicio', 'quanto tempo prancha', 'carga recomendada', 'qual carga'],
+      'progredir', 'progressao', 'evoluir', 'dose', 'descanso rosca', 'descanso supino', 'descanso agachamento', 'exercicio', 'quanto tempo prancha', 'carga recomendada', 'qual carga', '!carga', 'carga uso', 'peso uso', 'quanto coloco', 'coloco quanto', 'pegar mais peso', 'botar mais peso', 'ta leve', 'esta leve', 'leve demais', 'facil demais', 'pesado demais', 'ta pesado demais', 'supino leve', 'quantos quilo coloco'],
+    // um exercício do plano junto de carga, séries, repetições ou descanso ("qual o descanso da rosca?")
+    bonus: (i) => (/\b(carga|peso|kg|quilos?|series?|repeticoes|reps|descanso|intervalo|aumento|aumentar)\b/.test(i.texto) && exercicioNoTexto(i.texto, P.planoAtivo(i.ctx.st)) ? 2 : 0),
     disponivel: (ctx) => { const p = P.planoAtivo(ctx.st); return !!p && p.dias.some((d) => Array.isArray(d.itens) && d.itens.length); },
     inicio: passoCarga,
   },
   {
+    id: 'aparelho-falta', coach: 'treinador', titulo: 'Não tenho um aparelho', resumo: 'um aparelho que a sua academia não tem',
+    palavras: ['nao tem aparelho', 'academia nao tem', 'nao tem academia', 'minha academia nao tem', 'nao tenho aparelho', 'falta aparelho', 'aparelho quebrado', 'quebrado', 'quebrada', 'nao existe', 'nao tem esse', 'esse aparelho', 'aparelho nao tem',
+      'nao tem leg', 'nao tem smith', 'nao tem polia', 'nao tem cross', '!manutencao', '!quebrou', '!quebrado', '!quebrada', 'parou de funcionar', 'estragado', 'estragada', 'interditado', 'nao tem na academia', 'nao tem onde fazer', 'aparelho estragado', 'polia quebrada', 'nao funciona', 'sem funcionar'],
+    bonus: (i) => (/\b(nao tem|nao tenho|quebrad\w*|manutencao|estragad\w*|nao existe)\b/.test(i.texto) && exercicioNoTexto(i.texto, P.planoAtivo(i.ctx.st)) ? 1.5 : 0),
+    disponivel: temPlano,
+    inicio: passoAparelhoFalta,
+  },
+  {
     id: 'mudar-plano', coach: 'treinador', titulo: 'Mudar ou refazer o treino', resumo: 'mudar ou refazer o seu treino',
-    palavras: ['nao tenho halteres', 'sem halteres', 'nao tenho aparelho', 'sem aparelho', 'mudar plano', 'mudar treino', 'mudar dia', 'mudar dias', 'trocar dia', 'outro treino', 'treino novo', 'novo treino', 'refazer treino', 'refazer entrevista', 'refazer plano',
-      'treinar casa', 'treino casa', 'trocar exercicio', 'mudar exercicio', 'enjoei treino', 'cansei treino', 'treino chato', 'mudar academia', 'mudar horario', 'plano novo', 'mudar', 'novo plano'],
+    palavras: ['nao tenho halteres', 'sem halteres', 'treinar sem aparelho', 'treino sem aparelho', 'mudar plano', 'mudar treino', 'mudar dia', 'mudar dias', 'trocar dia', 'outro treino', 'treino novo', 'novo treino', 'refazer treino', 'refazer entrevista', 'refazer plano',
+      'treinar casa', 'treino casa', 'trocar exercicio', 'mudar exercicio', 'enjoei treino', 'cansei treino', 'treino chato', 'treino diferente', 'algo diferente', 'mudar academia', 'mudar horario', 'plano novo', 'mudar', 'novo plano', 'posso mudar', 'mudar algo', 'alterar treino', 'mudar ordem', 'trocar ordem', 'ordem exercicio', '!enjoei', 'enjoei plano', 'treino enjoativo', 'cansei plano'],
     inicio: passoMudar,
   },
   {
-    id: 'dor-treino', coach: 'treinador', titulo: 'Estou com dor', resumo: 'uma dor',
-    palavras: ['dor', 'dor depois treino', 'dor muscular', 'machucar', 'lesao', 'tendinite', 'inflamado', 'inchado', 'inchaco', 'joelho dor', 'ombro dor', 'costas dor', 'dor joelho', 'dor ombro', 'dor costas', 'dor lombar', 'dor punho', 'dor cotovelo', 'dor tornozelo', 'dor quadril', 'lombar', 'torcer', 'dor articulacao', 'dor tendao', 'estou dor'],
+    id: 'dor-treino', coach: 'treinador', titulo: 'Estou com dor', resumo: 'uma dor', prioridade: 3,
+    palavras: ['dor', 'dor depois treino', 'dor muscular', 'machucar', 'lesao', 'tendinite', 'inflamado', 'inchado', 'inchaco', 'joelho dor', 'ombro dor', 'costas dor', 'dor joelho', 'dor ombro', 'dor costas', 'dor lombar', 'dor punho', 'dor cotovelo', 'dor tornozelo', 'dor quadril', 'lombar', 'torcer', 'dor articulacao', 'dor tendao', 'estou dor', 'to dor', 'tou dor', 'sinto dor', 'senti dor', '!travou', 'travado', 'lombar travou', 'costas travou', '!fisgada', 'estou dolorido', 'todo dolorido', 'todo dor', 'joelho dor', 'dor joelho', 'ombro dor', 'dor ombro', 'costas dor', 'dor costas', 'lombar dor', 'dor lombar', 'punho dor', 'dor punho', 'cotovelo dor', 'dor cotovelo', 'tornozelo dor', 'dor tornozelo', 'quadril dor', 'dor quadril', 'panturrilha dor', 'dor panturrilha', 'canela dor', 'dor canela', 'pe dor', 'dor pe', 'coxa dor', 'dor coxa', 'perna dor', 'dor perna', 'pescoco dor', 'dor pescoco', 'braco dor', 'dor braco', 'gluteo dor', 'dor gluteo', 'virilha dor', 'dor virilha'],
     inicio: (ctx) => passoDor(ctx, 'treinador'),
   },
   {
     id: 'aparelho-ocupado', coach: 'treinador', titulo: 'O aparelho está ocupado', resumo: 'um aparelho ocupado na academia',
-    palavras: ['aparelho ocupado', 'ocupado', 'aparelho', 'esperar aparelho', 'trocar aparelho', 'academia cheia', 'academia lotada', 'fila', 'nao tem aparelho', 'aparelho quebrado', 'sem aparelho'],
+    palavras: ['aparelho ocupado', '!ocupado', 'aparelho', 'esperar aparelho', 'trocar aparelho', 'academia cheia', 'academia lotada', 'fila', 'aparelho usando', 'tem gente', 'tem fila', 'esperando aparelho'],
     disponivel: temPlano,
     inicio: (ctx) => {
       const b = bloqueio(ctx);

@@ -5,6 +5,7 @@ import { state, update } from '../store.js';
 import { refresh } from '../router.js';
 import { folha } from './common.js';
 import { LOCAIS_DOR, TIPOS_DOR, QUANDO_DOR, doresAtivas, dorDeAlerta, limparDor, MAX_DORES } from '../logic/dor.js';
+import { botaoContarProblema, cartaoSaude } from './saude-fora.js';
 
 const LADOS = [['', 'Não se aplica'], ['e', 'Esquerdo'], ['d', 'Direito'], ['dois', 'Os dois']];
 
@@ -54,7 +55,15 @@ export function contarDor({ aoSalvar = null } = {}) {
 const nomeDor = (d) => LOCAIS_DOR[d.onde] + (d.lado === 'e' ? ', lado esquerdo' : d.lado === 'd' ? ', lado direito' : d.lado === 'dois' ? ', os dois lados' : '');
 // Cartão com as dores ativas e o botão de contar uma dor. `extra(dor)` devolve o texto do que o treinador mudou por causa
 // dela (opcional). Sem dor ativa, mostra só o botão.
-export function cartaoDores({ extra = null, aoMudar = null } = {}) {
+// Junto vem o caminho para contar um problema de saúde que não é do treino (febre, pancada...: views/saude-fora.js) e,
+// se houver algum que mude o treino hoje, o cartão dele.
+export function cartaoDores(opc = {}) {
+  const saude = cartaoSaude({ aoMudar: opc.aoMudar ? () => opc.aoMudar(null) : null, contar: false });
+  const dores = cartaoDoresSo(opc);
+  const contar = botaoContarProblema('block plain sm', opc.aoMudar ? () => opc.aoMudar(null) : null);
+  return h('div', { class: 'col gap-s' }, saude, dores, contar);
+}
+function cartaoDoresSo({ extra = null, aoMudar = null } = {}) {
   const ativas = doresAtivas(state, dateKey(new Date()));
   const abrir = () => contarDor({ aoSalvar: aoMudar });
   if (!ativas.length) return btn('Contar uma dor ao Treinador', abrir, 'block ghost', 'plus');

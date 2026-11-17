@@ -110,7 +110,8 @@ export function linhaNaoTreinado(dia, nome, aoMudar, podeDesfazer = true) {
 export function linhaNaoCorrida(entrada, nome, aoMudar, podeDesfazer = true) {
   return h('div', { class: 'treino row perdido', 'data-corrida-perdida': entrada.data },
     h('div', { class: 'grow' },
-      h('div', { class: 'row gap-s' }, h('span', { class: 'bold', text: nome || 'Corrida' }), badge('Não feita', 'warn')),
-      h('div', { class: 'small muted', text: 'Não se repõe: o plano segue.' })),
+      h('div', { class: 'row gap-s' }, h('span', { class: 'bold', text: nome || 'Corrida' }), badge(entrada.para ? 'Mudou de dia' : 'Não feita', entrada.para ? 'acc' : 'warn')),
+      // corrida que mudou de dia pelo chat (marca com `para`)
+      h('div', { class: 'small muted', text: entrada.para ? `Passou para ${P.nomeDoDia(entrada.para, hojeK())}.` : 'Não se repõe: o plano segue.' })),
     podeDesfazer ? btn('Desfazer', () => desfazerMarca(entrada, aoMudar), 'sm ghost nao-treinei') : null);
 }

@@ -21,6 +21,8 @@ import { cartaoSono } from './sono.js';
 import { resumoDeHoje } from '../logic/diario.js';
 import { semanaEfetiva, segundaDe, podeMarcar, podeMarcarCorrida, corridaPerdidaEm, nomeDoDia } from '../logic/perdido.js';
 import { botaoNaoTreinei, botaoNaoCorri, linhaNaoTreinado, linhaNaoCorrida } from './perdido.js';
+import { cartaoSaude, avisoDoTreino, contarProblema } from './saude-fora.js';
+import { semTreinoHoje } from '../logic/saude-fora.js';
 
 function saudacao() {
   const hora = new Date().getHours();
@@ -37,6 +39,11 @@ export function homeView() {
 
   const inst = installCard();
   if (inst) body.push(inst);
+
+  // problema de saúde que não vem do treino (febre, pancada...) e muda o treino de hoje: logic/saude-fora.js
+  let saudeHoje = null, semTreino = false;
+  try { saudeHoje = cartaoSaude(); semTreino = semTreinoHoje(state, dateKey(hoje)); } catch { saudeHoje = null; }
+  if (saudeHoje) body.push(saudeHoje);
 
   // treino em andamento
   if (state.current) {
@@ -55,7 +62,12 @@ export function homeView() {
   }
   const hojeK = dateKey(hoje);
   const corridaNaoFeita = corridaHoje && !corridaHoje.feito ? corridaPerdidaEm(state, corridaHoje.data) : null;
-  if (corridaNaoFeita) {
+  // a corrida de hoje mudou de dia pelo chat: hoje fica sem corrida, com "Mudou de dia" e o "Desfazer"
+  const movidaHoje = !corridaHoje && corridaSem && Array.isArray(corridaSem.movidas) ? corridaSem.movidas[wd] : null;
+  const marcaMovidaHoje = movidaHoje ? corridaPerdidaEm(state, dateKey(hoje)) : null;
+  if (marcaMovidaHoje) {
+    body.push(h('div', { class: 'card col' }, h('div', { class: 'tiny muted bold', text: 'CORRIDA DE HOJE' }), linhaNaoCorrida(marcaMovidaHoje, String(movidaHoje.nome || 'Corrida'), refresh)));
+  } else if (corridaNaoFeita) {
     body.push(h('div', { class: 'card col' }, h('div', { class: 'tiny muted bold', text: 'CORRIDA DE HOJE' }), linhaNaoCorrida(corridaNaoFeita, String(corridaHoje.nome || 'Corrida'), refresh)));
   } else if (corridaHoje) {
     body.push(h('div', { class: 'card hl col' },
@@ -119,7 +131,8 @@ export function homeView() {
         dia.foco ? h('p', { class: 'small muted', text: dia.foco }) : null,
         thumbs, lista,
         h('p', { class: 'tiny muted', text: `${plural(dia.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(dia)} min` }),
-        btn(feitoHoje ? 'Treinar de novo' : 'Iniciar treino', () => startSession(plan.id, dia.id), (feitoHoje ? '' : 'primary ') + 'lg block', 'play'),
+        (() => { try { return avisoDoTreino(); } catch { return null; } })(),
+        semTreino ? null : btn(feitoHoje ? 'Treinar de novo' : 'Iniciar treino', () => startSession(plan.id, dia.id), (feitoHoje ? '' : 'primary ') + 'lg block', 'play'),
         // imprevisto ou dúvida: "Não treinei" e o chat do Treinador, discretos, na mesma linha
         h('div', { class: 'perdido-acoes' }, podeMarcar(state, hojeK, hojeK).pode ? botaoNaoTreinei(hojeK, refresh) : null, botaoChat('treinador', 'Dúvida? Pergunte', 'sm plain'))));
     } else {
@@ -220,6 +233,8 @@ export function homeView() {
   for (const [ic, label, path] of [['chart', 'Evolução e peso corporal', 'progresso'], ['history', 'Histórico de treinos', 'historico'], ['building', 'Minha academia (aparelhos)', 'academia'], ['settings', 'Ajustes e backup', 'ajustes'], ['book', 'Sobre, privacidade e referências', 'sobre']]) {
     atalhos.appendChild(h('button', { class: 'menu-item', type: 'button', onClick: () => go(path) }, icon(ic), h('span', { class: 'grow', text: label }), icon('right', 's muted')));
   }
+  // febre, pancada, corte, dor de cabeça...: o treinador avalia se muda o treino (views/saude-fora.js)
+  atalhos.appendChild(h('button', { class: 'menu-item', type: 'button', 'data-acao': 'contar-saude', onClick: () => contarProblema() }, icon('heart'), h('span', { class: 'grow', text: 'Contar um problema de saúde' }), icon('right', 's muted')));
   body.push(atalhos);
   return { title: 'FitCore', actions: [iconBtn('settings', 'Ajustes', () => go('ajustes'))], body };
 }

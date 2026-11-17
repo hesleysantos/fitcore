@@ -22,6 +22,7 @@
 //   que se corre (hreljac2005) e o recorde mundial (wa_recordes).
 import { FAIXA_DA_RESPOSTA, FAIXAS_PAUSA } from './pausa.js';
 import { LOCAIS_DOR, DIAS_ATIVA, dorDeAlerta, doresAtivas } from './dor.js';
+import { doresForaDaCorrida } from './saude-fora.js';
 import { comboAtual } from './combinado.js';
 import { diasBloqueados } from './dias-livres.js';
 import { EX_POR_ID } from '../data/exercises.js';
@@ -1072,6 +1073,8 @@ export function limparRegistro(raw) {
     nota: typeof raw.nota === 'string' ? raw.nota.slice(0, 200) : '', planejado: typeof raw.planejado === 'string' ? raw.planejado.slice(0, 160) : '',
     // o treino que estava no plano naquele dia; a chave só existe quando há o que guardar
     ...(limparPlanejado(raw.plan) ? { plan: limparPlanejado(raw.plan) } : {}),
+    // corrida feita na esteira (logic/esteira.js): a chave só existe nesse caso; conta igual no volume da semana
+    ...(raw.local === 'esteira' ? { local: 'esteira' } : {}),
   };
 }
 export const MAX_REGISTROS = 3000;
@@ -1156,6 +1159,8 @@ const TRONCO = new Set(['abdomen', 'coluna-alta', 'pescoco']);
 // pf (opcional) = perfil de quem corre: na gestação, dor no abdômen ou na panturrilha suspende a corrida (csep2019, sbc_gestacao2021)
 export function efeitoDaDor(d, pf = null) {
   const nada = { nivel: 0, corte: 0, texto: '', refs: [] };
+  // problema de saúde que não vem do treino: o efeito já vem pronto (logic/saude-fora.js, doresForaDaCorrida)
+  if (isObj(d) && isObj(d.fora)) return Number.isFinite(d.fora.nivel) && typeof d.fora.texto === 'string' ? { ...nada, ...d.fora, refs: Array.isArray(d.fora.refs) ? d.fora.refs : [] } : nada;
   if (!isObj(d) || !temLocal(d.onde)) return nada;
   if (isObj(pf) && pf.gestante && (d.onde === 'abdomen' || d.onde === 'panturrilha')) return { nivel: 4, corte: 1, texto: 'Corrida suspensa: na gestação, dor no abdômen ou na panturrilha é sinal para parar e falar com o seu obstetra antes de voltar a treinar (regra de cautela do aplicativo).', refs: ['sbc_gestacao2021', 'nhs_tvp'] };
   const nome = LOCAIS_DOR[d.onde].toLowerCase();
@@ -1242,7 +1247,7 @@ function ordenarLongo(dias, c, naJanela) {
 function aplicarDor(dia, ef, c) {
   if (dia.tipo === 'caminhada' || dia.tipo === 'descanso' || ef.nivel === 0) return dia;
   if (ef.nivel >= 4) {
-    return { ...treino('descanso', [], c), wd: dia.wd, durMin: 0, distKm: 0, resumo: 'Sem corrida hoje, por causa da dor', detalhe: 'Se não doer, caminhada, bicicleta ou natação mantêm o condicionamento. Procure avaliação antes de voltar a correr.', original: dia.tipo };
+    return { ...treino('descanso', [], c), wd: dia.wd, durMin: 0, distKm: 0, resumo: ef.resumo || 'Sem corrida hoje, por causa da dor', detalhe: ef.detalhe || 'Se não doer, caminhada, bicicleta ou natação mantêm o condicionamento. Procure avaliação antes de voltar a correr.', original: dia.tipo };
   }
   if (dia.tipo === 'prova' || dia.tipo === 'teste') return { ...dia, detalhe: 'Atenção: você contou uma dor. Só faça a prova se a dor estiver leve e não mudar o seu jeito de correr; não vale a pena piorar uma lesão. ' + dia.detalhe };
   if (dia.tipo === 'corrida_caminhada') {
@@ -1271,7 +1276,7 @@ function aplicarDor(dia, ef, c) {
   const n = { ...base, wd: dia.wd, ajustado: true, blocos: base.blocos.filter((b) => b.rotulo !== 'Acelerações').map((b) => ({ ...b })) };
   // o corte é feito na duração de cada treino, sempre para baixo: a ordem entre eles se mantém
   if (ef.corte) { const b = n.blocos[0]; if (b.seg) b.seg = Math.max(600, Math.floor((b.seg * (1 - ef.corte)) / 300) * 300); else b.m = Math.max(1000, Math.floor((b.m * (1 - ef.corte)) / 500) * 500); }
-  n.detalhe = (n.tipo === 'longo' ? 'Ritmo de conversa. ' : 'Ritmo confortável. ') + 'Treino ajustado por causa da dor: se ela aumentar durante a corrida, pare e caminhe.';
+  n.detalhe = (n.tipo === 'longo' ? 'Ritmo de conversa. ' : 'Ritmo confortável. ') + (ef.ajuste || 'Treino ajustado por causa da dor: se ela aumentar durante a corrida, pare e caminhe.');
   return refazer(n, c);
 }
 
@@ -1582,7 +1587,8 @@ function opcoesLimpas(o) {
     mostrados: limparMostrados(op.mostrados), degrau: limparDegrau(op.degrau),
     foco: FOCOS_CORRIDA.includes(op.foco) ? op.foco : '', // prioridade entre corrida e musculação ('' = sem escolha: o plano não muda)
     diasForca: dias(op.diasForca), diasPernas: dias(op.diasPernas), bloqueados: dias(op.bloqueados).slice(0, 5),
-    dores: (Array.isArray(op.dores) ? op.dores : []).filter((d) => isObj(d) && typeof d.onde === 'string' && Object.prototype.hasOwnProperty.call(LOCAIS_DOR, d.onde) && Number.isFinite(d.nivel)).slice(0, 30),
+    // (problemas fora do treino podem não ter região: valem pelo efeito pronto em `fora`)
+    dores: (Array.isArray(op.dores) ? op.dores : []).filter((d) => isObj(d) && (isObj(d.fora) || (typeof d.onde === 'string' && Object.prototype.hasOwnProperty.call(LOCAIS_DOR, d.onde))) && Number.isFinite(d.nivel)).slice(0, 30),
     // dores que a pessoa marcou como melhoradas: { onde, fim }
     encerradas: (Array.isArray(op.encerradas) ? op.encerradas : []).filter((d) => isObj(d) && typeof d.onde === 'string' && diaValido(d.fim)).slice(0, 100).map((d) => ({ onde: d.onde, fim: d.fim })),
   };
@@ -1837,7 +1843,7 @@ export function gerarPlano(respostas, opcoes) {
     if (ef.nivel > 0) efeitos.push({ d, ef });
   }
   const pior = efeitos.reduce((m, x) => (x.ef.nivel > m.nivel || (x.ef.nivel === m.nivel && x.ef.corte > m.corte) ? x.ef : m), { nivel: 0, corte: 0 });
-  for (const { d, ef } of efeitos) ajustes.push({ texto: `${LOCAIS_DOR[d.onde]}: ${ef.texto}`, motivo: `Você contou dor de intensidade ${d.nivel} nessa região. O ajuste vale por 7 dias a partir de hoje e se renova enquanto a dor estiver registrada: marque “Melhorou” na dor quando ela passar.`, refs: ef.refs });
+  for (const { d, ef } of efeitos) ajustes.push(d.fora ? { texto: ef.texto, motivo: String(ef.motivo || ''), refs: ef.refs } : { texto: `${LOCAIS_DOR[d.onde]}: ${ef.texto}`, motivo: `Você contou dor de intensidade ${d.nivel} nessa região. O ajuste vale por 7 dias a partir de hoje e se renova enquanto a dor estiver registrada: marque “Melhorou” na dor quando ela passar.`, refs: ef.refs });
 
   // ----- ritmos, com os ajustes de VDOT -----
   // Na volta de pausa, o VDOT cai conforme o tempo parado (vdoto2_pausa). Sem prova nova e com o treino em dia, sobe 1 ponto
@@ -2270,7 +2276,8 @@ function opcoesDoEstado(st, hoje) {
   const desde = diaLocal(run.aceitoEm);
   const dores = Array.isArray(st.dores) ? st.dores : [];
   return {
-    inicio: run.inicio, hoje, registros: Array.isArray(st.runs) ? st.runs : [], diasForca: forca, diasPernas: pernas, dores: doresAtivas(st, hoje), desde,
+    // + problemas de saúde que não vêm do treino (logic/saude-fora.js), já com o efeito na corrida pronto em `fora`
+    inicio: run.inicio, hoje, registros: Array.isArray(st.runs) ? st.runs : [], diasForca: forca, diasPernas: pernas, dores: [...doresAtivas(st, hoje), ...(() => { try { return doresForaDaCorrida(st, hoje); } catch { return []; } })()], desde,
     bloqueados: diasBloqueados(st), // dias em que a pessoa não treina (logic/dias-livres.js)
     foco: comboAtual(st).foco, mostrados: run.mostrados, degrau: run.degrau,
     // o plano começou na segunda-feira seguinte ao aceite? (as pausas adiam o início guardado: desconta)
@@ -2312,7 +2319,7 @@ const diaGuardado = (m, p) => ({
 // extras[wd] = corridas registradas em dia sem treino do plano: [{ id, data, tipo, distKm, durMin }].
 function semanaDoPlano(p, st, n, ini, hoje) {
   const s = p.semanas[n - 1];
-  const dias = new Array(7).fill(null), extras = Array.from({ length: 7 }, () => []);
+  const dias = new Array(7).fill(null), extras = Array.from({ length: 7 }, () => []), movidas = new Array(7).fill(null);
   const runs = Array.isArray(st.runs) ? st.runs.filter((r) => isObj(r)) : [];
   let diaLongo = null;
   for (let k = 0; k < 7; k++) {
@@ -2326,7 +2333,19 @@ function semanaDoPlano(p, st, n, ini, hoje) {
     if (d.tipo === 'longo') diaLongo = wd;
     dias[wd] = { ...d, wd, data, forte, chave: forte || d.tipo === 'longo', feito: melhorRegistro(doDia) };
   }
-  return { semana: n, totalSemanas: p.totalSemanas, semanaAtual: p.semanaAtual, fase: ROTULO.fase[s.fase] + (s.descarga ? ' · semana leve' : ''), foco: s.foco, descarga: s.descarga, dias, extras, diaLongo, inicioDaSemana: ini };
+  // corrida que mudou de dia pelo chat (marca "corrida" com `para`, logic/perdido.js): aparece no dia novo (`movidaDe`); o
+  // dia de origem fica SEM corrida (não é previsto, não conta como falta), e `movidas[wd]` diz para onde ela foi
+  for (const e of Array.isArray(st.perdidos) ? st.perdidos : []) {
+    if (!isObj(e) || e.tipo !== 'corrida' || !diaValido(e.para) || !diaValido(e.data) || segundaDe(e.data) !== ini || segundaDe(e.para) !== ini) continue;
+    const wd0 = diaDaSemana(e.data), wd = diaDaSemana(e.para), de = dias[wd0];
+    if (!de || de.movidaPara || de.movidaDe || dias[wd]) continue;
+    dias[wd] = { ...de, wd, data: e.para, movidaDe: e.data, feito: melhorRegistro(runs.filter((r) => r.data === e.para)) };
+    dias[wd0] = null;
+    movidas[wd0] = { para: e.para, nome: de.nome };
+    extras[wd] = [];
+    if (de.tipo === 'longo' && diaLongo === wd0) diaLongo = wd;
+  }
+  return { semana: n, totalSemanas: p.totalSemanas, semanaAtual: p.semanaAtual, fase: ROTULO.fase[s.fase] + (s.descarga ? ' · semana leve' : ''), foco: s.foco, descarga: s.descarga, dias, extras, movidas, diaLongo, inicioDaSemana: ini };
 }
 const semTreinos = () => ({ dias: new Array(7).fill(null), extras: Array.from({ length: 7 }, () => []), diaLongo: null });
 // Semana atual do plano
@@ -2358,9 +2377,15 @@ export function planoDaSemanaEm(st, hoje, segunda) {
 }
 // Treino planejado para uma data (ou null). Em data que já passou, é o treino que o plano MOSTROU naquele dia (`guardado: true`);
 // se ele não ficou guardado, vem o previsto pelo plano de hoje, marcado `estimado: true` (serve para mostrar, não para comparar).
-export function treinoDoDia(st, hoje, data) {
+export function treinoDoDia(st, hoje, data, origem = false) {
   const p = planoAtual(st, hoje);
   if (!p || !diaValido(data)) return null;
+  // corrida que mudou de dia pelo chat (logic/perdido.js): no dia novo vale a corrida do dia de origem; o dia de origem
+  // fica sem corrida (`origem` = true só para buscar, no dia de origem, a corrida que foi para o dia novo)
+  const perd = Array.isArray(st.perdidos) ? st.perdidos : [];
+  const mov = perd.find((e) => isObj(e) && e.tipo === 'corrida' && e.para === data && diaValido(e.data) && e.data !== data);
+  if (mov) { const o = treinoDoDia(st, hoje, mov.data, true); if (o) return { ...o, wd: diaDaSemana(data), data, movidaDe: mov.data }; }
+  if (!origem && perd.some((e) => isObj(e) && e.tipo === 'corrida' && e.data === data && diaValido(e.para) && e.para !== data)) return null;
   const n = p.inicios.findIndex((ini) => data >= ini && data <= somaDias(ini, 6)) + 1;
   const s = n ? p.semanas[n - 1] : null;
   if (!s) return null;
@@ -2438,7 +2463,10 @@ export function evolucao(registros, hoje, nSemanas = 8) {
     const l = rs.filter((r) => r.data >= a && r.data <= b && ehCorrida(r));
     semanas.push({ inicio: a, km: r1(l.reduce((s, r) => s + r.distKm, 0)), min: Math.round(l.reduce((s, r) => s + r.durMin, 0)), sessoes: l.length, carga: Math.round(l.reduce((s, r) => s + (r.pse || 0) * r.durMin, 0)) });
   }
-  const leves = rs.filter((r) => (r.tipo === 'leve' || r.tipo === 'longo' || r.tipo === 'livre') && r.distKm >= 2 && r.durMin > 0 && (r.pse == null || r.pse <= 5)).slice(-12).map((r) => ({ data: r.data, ritmo: Math.round((r.durMin * 60) / r.distKm), pse: r.pse }));
+  // na esteira, o mesmo esforço sai num ritmo mais lento (miller2019): a tendência compara só corridas do mesmo lugar da mais recente
+  const levesTodos = rs.filter((r) => (r.tipo === 'leve' || r.tipo === 'longo' || r.tipo === 'livre') && r.distKm >= 2 && r.durMin > 0 && (r.pse == null || r.pse <= 5));
+  const ultEsteira = levesTodos.length > 0 && levesTodos[levesTodos.length - 1].local === 'esteira';
+  const leves = levesTodos.filter((r) => (r.local === 'esteira') === ultEsteira).slice(-12).map((r) => ({ data: r.data, ritmo: Math.round((r.durMin * 60) / r.distKm), pse: r.pse }));
   const comTreino = semanas.filter((s) => s.sessoes > 0).length;
   let seq = 0;
   for (let i = semanas.length - 1; i >= 0; i--) { if (semanas[i].sessoes > 0) seq++; else if (i < semanas.length - 1) break; }

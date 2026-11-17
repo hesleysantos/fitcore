@@ -253,9 +253,13 @@ export function plansView() {
     const card = h('div', { class: 'card col dia' + (wd === hojeWd ? ' hl' : ''), 'data-wd': String(wd) },
       h('div', { class: 'row between' }, h('div', { class: 'dia-nome' }, DIAS_LONGO[wd], h('span', { class: 'small muted', text: ' · ' + diaMes(dataDe(wd)) })), wd === hojeWd ? badge('Hoje', 'acc') : d && feitoEm(d, wd) ? badge('Feito', 'ok') : null));
     const extras = corrida && Array.isArray(corrida.extras) && Array.isArray(corrida.extras[wd]) ? corrida.extras[wd] : [];
-    if (c || extras.length) card.appendChild(rotulo('run', 'Corrida'));
+    // corrida que mudou de dia pelo chat: o dia de origem fica sem corrida, só com a linha "Mudou de dia" e o "Desfazer"
+    const movida = !c && corrida && Array.isArray(corrida.movidas) && corrida.movidas[wd] ? corrida.movidas[wd] : null;
+    const marcaMovida = movida ? corridaPerdidaEm(state, dateKey(dataDe(wd))) : null;
+    if (c || extras.length || marcaMovida) card.appendChild(rotulo('run', 'Corrida'));
     const corridaPerdida = c && !c.feito ? corridaPerdidaEm(state, c.data) : null;
-    if (corridaPerdida) card.appendChild(linhaNaoCorrida(corridaPerdida, String(c.nome || 'Corrida'), refresh, semanaVista === 0));
+    if (marcaMovida) card.appendChild(linhaNaoCorrida(marcaMovida, String(movida.nome || 'Corrida'), refresh, semanaVista === 0));
+    else if (corridaPerdida) card.appendChild(linhaNaoCorrida(corridaPerdida, String(c.nome || 'Corrida'), refresh, semanaVista === 0));
     else if (c) { card.appendChild(blocoCorrida(c)); if (c.estimado && !c.feito) card.appendChild(h('div', { class: 'tiny muted', text: 'Previsão de hoje para esse dia (o que foi mostrado na época não ficou guardado).' })); }
     for (const x of extras) {
       const partes = [x.distKm ? String(x.distKm).replace('.', ',') + ' km' : '', x.durMin ? Math.round(x.durMin) + ' min' : ''].filter(Boolean).join(' · ');

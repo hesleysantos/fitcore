@@ -12,6 +12,8 @@ import { recomendacao, temRegistro, contextoDoEstado } from '../logic/carga.js';
 import { aquecimentoGeral, primeiroDoMusculo, seriesDeAproximacao, aparelhoOcupado, testeDaPrimeira, limparGuia, REFS_TESTE } from '../logic/guiado.js';
 import { EQUIPAMENTOS } from '../data/equipment.js';
 import { REFS } from '../data/knowledge.js';
+import { barrarSemTreino, avisoDoTreino } from './saude-fora.js';
+import { efeitoDeHoje } from '../logic/saude-fora.js';
 import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate, agendarAviso, cancelarAviso, fimDoDescanso } from '../device.js';
 
 // ---------- carga recomendada ----------
@@ -77,6 +79,8 @@ export async function startSession(planId, dayId, opc = {}) {
   if (!day) return;
   const itensDoDia = opc && Array.isArray(opc.itens) && opc.itens.length ? opc.itens : day.itens;
   if (!itensDoDia.length) { toast('Este treino ainda não tem exercícios.'); return; }
+  // febre, diarreia, pancada na cabeça... (logic/saude-fora.js): dia sem treino, com o porquê e o "Já melhorei"
+  if (barrarSemTreino()) return;
   if (!(await podeIniciar())) { if (state.current) go('sessao'); return; }
   unlockAudio();
   // Volta depois de 2 semanas ou mais parado (consenso CSCCa/NSCA de 2019, regra FIT): nas 2 primeiras semanas o treino
@@ -87,12 +91,17 @@ export async function startSession(planId, dayId, opc = {}) {
     const series = seriesNaVolta(base);
     base = base.map((it, i) => ({ ...it, series: series[i], descanso: descansoNaVolta(it.ex, it.descanso, volta) }));
   }
+  // dia de treino só leve por um problema de saúde (resfriado, volta depois da febre...): uma série a menos por exercício
+  let leve = false;
+  try { leve = efeitoDeHoje(state, dateKey(new Date())).musc === 'leve'; } catch { leve = false; }
+  if (leve) base = base.map((it) => ({ ...it, series: Math.max(1, (Number(it.series) || 1) - 1) }));
   update((s) => {
     s.current = { id: 's' + uid(), planId, diaId: dayId, nome: day.nome, inicio: new Date().toISOString(), fim: '', nota: '', itens: base.map(montarItem), restEnd: 0, restTotal: 0, volta: volta ? volta.dias : 0, cron: null };
   });
   go('sessao');
 }
 export async function startFree() {
+  if (barrarSemTreino()) return;
   if (!(await podeIniciar())) { if (state.current) go('sessao'); return; }
   unlockAudio();
   update((s) => { s.current = { id: 's' + uid(), planId: '', diaId: '', nome: 'Treino livre', inicio: new Date().toISOString(), fim: '', nota: '', itens: [], restEnd: 0, restTotal: 0, volta: 0, cron: null }; });
@@ -611,6 +620,8 @@ export function sessionView() {
   for (const ev of TOQUES) document.addEventListener(ev, liberarSom, true);
 
   const body = [];
+  // problema de saúde de hoje (logic/saude-fora.js): treino leve ou região fora; o aviso por exercício fica em cada cartão
+  { let av = null; try { av = avisoDoTreino(); } catch { av = null; } if (av) { av.id = 'sessao-saude'; body.push(av); } }
   if (cur.volta >= 14) body.push(note('info', `De volta depois de ${duracaoTxt(cur.volta)} parado: nas duas primeiras semanas o treino começa com menos séries por músculo, mais descanso e carga menor. Você pode ajustar qualquer série.`));
   if (!cur.itens.length) body.push(h('div', { class: 'empty' }, icon('dumbbell'), h('p', { text: 'Treino livre: toque em “Exercício” para escolher o que você vai fazer.' })));
   body.push(aquec, cards);
