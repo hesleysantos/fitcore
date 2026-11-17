@@ -9,6 +9,7 @@ import { LOCAIS_DOR, TIPOS_DOR, DIAS_ATIVA, dorDeAlerta, doresAtivas } from './d
 import { planoDaSemana, planoDaSemanaEm } from './corrida.js';
 import { limparCombo, FOCOS, FORTALECIMENTOS } from './combinado.js';
 import { perguntaCondicoes, perguntaTriagem, perguntaRemedios, perguntaLiberado, condicoesDe, sinaisDe, remediosDe, soComSupervisao, respostasProtegidas } from './saude.js';
+import { perguntaSemTreino, bloqueadosDe, livresDe, notaDosDias, nomesDosDias, diasBloqueados } from './dias-livres.js';
 
 // ---------- perguntas ----------
 export const PERGUNTAS = [
@@ -59,10 +60,14 @@ export const PERGUNTAS = [
   perguntaLiberado((a) => precisaLiberacao(a) && !soComSupervisao(a), 'Um médico já liberou você para treinar musculação?'),
   { k: 'peso', tipo: 'numero', informar: true, titulo: 'Qual é o seu peso?', ajuda: 'Uma estimativa já serve.', min: 30, max: 250, un: 'kg', padrao: 70, passo: 0.5, dec: 1 },
   { k: 'altura', tipo: 'numero', informar: true, titulo: 'Qual é a sua altura?', ajuda: 'Em centímetros.', min: 120, max: 220, un: 'cm', padrao: 170 },
+  // dias em que a pessoa não treina (vale também para a corrida): logic/dias-livres.js
+  perguntaSemTreino(),
   {
     k: 'dias', tipo: 'um', titulo: 'Quantos dias por semana você consegue treinar?',
     ajuda: 'Seja realista: o melhor treino é o que você consegue manter.',
-    op: [['2', '2 dias', ''], ['3', '3 dias', ''], ['4', '4 dias', ''], ['5', '5 dias', ''], ['6', '6 dias', '']],
+    // não aparece opção com mais treinos do que dias livres (`nota` diz por quê)
+    nota: notaDosDias,
+    op: [['2', '2 dias', ''], ['3', '3 dias', ''], ['4', '4 dias', ''], ['5', '5 dias', ''], ['6', '6 dias', '']].map((o) => [...o, (a) => Number(o[0]) <= livresDe(bloqueadosDe(a))]),
   },
   {
     k: 'tempo', tipo: 'um', titulo: 'Quanto tempo você tem por treino?',
@@ -87,7 +92,8 @@ export const PERGUNTAS = [
       ['elastico', 'Elástico ou mini band', ''], ['bola_suica', 'Bola suíça', ''],
       ['caixa', 'Degrau ou caixa firme', 'Que não escorrega nem vira'], ['banco_inclinado', 'Banco regulável', 'Com encosto que inclina'],
       ['barra_fixa', 'Barra fixa', 'De porta ou de parede, bem presa'], ['kettlebell', 'Kettlebell', ''], ['trx', 'Fita de suspensão', 'Presa em ponto firme'],
-      ['corda_pular', 'Corda de pular', ''], ['bicicleta', 'Bicicleta ergométrica', ''], ['esteira', 'Esteira', ''], ['nenhum', 'Nenhum destes', ''],
+      ['corda_pular', 'Corda de pular', ''], ['bicicleta', 'Bicicleta ergométrica', ''], ['esteira', 'Esteira', ''],
+      ['escada', 'Simulador de escada', 'Aparelho de subir degraus'], ['nenhum', 'Nenhum destes', ''],
     ],
   },
   {
@@ -126,7 +132,7 @@ export const ROTULO = {
   experiencia: { nunca: 'Começando agora', iniciante: 'Iniciante', intermediario: 'Intermediário', avancado: 'Avançado' },
   pausa: { treinando: 'Sem pausa', '2a4s': '2 a 4 semanas', '1a3m': '1 a 3 meses', '3a6m': '3 a 6 meses', mais6m: 'Mais de 6 meses' },
   local: { completa: 'Academia completa', minha: 'Aparelhos da minha academia', halteres: 'Casa com halteres', corporal: 'Sem aparelhos' },
-  extras: { elastico: 'elástico', bola_suica: 'bola suíça', caixa: 'degrau', banco_inclinado: 'banco regulável', barra_fixa: 'barra fixa', kettlebell: 'kettlebell', trx: 'fita de suspensão', corda_pular: 'corda de pular', bicicleta: 'bicicleta ergométrica', esteira: 'esteira' },
+  extras: { elastico: 'elástico', bola_suica: 'bola suíça', caixa: 'degrau', banco_inclinado: 'banco regulável', barra_fixa: 'barra fixa', kettlebell: 'kettlebell', trx: 'fita de suspensão', corda_pular: 'corda de pular', bicicleta: 'bicicleta ergométrica', esteira: 'esteira', escada: 'simulador de escada' },
 };
 
 export function respostasCompletas(a) {
@@ -214,7 +220,11 @@ export function perfil(respostas) {
   const objetivo = OPC.objetivo.has(a.objetivo) ? a.objetivo : 'saude';
   const d = Math.round(Number(a.dias));
   const t = Number(a.tempo);
-  const dias = Number.isFinite(d) ? Math.min(6, Math.max(2, d)) : 3;
+  // dias em que a pessoa não treina (logic/dias-livres.js): o plano nunca pede mais treinos do que os dias livres
+  const bloqueados = bloqueadosDe(a);
+  const livres = livresDe(bloqueados);
+  const diasPedidos = Number.isFinite(d) ? Math.min(6, Math.max(2, d)) : 3;
+  const dias = Math.min(diasPedidos, livres);
   const tempo = Number.isFinite(t) && t > 0 ? TEMPOS.reduce((m, x) => (Math.abs(x - t) < Math.abs(m - t) ? x : m), 60) : 60;
   // músculos em prioridade, na ordem em que foram escolhidos; as áreas antigas ("pernas", "braços") valem por dois
   const focoPedido = [];
@@ -229,7 +239,9 @@ export function perfil(respostas) {
     objetivoDose: gestante ? 'saude' : objetivo,
     obeso: imc != null && imc >= 30,
     baixoPeso: imc != null && (idoso ? imc < 22 : imc < 18.5),
-    dias, tempo,
+    dias, tempo, diasPedidos, bloqueados, livres,
+    // os dois únicos dias livres são seguidos (só com 5 dias bloqueados): ver divisoes()
+    livresSeguidos: livres === 2 && [0, 1, 2, 3, 4, 5, 6].filter((w) => !bloqueados.includes(w)).some((w, _, l) => l.includes((w + 1) % 7)),
     local: OPC.local.has(a.local) ? a.local : 'completa',
     // itens extras em casa: só valem para os locais de casa e só os que existem na pergunta
     extras: a.local === 'halteres' || a.local === 'corporal' ? lista(a.extras, OPC.extras).filter((x) => x !== 'nenhum' && Object.prototype.hasOwnProperty.call(EQUIPAMENTOS, x)) : [],
@@ -304,6 +316,11 @@ const D_BASE = {
 const D_SUPINF_CARDIO = { 5: { dias: ['supA', 'infA', 'cardio', 'supB', 'infB'] }, 6: { dias: ['supA', 'infA', 'cardio', 'supB', 'infB', 'cardio'] } };
 function divisoes(pf) {
   const d = pf.dias;
+  // Só dois dias livres, e seguidos (ex.: sábado e domingo): corpo inteiro nos dois deixaria o mesmo músculo sem as 48
+  // horas de descanso (ref garber2011). Fica superiores num dia e inferiores no outro; para menores de 18 e diabetes, que
+  // pedem força em dias não seguidos (refs faigenbaum2009, colberg2016), e se a divisão não der para montar, um treino de
+  // corpo inteiro e um de cardio.
+  if (d <= 2 && pf.livresSeguidos) return pf.jovem || pf.diabetes ? [{ dias: ['fullA', 'cardio'] }] : [{ dias: ['supA', 'infA'] }, { dias: ['fullA', 'cardio'] }];
   if (d <= 2) return [{ dias: ['fullA', 'fullB'] }];
   // Menores de 18: 2 a 3 treinos de força por semana em dias não seguidos (refs faigenbaum2009, lloyd2014). Diabetes: 2 a
   // 3 sessões de força em dias não consecutivos (refs colberg2016, kanaley2022). Os dias que sobram viram cardio.
@@ -678,7 +695,29 @@ const numVersao = (v) => Math.abs(Math.floor(Number(v))) % 1000000 || 0;
 // lista de dores ativas (logic/dor.js → doresAtivas): o plano já sai poupando as regiões doloridas (ver "dores", abaixo).
 // `combinado` (opcional): resumoCombinado(state, hoje) — a prioridade de quem corre e faz musculação e os dias da corrida
 // forte e do longo. Sem ele, o plano sai como sempre.
+// Dias em que a pessoa não treina (resposta semTreino — logic/dias-livres.js): a agenda só usa os dias livres. Se neles não
+// dá para manter o descanso de sempre — 48 horas ou mais entre treinos do mesmo músculo (ref garber2011) e, para menores
+// de 18 e diabetes, força em dias não seguidos (refs faigenbaum2009, colberg2016) —, sai um treino de cada vez até dar:
+// o descanso vem antes do número de treinos, e o plano diz isso em uma linha.
 export function gerarPlano(respostas, gymBruta, versaoBruta = 0, doresBrutas = null, combinado = null) {
+  let p = gerarNosDias(respostas, gymBruta, versaoBruta, doresBrutas, combinado);
+  if (!p || !p.perfil.bloqueados.length) return p;
+  const { diasPedidos, livres, bloqueados } = p.perfil;
+  const r = respostas && typeof respostas === 'object' ? respostas : {};
+  let d = p.perfil.dias;
+  while (p.quebra && d > 2) {
+    const q = gerarNosDias({ ...r, dias: String(d - 1) }, gymBruta, versaoBruta, doresBrutas, combinado);
+    if (!q || !q.dias.length) break;
+    d--; p = q;
+  }
+  const nomes = nomesDosDias(bloqueados);
+  // resposta antiga (de antes de marcar os dias sem treino) com mais treinos do que dias livres
+  if (diasPedidos > livres) p.avisos.unshift({ tipo: 'info', diasLivres: true, texto: `Você pediu ${diasPedidos} dias de treino, mas com ${nomes} sem treino sobram ${livres} dias livres: o plano usa os ${livres}.` });
+  if (d < Math.min(diasPedidos, livres)) p.avisos.unshift({ tipo: 'warn', diasLivres: true, texto: `Nos dias livres, ${Math.min(diasPedidos, livres)} treinos ficariam sem o descanso necessário entre eles (48 horas para o mesmo músculo${p.perfil.jovem || p.perfil.diabetes ? '; para você, força em dias não seguidos' : ''}). Por segurança, o plano ficou com ${d}. Libere outro dia para ter mais.` });
+  if (p.quebra) p.avisos.unshift({ tipo: 'warn', diasLivres: true, texto: 'Nos dias livres, não deu para deixar 48 horas de descanso entre dois treinos do mesmo músculo. Libere outro dia; até lá, não faça esses dois treinos em dias seguidos.' });
+  return p;
+}
+function gerarNosDias(respostas, gymBruta, versaoBruta = 0, doresBrutas = null, combinado = null) {
   const corr = limparCombinado(combinado);
   if (!corr || !corr.fortalece) return gerarComFoco(respostas, gymBruta, versaoBruta, doresBrutas, combinado);
   // Fortalecimento para a corrida dentro da musculação: as garantias (um pé só, panturrilha, abdutores, core) entram no
@@ -1042,7 +1081,7 @@ function montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, baseFoco, co
     const semExercicio = faltam.filter((g) => !cands(g[1] === R_CORE ? CORE : SLOT_RESERVA[g[1][0]]).length).map((g) => g[0]);
     combinadoInfo = { foco: corr.foco, fortalecimento: corr.fortalecimento, agendaMudou: !!(encaixe && encaixe.mudou), vespera: encaixe ? encaixe.vespera : 0, garantidos: garantias.filter((g) => tem(g[1])).map((g) => g[0]), faltam: faltam.map((g) => g[0]), semExercicio, descanso: descansoSemana };
     if (cardioDaCorrida || AEROBIO.has(pf.objetivoDose)) av.push({ tipo: 'info', combo: true, texto: 'Como você corre, este plano não tem cardio: a corrida já conta para a meta da semana.' });
-    if (encaixe && encaixe.mudou) av.push({ tipo: 'info', combo: true, texto: `${encaixe.ajusta ? 'Para as pernas ficarem a 24 horas ou mais da corrida forte e do longo' : 'Para a semana ter um dia de descanso'}, os treinos foram para: ${encaixe.dias.map((w) => DIAS_NOME[w]).join(', ')}.` });
+    if (encaixe && encaixe.mudou) av.push({ tipo: 'info', combo: true, texto: `${encaixe.fora && !encaixe.ajusta ? 'Fora dos dias em que você não treina' : encaixe.ajusta ? 'Para as pernas ficarem a 24 horas ou mais da corrida forte e do longo' : 'Para a semana ter um dia de descanso'}, os treinos foram para: ${encaixe.dias.map((w) => DIAS_NOME[w]).join(', ')}.` });
     if (descansoSemana === 0) av.push({ tipo: 'warn', combo: true, texto: 'Somando corrida e musculação, a semana fica sem nenhum dia de descanso. Tire um treino ou junte a musculação a uma corrida leve no mesmo dia: pelo menos um dia de descanso por semana é o recomendado.' });
     if (encaixe && encaixe.vespera) av.push({ tipo: 'warn', combo: true, texto: 'Não deu para afastar todo treino de pernas da corrida forte: na véspera, treine as pernas mais leve.' });
     if (corr.fortalece) av.push({ tipo: 'info', combo: true, texto: `Fortalecimento para a corrida: o treino tem ${combinadoInfo.garantidos.join(', ') || 'os exercícios de pernas'}.${semExercicio.length ? ` Sem exercício para o seu perfil e os seus aparelhos: ${semExercicio.join(', ')}.` : ''}${faltam.length > semExercicio.length ? ` Não coube no treino sem tirar o principal: ${faltam.map((g) => g[0]).filter((x) => !semExercicio.includes(x)).join(', ')}.` : ''}` });
@@ -1052,6 +1091,8 @@ function montarPlano(respostas, gymBruta, versaoBruta, doresBrutas, baseFoco, co
   return {
     nome: 'Plano do Treinador', dias: limpos, agenda, volume, avisos: av, orientacoes: orientacoes(pf, estadoCardio, corr ? corr.foco || 'corre' : ''), revisaoSemanas: semanasRevisao(pf), perfil: pf, minCardio,
     foco, focoFora: pf.focoPedido.slice(pf.foco.length).map(nomeGrupo), versao, combinado: combinadoInfo,
+    // os dias livres não deixaram cumprir o descanso entre treinos (ver encaixarNaCorrida e gerarPlano)
+    quebra: !!(encaixe && encaixe.quebra),
     faltando: dias.filter((d) => d._chave !== 'cardio' && d.itens.filter((it) => !it._cardio).length < 3).map((d) => d.nome),
   };
 }
@@ -1268,7 +1309,8 @@ function orientacoes(pf, estadoCardio = 'ok', focoCorrida = '') {
   // quem prioriza a corrida (ou os dois por igual): pernas sem falha (ref blagrove2018)
   o.push(['Esforço', rir + (focoCorrida === 'corrida' || focoCorrida === 'equilibrio' ? ' Nas pernas, não vá até a falha: isso não ajuda a corrida e pesa no treino seguinte.' : '')]);
   o.push(['Como aumentar a carga', 'Use a faixa de repetições do treino. Quando conseguir o número mais alto da faixa em todas as séries, em dois treinos seguidos, aumente a carga em 2 a 10% e volte ao número mais baixo.']);
-  o.push(['Aquecimento', 'Faça 5 minutos de cardio leve e, antes dos dois primeiros exercícios, 1 ou 2 séries com metade da carga. Não é preciso alongar parado antes do treino de força.']);
+  // séries de aproximação e cardio leve: regra e fontes em logic/guiado.js (iversen2021, ribeiro2020, garber2011, izquierdo2021)
+  o.push(['Aquecimento', `No 1º exercício de cada músculo, faça 2 séries leves antes: 6 repetições com cerca de 40% da carga e 6 com cerca de 80%, longe da falha (o treino mostra as cargas). ${pf.idoso || pf.pressao || pf.liberacao || pf.moderado ? 'Para o seu perfil, faça também 5 minutos de cardio leve antes.' : 'Cinco minutos de cardio leve antes são opcionais.'} Não é preciso alongar parado antes do treino de força.`]);
   o.push(['Execução', 'Suba em 1 a 2 segundos e desça em 2 segundos, controlando o peso. Use a amplitude completa do movimento que você consegue fazer sem dor. Solte o ar no esforço e não prenda a respiração.']);
   // o texto só diz que "o cardio do plano já conta" quando o plano tem cardio
   const conta = estadoCardio === 'corrida' ? 'O seu plano de corrida já conta para essa meta.' : estadoCardio === 'ok' ? 'O cardio do plano já conta para essa meta.' : estadoCardio === 'dor' ? 'Com a dor que você contou, o cardio fica para depois que ela passar ou for avaliada.' : 'Este plano não tem cardio: some esses minutos com caminhada, bicicleta ou outra atividade.';
@@ -1402,7 +1444,7 @@ const MEMO_CORRIDA = { k: '', v: null };
 const maisDias = (dia, n) => new Date(Date.parse(dia + 'T12:00:00Z') + n * 86400000).toISOString().slice(0, 10);
 function semanasDaCorrida(st, hoje) {
   const run = st.run;
-  const k = [hoje, run.aceitoEm, run.inicio, JSON.stringify(run.pausas || []), Array.isArray(st.runs) ? st.runs.length : 0, JSON.stringify(run.answers || {})].join('|');
+  const k = [hoje, run.aceitoEm, run.inicio, JSON.stringify(run.pausas || []), Array.isArray(st.runs) ? st.runs.length : 0, JSON.stringify(run.answers || {}), diasBloqueados(st).join(',')].join('|');
   if (MEMO_CORRIDA.k === k) return MEMO_CORRIDA.v;
   const fortes = new Set(), longos = new Set(), dias = new Set();
   let longo = null;
@@ -1470,8 +1512,13 @@ const ehDiaDePernas = (d) => d.itens.filter((it) => { const ex = EX_POR_ID.get(i
 // menores de 18, pelo menos 1 a 2 dias de folga por semana (ref valovichmcleod2011). Por isso, para
 // menores de 18 — e, por cautela, sem fonte direta, para 60 anos ou mais e iniciantes —, ficar com um dia só custa 12:
 // mais do que deixar um treino de pernas na véspera da corrida forte (que sai com o aviso de ir mais leve).
-function encaixarNaCorrida(dias, pf, corr) {
-  if (!corr) return null;
+function encaixarNaCorrida(dias, pf, corrBruto) {
+  // Dias em que a pessoa não treina (logic/dias-livres.js): o encaixe nunca usa esses dias. Sem corrida, ele só roda quando
+  // a agenda de sempre cai num deles; com corrida, as regras abaixo valem do mesmo jeito, só que nos dias livres.
+  const bloq = new Set(pf.bloqueados || []);
+  const fora = dias.some((d) => bloq.has(d._wd));
+  if (!corrBruto && !fora) return null;
+  const corr = corrBruto || { foco: '', chave: [], dias: [] };
   // com prioridade na musculação (ou sem resposta), as pernas não mudam de dia por causa da corrida: os treinos só
   // saem do lugar quando, sem isso, a semana ficaria sem nenhum dia de descanso
   const ajusta = corr.foco === 'corrida' || corr.foco === 'equilibrio';
@@ -1479,14 +1526,34 @@ function encaixarNaCorrida(dias, pf, corr) {
   const n = dias.length;
   if (!n || n > 6) return null;
   const temDescanso = 7 - new Set([...corr.dias, ...dias.map((d) => d._wd)]).size > 0;
-  if (temDescanso && (!ajusta || !chave.size)) return null;
+  if (!fora && temDescanso && (!ajusta || !chave.size)) return null;
   const pernas = dias.map(ehDiaDePernas);
   const prim = dias.map((d) => { const m = {}; for (const it of d.itens) { const ex = EX_POR_ID.get(it.ex); if (!ex || ex.padrao === 'cardio') continue; for (const mu of new Set(ex.primarios)) if (GRANDES.includes(grupoVol(mu))) m[mu] = (m[mu] || 0) + it.series; } return m; });
-  const choca = (i, j) => Object.keys(prim[i]).some((mu) => prim[i][mu] >= 3 && (prim[j][mu] || 0) >= 3);
+  // Com dias bloqueados, a regra fica a do texto da diretriz: 48 horas entre sessões do MESMO músculo, qualquer que seja
+  // o número de séries (ref garber2011). Sem bloqueio, vale o critério de sempre (3 séries ou mais nos dois dias).
+  const choca = bloq.size
+    ? (i, j) => Object.keys(prim[i]).some((mu) => (prim[j][mu] || 0) > 0)
+    : (i, j) => Object.keys(prim[i]).some((mu) => prim[i][mu] >= 3 && (prim[j][mu] || 0) >= 3);
   const alternado = pf.jovem || pf.diabetes;
+  // dia só de cardio não é treino de força (para a regra de força em dias não seguidos)
+  const forca = dias.map((d) => d._chave !== 'cardio');
   const original = dias.map((d) => d._wd);
   const doisDescansos = pf.jovem || pf.idoso || pf.nivel === 1;
   const descansoDe = (wds) => 7 - new Set([...corr.dias, ...wds]).size;
+  // Com dias bloqueados, os treinos ficam espalhados nos dias livres, como na agenda de sempre (dias alternados quando dá):
+  // dois treinos de força em dias seguidos custam 0,3 e o resto é desempate. Tudo abaixo do custo de musculação em dia de
+  // corrida (1): com corrida, as regras dela vêm antes.
+  const espalha = (wds) => {
+    let c = 0;
+    for (let i = 0; i < n; i++) {
+      let g = 7, k = -1;
+      for (let j = 0; j < n; j++) if (j !== i) { const x = (wds[j] - wds[i] + 7) % 7 || 7; if (x < g) { g = x; k = j; } }
+      c += g === 1 && forca[i] && forca[k] ? 0.3 : 0.05 / g;
+    }
+    return c;
+  };
+  // ordem dos treinos (A, B, C) na semana: com dias bloqueados, na semana que a tela mostra (segunda a domingo)
+  const ord = (w) => (bloq.size ? (w + 6) % 7 : w);
   const custo = (wds) => {
     let c = 0;
     const descanso = descansoDe(wds);
@@ -1498,21 +1565,27 @@ function encaixarNaCorrida(dias, pf, corr) {
       if (w !== original[i]) c += 0.1;
       for (let j = 0; j < n; j++) {
         if (j === i) continue;
-        if (j > i && wds[j] < w) c += 0.2; // mantém, se der, a ordem A, B, C ao longo da semana
+        if (j > i && ord(wds[j]) < ord(w)) c += 0.2; // mantém, se der, a ordem A, B, C ao longo da semana
         if ((wds[j] - w + 7) % 7 === 1) { if (choca(i, j)) c += 100; if (alternado) c += 200; }
       }
     }
-    return c;
+    return bloq.size ? c + espalha(wds) : c;
   };
-  let melhor = original.slice(), menor = custo(melhor);
+  // agenda de sempre num dia bloqueado: ela não é opção (o melhor sai da busca, só nos dias livres)
+  let melhor = original.slice(), menor = fora ? Infinity : custo(melhor);
   const ocupado = new Array(7).fill(false), atual = new Array(n);
+  for (const w of bloq) ocupado[w] = true;
   const tenta = (i) => {
     if (i === n) { const c = custo(atual); if (c < menor - 1e-9) { menor = c; melhor = atual.slice(); } return; }
     for (let w = 0; w < 7; w++) { if (ocupado[w]) continue; ocupado[w] = true; atual[i] = w; tenta(i + 1); ocupado[w] = false; }
   };
   tenta(0);
   dias.forEach((d, i) => { d._wd = melhor[i]; });
-  return { ajusta, mudou: melhor.some((w, i) => w !== original[i]), vespera: dias.filter((d, i) => pernas[i] && chave.has((melhor[i] + 1) % 7)).length, dias: melhor.slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)) };
+  // regra de descanso que os dias livres não deixaram cumprir: o mesmo músculo em dias seguidos (48 horas ou mais — ref
+  // garber2011) ou, para menores de 18 e diabetes, força em dias seguidos. Quem chama tira um treino (gerarPlano).
+  let quebra = false;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (i !== j && (melhor[j] - melhor[i] + 7) % 7 === 1 && (choca(i, j) || (alternado && forca[i] && forca[j]))) quebra = true;
+  return { ajusta, mudou: melhor.some((w, i) => w !== original[i]), vespera: dias.filter((d, i) => pernas[i] && chave.has((melhor[i] + 1) % 7)).length, dias: melhor.slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)), quebra, fora };
 }
 // O que a escolha do foco muda na musculação, em até 3 linhas curtas (para a folha da pergunta).
 export function efeitoDoFoco(foco, st) {
@@ -1627,10 +1700,12 @@ export function planoFortalecimento(st, opcoes = {}) {
   const corr = limparCombinado(resumoCombinado(st, hoje)) || { chave: [], dias: [] };
   const chave = new Set(corr.chave);
   const ocupados = new Set(diasSemana(o.ocupados));
-  const livres = [1, 2, 3, 4, 5, 6, 0].filter((w) => !ocupados.has(w));
-  if (!livres.length) return semPlanoDeFortalecimento('sem_dias', 'Não há dia livre na semana para o fortalecimento. Libere um dia no seu plano de treinos e tente de novo.');
+  // nem nos dias em que a pessoa não treina (resposta do Treinador: logic/dias-livres.js)
+  const bloq = new Set(diasBloqueados(st));
+  const livres = [1, 2, 3, 4, 5, 6, 0].filter((w) => !ocupados.has(w) && !bloq.has(w));
+  if (!livres.length) return semPlanoDeFortalecimento('sem_dias', bloq.size ? 'Não há dia livre na semana para o fortalecimento, fora dos dias em que você não treina. Libere um dia no seu plano de treinos e tente de novo.' : 'Não há dia livre na semana para o fortalecimento. Libere um dia no seu plano de treinos e tente de novo.');
   // (o dia de descanso da semana também conta: treinar no único dia sem corrida custa mais do que juntar com uma corrida leve)
-  const semCorrida = [0, 1, 2, 3, 4, 5, 6].filter((w) => !corr.dias.includes(w) && !ocupados.has(w));
+  const semCorrida = [0, 1, 2, 3, 4, 5, 6].filter((w) => !corr.dias.includes(w) && !ocupados.has(w) && !bloq.has(w));
   const custoDia = (w) => (chave.has((w + 1) % 7) ? 10 : 0) + (pf.nivel === 1 && chave.has((w + 2) % 7) ? 4 : 0) + (chave.has(w) ? 3 : 0) + (corr.dias.includes(w) ? 1 : 0);
   const semDescanso = (ws) => (semCorrida.length && semCorrida.every((w) => ws.includes(w)) && 7 - new Set([...corr.dias, ...ocupados, ...ws]).size < 1 ? 80 : 0);
   const dist = (a, b) => Math.min((a - b + 7) % 7, (b - a + 7) % 7);
@@ -1650,7 +1725,7 @@ export function planoFortalecimento(st, opcoes = {}) {
   avisos.push({ tipo: 'info', texto: emCasa
     ? 'Em casa, o que está demonstrado é a prevenção: exercícios de quadril e core reduziram lesões de corrida quando orientados por fisioterapeuta. Faça com calma e técnica; não espere ganho de velocidade só com o peso do corpo.'
     : 'Treinos de força com carga melhoram a economia de corrida em 2 a 8%. Comece leve, para aprender os movimentos, e aumente a carga aos poucos, sem ir até a falha.' });
-  if (escolhidos.length === 1) avisos.push({ tipo: 'info', texto: 'Só coube um treino por semana longe das corridas fortes: é a dose que mantém a força. Com mais um dia livre, entram dois.' });
+  if (escolhidos.length === 1) avisos.push({ tipo: 'info', texto: `Só coube um treino por semana ${bloq.size ? 'nos dias livres, com 48 horas entre os treinos' : 'longe das corridas fortes'}: é a dose que mantém a força. Com mais um dia livre, entram dois.` });
   if (escolhidos.some((w) => chave.has((w + 1) % 7))) avisos.push({ tipo: 'warn', texto: 'Em alguma semana do plano de corrida, um dos treinos cai na véspera de corrida forte ou do longo, por falta de outro dia: nessa véspera, faça as pernas mais leves.' });
   if (escolhidos.some((w) => corr.dias.includes(w))) avisos.push({ tipo: 'info', texto: 'No dia em que houver corrida e fortalecimento, corra primeiro e faça o fortalecimento pelo menos 3 horas depois; se a corrida for leve, tanto faz a ordem.' });
   if (7 - new Set([...corr.dias, ...ocupados, ...escolhidos]).size < 1) avisos.push({ tipo: 'warn', texto: 'Com o fortalecimento, a semana fica sem nenhum dia de descanso. Junte-o a uma corrida leve no mesmo dia ou tire um treino: pelo menos um dia de descanso por semana é o recomendado.' });

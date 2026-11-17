@@ -20,6 +20,8 @@
 //    na musculação (refs blagrove2018, doma2017). Pelo menos um dia sem treino na semana (ref meeusen2013); menores de 18,
 //    dois (ref valovichmcleod2011). Menores de 18 e diabetes: força em dias não seguidos, como no Treinador (refs
 //    colberg2016, valovichmcleod2011).
+//  • Dias em que a pessoa não treina (resposta do Treinador — logic/dias-livres.js): nunca recebem treino. Um treino que
+//    já estava num deles (plano editado à mão) pode ficar onde está, mas nenhum outro vai para lá.
 //  • Corrida perdida não se repõe: a marca "Não corri" só fica registrada. O plano de corrida (logic/corrida.js) já não
 //    repõe treino perdido e ajusta o volume pelo que foi feito nas últimas semanas. Juntar a corrida perdida a outra faria
 //    uma corrida maior, e uma corrida mais de 10% maior do que a mais longa dos últimos 30 dias aumenta o risco de lesão por
@@ -30,6 +32,7 @@ import { planoDaSemanaEm } from './corrida.js';
 import { comboAtual } from './combinado.js';
 import { perfil } from './trainer.js';
 import { respostasProtegidas } from './saude.js';
+import { diasBloqueados } from './dias-livres.js';
 
 export const MAX_PERDIDOS = 200;
 export const TIPOS_PERDIDO = ['musculacao', 'corrida'];
@@ -252,13 +255,16 @@ export function propor(st, data, hoje) {
   const antes = carga.slice(); antes[at(i)] = cargaX;
   const descansoAntes = descansos(antes);
 
-  // os dias que podem receber: de hoje (ou de amanhã, se o perdido é o de hoje) até domingo, sem treino feito nem marca
+  // os dias que podem receber: de hoje (ou de amanhã, se o perdido é o de hoje) até domingo, sem treino feito nem marca,
+  // e fora dos dias em que a pessoa não treina (a não ser o treino que já estava lá, que pode ficar)
+  const bloq = new Set(diasBloqueados(st));
+  const bloqueado = (k) => bloq.has(sem[k].wd);
   const vagas = [];
-  for (let k = Math.max(iHoje, i + 1); k < 7; k++) if (!fixo[at(k)]) vagas.push(k);
+  for (let k = Math.max(iHoje, i + 1); k < 7; k++) if (!fixo[at(k)] && (!bloqueado(k) || conteudo[at(k)])) vagas.push(k);
   // os treinos que podem andar junto: os que estão nessas vagas
   const elems = [{ diaId: base.diaId, de: i, carga: cargaX }];
   for (const k of vagas) if (conteudo[at(k)]) elems.push({ diaId: conteudo[at(k)], de: k, carga: carga[at(k)] });
-  const livres = vagas.filter((k) => !conteudo[at(k)]).length;
+  const livres = vagas.filter((k) => !conteudo[at(k)] && !bloqueado(k)).length;
 
   let melhor = null, melhorCusto = Infinity;
   const motivos = new Set();
@@ -295,6 +301,7 @@ export function propor(st, data, hoje) {
     if (j === elems.length) { avaliar(); return; }
     for (const k of vagas) {
       if (usada.has(k) || (j > 0 && k < elems[j].de)) continue;
+      if (bloqueado(k) && !(j > 0 && k === elems[j].de)) continue; // dia sem treino: só o treino que já era dele
       usada.add(k); atual[j] = k; tenta(j + 1); usada.delete(k);
     }
   };

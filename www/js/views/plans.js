@@ -15,6 +15,7 @@ import { semanaEfetiva, podeMarcar, podeMarcarCorrida, corridaPerdidaEm, nomeDoD
 import { botaoNaoTreinei, botaoNaoCorri, linhaNaoTreinado, linhaNaoCorrida } from './perdido.js';
 import { situacaoDoPlano, cartaoVariacao } from './variacao.js';
 import { registrarTrocaManual } from '../logic/variacao.js';
+import { diasBloqueados } from '../logic/dias-livres.js';
 
 const ORDEM_SEMANA = [1, 2, 3, 4, 5, 6, 0];
 const AGENDA_PADRAO = { 1: [1], 2: [1, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5], 6: [1, 2, 3, 4, 5, 6], 7: [1, 2, 3, 4, 5, 6, 0] };
@@ -81,7 +82,9 @@ function agendaSheet(plan, wd) {
       h('div', { class: 'grow' }, h('div', { class: 't', text: d.nome }), h('div', { class: 's', text: d.foco || plural(d.itens.length, 'exercício', 'exercícios') }))));
   }
   list.appendChild(h('button', { class: 'item' + (!plan.agenda[wd] ? ' sel' : ''), type: 'button', onClick: () => set('') }, h('div', { class: 'grow' }, h('div', { class: 't', text: 'Descanso' }), h('div', { class: 's', text: 'Sem treino neste dia' }))));
-  const s = folha({ title: DIAS_LONGO[wd], body: [h('p', { class: 'muted small', text: 'Qual treino você faz neste dia da semana?' }), list] });
+  // dia que a pessoa marcou no Treinador como sem treino: a escolha à mão continua livre, mas a folha lembra
+  const semTreino = diasBloqueados(state).includes(Number(wd));
+  const s = folha({ title: DIAS_LONGO[wd], body: [h('p', { class: 'muted small', text: 'Qual treino você faz neste dia da semana?' }), semTreino ? note('info', 'No Treinador, você marcou que não treina neste dia.') : null, list].filter(Boolean) });
 }
 
 function planMenu(plan) {

@@ -27,12 +27,30 @@
   color-scheme: light;
 }
 
+/* Alto contraste (Ajustes): texto e bordas mais fortes. Razões calculadas pela fórmula da WCAG 2.2 (luminância relativa):
+   texto, "muted" e cores de estado ≥ 7:1 sobre o fundo, as superfícies e os fundos suaves (1.4.6); bordas ≥ 3:1 (1.4.11).
+   Escuro: texto 21:1 no fundo, muted 11,6:1 na surface-2, accent 9:1, borda 6,5:1. Claro: texto 21:1, muted 10,6:1,
+   accent 7,4:1 na surface-2, borda 5,8:1. */
+:root[data-contraste='alto'] {
+  --bg: #000000; --surface: #0d1015; --surface-2: #1a1f28; --border: #8e98aa;
+  --text: #ffffff; --muted: #d3d9e2; --accent: #ffab80; --accent-ink: #000000; --accent-soft: rgba(255, 171, 128, 0.14);
+  --ok: #5ee08f; --ok-soft: rgba(94, 224, 143, 0.14); --danger: #ffadad; --danger-soft: rgba(255, 173, 173, 0.14);
+  --warn: #ffc46b; --warn-soft: rgba(255, 196, 107, 0.14); --info: #a9cdff; --info-soft: rgba(169, 205, 255, 0.14);
+  --on-ok: #000000;
+}
+:root[data-contraste='alto'][data-theme='light'] {
+  --bg: #ffffff; --surface: #ffffff; --surface-2: #eceef2; --border: #5d6675;
+  --text: #000000; --muted: #2f3540; --accent: #8a2c00; --accent-ink: #ffffff; --accent-soft: rgba(138, 44, 0, 0.08);
+  --ok: #0b5a2a; --ok-soft: rgba(11, 90, 42, 0.08); --danger: #9b1111; --danger-soft: rgba(155, 17, 17, 0.08);
+  --warn: #7a3a00; --warn-soft: rgba(122, 58, 0, 0.08); --info: #173ea5; --info-soft: rgba(23, 62, 165, 0.08);
+  --on-ok: #ffffff;
+}
 /* ===== Base ===== */
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
-  font: 16px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font: 1rem/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none;
 }
 h1, h2, h3, h4, p { margin: 0; }
@@ -480,3 +498,74 @@ details.acc .orient-t { font-size: 0.96rem; margin-top: 6px; }
 .treino.perdido { align-items: center; gap: 10px; }
 .treino.perdido .grow { min-width: 0; }
 details.pq.perdido-pq > summary { min-height: 44px; }
+
+/* ===== Letra maior (Ajustes) =====
+   O texto é todo em rem: mudar o tamanho da raiz aumenta só a letra; caixas, ícones e figuras continuam do mesmo
+   tamanho e o texto quebra linha (WCAG 2.2, 1.4.4; técnica G178). Porcentagem do tamanho do navegador, para respeitar
+   também o ajuste de letra do próprio aparelho. Testado a 360 px de largura sem rolagem lateral (tools/e2e/ajustes-extras.mjs). */
+:root[data-letra='grande'] { font-size: 125%; }
+:root[data-letra='muito'] { font-size: 150%; }
+/* seletores (Tema, Evolução, períodos): a palavra não se parte; se as opções não cabem lado a lado, descem de linha */
+:root[data-letra] .seg { flex-wrap: wrap; }
+:root[data-letra] .seg button { flex: 1 1 auto; padding: 4px 8px; line-height: 1.15; }
+:root[data-letra] .btn, :root[data-letra] .chip, :root[data-letra] .badge { max-width: 100%; }
+:root[data-letra] .btn { white-space: normal; line-height: 1.2; padding: 4px 12px; overflow-wrap: break-word; }
+:root[data-letra] .chips.wrap .chip { white-space: normal; height: auto; }
+/* barra de abas: cinco rótulos em 360 px; o rótulo cresce até 13 px e o ícone continua indicando a aba */
+:root[data-letra] .nav a { font-size: min(0.7rem, 13px); text-align: center; line-height: 1.1; }
+:root[data-letra] .item .thumb, :root[data-letra] .exhead .thumb { width: 72px; }
+/* treino em andamento: a grade das séries ganha espaço para o número (colunas e botões −/+ mais estreitos); o número
+   da carga para em 22 px para "102,5" caber inteiro em 360 px; os rótulos em maiúsculas param em 13 px */
+:root[data-letra] .setgrid { gap: 6px; grid-template-columns: 26px minmax(0, 1fr) minmax(0, 1fr) 46px; }
+:root[data-letra] .setgrid.one { grid-template-columns: 26px minmax(0, 1fr) 46px; }
+:root[data-letra] .setgrid .hd { letter-spacing: 0; font-size: min(0.72rem, 13px); }
+:root[data-letra] .setn { width: 26px; height: 26px; font-size: min(0.86rem, 16px); }
+:root[data-letra] .check { width: 46px; }
+:root[data-letra] .numin button { width: 24px; }
+:root[data-letra] .numin input { font-size: min(1.12rem, 22px); }
+/* fileiras de botões que cabem numa linha só com a letra normal: com letra maior, descem para a linha de baixo */
+:root[data-letra] .acoes-ex, :root[data-letra] .par-de-botoes { flex-wrap: wrap; }
+/* barra de baixo do treino: sem ícones nos botões, para os dois rótulos caberem lado a lado */
+:root[data-letra] .restbar .btn .ic { display: none; }
+:root[data-letra] .restbar .btn { padding: 4px 10px; }
+:root[data-letra] .stepper input { width: 3.2em; }
+:root[data-letra] .restbar .time { min-width: 0; font-size: 1.6rem; }
+:root[data-letra] .kv > :first-child { min-width: 0; overflow-wrap: anywhere; }
+:root[data-letra] .sono-passo.sm .sono-tempo input { width: 2.2em; }
+:root[data-letra] .tempo-hms input { width: 2.6em; }
+:root[data-letra] .tempo-hms label:first-child input { width: 1.6em; }
+
+/* ===== Alto contraste: ajustes além das cores ===== */
+:root[data-contraste='alto'] :focus-visible { outline: 3px solid var(--text); outline-offset: 2px; box-shadow: 0 0 0 5px var(--bg); }
+:root[data-contraste='alto'] .input::placeholder { color: var(--muted); opacity: 1; }
+:root[data-contraste='alto'] .setrow-done .numin { opacity: 1; }
+:root[data-contraste='alto'] .check.on, :root[data-contraste='alto'] .week .dot.done, :root[data-contraste='alto'] .restbar.done { color: var(--on-ok); }
+:root[data-contraste='alto'] .restbar.done .btn { color: var(--on-ok); border-color: var(--on-ok); background: transparent; }
+:root[data-contraste='alto'] .seg button.on { outline: 2px solid var(--text); outline-offset: -2px; }
+:root[data-contraste='alto'] .topbar { border-bottom-color: var(--border); }
+:root[data-contraste='alto'] .switch i { background: var(--muted); }
+:root[data-contraste='alto'] .switch input:checked + i { background: var(--accent); }
+:root[data-contraste='alto'] .switch i::after { background: var(--bg); box-shadow: 0 0 0 1px var(--text); }
+
+/* ===== Exportar e textos legais ===== */
+.legal-links { justify-content: center; gap: 4px; flex-wrap: wrap; }
+.legal-links .btn { color: var(--muted); }
+.textos-legais p { font-size: 0.94rem; }
+.resumo-item { padding: 6px 0; border-bottom: 1px solid var(--border); break-inside: avoid; }
+.resumo-item:last-child { border-bottom: 0; }
+.resumo-folha { gap: 12px; }
+.resumo-sec h3 { font-size: 1.02rem; }
+
+/* ===== Impressão (resumo para salvar em PDF) =====
+   Papel branco e texto preto, sem barras e botões; cada seção não se parte entre páginas. */
+@media print {
+  :root, :root[data-theme='light'], :root[data-contraste='alto'], :root[data-contraste='alto'][data-theme='light'] {
+    --bg: #ffffff; --surface: #ffffff; --surface-2: #ffffff; --border: #9aa0a8; --text: #000000; --muted: #333333; color-scheme: light;
+  }
+  @page { margin: 14mm; }
+  body { background: #fff; color: #000; }
+  .topbar, .nav, .no-print, .toast, .fab-bar, .backdrop { display: none !important; }
+  #app { max-width: none; min-height: 0; }
+  .view, .view.no-nav { padding: 0; }
+  .card { border-color: var(--border); break-inside: avoid; }
+}

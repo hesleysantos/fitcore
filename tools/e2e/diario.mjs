@@ -209,7 +209,10 @@ export default async (page) => {
   const deOntem = await doDia(ontem);
   ok(deOntem.length === 1 && deOntem[0].al === 'banana-prata' && deOntem[0].ref === 'ceia' && (await estado('s.diario.dias.map((d) => d.data).join()')) === `${ontem},${hojeKey}`, 'gravado em ontem; os dias ficam em ordem de data');
   ok((await page.eval(`return document.querySelectorAll('#diario-passado .diario-item').length;`)) === 1 && (await page.eval(`return document.getElementById('diario-dias').open;`)), 'a seção continua aberta e mostra só o alimento de ontem');
-  ok(!(await page.eval(`return [...document.querySelectorAll('.refeicao .diario-item, #diario-hoje .diario-item')].some((e) => e.textContent.includes('Banana-prata'));`)), 'o alimento de ontem não entra nas refeições de hoje');
+  // o cardápio de hoje pode trazer banana-prata (muda com a data): hoje, na tela, só as bananas registradas hoje
+  { const naTela = await page.eval(`return [...document.querySelectorAll('.refeicao .diario-item, #diario-hoje .diario-item')].filter((e) => e.textContent.includes('Banana-prata')).length;`);
+    const deHoje = (await hoje()).filter((x) => x.al === 'banana-prata').length;
+    ok(naTela === deHoje, 'o alimento de ontem não entra nas refeições de hoje', { naTela, deHoje }); }
   ok((await page.eval(`return document.querySelector('#diario-passado .iconbtn[aria-label="Dia anterior"]').disabled;`)) === false, 'ainda dá para voltar mais (o limite é o primeiro dia que o diário guarda)');
   ok((await page.eval(`return document.querySelector('#diario-passado .iconbtn[aria-label="Dia seguinte"]').disabled;`)) === true, 'de ontem não se avança: hoje está nas refeições, no alto');
   await page.click('Dia anterior'); await page.sleep(400);

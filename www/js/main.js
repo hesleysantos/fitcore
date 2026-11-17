@@ -13,6 +13,7 @@ import { corridaView, corridaDiaView } from './views/corrida.js';
 import { sonoView } from './views/sono.js';
 import { nutritionView } from './views/nutrition.js';
 import { gymView, settingsView, aboutView } from './views/more.js';
+import { resumoView } from './views/exportar.js';
 
 const ROUTES = [
   { re: /^$/, view: homeView, tab: 'inicio' },
@@ -32,6 +33,8 @@ const ROUTES = [
   { re: /^academia$/, view: gymView, tab: 'inicio' },
   { re: /^ajustes$/, view: settingsView, tab: 'inicio' },
   { re: /^sobre$/, view: aboutView, tab: 'inicio' },
+  // resumo para imprimir ou salvar em PDF (Ajustes → Exportar); o número é o período em dias (0 = tudo)
+  { re: /^resumo(?:\/(\d{1,3}))?$/, view: resumoView, tab: 'inicio', noNav: true },
 ];
 const TABS = [
   ['inicio', '', 'Início', 'home'],
@@ -48,10 +51,16 @@ let lastPath = null;
 function applyTheme() {
   const t = state.settings.tema;
   const light = t === 'claro' || (t === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
-  if (light) document.documentElement.dataset.theme = 'light';
-  else delete document.documentElement.dataset.theme;
+  const raiz = document.documentElement;
+  if (light) raiz.dataset.theme = 'light';
+  else delete raiz.dataset.theme;
+  // letra maior e alto contraste (Ajustes): só atributos na raiz; o CSS faz o resto. Roda antes do primeiro desenho
+  // (boot) e a cada mudança do estado, então a tela já abre no tamanho e nas cores escolhidos.
+  const { letra, contraste } = state.settings;
+  if (letra && letra !== 'normal') raiz.dataset.letra = letra; else delete raiz.dataset.letra;
+  if (contraste) raiz.dataset.contraste = 'alto'; else delete raiz.dataset.contraste;
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', light ? '#f3f4f7' : '#0e1116');
+  if (meta) meta.setAttribute('content', contraste ? (light ? '#ffffff' : '#000000') : light ? '#f3f4f7' : '#0e1116');
 }
 
 let diaDoDesenho = '';

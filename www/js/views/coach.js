@@ -9,6 +9,8 @@ import { ROTULO as ROT_N } from '../logic/nutrition.js';
 import { marcar, limiteDe, somaDe, dicaVarios } from '../logic/escolhas.js';
 const FAQ_INICIAL = 4;
 import { REFS, buscarFaq } from '../data/knowledge.js';
+// `nota(respostas)` (opcional): frase que depende das respostas anteriores (ex.: quantos dias livres sobram)
+const notaDe = (q, a) => { let t = ''; try { t = typeof q.nota === 'function' ? q.nota(a) : ''; } catch { t = ''; } return t ? h('p', { class: 'small', 'data-nota': q.k, text: t }) : null; };
 
 // `base` (opcional): as respostas guardadas desta entrevista, quando `respostas` traz também o que veio de outras
 // entrevistas. Serve para saber se as condições ou a triagem mudaram (aí a liberação médica dada antes deixa de valer).
@@ -64,7 +66,7 @@ export function interview({ perguntas, respostas, onDone, onCancel, avatar = 'co
     if (i >= vis.length) i = vis.length - 1;
     const q = vis[i];
     root.appendChild(h('div', { class: 'col gap-s' }, h('div', { class: 'row between tiny muted' }, h('span', { text: `Pergunta ${i + 1} de ${vis.length}` })), h('div', { class: 'steps', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': vis.length, 'aria-valuenow': i + 1 }, bar((i + 1) / vis.length))));
-    root.appendChild(h('div', { class: 'row top' }, h('div', { class: 'avatar' + (nutri ? ' nutri' : '') }, icon(avatar)), h('div', { class: 'bubble grow' }, h('h2', { text: q.titulo }), q.ajuda ? h('p', { class: 'small muted', text: q.ajuda }) : null, notas && notas[q.k] ? h('p', { class: 'small', text: notas[q.k] }) : null)));
+    root.appendChild(h('div', { class: 'row top' }, h('div', { class: 'avatar' + (nutri ? ' nutri' : '') }, icon(avatar)), h('div', { class: 'bubble grow' }, h('h2', { text: q.titulo }), q.ajuda ? h('p', { class: 'small muted', text: q.ajuda }) : null, notas && notas[q.k] ? h('p', { class: 'small', text: notas[q.k] }) : null, notaDe(q, a))));
     const next = btn(i === vis.length - 1 ? 'Concluir' : 'Continuar', () => {
       if (!valida(q)) return;
       // a resposta dada agora pode mostrar ou esconder a pergunta seguinte

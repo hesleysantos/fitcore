@@ -23,6 +23,7 @@
 import { FAIXA_DA_RESPOSTA, FAIXAS_PAUSA } from './pausa.js';
 import { LOCAIS_DOR, DIAS_ATIVA, dorDeAlerta, doresAtivas } from './dor.js';
 import { comboAtual } from './combinado.js';
+import { diasBloqueados } from './dias-livres.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { TIPOS_TREINO, DOR_CORRIDA } from '../data/corrida.js';
 import { perguntaCondicoes, perguntaTriagem, perguntaRemedios, perguntaLiberado, condicoesDe, sinaisDe, remediosDe, soComSupervisao, respostasProtegidas } from './saude.js';
@@ -1580,11 +1581,27 @@ function opcoesLimpas(o) {
     hoje, inicio, desde: diaValido(op.desde) ? op.desde : '', registros: limparRegistros(op.registros), adiado: op.adiado === true, paradas,
     mostrados: limparMostrados(op.mostrados), degrau: limparDegrau(op.degrau),
     foco: FOCOS_CORRIDA.includes(op.foco) ? op.foco : '', // prioridade entre corrida e musculação ('' = sem escolha: o plano não muda)
-    diasForca: dias(op.diasForca), diasPernas: dias(op.diasPernas),
+    diasForca: dias(op.diasForca), diasPernas: dias(op.diasPernas), bloqueados: dias(op.bloqueados).slice(0, 5),
     dores: (Array.isArray(op.dores) ? op.dores : []).filter((d) => isObj(d) && typeof d.onde === 'string' && Object.prototype.hasOwnProperty.call(LOCAIS_DOR, d.onde) && Number.isFinite(d.nivel)).slice(0, 30),
     // dores que a pessoa marcou como melhoradas: { onde, fim }
     encerradas: (Array.isArray(op.encerradas) ? op.encerradas : []).filter((d) => isObj(d) && typeof d.onde === 'string' && diaValido(d.fim)).slice(0, 100).map((d) => ({ onde: d.onde, fim: d.fim })),
   };
+}
+
+// Tira das respostas os dias em que a pessoa não treina (logic/dias-livres.js). Se TODOS os dias marcados para correr
+// estão bloqueados (entrevista da corrida de antes da resposta do Treinador), a corrida vai para o mesmo número de dias
+// livres, os mais espalhados. O longo marcado num dia bloqueado volta para "Tanto faz". Devolve { respostas, tirados, todos }.
+function semDiasBloqueados(respostas, bloqueados) {
+  const a = isObj(respostas) ? respostas : {};
+  const bloq = new Set(bloqueados);
+  const marcados = Array.isArray(a.dias) ? [...new Set(a.dias.filter((x) => typeof x === 'string' && /^[0-6]$/.test(x)))] : [];
+  const tirados = marcados.map(Number).filter((w) => bloq.has(w)).sort((x, y) => pos(x) - pos(y));
+  if (!tirados.length) return { respostas: a, tirados, todos: false };
+  let dias = marcados.filter((x) => !bloq.has(Number(x)));
+  const todos = !dias.length;
+  if (todos) dias = escolherDias(ORDEM.filter((w) => !bloq.has(w)), marcados.length, null, false).map(String);
+  const diaLongo = typeof a.diaLongo === 'string' && bloq.has(Number(a.diaLongo)) ? 'auto' : a.diaLongo;
+  return { respostas: { ...a, dias, ...(diaLongo === undefined ? {} : { diaLongo }) }, tirados, todos };
 }
 
 // Volta depois de um tempo sem correr: fração do volume de antes em cada semana, semanas sem treino forte e sem acelerações.
@@ -1738,9 +1755,12 @@ function aparar(semanas, c) {
 const nSemanas = (n) => (n === 1 ? '1 semana' : `${n} semanas`);
 
 export function gerarPlano(respostas, opcoes) {
-  let pf = perfil(respostas);
-  if (pf.bloqueio) return null;
   const op = opcoesLimpas(opcoes);
+  // dias em que a pessoa não treina (resposta do Treinador — logic/dias-livres.js): a corrida nunca cai neles
+  const livre = semDiasBloqueados(respostas, op.bloqueados);
+  let pf = perfil(livre.respostas);
+  if (pf.bloqueio) return null;
+  if (livre.tirados.length) pf = { ...pf, diasTirados: livre.tirados, diasRemanejados: livre.todos };
   const ajustes = [], extras = [];
   const acompanha = !!(op.inicio && op.hoje);
   // "Em quantas semanas é a prova?" conta a semana da entrevista; se o plano só começa na segunda seguinte, sobra uma a menos
@@ -2143,6 +2163,7 @@ function avisos(pf, P, { semanas, limitado }) {
     const local = { coxa: 'coxa-tras' }[k] || k, o = Object.prototype.hasOwnProperty.call(DOR_CORRIDA, local) ? DOR_CORRIDA[local] : null;
     if (o) av('warn', `Você disse que sente dor: ${o.nome.toLowerCase()}. Por isso as 2 primeiras semanas ficam sem treinos fortes e o plano sobe mais devagar (7% por semana). ${o.reduzir} Conte a dor com a intensidade em “Contar uma dor”: o plano se ajusta ao que você sente.`, [...new Set(['nhs_dor', ...o.f])].slice(0, 5));
   }
+  if (pf.diasTirados) av('info', pf.diasRemanejados ? `Os dias que você marcou para correr estão entre os dias sem treino do Treinador (${pf.diasTirados.map((w) => DIAS_NOME[w]).join(', ')}): a corrida foi para ${pf.dias.map((w) => DIAS_NOME[w]).join(', ')}. Confira em “Mudar respostas”.` : `Sem corrida ${pf.diasTirados.map((w) => DIAS_NOME[w]).join(' e ')}: no Treinador, você marcou que não treina ${pf.diasTirados.length === 1 ? 'nesse dia' : 'nesses dias'}.`, []);
   if (pf.descansoForcado != null) av('info', `Você marcou os 7 dias. Deixei ${DIAS_NOME[pf.descansoForcado]} como descanso: pelo menos um dia sem treino por semana.`, ['meeusen2013', 'warden2021']);
   if (pf.nivel === 0 && !pf.gestante && pf.tempo <= 30) av('info', 'Com cerca de 30 minutos por treino, o programa chega a 26 minutos seguidos de corrida. Para chegar aos 30, as últimas semanas pedem treinos de 35 a 40 minutos, contando a caminhada do começo e do fim.', ['nhs_c25k']);
   if (limitado) av('info', `Com os dias e o tempo que você tem, o plano chega a cerca de ${limitado} km por semana. Para evoluir mais, abra mais um dia ou mais tempo por treino.`, ['fokkema2020', 'knopp2024']);
@@ -2250,6 +2271,7 @@ function opcoesDoEstado(st, hoje) {
   const dores = Array.isArray(st.dores) ? st.dores : [];
   return {
     inicio: run.inicio, hoje, registros: Array.isArray(st.runs) ? st.runs : [], diasForca: forca, diasPernas: pernas, dores: doresAtivas(st, hoje), desde,
+    bloqueados: diasBloqueados(st), // dias em que a pessoa não treina (logic/dias-livres.js)
     foco: comboAtual(st).foco, mostrados: run.mostrados, degrau: run.degrau,
     // o plano começou na segunda-feira seguinte ao aceite? (as pausas adiam o início guardado: desconta)
     adiado: !!desde && segundaDe(desde) < somaDias(run.inicio, -7 * pausas.reduce((s, p) => s + (p && Number.isInteger(p.semanas) ? p.semanas : 0), 0)),
@@ -2371,8 +2393,9 @@ export function guardarDoDia(st, hoje) {
 }
 // segunda-feira da semana 1 para um plano aceito hoje: esta semana, se ainda há treino de hoje em diante; senão, a próxima
 // (a prova continua na semana pedida: ver `adiado` em gerarPlano)
-export function inicioPara(respostas, hoje) {
-  const pf = perfil(respostas);
+// `bloqueados` (opcional): dias em que a pessoa não treina (os mesmos que gerarPlano tira)
+export function inicioPara(respostas, hoje, bloqueados = []) {
+  const pf = perfil(semDiasBloqueados(respostas, Array.isArray(bloqueados) ? bloqueados : []).respostas);
   const seg = segundaDe(hoje), p = pos(diaDaSemana(hoje));
   // no programa de corrida e caminhada a semana só vale inteira: cada etapa são as 3 sessões da semana
   if (pf.nivel === 0 && !pf.gestante) return estruturaNivel0(pf, RITMO_PADRAO[0], null, null).corridaDias.every((wd) => pos(wd) >= p) ? seg : somaDias(seg, 7);

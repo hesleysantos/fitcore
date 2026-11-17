@@ -9,8 +9,11 @@ import { REFS_CORRIDA } from '../data/corrida.js';
 import { REFS_SONO } from '../data/sono.js';
 import { cancelarAviso, avisoDisponivel, avisoPermitido, pedirPermissaoDeAviso, telaLigadaDisponivel, SONS_ALERTA, SOM_PADRAO, tocarAlerta, unlockAudio } from '../device.js';
 import { canSuggestInstall, openInstall, isIos } from '../install.js';
+import { entregarArquivo } from './arquivo.js';
+import { abrirExportar } from './exportar.js';
+import { abrirPrivacidade, abrirTermos, blocoPrivacidade, blocoTermos } from './termos.js';
 
-export const APP_VERSAO = '1.5.0';
+export const APP_VERSAO = '1.6.0';
 
 // ---------- Minha academia ----------
 export function gymView() {
@@ -46,27 +49,11 @@ async function exportar() {
   try { readBackup(text); } catch { toast('O histórico ficou grande demais para um backup. Fale com o suporte do aplicativo.'); return; }
   const marcar = () => update((st) => { st.ui.backupEm = new Date().toISOString(); });
   try {
-    const blob = new Blob([text], { type: 'application/json' });
-    const noCelular = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || isIos();
-    const candidatos = typeof File !== 'undefined' ? [new File([blob], nome, { type: 'application/json' }), new File([text], nome, { type: 'text/plain' })] : [];
-    const file = noCelular && navigator.canShare ? candidatos.find((f) => { try { return navigator.canShare({ files: [f] }); } catch { return false; } }) : null;
-    if (file) {
-      try {
-        await navigator.share({ files: [file], title: 'Backup do FitCore' });
-        marcar(); refresh();
-        return;
-      } catch (e) {
-        if (e && e.name === 'AbortError') return; // a pessoa fechou a folha de compartilhar: não é erro
-        // outro erro: segue para o download
-      }
-    }
-    const url = URL.createObjectURL(blob);
-    const link = h('a', { href: url, download: nome });
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-    marcar(); toast('Backup gerado. Confira a pasta de downloads; se o arquivo não apareceu, use “Copiar o backup como texto”.'); refresh();
+    const r = await entregarArquivo(text, nome, ['application/json', 'text/plain'], 'Backup do FitCore');
+    if (r === 'cancelado') return; // a pessoa fechou a folha de compartilhar: não é erro
+    marcar();
+    if (r === 'baixado') toast('Backup gerado. Confira a pasta de downloads; se o arquivo não apareceu, use “Copiar o backup como texto”.');
+    refresh();
   } catch (e) {
     if (e && e.name === 'AbortError') return;
     copiar(text, marcar);
@@ -162,8 +149,11 @@ export function settingsView() {
   const linha = (titulo, sub, ctrl) => h('div', { class: 'row between menu-item' }, h('div', { class: 'grow' }, h('div', { class: 'bold', text: titulo }), sub ? h('div', { class: 'small muted', text: sub }) : null), ctrl);
   const body = [];
   body.push(sectionTitle('Aparência'));
-  body.push(h('div', { class: 'card col' }, h('div', { class: 'bold', text: 'Tema' }), seg([['auto', 'Automático'], ['escuro', 'Escuro'], ['claro', 'Claro']], st.tema, (v) => { set('tema', v); refresh(); })));
+  body.push(h('div', { class: 'card col' }, h('div', { class: 'bold', text: 'Tema' }), seg([['auto', 'Automático'], ['escuro', 'Escuro'], ['claro', 'Claro']], st.tema, (v) => { set('tema', v); refresh(); }),
+    // letra: 125% e 150% do tamanho do navegador (css/app.css); o zoom do aparelho continua valendo por cima
+    h('div', { class: 'bold mt', text: 'Tamanho da letra' }), h('div', { id: 'letra' }, seg([['normal', 'Normal'], ['grande', 'Grande'], ['muito', 'Muito grande']], st.letra, (v) => { set('letra', v); refresh(); }))));
   body.push(h('div', { class: 'card tight' },
+    linha('Alto contraste', 'Texto, bordas e foco mais fortes, no tema claro e no escuro.', toggle(!!st.contraste, (v) => set('contraste', v), 'Alto contraste')),
     linha('Figuras em movimento', 'As demonstrações tocam sozinhas, como um vídeo.', toggle(st.animar !== false, (v) => set('animar', v), 'Figuras em movimento'))));
   body.push(sectionTitle('Durante o treino'));
   body.push(h('div', { class: 'card tight' },
@@ -184,7 +174,9 @@ export function settingsView() {
     btn('Fazer backup agora', exportar, 'block primary', 'download'),
     btn('Restaurar um backup', importar, 'block', 'upload'),
     // caminho que funciona em qualquer aparelho, quando o arquivo não baixa nem compartilha
-    btn('Copiar o backup como texto', async () => { const ok = await confirmSheet({ title: 'Copiar o backup', text: AVISO_BACKUP, okLabel: 'Continuar' }); if (!ok) return; const texto = exportData(); try { readBackup(texto); } catch { toast('O histórico ficou grande demais para um backup.'); return; } copiar(texto, () => update((x) => { x.ui.backupEm = new Date().toISOString(); })); }, 'block plain sm', 'copy')));
+    btn('Copiar o backup como texto', async () => { const ok = await confirmSheet({ title: 'Copiar o backup', text: AVISO_BACKUP, okLabel: 'Continuar' }); if (!ok) return; const texto = exportData(); try { readBackup(texto); } catch { toast('O histórico ficou grande demais para um backup.'); return; } copiar(texto, () => update((x) => { x.ui.backupEm = new Date().toISOString(); })); }, 'block plain sm', 'copy'),
+    // discreto, como o pedido: planilhas (CSV) e resumo para imprimir ficam dentro da folha
+    btn('Exportar para planilha ou PDF', abrirExportar, 'block plain sm', 'share')));
   const desfazer = h('div');
   body.push(desfazer);
   previousInfo().then((p) => {
@@ -206,6 +198,8 @@ export function settingsView() {
     toast(apagou ? 'Dados apagados' : 'Não foi possível apagar tudo: o armazenamento do aparelho não respondeu. Feche o aplicativo, abra de novo e repita.');
     replace('');
   }, 'block plain danger', 'trash'));
+  // privacidade e termos: discretos, no fim, cada um abre a sua folha
+  body.push(h('div', { class: 'row legal-links' }, btn('Privacidade', abrirPrivacidade, 'plain sm', 'shield'), btn('Termos de uso', abrirTermos, 'plain sm', 'book')));
   return { title: 'Ajustes', back: '', body };
 }
 
@@ -214,19 +208,9 @@ export function aboutView() {
   const body = [];
   body.push(h('div', { class: 'card col center' }, h('img', { src: 'icons/icon-192.png', alt: '', width: 72, height: 72, class: 'appic-l' }), h('h2', { text: 'FitCore — Treino e Nutrição' }), h('p', { class: 'small muted', text: `Versão ${APP_VERSAO}` })));
   const bloco = (titulo, ps) => { const d = h('details', { class: 'acc' }, h('summary', { text: titulo })); const inner = h('div'); for (const p of ps) inner.appendChild(typeof p === 'string' ? h('p', { text: p }) : p); d.appendChild(inner); return d; };
-  body.push(bloco('Aviso importante sobre saúde', [
-    'Este aplicativo oferece informação educativa sobre exercícios e alimentação, baseada em diretrizes e estudos publicados. Ele não faz diagnóstico, não prescreve tratamento, treino individualizado ou dieta, e não substitui médico, profissional de educação física ou nutricionista.',
-    'Antes de iniciar um programa de exercícios, principalmente se você tem alguma doença, sente dor, está grávida ou está parado há muito tempo, procure avaliação médica.',
-    'Interrompa o exercício e procure atendimento se sentir dor ou pressão no peito, falta de ar fora do normal, tontura, desmaio ou palpitações.',
-    'O “Treinador” e a “Nutricionista” do aplicativo são assistentes virtuais que seguem regras fixas. Não são profissionais registrados.',
-  ]));
-  body.push(bloco('Privacidade e seus dados', [
-    'Tudo o que você registra (treinos, corridas, peso, dores, noites de sono e cochilos, o que você comeu, alimentos de casa e respostas ao Treinador e à Nutricionista) fica guardado somente neste aparelho. O aplicativo não tem cadastro, não envia dados para servidores, não usa anúncios, rastreadores nem serviços de terceiros.',
-    'Como os dados não saem do aparelho, só você tem acesso a eles. O arquivo de backup, quando você decide criá-lo, não tem senha e fica sob sua responsabilidade: guarde-o em lugar seguro, pois contém informações de saúde.',
-    'Você pode apagar todos os dados a qualquer momento em Ajustes → Apagar todos os meus dados. Desinstalar o aplicativo ou limpar os dados do navegador também apaga tudo.',
-    'O aplicativo funciona sem internet. Na versão aberta ou instalada pelo navegador (iPhone, Android ou computador), a conexão só é usada para baixar o próprio aplicativo e suas atualizações.',
-    'O aplicativo não pede localização, câmera, microfone nem contatos. A única permissão opcional é a de notificações, para avisar o fim do descanso quando você liga essa opção em Ajustes.',
-  ]));
+  // os mesmos textos das folhas de Privacidade e Termos de uso de Ajustes (views/termos.js)
+  body.push(bloco('Termos de uso e aviso de saúde', blocoTermos()));
+  body.push(bloco('Privacidade e seus dados', blocoPrivacidade()));
   const refs = h('div', { class: 'col gap-s' });
   // a mesma publicação pode estar nas duas listas: aparece uma vez só
   const todasRefs = [...new Set([...Object.values(REFS), ...Object.values(REFS_CORRIDA), ...Object.values(REFS_SONO)])];

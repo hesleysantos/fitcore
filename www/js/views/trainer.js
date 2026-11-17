@@ -132,6 +132,8 @@ function perfilCard(a, pf, extra) {
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Nível' }), h('span', { text: ROTULO.experiencia[a.experiencia] })),
     pf.retorno ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Parado antes de voltar' }), h('span', { text: ROTULO.pausa[a.pausa] })) : null,
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Frequência' }), h('span', { text: `${plural(pf.dias, 'dia', 'dias')} por semana · ${pf.tempo >= 75 ? 'mais de 1 h' : pf.tempo + ' min'}` })),
+    // dias em que a pessoa não treina (vale também para a corrida)
+    pf.bloqueados.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Sem treino' }), h('span', { text: pf.bloqueados.map((w) => DIAS_CURTO[w]).join(', ') })) : null,
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Local' }), h('span', { text: ROTULO.local[a.local] })),
     pf.extras.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Também tem' }), h('span', { text: pf.extras.map((x) => ROTULO.extras[x] || x).join(', ') })) : null,
     pf.limitacoes.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Cuidados' }), h('span', { text: pf.limitacoes.join(', ') })) : null,
@@ -439,6 +441,8 @@ export function trainerView() {
     for (const k of ['idade', 'peso', 'altura']) if (pre[k] == null) { const v = typeof state.run.answers[k] === 'number' ? state.run.answers[k] : n[k]; if (typeof v === 'number') pre[k] = v; }
     // o objetivo começa igual ao da alimentação (o usuário pode trocar)
     if (pre.objetivo == null && treinoPara(n.objetivo)) pre.objetivo = treinoPara(n.objetivo);
+    // dias sem treino: o padrão é "Nenhum" (treina em qualquer dia); respostas antigas, sem a pergunta, também
+    if (!Array.isArray(pre.semTreino) || !pre.semTreino.length) pre.semTreino = ['nenhum'];
     return {
       title: 'Treinador', body: [interview({
         perguntas: PERGUNTAS, respostas: pre, base: a, notas: { objetivo: notaObjetivo('treino') },

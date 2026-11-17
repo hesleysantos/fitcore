@@ -35,7 +35,7 @@ function estadoCheio() {
   const corrida = responder(P_CORRIDA, 1);
   return {
     v: store.VERSAO,
-    settings: { tema: 'claro', descanso: 75, som: false, somAlerta: 'sino', vibrar: false, telaLigada: false, animar: false, avisoFundo: true },
+    settings: { tema: 'claro', descanso: 75, som: false, somAlerta: 'sino', vibrar: false, telaLigada: false, animar: false, avisoFundo: true, letra: 'muito', contraste: true },
     gym: { all: false, has: Object.fromEntries(Object.keys(EQUIPAMENTOS).slice(0, 3).map((k) => [k, true])) },
     plans: [plano],
     activePlan: 'p1',

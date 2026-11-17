@@ -575,11 +575,11 @@ export default async (page) => {
   const menuEx = async (i, item) => { await ev(`cart(${i}).querySelector('button[aria-label^="Opções: "]').click(); await espera(120); return true;`); return item ? clicar(item, '.menu-item') : true; };
   await menuEx(4);
   r = await ev(`return [...topo().querySelectorAll('.menu-item')].map((m) => m.textContent);`);
-  ok(J(r) === J(['Trocar por outro exercício', 'Fazer antes', 'Tirar deste treino']), 'menu do último exercício: trocar, fazer antes, tirar (sem "fazer depois")', r);
+  ok(J(r) === J(['Aparelho ocupado', 'Trocar por outro exercício', 'Fazer antes', 'Tirar deste treino']), 'menu do último exercício: aparelho ocupado, trocar, fazer antes, tirar (sem "fazer depois")', r);
   await fechar();
   await menuEx(0);
   r = await ev(`return [...topo().querySelectorAll('.menu-item')].map((m) => m.textContent);`);
-  ok(J(r) === J(['Trocar por outro exercício', 'Fazer depois', 'Tirar deste treino']), 'menu do primeiro exercício: trocar, fazer depois, tirar (sem "fazer antes")', r);
+  ok(J(r) === J(['Aparelho ocupado', 'Trocar por outro exercício', 'Fazer depois', 'Tirar deste treino']), 'menu do primeiro exercício: aparelho ocupado, trocar, fazer depois, tirar (sem "fazer antes")', r);
   await fechar();
   await menuEx(4, 'Fazer antes'); await page.sleep(200);
   ok((await cur('c.itens.map((i) => i.ex).join()')) === 'supino-reto-barra,flexao-de-bracos,prancha-frontal,leg-press-45,caminhada-esteira', '"Fazer antes" sobe o exercício uma posição');

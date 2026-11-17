@@ -22,10 +22,12 @@ export const VERSAO = 1;
 const MAX_IMPORT = 24 * 1024 * 1024; // cabe o maior histórico possível (5.000 treinos)
 const MAX_ESTADO = 30 * 1024 * 1024; // um backup válido nunca vira um estado maior que isto
 export const MAX_PLANOS = 60;
+export const LETRAS = ['normal', 'grande', 'muito']; // tamanhos de letra de Ajustes (100%, 125% e 150%: css/app.css)
 
 const defaults = () => ({
   v: VERSAO,
-  settings: { tema: 'auto', descanso: 90, som: true, somAlerta: 'equilibrado', vibrar: true, telaLigada: true, animar: true, avisoFundo: false },
+  // letra: tamanho do texto ('normal' | 'grande' | 'muito'); contraste: cores mais fortes (views/more.js, main.js)
+  settings: { tema: 'auto', descanso: 90, som: true, somAlerta: 'equilibrado', vibrar: true, telaLigada: true, animar: true, avisoFundo: false, letra: 'normal', contraste: false },
   gym: { all: true, has: {} },
   plans: [],
   activePlan: '',
@@ -193,6 +195,7 @@ export function sanitize(raw, { doAparelho = false } = {}) {
     tema: oneOf(s.tema, ['auto', 'escuro', 'claro'], 'auto'),
     descanso: Math.round(num(s.descanso, 15, 600, 90)),
     som: bool(s.som, true), somAlerta: ['equilibrado', 'sino', 'alto', 'longo', 'discreto'].includes(s.somAlerta) ? s.somAlerta : 'equilibrado', vibrar: bool(s.vibrar, true), telaLigada: bool(s.telaLigada, true), animar: bool(s.animar, true), avisoFundo: bool(s.avisoFundo, false),
+    letra: oneOf(s.letra, LETRAS, 'normal'), contraste: bool(s.contraste, false),
   };
   const g = isObj(raw.gym) ? raw.gym : {};
   d.gym.all = bool(g.all, true);
@@ -467,6 +470,8 @@ export async function restorePrevious() {
 }
 export async function resetAll() {
   state = defaults();
+  // o estado da tela do treino guiado (views/session.js) também sai
+  try { localStorage.removeItem('fitcore-treino-guiado'); } catch { /* ignore */ }
   await idbDelete(KEY_PREV);
   dirty = true;
   await flush();

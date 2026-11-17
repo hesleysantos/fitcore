@@ -4,6 +4,7 @@ import { state, update } from '../store.js';
 import { go, refresh } from '../router.js';
 import { interview, abasTreinador, cartaoLiberacao } from './coach.js';
 import { respostasParaEntrevista } from '../logic/saude.js';
+import { diasBloqueados, nomesDosDias } from '../logic/dias-livres.js';
 import { cartaoDores } from './dor.js';
 import { barChart } from './charts.js';
 import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate } from '../device.js';
@@ -79,7 +80,16 @@ function faq() {
   return wrap;
 }
 
-const opcoesDoPlano = () => { const { forca, pernas } = diasDeForca(state); return { diasForca: forca, diasPernas: pernas, dores: doresAtivas(state, hojeKey()) }; };
+const opcoesDoPlano = () => { const { forca, pernas } = diasDeForca(state); return { diasForca: forca, diasPernas: pernas, dores: doresAtivas(state, hojeKey()), bloqueados: diasBloqueados(state) }; };
+// Entrevista da corrida sem os dias em que a pessoa não treina (resposta do Treinador — logic/dias-livres.js): eles não
+// aparecem como opção, e a pergunta diz por quê. A preferência é uma só; para mudar, é no Treinador.
+function perguntasSemBloqueados() {
+  const bloq = diasBloqueados(state);
+  if (!bloq.length) return { perguntas: PERGUNTAS, nota: '' };
+  const fora = (o) => !bloq.includes(Number(o[0]));
+  const perguntas = PERGUNTAS.map((q) => (q.k === 'dias' ? { ...q, op: q.op.filter(fora) } : q.k === 'diaLongo' ? { ...q, op: q.op.filter((o) => o[0] === 'auto' || fora(o)) } : q));
+  return { perguntas, nota: `Sem ${nomesDosDias(bloq)}: no Treinador você marcou que não treina ${bloq.length === 1 ? 'nesse dia' : 'nesses dias'}. Para mudar, refaça a entrevista do Treinador.` };
+}
 const volumeTxt = (s) => (s.fase === 'adaptacao' ? `${s.corridaMin} min de corrida` : s.fase === 'caminhada' ? `${s.volumeMin} min` : `${virgula(s.volumeKm)} km`);
 
 function zonasCard(p) {
@@ -144,7 +154,7 @@ function proposta() {
   const hoje = hojeKey();
   const sd = saudeDaCorrida(state, hoje);
   const a = sd.respostas;
-  const inicio = inicioPara(a, hoje);
+  const inicio = inicioPara(a, hoje, diasBloqueados(state));
   const adiado = inicio > segundaDe(hoje); // nesta semana não sobra dia de treino: o plano começa na segunda-feira
   const p = gerarPlano(a, { ...opcoesDoPlano(), dores: [], adiado }); // a proposta mostra o plano inteiro; as dores ajustam os dias depois do aceite
   // Ordem: resumo do plano → avisos que mudam o treino → resumo em linhas → a primeira semana → aceitar. O resto, fechado.
@@ -196,7 +206,7 @@ function proposta() {
   let ciente = !pf.confirmar;
   const aceitar = btn('Aceitar e usar este plano', () => {
     if (!ciente) return;
-    update((s) => { s.run.aceitoEm = new Date().toISOString(); s.run.inicio = inicioPara(s.run.answers, hojeKey()); s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; });
+    update((s) => { s.run.aceitoEm = new Date().toISOString(); s.run.inicio = inicioPara(s.run.answers, hojeKey(), diasBloqueados(s)); s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; });
     modo = 'auto';
     toast('Plano ativado! Os treinos de corrida já aparecem na aba Treinos.');
     refresh(); window.scrollTo(0, 0);
@@ -424,9 +434,14 @@ export function corridaView() {
     // as respostas guardadas, mais o que as outras entrevistas disseram sobre a saúde (a pessoa confere e desmarca)
     const pre = respostasParaEntrevista('corrida', state);
     for (const k of ['idade', 'peso', 'altura']) if (pre[k] == null) { const v = typeof state.trainer.answers[k] === 'number' ? state.trainer.answers[k] : state.nutri.answers[k]; if (typeof v === 'number') pre[k] = v; }
+    // dias em que a pessoa não treina: saem das opções (e da resposta guardada, que ela confere)
+    const semBloq = perguntasSemBloqueados();
+    const bloq = diasBloqueados(state);
+    if (Array.isArray(pre.dias) && bloq.length) { pre.dias = pre.dias.filter((x) => !bloq.includes(Number(x))); if (!pre.dias.length) delete pre.dias; }
+    if (typeof pre.diaLongo === 'string' && bloq.includes(Number(pre.diaLongo))) pre.diaLongo = 'auto';
     return {
       title: 'Treinador', body: [interview({
-        perguntas: PERGUNTAS, respostas: pre, base: a, avatar: 'run',
+        perguntas: semBloq.perguntas, respostas: pre, base: a, avatar: 'run', notas: semBloq.nota ? { dias: semBloq.nota } : null,
         onDone: (r) => { update((s) => { s.run.answers = r; s.run.aceitoEm = ''; s.run.inicio = ''; s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); },
         onCancel: () => { modo = 'auto'; refresh(); },
       })],

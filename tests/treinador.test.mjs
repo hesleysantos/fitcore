@@ -49,7 +49,8 @@ test('perguntas da entrevista são consistentes', () => {
   for (const q of PERGUNTAS) {
     assert.ok(!chaves.has(q.k)); chaves.add(q.k);
     assert.ok(q.titulo.endsWith('?'), 'pergunta sem interrogação: ' + q.titulo);
-    if (q.tipo !== 'numero') { assert.ok(q.op.length >= 2); for (const o of q.op) assert.equal(o.length, 3); }
+    // 4º item (opcional): condição para a opção aparecer (ex.: "dias" acima dos dias livres — logic/dias-livres.js)
+    if (q.tipo !== 'numero') { assert.ok(q.op.length >= 2); for (const o of q.op) assert.ok(o.length === 3 || (o.length === 4 && typeof o[3] === 'function')); }
   }
   assert.ok(respostasCompletas(base));
   assert.ok(!respostasCompletas({ ...base, idade: undefined }));

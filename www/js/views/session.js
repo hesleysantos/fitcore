@@ -1,5 +1,5 @@
 // Treino em andamento: registro das séries, cronômetro de descanso e finalização.
-import { h, btn, icon, iconBtn, confirmSheet, toast, note, parseNum, fmtClock, uid, plural, dateKey } from '../ui.js';
+import { h, btn, icon, iconBtn, confirmSheet, toast, note, parseNum, fmtClock, uid, plural, dateKey, clear } from '../ui.js';
 import { state, update, planById } from '../store.js';
 import { go, refresh, replace } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
@@ -7,8 +7,10 @@ import { figure, thumb } from '../figure.js';
 import { recorde, e1rm, assistido, voltaDePausa, seriesNaVolta, descansoNaVolta } from '../logic/progress.js';
 import { nivelPausa, cortePausa, duracaoTxt } from '../logic/pausa.js';
 import { alertaDoExercicio, doresDoTreino, respostasParaAvisos } from '../logic/trainer.js';
-import { pickExercises, novoItem, subtitulo, folha } from './common.js';
-import { recomendacao } from '../logic/carga.js';
+import { pickExercises, novoItem, subtitulo, folha, exItem } from './common.js';
+import { recomendacao, temRegistro } from '../logic/carga.js';
+import { aquecimentoGeral, primeiroDoMusculo, seriesDeAproximacao, aparelhoOcupado, testeDaPrimeira, limparGuia, REFS_TESTE } from '../logic/guiado.js';
+import { EQUIPAMENTOS } from '../data/equipment.js';
 import { REFS } from '../data/knowledge.js';
 import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate, agendarAviso, cancelarAviso, fimDoDescanso } from '../device.js';
 
@@ -23,6 +25,35 @@ function contextoCarga(exId) {
   return { respostas, dor, sexo: n && typeof n.sexo === 'string' ? n.sexo : '' };
 }
 const recomendar = (exId, alvo, series) => recomendacao(exId, alvo, series, contextoCarga(exId));
+
+// ---------- treino guiado (logic/guiado.js) ----------
+// O que a pessoa já fez do aquecimento e do teste da 1ª série fica FORA do state: store.js descarta campos novos do
+// treino em andamento ao abrir o app. Fica no localStorage do aparelho, preso ao id do treino (vale depois de recarregar a
+// página; outro treino começa do zero). As séries de aproximação nunca entram em it.sets: não contam no histórico, no
+// volume, nos recordes nem nas calorias.
+const GUIA = 'fitcore-treino-guiado';
+let guiaMem = null;
+function guia() {
+  const sid = state.current ? state.current.id : '';
+  if (guiaMem && guiaMem.sid === sid) return guiaMem;
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem(GUIA) || 'null'); } catch { raw = null; }
+  guiaMem = limparGuia(raw, sid);
+  return guiaMem;
+}
+function mudarGuia(fn) {
+  const g = guia();
+  fn(g);
+  try { localStorage.setItem(GUIA, JSON.stringify(g)); } catch { /* sem espaço: vale até fechar a página */ }
+}
+function apagarGuia() { guiaMem = null; try { localStorage.removeItem(GUIA); } catch { /* ignore */ } }
+// "Por quê?" fechado, com os textos e as fontes
+function porQue(textos, refs) {
+  const ks = (refs || []).filter((k) => REFS[k]);
+  return h('details', { class: 'pq' }, h('summary', { text: 'Por quê?' }),
+    ...textos.map((t) => h('p', { class: 'small muted', text: t })),
+    ks.length ? h('div', { class: 'col gap-s' }, h('div', { class: 'tiny bold', text: 'Fontes' }), ...ks.map((k) => h('p', { class: 'ref', text: '• ' + REFS[k] }))) : null);
+}
 
 // ---------- iniciar ----------
 function montarItem(planItem) {
@@ -202,7 +233,7 @@ export function sessionView() {
     const st = it && it.sets[j];
     if (!st) return;
     const ex = EX_POR_ID.get(it.ex);
-    if (st.ok) { mutCur((c) => { c.itens[i].sets[j].ok = false; }); drawCard(i); drawBar(); return; }
+    if (st.ok) { mutCur((c) => { c.itens[i].sets[j].ok = false; }); drawCard(i); drawBar(); drawAquec(); return; }
     if (ex.registro === 'peso_reps' && st.kg == null) { toast('Informe a carga (kg) desta série. Use 0 se for sem peso.'); return; }
     if ((ex.registro === 'peso_reps' || ex.registro === 'reps') && !st.reps) { toast('Informe quantas repetições você fez.'); return; }
     if ((ex.registro === 'segundos' || ex.registro === 'minutos') && !st.seg) { toast('Informe o tempo.'); return; }
@@ -225,6 +256,7 @@ export function sessionView() {
     const antes = recAntes.get(it.ex);
     if (ex.registro === 'peso_reps' && antes && !assistido(it.ex) && e1rm(st.kg, st.reps) > antes.v * 1.001) { toast('Novo recorde pessoal neste exercício!'); recAntes.set(it.ex, { v: e1rm(st.kg, st.reps) }); }
     drawCard(i);
+    drawAquec(); // começou a treinar: o passo do aquecimento sai
     const ultimaSerie = i === state.current.itens.length - 1 && j === it.sets.length - 1;
     if (!ultimaSerie && ex.registro !== 'minutos' && it.descanso) startRest(it.descanso);
     else drawBar(); // o botão da barra muda entre "Encerrar" e "Finalizar treino"
@@ -250,12 +282,15 @@ export function sessionView() {
     if (tipo === 'peso_reps') { grid.appendChild(h('span', { class: 'hd', text: assistido(it.ex) ? 'Ajuda (kg)' : 'Carga (kg)' })); grid.appendChild(h('span', { class: 'hd', text: 'Repetições' })); }
     else grid.appendChild(h('span', { class: 'hd', text: tipo === 'reps' ? 'Repetições' : tipo === 'minutos' ? 'Minutos' : 'Segundos' }));
     grid.appendChild(h('span', { class: 'hd', text: 'Feito' }));
+    // séries de aproximação: acompanham a carga da 1ª série enquanto a pessoa a ajusta (sem redesenhar o cartão)
+    const apBox = h('div', { class: 'aprox-box' });
+    const desenharAprox = () => { clear(apBox); const el = aproximacao(i, it, avisoDor, it.sets.filter((x) => x.ok).length); if (el) apBox.appendChild(el); apBox.hidden = !el; };
     it.sets.forEach((st, j) => {
       const cls = st.ok ? ' setrow-done' : '';
       const n = h('span', { class: 'setn', text: String(j + 1) });
       const wrapN = h('div', { class: cls.trim() }, n);
       grid.appendChild(wrapN);
-      const setV = (k) => (v) => { mutCur((c) => { c.itens[i].sets[j][k] = v; }); };
+      const setV = (k) => (v) => { mutCur((c) => { c.itens[i].sets[j][k] = v; }); if (j === 0 && k === 'kg') desenharAprox(); };
       if (tipo === 'peso_reps') {
         grid.appendChild(h('div', { class: cls.trim() }, numin({ value: st.kg, step: passoKg, dec: true, label: `carga da série ${j + 1}`, placeholder: 'kg', onChange: setV('kg') })));
         grid.appendChild(h('div', { class: cls.trim() }, numin({ value: st.reps, step: 1, max: 999, label: `repetições da série ${j + 1}`, placeholder: 'reps', onChange: setV('reps') })));
@@ -290,6 +325,7 @@ export function sessionView() {
     // dores ativas, dores de alerta que passaram do prazo sem "Melhorou" e dores em volta gradual; o perfil vem do
     // Treinador ou, para quem só corre, das respostas da corrida
     try { const perfilDeAviso = respostasParaAvisos(state); avisoDor = alertaDoExercicio(it.ex, doresDoTreino(state, dateKey(new Date()), perfilDeAviso), perfilDeAviso); } catch { avisoDor = null; }
+    desenharAprox();
     const card = h('div', { class: 'card col' },
       h('div', { class: 'exhead' },
         h('button', { class: 'thumb', type: 'button', 'aria-label': 'Ver como fazer: ' + ex.nome, onClick: () => infoSheet(ex) }, thumb(ex)),
@@ -300,11 +336,77 @@ export function sessionView() {
         iconBtn('more', 'Opções: ' + ex.nome, () => itemMenu(i), '')),
       avisoDor ? note(avisoDor.nivel === 'evitar' ? 'warn' : 'info', avisoDor.texto) : null,
       origemDaCarga(it, sug),
+      apBox,
       grid,
+      testeDaSerie(i, it, feitas),
       h('div', { class: 'row acoes-ex' }, maisSerie, menosSerie,
         h('div', { class: 'grow' }),
         btn('Como fazer', () => infoSheet(ex), 'sm plain', 'info')));
     if (old) cards.replaceChild(card, old); else cards.appendChild(card);
+  }
+
+  // Séries de aproximação no 1º exercício com carga de cada músculo (logic/guiado.js): antes da 1ª série válida, com a
+  // carga calculada da 1ª série de hoje. Cada uma se marca com um toque (e começa 1 minuto de descanso); feitas ou
+  // puladas, somem. Não entram em it.sets.
+  function aproximacao(i, it, avisoDor, feitas) {
+    if (feitas || !primeiroDoMusculo(state.current.itens, i)) return null;
+    const marca = guia().aprox[it.ex];
+    if (marca === 'pulado') return null;
+    const ap = seriesDeAproximacao(it.ex, it.sets[0] ? it.sets[0].kg : null, avisoDor);
+    if (!ap) return null;
+    const feitasAp = Array.isArray(marca) ? marca : [];
+    if (ap.series.every((_, k) => feitasAp[k])) return null;
+    const marcar = (k) => {
+      unlockAudio();
+      if (!state.current || state.current.itens[i] !== it) return;
+      let agora = false;
+      mudarGuia((x) => { const l = Array.isArray(x.aprox[it.ex]) ? x.aprox[it.ex] : []; agora = !l[k]; x.aprox[it.ex] = ap.series.map((_, n) => (n === k ? agora : !!l[n])); });
+      drawCard(i);
+      if (agora) startRest(60); // 1 minuto depois de cada série de aproximação (ribeiro2020)
+    };
+    return h('div', { class: 'aprox', role: 'group', 'aria-label': 'Séries de aproximação' },
+      h('div', { class: 'aprox-hd' },
+        h('span', { class: 'aprox-t', text: 'Aproximação' }),
+        h('span', { class: 'tiny muted grow', text: 'não conta no histórico' }),
+        h('button', { class: 'aprox-pular', type: 'button', 'aria-label': 'Pular as séries de aproximação', onClick: () => { mudarGuia((x) => { x.aprox[it.ex] = 'pulado'; }); drawCard(i); } }, 'Pular')),
+      h('div', { class: 'aprox-series' }, ...ap.series.map((x, k) => h('button', {
+        class: 'aprox-s' + (feitasAp[k] ? ' on' : ''), type: 'button', 'aria-pressed': feitasAp[k] ? 'true' : 'false',
+        'aria-label': `Aproximação ${k + 1}: ${x.txt}${feitasAp[k] ? ', feita' : ''}`, onClick: () => marcar(k),
+      }, icon(feitasAp[k] ? 'check' : 'plus'), h('span', { text: x.txt })))),
+      ap.nota ? h('div', { class: 'tiny muted', text: ap.nota }) : null);
+  }
+
+  // Teste da 1ª série (logic/guiado.js): exercício com carga feito pela 1ª vez no app. Depois da 1ª série válida, uma
+  // pergunta curta ajusta a carga das séries seguintes ainda não feitas (só as que estão com a carga da 1ª, ou vazias: o
+  // que a pessoa mudou à mão fica). Respondida, some.
+  function testeDaSerie(i, it, feitas) {
+    if (feitas !== 1) return null;
+    const ex = EX_POR_ID.get(it.ex);
+    if (!ex || ex.registro !== 'peso_reps' || guia().teste[it.ex]) return null;
+    const j0 = it.sets.findIndex((x) => x.ok);
+    if (j0 < 0 || !it.sets.slice(j0 + 1).some((x) => !x.ok) || temRegistro(it.ex)) return null;
+    const t = testeDaPrimeira(it.ex, it.alvo, it.sets[j0], { ...contextoCarga(it.ex), volta: state.current.volta });
+    if (!t) return null;
+    const responder = (o) => {
+      if (!state.current || state.current.itens[i] !== it) return;
+      const kg0 = it.sets[j0].kg;
+      let mudou = 0;
+      if (o.kg != null) mutCur((c) => { for (const x of c.itens[i].sets.slice(j0 + 1)) if (!x.ok && (x.kg == null || x.kg === kg0)) { x.kg = o.kg; mudou++; } });
+      mudarGuia((x) => { x.teste[it.ex] = o.id; });
+      toast(mudou || o.kg == null ? o.texto : 'As próximas séries ficam com a carga que você escolheu.');
+      drawCard(i);
+    };
+    return h('div', { class: 'teste1', role: 'group', 'aria-label': t.titulo },
+      h('div', { class: 'bold small', text: t.titulo }),
+      t.aviso ? h('p', { class: 'tiny muted', text: t.aviso }) : null,
+      h('div', { class: 'teste1-op n' + t.opcoes.length }, ...t.opcoes.map((o, k) => h('button', {
+        class: 'btn sm ' + (t.tipo !== 'pergunta' && k === 0 ? 'primary' : 'ghost'), type: 'button', onClick: () => responder(o),
+      }, h('span', { text: o.rotulo }), o.sub ? h('span', { class: 'sub', text: o.sub }) : null))),
+      porQue([
+        'Conte quantas repetições você ainda faria com boa técnica. Quem está começando costuma achar que sobram menos do que sobram: na dúvida, o ajuste fica do lado mais leve.',
+        'Subir: cerca de 10% nos exercícios de várias articulações e 5% nos isolados. Baixar: cerca de 10%. Na máquina com ajuda, o sentido inverte (mais ajuda = mais fácil).',
+        ...(t.podeSubir ? [] : ['Para o seu perfil, a carga não sobe no meio do treino: ela sobe de um treino para o outro, pela regra das repetições.']),
+      ], REFS_TESTE));
   }
 
   function itemMenu(i) {
@@ -318,17 +420,46 @@ export function sessionView() {
       if (!n) return true;
       return confirmSheet({ title, text: `${plural(n, 'série já feita', 'séries já feitas')} de “${ex.nome}” ${n === 1 ? 'será apagada' : 'serão apagadas'}.`, okLabel, danger: true });
     };
-    add('swap', 'Trocar por outro exercício', async () => {
-      if (!(await podePerder('Trocar este exercício?', 'Trocar'))) return;
-      const usados = new Set(state.current.itens.map((x) => x.ex));
-      const [novo] = await pickExercises({ title: 'Trocar ' + ex.nome, multi: false, padrao: ex.padrao, excluir: usados });
+    // troca só de hoje: mantém séries, repetições e descanso quando o novo é medido do mesmo jeito. Não mexe no plano nem
+    // entra no histórico de trocas (variacao.registrarTrocaManual): no próximo treino o aparelho pode estar livre.
+    const trocar = (novo) => {
       if (!novo || !state.current || state.current.itens[i] !== it) return;
       const nx = EX_POR_ID.get(novo);
       const base = nx.registro === ex.registro ? { ex: novo, series: it.sets.length, reps: it.alvo, descanso: it.descanso } : { ...novoItem(nx) };
       mutCur((c) => { c.itens[i] = montarItem(base); });
       recAntes.set(novo, recorde(novo));
       refresh();
-    });
+    };
+    const pelaLista = async () => {
+      if (!(await podePerder('Trocar este exercício?', 'Trocar'))) return;
+      if (!state.current || state.current.itens[i] !== it) return;
+      const usados = new Set(state.current.itens.map((x) => x.ex));
+      const [novo] = await pickExercises({ title: 'Trocar ' + ex.nome, multi: false, padrao: ex.padrao, excluir: usados });
+      trocar(novo);
+    };
+    // Aparelho ocupado: 2 ou 3 do mesmo movimento e músculo, com o que a academia tem e sem o que a dor manda evitar
+    const ocupado = () => {
+      let respostas = null, dores = [];
+      try { respostas = respostasParaAvisos(state); } catch { respostas = null; }
+      try { dores = doresDoTreino(state, dateKey(new Date()), respostas); } catch { dores = []; }
+      let ids = [];
+      try { ids = aparelhoOcupado(it.ex, { respostas, gym: state.gym, dores, noTreino: state.current.itens.map((x) => x.ex) }); } catch { ids = []; }
+      const nomes = (nx) => nx.equip.map((k) => (EQUIPAMENTOS[k] ? EQUIPAMENTOS[k].nome : '')).filter(Boolean).slice(0, 2).join(' · ') || subtitulo(nx);
+      const lista = h('div', { class: 'list' }, ...ids.map((id) => {
+        const nx = EX_POR_ID.get(id);
+        return exItem(nx, { sub: nomes(nx), right: icon('right', 's'), onClick: async () => { f.close(); if (await podePerder('Trocar este exercício?', 'Trocar')) trocar(id); } });
+      }));
+      const f = folha({
+        title: 'Aparelho ocupado',
+        body: ids.length
+          ? [h('p', { class: 'small muted', text: 'Mesmo movimento e mesmo músculo, com o que a sua academia tem. Séries e repetições continuam.' }), lista]
+          : [note('info', 'Não achei outro exercício do mesmo movimento que seja seguro para você e use os aparelhos da sua academia. Veja a lista completa ou espere o aparelho.')],
+        footer: [btn('Ver a lista completa', () => { f.close(); pelaLista(); }, ids.length ? 'ghost' : 'primary')],
+      });
+      f.el.id = 'folha-ocupado';
+    };
+    add('building', 'Aparelho ocupado', ocupado);
+    add('swap', 'Trocar por outro exercício', pelaLista);
     if (i > 0) add('up', 'Fazer antes', () => { mutCur((c) => { const [x] = c.itens.splice(i, 1); c.itens.splice(i - 1, 0, x); }); refresh(); });
     if (i < state.current.itens.length - 1) add('down', 'Fazer depois', () => { mutCur((c) => { const [x] = c.itens.splice(i, 1); c.itens.splice(i + 1, 0, x); }); refresh(); });
     add('trash', 'Tirar deste treino', async () => {
@@ -398,6 +529,7 @@ export function sessionView() {
       const ok = await confirmSheet({ title: 'Encerrar sem registrar?', text: 'Nenhuma série foi marcada como feita. O treino não será salvo no histórico.', okLabel: 'Encerrar', danger: true });
       if (!ok) return;
       update((s) => { s.current = null; });
+      apagarGuia();
       replace('treinos');
       return;
     }
@@ -415,6 +547,7 @@ export function sessionView() {
       cancelarAviso();
       s.ui.onboarded = true;
     });
+    apagarGuia();
     replace('historico/' + id);
   }
 
@@ -451,6 +584,23 @@ export function sessionView() {
     } else if (doneUntil && doneUntil <= now) { doneUntil = 0; drawBar(); }
   }
 
+  // Aquecimento: um passo discreto no topo, até a pessoa marcar "Feito" ou "Pular" (ou marcar a 1ª série do treino)
+  const aquec = h('div', { class: 'card aquec', id: 'aquecimento' });
+  function drawAquec() {
+    clear(aquec);
+    const c = state.current;
+    if (!c || !c.itens.length || guia().geral || c.itens.some((it) => it.sets.some((x) => x.ok))) { aquec.hidden = true; return; }
+    aquec.hidden = false;
+    let respostas = null;
+    try { respostas = respostasParaAvisos(state); } catch { respostas = null; }
+    const a = aquecimentoGeral(respostas, c.itens.some((it) => { const e = EX_POR_ID.get(it.ex); return !!e && e.registro === 'peso_reps'; }));
+    const fim = (v) => { mudarGuia((x) => { x.geral = v; }); drawAquec(); };
+    aquec.appendChild(h('div', { class: 'row gap-s aquec-hd' }, icon('flame', 's'),
+      h('div', { class: 'grow' }, h('div', { class: 'bold', text: 'Aquecimento' }), h('div', { class: 'small muted', text: a.linha }))));
+    aquec.appendChild(h('div', { class: 'row aquec-acoes' }, porQue(a.porque, a.refs), h('div', { class: 'grow' }),
+      btn('Pular', () => fim('pulado'), 'sm ghost'), btn('Feito', () => fim('feito'), 'sm primary', 'check')));
+  }
+  drawAquec();
   cur.itens.forEach((_, i) => drawCard(i));
   drawBar();
   tick();
@@ -466,13 +616,14 @@ export function sessionView() {
   const body = [];
   if (cur.volta >= 14) body.push(note('info', `De volta depois de ${duracaoTxt(cur.volta)} parado: nas duas primeiras semanas o treino começa com menos séries por músculo, mais descanso e carga menor. Você pode ajustar qualquer série.`));
   if (!cur.itens.length) body.push(h('div', { class: 'empty' }, icon('dumbbell'), h('p', { text: 'Treino livre: toque em “Exercício” para escolher o que você vai fazer.' })));
-  body.push(cards);
+  body.push(aquec, cards);
   if (cur.itens.length) body.push(note('info', 'Toque no ✓ ao terminar cada série. O descanso começa sozinho e o app avisa quando acabar.'));
   body.push(h('div', { class: 'row' }, btn('Descartar treino', async () => {
     const ok = await confirmSheet({ title: 'Descartar este treino?', text: 'Tudo o que foi registrado nesta sessão será perdido.', okLabel: 'Descartar', danger: true });
     if (!ok) return;
     cancelarAviso();
     update((s) => { s.current = null; });
+    apagarGuia();
     replace('treinos');
   }, 'plain danger sm', 'trash')));
   body.push(h('div', { class: 'spacer' }));

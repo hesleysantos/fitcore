@@ -1,0 +1,48 @@
+/* Treino guiado (views/session.js e logic/guiado.js): o passo do aquecimento no topo, as séries de aproximação (bem
+   diferentes das séries válidas: tracejadas e sem o ✓ grande) e a pergunta do teste da 1ª série. Só usa as cores de
+   app.css (var(--…)), então vale para os temas claro, escuro e de alto contraste. */
+.aquec[hidden], .aprox-box[hidden] { display: none; }
+.card.aquec { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-style: dashed; }
+.aquec-hd { align-items: flex-start; }
+.aquec-hd > .ic { color: var(--accent); margin-top: 2px; flex: none; }
+.aquec-acoes { gap: 8px; align-items: center; flex-wrap: wrap; }
+.aquec-acoes .btn { min-height: 44px; white-space: nowrap; }
+.aquec details.pq, .teste1 details.pq { min-width: 0; }
+.aquec details.pq[open], .teste1 details.pq[open] { flex-basis: 100%; order: 9; }
+.aquec details.pq p, .teste1 details.pq p { overflow-wrap: anywhere; }
+
+/* aproximação: uma faixa leve, tracejada, acima das séries válidas */
+.aprox { border: 1px dashed var(--border); border-radius: var(--radius-sm); padding: 6px 8px 8px; display: flex; flex-direction: column; gap: 6px; background: var(--surface-2); }
+.aprox-hd { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.aprox-hd .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aprox-t { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); flex: none; }
+.aprox-pular { border: 0; background: transparent; color: var(--accent); font-weight: 650; font-size: 0.85rem; min-height: 44px; min-width: 44px; padding: 0 4px; flex: none; }
+.aprox-series { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 6px; }
+.aprox-s { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 44px; padding: 0 6px; border-radius: 10px; border: 1px dashed var(--muted); background: transparent; color: var(--text); font-size: 0.9rem; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 0; }
+.aprox-s span { min-width: 0; overflow-wrap: anywhere; }
+.aprox-s .ic { width: 16px; height: 16px; color: var(--muted); flex: none; }
+.aprox-s.on { border-style: solid; border-color: var(--ok); color: var(--ok); background: var(--ok-soft); }
+.aprox-s.on .ic { color: var(--ok); }
+
+/* teste da 1ª série: a pergunta logo abaixo da série feita */
+.teste1 { border-radius: var(--radius-sm); padding: 10px; background: var(--accent-soft); display: flex; flex-direction: column; gap: 8px; }
+.teste1 p { margin: 0; }
+.teste1-op { display: grid; gap: 6px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.teste1-op.n2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.teste1-op.n1 { grid-template-columns: minmax(0, 1fr); }
+.teste1-op .btn { flex-direction: column; gap: 0; min-height: 52px; padding: 4px 6px; line-height: 1.2; white-space: normal; min-width: 0; overflow-wrap: anywhere; }
+.teste1-op .btn.ghost { background: var(--surface); }
+.teste1-op .btn .sub { font-size: 0.72rem; font-weight: 500; color: var(--muted); }
+.teste1-op .btn.primary .sub { color: inherit; }
+
+/* Séries do treino em telas estreitas, com a letra Normal (com letra maior, app.css já ajusta via [data-letra]): a 360 px
+   o campo de carga ficava com ~27 px e cortava "22,5". Botões − e + um pouco mais estreitos (o toque segue com a altura
+   inteira de 52 px), menos espaço entre as colunas e o ✓ com 48 px (acima dos 44 px mínimos): o campo passa de 50 px. */
+@media (max-width: 420px) {
+  :root:not([data-letra]) .setgrid { gap: 6px; grid-template-columns: 26px minmax(0, 1fr) minmax(0, 1fr) 48px; }
+  :root:not([data-letra]) .setgrid.one { grid-template-columns: 26px minmax(0, 1fr) 48px; }
+  :root:not([data-letra]) .setgrid .check { width: 48px; }
+  :root:not([data-letra]) .setgrid .setn { width: 26px; height: 26px; }
+  :root:not([data-letra]) .setgrid .numin button { width: 26px; }
+  :root:not([data-letra]) .setgrid .numin input { font-size: 1.06rem; }
+}

@@ -34,14 +34,15 @@ const todosDiferentes = (lista, rot) => { const s = new Set(lista); assert.equal
 const p0 = gerarPlano(base, GYM, 0);
 
 test('todas as perguntas da entrevista estão cobertas por este arquivo', () => {
-  assert.deepEqual(PERGUNTAS.map((q) => q.k), ['objetivo', 'idade', 'condicoes', 'triagem', 'remedios', 'experiencia', 'pausa', 'liberado', 'peso', 'altura', 'dias', 'tempo', 'local', 'extras', 'limitacoes', 'foco'], 'pergunta nova na entrevista: acrescente o teste de sensibilidade dela');
+  assert.deepEqual(PERGUNTAS.map((q) => q.k), ['objetivo', 'idade', 'condicoes', 'triagem', 'remedios', 'experiencia', 'pausa', 'liberado', 'peso', 'altura', 'semTreino', 'dias', 'tempo', 'local', 'extras', 'limitacoes', 'foco'], 'pergunta nova na entrevista: acrescente o teste de sensibilidade dela');
   assert.deepEqual(opcoes('objetivo'), ['hipertrofia', 'emagrecimento', 'forca', 'saude', 'resistencia']);
   assert.deepEqual(opcoes('experiencia'), ['nunca', 'iniciante', 'intermediario', 'avancado']);
   assert.deepEqual(opcoes('pausa'), ['treinando', '2a4s', '1a3m', '3a6m', 'mais6m']);
+  assert.deepEqual(opcoes('semTreino'), ['1', '2', '3', '4', '5', '6', '0', 'nenhum']);
   assert.deepEqual(opcoes('dias'), ['2', '3', '4', '5', '6']);
   assert.deepEqual(opcoes('tempo'), ['30', '45', '60', '75']);
   assert.deepEqual(opcoes('local'), ['completa', 'minha', 'halteres', 'corporal']);
-  assert.deepEqual(opcoes('extras'), ['elastico', 'bola_suica', 'caixa', 'banco_inclinado', 'barra_fixa', 'kettlebell', 'trx', 'corda_pular', 'bicicleta', 'esteira', 'nenhum']);
+  assert.deepEqual(opcoes('extras'), ['elastico', 'bola_suica', 'caixa', 'banco_inclinado', 'barra_fixa', 'kettlebell', 'trx', 'corda_pular', 'bicicleta', 'esteira', 'escada', 'nenhum']);
   assert.deepEqual(opcoes('limitacoes'), ['ombro', 'joelho', 'lombar', 'cervical', 'cotovelo', 'punho', 'quadril', 'tornozelo', 'nenhuma']);
   assert.deepEqual(opcoes('condicoes'), ['hipertensao', 'cardiaco', 'diabetes', 'renal', 'gestante', 'posparto', 'transtorno', 'cronica', 'nenhuma']);
   assert.deepEqual(opcoes('triagem'), ['dor_peito', 'falta_ar', 'falta_ar_deitado', 'palpitacao', 'tontura', 'tornozelos', 'perna', 'sopro', 'cansaco', 'osseo', 'medico', 'nenhum']);
@@ -55,6 +56,18 @@ test('todas as perguntas da entrevista estão cobertas por este arquivo', () => 
   assert.deepEqual(Object.keys(TIPOS_DOR), ['muscular', 'articular', 'aguda']);
   assert.deepEqual(Object.keys(QUANDO_DOR), ['durante', 'depois', 'repouso']);
   assert.equal(Object.keys(LOCAIS_DOR).length, 20);
+});
+
+test('semTreino: cada dia marcado sai da agenda (musculação e corrida); "Nenhum" e a resposta antiga não mudam nada', () => {
+  // o resto da regra (todas as combinações, corrida, fortalecimento e treino perdido) está em tests/dias-livres.test.mjs
+  assert.equal(doseEAgenda(gerarPlano({ ...base, semTreino: ['nenhum'] }, GYM, 0)), doseEAgenda(p0));
+  for (const w of opcoes('semTreino').filter((x) => x !== 'nenhum')) {
+    const p = gerarPlano({ ...base, semTreino: [w] }, GYM, 0);
+    assert.ok(!Object.keys(p.agenda).includes(w), 'treino no dia bloqueado: ' + w);
+    assert.equal(Object.keys(p.agenda).length, 4, 'os 4 treinos continuam: ' + w);
+    // só muda a agenda quando o dia bloqueado era um dia de treino (segunda, terça, quinta e sexta)
+    assert.equal(JSON.stringify(Object.keys(p.agenda).sort()) !== JSON.stringify(Object.keys(p0.agenda).sort()), Object.keys(p0.agenda).includes(w), w);
+  }
 });
 
 test('objetivo: cada opção dá a sua dose (repetições, descanso) e o seu cardio', () => {

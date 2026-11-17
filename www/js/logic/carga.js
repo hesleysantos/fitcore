@@ -56,10 +56,14 @@ export function fracaoDoPerfil(pf) {
 }
 export const fatorIdade = (idade) => (idade >= 60 ? 0.8 : idade >= 45 ? 0.9 : 1);
 
-const AJUSTE = (lo, hi) => `Faça a 1ª série e conte quantas repetições ainda sobrariam. Sobraram mais de 3: aumente na próxima. Não chegou a ${lo}: diminua. O ponto certo é fazer ${lo === hi ? lo : `de ${lo} a ${hi}`} com 2 a 3 sobrando.`;
+const AJUSTE = (lo, hi) => `Faça a 1ª série e conte quantas repetições ainda sobrariam. Sobraram mais de 3: aumente na próxima. Não chegou a ${lo}: diminua. O ponto certo é fazer ${lo === hi ? lo : `de ${lo} a ${hi}`} com 2 a 3 sobrando. Ao marcar a 1ª série, o app pergunta como foi e ajusta as próximas.`;
 const RESPIRAR = 'Solte o ar ao fazer força e não prenda a respiração: prender (Valsalva) sobe muito a pressão.';
 // fontes do ajuste pela 1ª série (vão depois das fontes da estimativa e dos cuidados)
-const REFS_AJUSTE = ['acsm2026', 'helms2016'];
+// steele2017: quem está começando acha que sobram menos repetições do que sobram (o teste guiado da 1ª série: logic/guiado.js)
+const REFS_AJUSTE = ['acsm2026', 'helms2016', 'steele2017'];
+
+// Limitação da entrevista que pega o exercício: marcada no catálogo (cuidado) ou pela mecânica (região que ele carrega).
+export const limitacaoNoExercicio = (ex, pf) => !!ex && !!pf && (pf.limitacoes.some((l) => ex.cuidado.includes(l)) || pf.regioesLim.some((r) => carregaRegiao(ex, r)));
 
 // Carga inicial pelo perfil, para quem não tem histórico do exercício.
 // ctx: { respostas (do Treinador, já com a proteção das outras entrevistas), sexo ('m' | 'f' | outro), dor (aviso de
@@ -97,7 +101,7 @@ export function cargaInicial(exId, alvoReps, ctx = {}) {
   porque.push(AJUSTE(lo, hi));
   // dor contada ao Treinador ou limitação da entrevista que pega o exercício: segue o Treinador (menos carga, só a
   // amplitude sem dor), sem número
-  const lim = !!pf && (pf.limitacoes.some((l) => ex.cuidado.includes(l)) || pf.regioesLim.some((r) => carregaRegiao(ex, r)));
+  const lim = !!pf && limitacaoNoExercicio(ex, pf);
   if (ctx.dor || lim) {
     porque.unshift('Este exercício usa uma região com dor ou limitação: comece mais leve que o normal e use só a amplitude sem dor. Siga o aviso do Treinador.');
     refs.push('silbernagel2007', 'smith2017');
