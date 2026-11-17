@@ -64,8 +64,9 @@ export default async (page) => {
   await page.eval(`document.getElementById('cartao-sono').click(); return true;`); await page.sleep(600);
   ok((await page.eval(`return location.hash;`)) === '#/sono', 'o cartão leva à tela do sono');
   t = await texto();
-  ok(t.includes('Sua meta de sono') && t.includes('quantos anos você tem?') && !t.includes('META DESTA NOITE'), 'sem idade conhecida, a tela pergunta a idade');
-  ok(t.includes('Quando procurar um médico') && t.includes('não indica remédio nem melatonina') && t.includes('Perguntas sobre o sono'), 'sinais de alerta e perguntas aparecem mesmo antes da meta');
+  ok(t.includes('Sua meta de sono') && t.includes('quantos anos você tem?') && !t.includes('Meta desta noite'), 'sem idade conhecida, a tela pergunta a idade');
+  const sinaisTxt = () => page.eval(`const e = document.querySelector('details.sono-sinais'); return e ? (e.open ? 'aberto:' : 'fechado:') + e.textContent : '';`);
+  ok(t.includes('Quando procurar um médico') && (await sinaisTxt()).startsWith('fechado:') && (await sinaisTxt()).includes('não indica remédio nem melatonina') && t.includes('Perguntas sobre o sono'), 'sinais de alerta (numa seção fechada) e perguntas aparecem mesmo antes da meta');
   await foto('1-idade');
 
   console.log('2. Idade → meta com o porquê');
@@ -74,7 +75,7 @@ export default async (page) => {
   ok((await campoIdade(34)) === '34', 'campo da idade');
   await page.click('Ver minha meta'); await page.sleep(500);
   t = await texto();
-  ok(t.includes('META DESTA NOITE') && (await alvoNaTela()) === '8 h' && t.includes('faixa: 7 a 9 h'), 'meta: 8 h, faixa de 7 a 9 h');
+  ok(t.includes('Meta desta noite') && (await alvoNaTela()) === '8 h' && t.includes('faixa: 7 a 9 h'), 'meta: 8 h, faixa de 7 a 9 h');
   ok(t.toLowerCase().includes(`meta desta noite · ${DIAS[wd(hojeKey)]} para ${DIAS[(wd(hojeKey) + 1) % 7]}`), 'a meta diz de que noite é (de hoje para amanhã)');
   ok(t.includes('Aos 34 anos, os consensos de sono recomendam de 7 a 9 h por noite.') && t.includes('Idade: 34 anos, informada aqui.'), 'a meta explica o porquê e de onde veio a idade');
   await page.eval(`document.querySelector('#sono-meta details.pq summary').click(); return true;`); await page.sleep(150);
@@ -88,7 +89,7 @@ export default async (page) => {
   await page.eval(`document.querySelector('#sono-dicas .dica').dataset.marca = 'antes'; return true;`);
   ok(await acordarAs('06:30'), 'campo da hora de acordar (e o foco continua nele)');
   await page.sleep(300);
-  ok((await page.eval(`return document.getElementById('sono-deitar').textContent;`)) === 'Para dormir 8 h, apague a luz às 22:30.', 'acordar às 06:30 com alvo de 8 h → deitar às 22:30');
+  ok((await page.eval(`return document.getElementById('sono-deitar').textContent;`)) === 'Deite até as 22:30 para dormir 8 h.', 'acordar às 06:30 com alvo de 8 h → deitar às 22:30');
   ok((await estado('s.sono.acordar')) === '06:30', 'hora de acordar gravada');
   ok(await page.eval(`const d = document.querySelector('#sono-dicas .dica'); return !!d && d.dataset.marca !== 'antes';`), 'as dicas são redesenhadas quando a hora de acordar muda');
 
@@ -120,6 +121,7 @@ export default async (page) => {
   ok(t.includes('5 de 7 noites') && t.includes('em geral, ficaram a mais de 1 hora da sua média'), 'a tela explica a variação como distância da média');
   ok(await page.eval(`const g = document.querySelector('#sono-semana svg.sono-graf'); return !!g && g.querySelectorAll('rect.bar').length === 5 && g.querySelectorAll('rect.bar.abaixo').length === 3 && !!g.querySelector('rect.zona') && !!g.querySelector('line.alvo');`), 'gráfico: 5 barras (3 abaixo da faixa), faixa recomendada e linha do alvo');
   const dicas1 = await page.eval(`return [...document.querySelectorAll('.dica')].map((e) => e.dataset.dica);`);
+  ok((await page.eval(`return [...document.querySelectorAll('#sono-dicas > .dica')].length === 2 && !!document.querySelector('#sono-dicas details.mais-dicas:not([open]) .dica');`)), 'dicas: 2 à vista e as outras em “Ver mais”');
   ok(dicas1.length >= 3 && dicas1.length <= 4 && dicas1[0] === 'faltou' && t.includes('Sua média foi de 6 h 42 em 5 noites, abaixo do mínimo de 7 h.') && !dicas1.includes('acordado'), 'dicas: de 3 a 4, a primeira avisa que faltou sono: ' + dicas1.join(', '));
   ok(await page.eval(`return [...document.querySelectorAll('.dica')].every((e) => !!e.querySelector('details.pq .ref'));`), 'toda dica traz as fontes');
   await ver('#sono-noite'); await foto('3-noite-semana');
@@ -183,7 +185,7 @@ export default async (page) => {
   const minutos = (delta) => page.eval(`const f = [...document.querySelectorAll('.sheet')].pop(); const b = f && f.querySelector('.sono-passo button[aria-label="${delta < 0 ? 'Menos' : 'Mais'} 5 minutos de cochilo"]'); if (!b) return false; for (let i = 0; i < ${Math.abs(delta)}; i++) b.click(); const v = Number(f.querySelector('.sono-passo .sono-tempo input').value); return v < 60 ? v + ' min' : (v % 60 ? Math.floor(v / 60) + ' h ' + String(v % 60).padStart(2, '0') : (v / 60) + ' h');`);
   const botaoCochilo = (escopo) => page.eval(`const e = document.querySelector(${JSON.stringify(escopo)}); const b = e && [...e.querySelectorAll('.btn')].find((x) => /Registrar cochilo|Outro cochilo/.test(x.textContent)); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true;`);
   t = await texto();
-  ok(t.includes(`Cochilos de hoje, ${DIAS[wd(hojeKey)]}`) && t.includes('Para adultos, a meta é a da noite. O cochilo aparece à parte'), 'a tela tem o cartão dos cochilos e diz como eles contam para o adulto');
+  ok(t.includes(`Cochilos de hoje, ${DIAS[wd(hojeKey)]}`) && t.includes('Em adultos, o cochilo não conta na meta da noite.'), 'a tela tem o cartão dos cochilos e diz como eles contam para o adulto');
   await botaoCochilo('#sono-cochilo'); await comFolhas(1);
   ok((await page.eval(`const e = document.getElementById('sono-folha-cochilo'); return e ? e.textContent : '';`)) === `Cochilo de ${diaTxt(hojeKey)}`, 'a folha diz de que dia é o cochilo: ' + diaTxt(hojeKey));
   ok((await minutos(2)) === '30 min', 'dois toques em + levam de 20 para 30 minutos');
@@ -203,7 +205,8 @@ export default async (page) => {
   ok(t.includes('14:10 · 30 min') && t.includes('Cochilos de hoje: 30 min. Não entram na meta, que é a da noite.'), 'o cochilo aparece no cartão, à parte da meta');
   ok(await page.eval(`const g = document.querySelector('#sono-semana svg.sono-graf'); const m = document.querySelector('.sono-dia.hoje .sono-mais'); return g.querySelectorAll('rect.bar.cochilo').length === 1 && g.querySelectorAll('rect.bar:not(.cochilo)').length === 4 && !!document.querySelector('#sono-semana .sono-legenda') && !!m && m.textContent === '+30m';`), 'semana: o cochilo é uma barra separada da noite, com legenda, e aparece no dia');
   const stats3 = await page.eval(`return [...document.querySelectorAll('#sono-semana .stat')].map((e) => e.textContent);`);
-  ok(stats3[0].includes('7 h 04') && t.includes('Cochilos: em 1 dia, 30 min em média por dia. Não entram na média da noite.'), 'adulto: a média continua sendo a da noite e os cochilos aparecem em separado: ' + stats3[0]);
+  ok(stats3[0].includes('7 h 04') && t.includes('Cochilos: em 1 dia, 30 min em média por dia.') && !t.includes('Não entram na média da noite') && t.split('Não entram na meta').length === 2, 'adulto: a média continua sendo a da noite e os cochilos aparecem em separado (o "não entram na meta" só no cartão dos cochilos): ' + stats3[0]);
+  ok(t.includes('Verde: sua faixa. Tracejado: o alvo. Toque num dia para corrigir.') && (await page.eval(`const b = [...document.querySelectorAll('#sono-semana .stat b')][2]; return !!b && getComputedStyle(b).whiteSpace === 'nowrap';`)), 'legenda curta da semana, e a variação não quebra linha');
   // corrigir
   await page.eval(`document.querySelector('#sono-cochilo .sono-cochilo').click(); return true;`); await comFolhas(1);
   ok((await texto()).includes('Corrigir o cochilo') && (await minutos(-1)) === '25 min', 'a folha de correção abre com os 30 minutos e desce para 25');
@@ -240,11 +243,13 @@ export default async (page) => {
 
   await avisos('6b');
   console.log('7. Perguntas frequentes com busca e fontes');
-  ok(await page.eval(`return document.querySelectorAll('details.acc').length === 4;`), 'quatro perguntas aparecem de início');
+  // (a seção fechada "Quando procurar um médico" também é um details.acc: fica de fora da conta das perguntas)
+  const PERG = 'details.acc:not(.sono-sinais)';
+  ok(await page.eval(`return document.querySelectorAll('${PERG}').length === 4;`), 'quatro perguntas aparecem de início');
   await page.eval(`const i = document.querySelector('.search input'); i.value = 'café'; i.dispatchEvent(new Event('input', { bubbles: true })); return true;`); await page.sleep(200);
-  ok((await page.eval(`return document.querySelector('details.acc summary').textContent;`)) === 'Até que horas posso tomar café?', 'a busca por “café” encontra a pergunta da cafeína');
-  await page.eval(`document.querySelector('details.acc summary').click(); return true;`); await page.sleep(150);
-  ok((await page.eval(`return document.querySelector('details.acc').textContent;`)).includes('Drake C') && (await texto()).includes('6 horas antes de deitar'), 'a resposta traz os números e as fontes');
+  ok((await page.eval(`return document.querySelector('${PERG} summary').textContent;`)) === 'Até que horas posso tomar café?', 'a busca por “café” encontra a pergunta da cafeína');
+  await page.eval(`document.querySelector('${PERG} summary').click(); return true;`); await page.sleep(150);
+  ok((await page.eval(`return document.querySelector('${PERG}').textContent;`)).includes('Drake C') && (await texto()).includes('6 horas antes de deitar'), 'a resposta traz os números e as fontes');
   await page.eval(`const i = document.querySelector('.search input'); i.value = 'qwertyzx'; i.dispatchEvent(new Event('input', { bubbles: true })); return true;`); await page.sleep(200);
   ok((await texto()).includes('Não encontrei isso na minha base'), 'busca sem resultado avisa e não inventa resposta');
   await page.eval(`const i = document.querySelector('.search input'); i.value = 'cochilo'; i.dispatchEvent(new Event('input', { bubbles: true })); return true;`); await page.sleep(200);
@@ -259,14 +264,14 @@ export default async (page) => {
   ok(st2.cochilos.length === 2 && st2.cochilos[0].min === 60 && st2.cochilos[1].data === hojeKey && st2.cochilos[1].min === 20 && (await texto()).includes('Cochilos de hoje: 20 min.') && (await page.eval(`return document.querySelectorAll('#sono-semana rect.bar.cochilo').length;`)) === 2, 'os cochilos continuam depois de recarregar');
   ok(st2.acordar === '06:30' && st2.idade === 34 && st2.n === 4 && st2.hoje.data === hojeKey && st2.hoje.horas === 7.75, 'hora de acordar, idade e noites continuam depois de recarregar: ' + JSON.stringify(st2));
   t = await texto();
-  ok(t.includes('faixa: 7 a 9 h') && t.includes('7 h 45') && t.includes('4 de 7 noites') && (await page.eval(`return document.querySelector('input[aria-label="Hora de acordar"]').value;`)) === '06:30' && t.includes('apague a luz às 22:30'), 'a tela mostra os mesmos dados');
+  ok(t.includes('faixa: 7 a 9 h') && t.includes('7 h 45') && t.includes('4 de 7 noites') && (await page.eval(`return document.querySelector('input[aria-label="Hora de acordar"]').value;`)) === '06:30' && t.includes('Deite até as 22:30'), 'a tela mostra os mesmos dados');
 
   console.log('9. Cartão da tela inicial');
   await page.goto(B, 900);
   // espera o cartão aparecer (a tela inicial pode levar um instante a mais para desenhar)
   await page.eval(`for (let i = 0; i < 30 && !document.getElementById('cartao-sono'); i++) await new Promise((r) => setTimeout(r, 100));`);
   let c = await page.eval(`const e = document.getElementById('cartao-sono'); return e ? e.textContent : '';`);
-  ok(c.includes('Meta: 8 h (7 a 9 h)') && c.includes(`Noite de ${entreDias(hojeKey)}: 7 h 45`) && c.includes('Dentro da faixa') && c.includes('Para acordar às 06:30, deite até as 22:30.'), 'cartão: meta, noite (com os dias) e hora de deitar: ' + c.slice(0, 150));
+  ok(c.includes('Meta: 8 h (7 a 9 h)') && c.includes(`Noite de ${entreDias(hojeKey)}: 7 h 45`) && c.includes('Dentro da faixa') && c.includes('Deite até as 22:30 para acordar às 06:30.'), 'cartão: meta, noite (com os dias) e hora de deitar: ' + c.slice(0, 150));
   ok(await page.eval(`const k = document.getElementById('cartao-sono'); const a = k.querySelector('a.sono-abrir'); return !!a && !a.hasAttribute('aria-label') && a.textContent.includes('Meta: 8 h') && !k.querySelector('button h2, a h2, button h3, a h3') && !!k.querySelector(':scope > .row > h2');`), 'acessibilidade: o link lê a meta (sem rótulo que a esconda) e o título não fica dentro de botão');
   ok((await page.eval(`const e = document.getElementById('cartao-sono-cochilo'); return e ? e.textContent : '';`)) === 'Cochilo de hoje: 20 min', 'o cartão do Início mostra o cochilo de hoje');
   await foto('5-inicio');
@@ -313,11 +318,11 @@ export default async (page) => {
   ok(pf.alvo === '9 h 30' && t.includes('faixa: 8 a 10 h'), 'aos 16 anos com 5 dias de treino: faixa de 8 a 10 h e alvo de 9 h 30');
   ok(t.includes('Aos 16 anos, os consensos de sono recomendam de 8 a 10 h por dia: os cochilos contam.') && t.includes('Você treina em 5 dias nesta semana') && t.includes('Idade: 16 anos, informada ao Treinador.') && pf.motivos.length === 2, 'a meta explica em duas linhas: a idade e a carga de treino');
   ok(!(await page.eval(`return [...document.querySelectorAll('#sono-meta .btn')].some((e) => e.textContent.trim() === 'Alterar');`)), 'idade vinda da entrevista não se altera aqui');
-  ok((await page.eval(`return document.getElementById('sono-deitar').textContent;`)) === 'Para dormir 9 h 30, apague a luz às 21:00.', 'a hora de deitar acompanha o novo alvo');
+  ok((await page.eval(`return document.getElementById('sono-deitar').textContent;`)) === 'Deite até as 21:00 para dormir 9 h 30.', 'a hora de deitar acompanha o novo alvo');
   const stats16 = await page.eval(`return [...document.querySelectorAll('#sono-semana .stat')].map((e) => e.textContent);`);
   ok(t.includes('Noite + cochilos: 7 h 20 (abaixo da faixa).') && stats16[0].includes('média 24 h') && stats16[1].includes('dias curtos') && t.includes('Já estão somados na média acima.'), 'aos 16 anos o cochilo soma à noite: 7 h + 20 min = 7 h 20, na média em 24 h: ' + stats16[0]);
   const dicas2 = await page.eval(`return [...document.querySelectorAll('.dica')].map((e) => e.dataset.dica);`);
-  ok(dicas2.includes('jovem') && t.includes('Adolescentes que treinam e dormem menos de 8 horas') && !dicas2.some((x) => ['alcool', 'cafeina', 'treinoNoite', 'musculo', 'cochilo', 'cochiloLongo', 'cochiloFrequente', 'cochiloTarde', 'cochiloNoite', 'semCochilo'].includes(x)), 'aos 16 anos as dicas são as da idade (sem álcool, corte de café, dicas de cochilo ou estudos de adultos): ' + dicas2.join(', '));
+  ok(dicas2.includes('jovem') && (await page.eval(`return document.getElementById('sono-dicas').textContent;`)).includes('Adolescentes que treinam e dormem menos de 8 horas') && !dicas2.some((x) => ['alcool', 'cafeina', 'treinoNoite', 'musculo', 'cochilo', 'cochiloLongo', 'cochiloFrequente', 'cochiloTarde', 'cochiloNoite', 'semCochilo'].includes(x)), 'aos 16 anos as dicas são as da idade (sem álcool, corte de café, dicas de cochilo ou estudos de adultos): ' + dicas2.join(', '));
   // cochilo em dia sem noite registrada: não entra na média em 24 horas, e a tela diz isso
   await page.eval(`const st = await import('/js/store.js'); const lg = await import('/js/logic/sono.js'); st.update((s) => { lg.gravarCochilo(s.sono, { data: '${diaMenos(5)}', min: 120 }); }); return true;`); await redesenhar(); await page.sleep(400);
   ok((await page.eval(`return document.getElementById('sono-semana-cochilos').textContent;`)).includes('Entram na média em 24 horas só nos dias com a noite registrada: 1 dia de cochilo ficou de fora.'), 'cochilo em dia sem noite registrada: a tela avisa que ele ficou fora da média em 24 horas');
@@ -361,7 +366,7 @@ export default async (page) => {
   await page.goto(B + '#/sono', 900);
   const longo = await page.eval(`const e = document.querySelector('.dica[data-dica="cochiloLongo"]'); return e ? e.textContent : '';`);
   ok(longo.includes('Cochilos de 1 hora ou mais') && longo.includes('Pode ser sinal de noite ruim, e não a causa') && longo.includes('Yamada T'), 'cochilos longos em 3 dias: a dica de saúde aparece, com a ressalva e as fontes');
-  ok((await texto()).includes('ou cochilos longos quase todos os dias'), 'o bloco “Quando procurar um médico” fala dos cochilos');
+  ok((await sinaisTxt()).includes('ou cochilos longos quase todos os dias'), 'o bloco “Quando procurar um médico” fala dos cochilos');
   await page.eval(`const st = await import('/js/store.js'); st.update((s) => { s.sono.registros = []; s.sono.cochilos = []; }); return true;`);
   // devolve os dados para as fotos em 360 px
   await page.eval(`const st = await import('/js/store.js'); const lg = await import('/js/logic/sono.js'); st.update((s) => {

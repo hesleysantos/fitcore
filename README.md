@@ -2,7 +2,7 @@
 
 Aplicativo de academia que funciona **100% offline**:
 
-- **286 exercícios** e 86 aparelhos (inclusive 32 exercícios para fazer em casa sem aparelhos) com figura humana animada (com o aparelho), que toca sozinha como um vídeo, e os músculos trabalhados em destaque. As mãos mudam conforme o exercício: espalmadas no apoio, com os dedos fechados em volta da barra ou do halter, ou soltas;
+- **287 exercícios** e 86 aparelhos (inclusive 31 exercícios para fazer em casa sem aparelhos) com figura humana animada (com o aparelho), que toca sozinha como um vídeo, e os músculos trabalhados em destaque. As mãos mudam conforme o exercício: espalmadas no apoio, com os dedos fechados em volta da barra ou do halter, ou soltas;
 - técnica de cada exercício conferida em fontes abertas (ACE, NASM, NSCA, artigos científicos), listadas na tela do exercício;
 - busca e filtros por grupo muscular, equipamento, nível e aparelhos da sua academia;
 - **treinos por dia da semana** totalmente personalizáveis, com 9 modelos prontos. Cada dia mostra, em seções separadas, a musculação e a corrida;
@@ -21,7 +21,7 @@ Aplicativo de academia que funciona **100% offline**:
 - **diário alimentar**: “Comi isso” ou “Comi outra coisa” em cada refeição, alimentos anotados ao longo do dia com as calorias de cada um e quanto falta (ou passou) da meta. Menores de 18 e quem informou transtorno alimentar não recebem contagem de calorias;
 - **cochilos**: registro dos cochilos do dia; até 18 anos somam à meta de sono (recomendação em 24 horas) e, para adultos, aparecem à parte, com dicas quando são longos, frequentes ou tarde;
 - **uma resposta de saúde vale para tudo**: idade, gestação e doenças informadas a um dos treinadores protegem também as metas da Nutricionista e o diário (vale sempre a resposta mais protegida);
-- tudo baseado em diretrizes e estudos publicados (293 referências; as que só abriam no resumo foram trocadas por fontes lidas em texto completo ou retiradas; listadas em *Sobre → Referências científicas*).
+- tudo baseado em diretrizes e estudos publicados (321 referências; as que só abriam no resumo foram trocadas por fontes lidas em texto completo ou retiradas; listadas em *Sobre → Referências científicas*).
 
 Os dados ficam **somente no aparelho**. Não há servidor, cadastro, anúncios nem rastreadores.
 
@@ -54,7 +54,7 @@ Abra `http://localhost:5173`. Requer Node.js 22 ou mais novo.
 npm test
 ```
 
-Roda 328 testes (centenas de milhares de perfis simulados no Treinador, na corrida, na Nutricionista e no sono; sensibilidade dos questionários, pergunta por pergunta; dores e limitações conferidas pela mecânica de cada exercício; corrida e musculação combinadas; avaliação de treino; diário alimentar; cochilos; armazenamento com o banco do aparelho falhando; validação de backup; catálogo com fontes; política de segurança) e três verificadores das 286 animações: física (ossos de comprimento fixo, articulações dentro do limite, nada atravessa o chão), postura e equilíbrio, e cabos (nenhum cabo atravessa o corpo).
+Roda 377 testes (centenas de milhares de perfis simulados no Treinador, na corrida, na Nutricionista e no sono; sensibilidade dos questionários, pergunta por pergunta; dores e limitações conferidas pela mecânica de cada exercício; corrida e musculação combinadas; avaliação de treino; diário alimentar; cochilos; armazenamento com o banco do aparelho falhando; validação de backup; catálogo com fontes; política de segurança) e três verificadores das 287 animações: física (ossos de comprimento fixo, articulações dentro do limite, nada atravessa o chão), postura e equilíbrio, e cabos (nenhum cabo atravessa o corpo).
 
 Teste de uso de ponta a ponta (clica no app como um usuário: entrevista, treino, evolução, nutrição, backup e uso sem internet). Deixe `npm start` rodando em outro terminal e execute:
 

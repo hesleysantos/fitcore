@@ -5,9 +5,10 @@ import { go, refresh, replace } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { volumeSessao, seriesSessao, duracaoSessao, semanaAtual, sequenciaSemanas, volumePorSemana, recorde, e1rm, historico, assistido } from '../logic/progress.js';
 import { barChart, lineChart, hbarChart } from './charts.js';
-import { analisar, GRUPOS_VOLUME, SERIES_MIN, SERIES_BOM, SERIES_TETO } from '../logic/insights.js';
+import { analisar, GRUPOS_VOLUME, SERIES_MIN, SERIES_BOM, SERIES_TETO, PESAGEM } from '../logic/insights.js';
 import { GRUPOS } from '../data/muscles.js';
 import { REFS } from '../data/knowledge.js';
+import { gastoDoTreino, MET_MUSC } from '../logic/gasto.js';
 import { exItem } from './common.js';
 
 const setTxt = (ex, s) => (ex.registro === 'peso_reps' ? `${fmtKg(s.kg || 0)} kg × ${s.reps || 0}` : ex.registro === 'reps' ? `${s.reps || 0} rep.` : `${s.seg || 0} ${ex.registro === 'minutos' ? 'min' : 's'}`);
@@ -29,7 +30,7 @@ export function historyView() {
       h('div', { class: 'grow' },
         h('div', { class: 't', text: s.nome }),
         h('div', { class: 's', text: `${fmtDate(s.inicio, true)} · ${fmtDur(duracaoSessao(s))}` }),
-        h('div', { class: 's', text: `${plural(s.itens.length, 'exercício', 'exercícios')} · ${plural(seriesSessao(s), 'série', 'séries')}${vol ? ` · ${fmtInt(vol)} kg no total` : ''}` })),
+        h('div', { class: 's', text: `${plural(s.itens.length, 'exercício', 'exercícios')} · ${plural(seriesSessao(s), 'série', 'séries')}${vol ? ` · carga total: ${fmtInt(vol)} kg` : ''}` })),
       icon('right', 's')));
   }
   body.push(l);
@@ -46,10 +47,22 @@ export function sessionDetailView(id) {
     body.push(h('div', { class: 'card hl center col' }, h('div', { class: 'row', }, h('div', { class: 'grow' })), icon('trophy', 'l accent'), h('h2', { text: 'Treino concluído!' }), h('p', { class: 'muted', text: 'Bom trabalho. Seu treino foi salvo no histórico.' })));
   }
   const vol = volumeSessao(s);
-  body.push(h('div', { class: 'stats' },
+  // gasto estimado (logic/gasto.js): sem número para menores de 18 e para quem informou transtorno alimentar
+  let g = null;
+  try { g = gastoDoTreino(s, state); } catch { g = null; }
+  body.push(h('div', { class: 'stats' + (g && g.mostrar ? ' quatro' : '') },
     h('div', { class: 'stat' }, h('b', { text: fmtDur(duracaoSessao(s)) }), h('span', { text: 'duração' })),
     h('div', { class: 'stat' }, h('b', { text: String(seriesSessao(s)) }), h('span', { text: 'séries' })),
-    h('div', { class: 'stat' }, h('b', { text: vol ? fmtInt(vol) : '–' }), h('span', { text: 'kg no total' }))));
+    h('div', { class: 'stat' }, h('b', { class: 'nowrap', text: vol ? `${fmtInt(vol)} kg` : '–' }), h('span', { text: 'carga total' })),
+    g && g.mostrar ? h('div', { class: 'stat', id: 'gasto-treino' }, h('b', { class: 'nowrap', text: `≈ ${fmtInt(g.kcal)} kcal` }), h('span', { text: 'gasto estimado' })) : null));
+  if (g && g.mostrar) {
+    const conta = `${g.musculacaoMin ? `musculação moderada (${String(g.idade60 ? MET_MUSC.idoso : MET_MUSC.adulto).replace('.', ',')} METs)` : ''}${g.musculacaoMin && g.cardio.length ? ' e ' : ''}${g.cardio.length ? 'o MET de cada cardio' : ''}`;
+    body.push(h('details', { class: 'pq', id: 'gasto-porque' }, h('summary', { text: 'Por quê?' }),
+      h('p', { class: 'small', text: `Estimativa pela tabela de atividades: ${conta}, vezes o seu peso (${fmtKg(g.peso)} kg) e o tempo. O gasto real varia muito de pessoa para pessoa.${g.foraDaConta.length ? ` Fica fora da conta (sem valor na tabela): ${g.foraDaConta.join(', ')}.` : ''}` }),
+      h('p', { class: 'tiny muted', text: 'Fonte: ' + (g.idade60 ? REFS.compendio60_2024 : REFS.compendio2024) })));
+  } else if (g && g.motivo === 'peso') {
+    body.push(h('button', { class: 'plainlink small gasto-peso', type: 'button', id: 'gasto-treino', onClick: () => abrir({ aba: 'peso', rota: 'progresso' }) }, h('span', { class: 'muted', text: 'Informe seu peso para ver as calorias ' }), h('span', { class: 'bold', text: '→' })));
+  }
   body.push(h('p', { class: 'small muted', text: fmtDate(s.inicio, true) }));
   for (const it of s.itens) {
     const ex = EX_POR_ID.get(it.ex);
@@ -92,13 +105,16 @@ export function dicaCard(d, compacto = false) {
 export function progressView() {
   const body = [];
   const total = state.sessions.length;
-  const meta = metaSemanal();
+  // meta da semana só com agenda no plano; sem ela, a sequência conta as semanas seguidas com algum treino
+  const comAgenda = temAgenda();
+  const meta = comAgenda ? metaSemanal() : 1;
   const semana = semanaAtual().size;
+  const seq = sequenciaSemanas(meta);
   const an = analisar(state);
   body.push(h('div', { class: 'stats' },
     h('div', { class: 'stat' }, h('b', { text: String(total) }), h('span', { text: total === 1 ? 'treino feito' : 'treinos feitos' })),
-    h('div', { class: 'stat' }, h('b', { text: `${semana}/${meta}` }), h('span', { text: 'nesta semana' })),
-    h('div', { class: 'stat' }, h('b', { text: String(sequenciaSemanas(meta)) }), h('span', { text: 'semanas seguidas' }))));
+    h('div', { class: 'stat' }, h('b', { text: comAgenda ? `${semana}/${meta}` : String(semana) }), h('span', { text: 'nesta semana' })),
+    h('div', { class: 'stat' }, h('b', { text: String(seq) }), h('span', { text: seq === 1 ? 'semana seguida' : 'semanas seguidas' }))));
   body.push(seg([['dicas', 'Dicas'], ['forca', 'Força'], ['volume', 'Volume'], ['peso', 'Peso']], aba, (v) => { aba = v; refresh(); }));
 
   if (aba === 'dicas') {
@@ -169,7 +185,7 @@ export function progressView() {
       const dif = Math.round((ult.peso - state.body[0].peso) * 10) / 10;
       pesoCard.appendChild(h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Último registro' }), h('span', { text: `${fmtKg(ult.peso)} kg` })));
       if (state.body.length > 1) pesoCard.appendChild(h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Desde o primeiro registro' }), h('span', { text: `${dif > 0 ? '+' : ''}${fmtKg(dif)} kg` })));
-    } else pesoCard.appendChild(h('p', { class: 'small muted', text: 'Pese-se uma vez por semana, sempre no mesmo horário.' }));
+    } else pesoCard.appendChild(h('p', { class: 'small muted', text: PESAGEM }));
     pesoCard.appendChild(h('div', { class: 'row' }, h('div', { class: 'grow' }, pesoInput), btn('Registrar', salvarPeso, 'primary')));
     if (state.body.length) pesoCard.appendChild(btn('Apagar o último registro', async () => {
       const u = state.body[state.body.length - 1];
@@ -183,6 +199,11 @@ export function progressView() {
   return { title: 'Evolução', back: '', body, actions: [iconBtn('history', 'Histórico de treinos', () => go('historico'))] };
 }
 
+// o plano ativo tem dias marcados na agenda? Sem agenda, não há meta de treinos na semana para mostrar.
+export function temAgenda() {
+  const p = state.plans.find((x) => x.id === state.activePlan);
+  return !!p && !!p.agenda && Object.keys(p.agenda).length > 0;
+}
 export function metaSemanal() {
   const p = state.plans.find((x) => x.id === state.activePlan);
   const agendados = p ? Object.keys(p.agenda).length : 0;

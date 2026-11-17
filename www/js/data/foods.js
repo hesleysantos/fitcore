@@ -5,6 +5,10 @@
 //   TACO — Tabela Brasileira de Composição de Alimentos, 4ª ed. rev. e ampl., NEPA/UNICAMP, 2011 (fonte principal).
 //   TBCA — Tabela Brasileira de Composição de Alimentos, USP/FoRC (tbca.net.br) — itens ausentes na TACO.
 //   USDA — FoodData Central, SR Legacy (fdc.nal.usda.gov) — itens ausentes na TACO.
+//   IBGE — POF 2008-2009, "Tabelas de composição nutricional dos alimentos consumidos no Brasil", Tabela 1 (PDF lido em
+//          nov/2026; o código do IBGE vai no comentário da linha) — preparações prontas: café com leite, sucos, sanduíches.
+// Alimentos com `soDiario` (refrigerantes, salgados, doces, bebidas com açúcar) servem só para registrar no diário: o
+// cardápio de exemplo nunca os usa (logic/nutrition.js).
 // "c" é o carboidrato total (inclui a fibra), como na TACO. Traços (Tr) e "não aplicável" (NA) foram gravados como 0.
 // Itens da USDA conferidos na FoodData Central em nov/2026: pão de forma = "Bread, white, commercially prepared" (FDC 174924);
 // salsicha = "Frankfurter, pork" (FDC 172964).
@@ -77,12 +81,14 @@ export const ALIMENTOS = [
   // ---- Feijões e leguminosas ----
   { id: 'feijao-carioca-cozido', nome: 'Feijão carioca cozido', cat: 'leguminosas', kcal: 76, p: 4.8, c: 13.6, g: 0.5, fibra: 8.5, porcao: { g: 100, desc: '1 concha média' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'carbo', fonte: 'TACO' },
   { id: 'feijao-preto-cozido', nome: 'Feijão preto cozido', cat: 'leguminosas', kcal: 77, p: 4.5, c: 14, g: 0.5, fibra: 8.4, porcao: { g: 100, desc: '1 concha média' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'carbo', fonte: 'TACO' },
-  { id: 'lentilha-cozida', nome: 'Lentilha cozida', cat: 'leguminosas', kcal: 93, p: 6.3, c: 16.3, g: 0.5, fibra: 7.9, porcao: { g: 100, desc: '1 concha média' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'carbo', fonte: 'TACO' },
+  { id: 'lentilha-cozida', nome: 'Lentilha cozida', cat: 'leguminosas', kcal: 93, p: 6.3, c: 16.3, g: 0.5, fibra: 7.9, porcao: { g: 160, desc: '1 concha média' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'carbo', fonte: 'TACO' },
   { id: 'grao-de-bico-cozido', nome: 'Grão-de-bico cozido', cat: 'leguminosas', kcal: 114, p: 7.5, c: 20.7, g: 1.8, fibra: 7.4, porcao: { g: 100, desc: '4 colheres de sopa cheias' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'carbo', fonte: 'TBCA' },
   { id: 'ervilha-enlatada', nome: 'Ervilha em conserva (drenada)', cat: 'leguminosas', kcal: 74, p: 4.6, c: 13.4, g: 0.4, fibra: 5.1, porcao: { g: 50, desc: '2 colheres de sopa' }, nova: 3, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'carbo', fonte: 'TACO' },
   { id: 'soja-cozida', nome: 'Soja em grão cozida', cat: 'leguminosas', kcal: 168, p: 16.2, c: 9.5, g: 9.3, fibra: 8.9, porcao: { g: 100, desc: '4 colheres de sopa cheias' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'proteina', fonte: 'TBCA' },
   { id: 'tofu', nome: 'Tofu', cat: 'leguminosas', kcal: 64, p: 6.6, c: 2.1, g: 4, fibra: 0.8, porcao: { g: 100, desc: '1 fatia grossa' }, nova: 3, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'proteina', fonte: 'TACO' },
-  { id: 'proteina-de-soja-texturizada', nome: 'Proteína de soja texturizada (seca)', cat: 'leguminosas', kcal: 336, p: 45.9, c: 41, g: 0.6, fibra: 8.5, porcao: { g: 25, desc: '1/2 xícara de chá' }, nova: 4, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'proteina', fonte: 'TBCA' },
+  // a proteína de soja como se come (hidratada e refogada): composição da POF 2008-2009, código 6505601 ("proteína de soja")
+  { id: 'proteina-de-soja-preparada', nome: 'Proteína de soja (carne de soja) refogada', cat: 'leguminosas', kcal: 142.37, p: 18.51, c: 5.8, g: 5.32, fibra: 0.44, porcao: { g: 96, desc: '2 colheres de servir' }, nova: 4, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'proteina', fonte: 'IBGE' },
+  { id: 'proteina-de-soja-texturizada', nome: 'Proteína de soja texturizada(seca)', cat: 'leguminosas', kcal: 336, p: 45.9, c: 41, g: 0.6, fibra: 8.5, porcao: { g: 25, desc: '1/2 xícara de chá' }, nova: 4, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'proteina', fonte: 'TBCA' },
   { id: 'feijao-fradinho-cozido', nome: 'Feijão-fradinho (de corda) cozido', cat: 'leguminosas', kcal: 78, p: 5.1, c: 13.5, g: 0.6, fibra: 7.5, porcao: { g: 100, desc: '1 concha média' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'carbo', fonte: 'TACO' },
   { id: 'feijao-roxo-cozido', nome: 'Feijão roxo cozido', cat: 'leguminosas', kcal: 77, p: 5.7, c: 12.9, g: 0.5, fibra: 11.5, porcao: { g: 100, desc: '1 concha média' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'carbo', fonte: 'TACO' },
   { id: 'feijao-jalo-cozido', nome: 'Feijão jalo cozido', cat: 'leguminosas', kcal: 93, p: 6.1, c: 16.5, g: 0.5, fibra: 13.9, porcao: { g: 100, desc: '1 concha média' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'carbo', fonte: 'TACO' },
@@ -297,6 +303,26 @@ export const ALIMENTOS = [
   { id: 'suco-de-uva-integral', nome: 'Suco de uva integral', cat: 'bebidas', kcal: 58, p: 0, c: 14.7, g: 0, fibra: 0.2, porcao: { g: 200, desc: '1 copo (200 mL)' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'TACO' },
   { id: 'caldo-de-cana', nome: 'Caldo de cana', cat: 'bebidas', kcal: 65, p: 0, c: 18.2, g: 0, fibra: 0.1, porcao: { g: 300, desc: '1 copo grande (300 mL)' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'TACO' },
   { id: 'cha-mate', nome: 'Chá-mate sem açúcar', cat: 'bebidas', kcal: 3, p: 0, c: 0.6, g: 0.1, fibra: 0, porcao: { g: 200, desc: '1 copo (200 mL)' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'TACO' },
+  // Bebidas do dia a dia que faltavam (POF 2017-2018, Tabela 2: café, sucos e refrigerantes estão entre os itens de
+  // maior consumo — ref pof2017). Composição por 100 g, da Tabela 1 das "Tabelas de composição nutricional dos alimentos
+  // consumidos no Brasil" (POF 2008-2009 — ref pof2008), com o código do IBGE no comentário, ou da TACO (número da linha).
+  // Os sucos da POF 2008-2009 são SEM açúcar (notas da publicação); as versões com açúcar estão em COM_ACUCAR, abaixo.
+  { id: 'cafe-com-leite', nome: 'Café com leite sem açúcar', cat: 'bebidas', kcal: 31.44, p: 1.72, c: 2.57, g: 1.69, fibra: 0.24, porcao: { g: 200, desc: '1 xícara de chá (200 mL)' }, nova: 1, tags: ['vegetariano', 'sem_gluten'], papel: 'bebida', fonte: 'IBGE' }, // 8501303 (metade café, metade leite)
+  { id: 'suco-de-abacaxi', nome: 'Suco de abacaxi natural sem açúcar', cat: 'bebidas', kcal: 53.21, p: 0.36, c: 12.92, g: 0.12, fibra: 0.2, porcao: { g: 200, desc: '1 copo (200 mL)' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'IBGE' }, // 8500402
+  { id: 'suco-de-acerola', nome: 'Suco de acerola natural sem açúcar', cat: 'bebidas', kcal: 23.06, p: 0.4, c: 4.81, g: 0.3, fibra: 0.3, porcao: { g: 200, desc: '1 copo (200 mL)' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'IBGE' }, // 8500403
+  { id: 'suco-de-goiaba', nome: 'Suco de goiaba natural sem açúcar', cat: 'bebidas', kcal: 62.28, p: 0.37, c: 15.62, g: 0.14, fibra: 0.79, porcao: { g: 200, desc: '1 copo (200 mL)' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'IBGE' }, // 8500406
+  { id: 'suco-de-mamao', nome: 'Suco de mamão natural sem açúcar', cat: 'bebidas', kcal: 57.13, p: 0.17, c: 14.54, g: 0.15, fibra: 0.6, porcao: { g: 200, desc: '1 copo (200 mL)' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'IBGE' }, // 8500412
+  { id: 'suco-de-manga', nome: 'Suco de manga natural sem açúcar', cat: 'bebidas', kcal: 50.86, p: 0.11, c: 13.08, g: 0.06, fibra: 0.3, porcao: { g: 200, desc: '1 copo (200 mL)' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'IBGE' }, // 8500413
+  { id: 'suco-de-maracuja', nome: 'Suco de maracujá natural sem açúcar', cat: 'bebidas', kcal: 60.14, p: 0.67, c: 14.48, g: 0.18, fibra: 0.2, porcao: { g: 200, desc: '1 copo (200 mL)' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'IBGE' }, // 8500414
+  { id: 'suco-de-melao', nome: 'Suco de melão natural sem açúcar', cat: 'bebidas', kcal: 31.79, p: 0.65, c: 8, g: 0.16, fibra: 0.42, porcao: { g: 200, desc: '1 copo (200 mL)' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'IBGE' }, // 8500415
+  { id: 'suco-de-morango', nome: 'Suco de morango natural sem açúcar', cat: 'bebidas', kcal: 59.21, p: 0.57, c: 14.51, g: 0.1, fibra: 0.23, porcao: { g: 200, desc: '1 copo (200 mL)' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'IBGE' }, // 8500416
+  { id: 'suco-de-tangerina', nome: 'Suco de tangerina natural sem açúcar', cat: 'bebidas', kcal: 36, p: 0.5, c: 8.8, g: 0, fibra: 0, porcao: { g: 200, desc: '1 copo (200 mL)' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'TACO' }, // TACO 252, "Tangerina, Poncã, suco"
+  { id: 'suco-de-caju', nome: 'Suco de caju sem açúcar', cat: 'bebidas', kcal: 45, p: 0.4, c: 10.7, g: 0.2, fibra: 0.6, porcao: { g: 200, desc: '1 copo (200 mL)' }, nova: 1, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'TACO' }, // TACO 188, "Caju, suco concentrado, envasado"
+  { id: 'refrigerante-de-cola-zero', nome: 'Refrigerante de cola zero açúcar', cat: 'bebidas', kcal: 2, p: 0.11, c: 0.29, g: 0.03, fibra: 0, porcao: { g: 350, desc: '1 lata (350 mL)' }, nova: 4, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'IBGE', soDiario: true }, // 8200801 (cola diet)
+  { id: 'refrigerante-de-guarana-zero', nome: 'Refrigerante de guaraná zero açúcar', cat: 'bebidas', kcal: 0, p: 0, c: 0, g: 0, fibra: 0, porcao: { g: 350, desc: '1 lata (350 mL)' }, nova: 4, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'IBGE', soDiario: true }, // 8207401 (guaraná diet: "-" em todos os campos)
+  { id: 'refrigerante-de-laranja', nome: 'Refrigerante de laranja', cat: 'bebidas', kcal: 46, p: 0, c: 11.8, g: 0, fibra: 0, porcao: { g: 350, desc: '1 lata (350 mL)' }, nova: 4, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'TACO', soDiario: true }, // TACO 482
+  { id: 'refrigerante-de-limao', nome: 'Refrigerante de limão', cat: 'bebidas', kcal: 40, p: 0, c: 10.3, g: 0, fibra: 0, porcao: { g: 350, desc: '1 lata (350 mL)' }, nova: 4, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'bebida', fonte: 'TACO', soDiario: true }, // TACO 483
+  { id: 'vitamina-de-banana', nome: 'Vitamina de banana com leite', cat: 'bebidas', kcal: 92.78, p: 2.47, c: 16.39, g: 2.31, fibra: 0.62, porcao: { g: 300, desc: '1 copo grande (300 mL)' }, nova: 1, tags: ['vegetariano', 'sem_gluten'], papel: 'bebida', fonte: 'IBGE', soDiario: true }, // 8500503 (com açúcar, segundo a publicação)
 
   // ---- Outros ----
   { id: 'whey-protein', nome: 'Whey protein (pó)', cat: 'outros', kcal: 352, p: 78.1, c: 6.3, g: 1.6, fibra: 3.1, porcao: { g: 30, desc: '1 dosador (scoop)' }, nova: 4, tags: ['vegetariano'], papel: 'proteina', fonte: 'USDA' },
@@ -318,7 +344,100 @@ export const ALIMENTOS = [
   { id: 'leite-condensado', nome: 'Leite condensado', cat: 'outros', kcal: 313, p: 7.7, c: 57, g: 6.7, fibra: 0, porcao: { g: 20, desc: '1 colher de sopa' }, nova: 4, tags: ['vegetariano', 'sem_gluten'], papel: 'carbo', fonte: 'TACO' },
   { id: 'coxinha-de-frango', nome: 'Coxinha de frango frita', cat: 'outros', kcal: 283, p: 9.6, c: 34.5, g: 11.8, fibra: 5, porcao: { g: 60, desc: '1 unidade média' }, nova: 3, tags: [], papel: 'carbo', fonte: 'TACO' },
   { id: 'pastel-de-carne-frito', nome: 'Pastel de carne frito', cat: 'outros', kcal: 388, p: 10.1, c: 43.8, g: 20.1, fibra: 1, porcao: { g: 60, desc: '1 unidade média' }, nova: 3, tags: [], papel: 'carbo', fonte: 'TACO' },
+  // Lanches e sanduíches comuns (POF 2017-2018, Tabela 2: sanduíches, pizzas, sorvete/picolé — ref pof2017), com a
+  // composição da POF 2008-2009 (código do IBGE) ou da TACO. Só para registrar no diário (`soDiario`): o cardápio de
+  // exemplo monta o pão com ovo e o café com leite com os alimentos separados.
+  { id: 'pao-com-ovo', nome: 'Pão com ovo', cat: 'outros', kcal: 261.3, p: 10.84, c: 29.91, g: 10.38, fibra: 1.15, porcao: { g: 100, desc: '1 unidade' }, nova: 3, tags: ['vegetariano', 'sem_lactose'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8570330 (pão francês e ovo, metade cada)
+  { id: 'pao-com-manteiga', nome: 'Pão com manteiga', cat: 'outros', kcal: 369.5, p: 6.81, c: 48.84, g: 16.1, fibra: 1.92, porcao: { g: 60, desc: '1 unidade' }, nova: 3, tags: ['vegetariano'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8570328
+  { id: 'misto-quente', nome: 'Misto-quente', cat: 'outros', kcal: 265.42, p: 16.29, c: 18.3, g: 13.78, fibra: 0.85, porcao: { g: 120, desc: '1 unidade' }, nova: 4, tags: [], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8500313 (misto-quente ou frio)
+  { id: 'pizza-de-mucarela', nome: 'Pizza de muçarela', cat: 'outros', kcal: 281.2, p: 14.6, c: 29.82, g: 11.35, fibra: 1.74, porcao: { g: 100, desc: '1 fatia' }, nova: 4, tags: ['vegetariano'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8500915
+  { id: 'pizza-de-calabresa', nome: 'Pizza de calabresa', cat: 'outros', kcal: 284.72, p: 13.74, c: 29.51, g: 12.21, fibra: 1.75, porcao: { g: 100, desc: '1 fatia' }, nova: 4, tags: [], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8500914
+  { id: 'acai-na-tigela', nome: 'Açaí na tigela (com xarope de guaraná)', cat: 'frutas', kcal: 110, p: 0.7, c: 21.5, g: 3.7, fibra: 1.7, porcao: { g: 300, desc: '1 copo (300 mL)' }, nova: 4, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'carbo', fonte: 'TACO', soDiario: true }, // TACO 167, "Açaí, polpa, com xarope de guaraná e glucose"
+  { id: 'picole', nome: 'Picolé industrializado', cat: 'outros', kcal: 79, p: 0, c: 19.23, g: 0.24, fibra: 0, porcao: { g: 60, desc: '1 unidade' }, nova: 4, tags: ['vegetariano'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 6900502 (picolé de qualquer sabor industrializado)
 ];
+
+// ---- Medidas caseiras do cardápio de exemplo ----
+// Peso de cada medida caseira, da "Tabela de Medidas Referidas para os Alimentos Consumidos no Brasil" (IBGE, POF
+// 2008-2009 — ref pof2008medidas; PDF lido em nov/2026), com o código do alimento no IBGE. O cardápio mostra e ajusta as
+// quantidades nessas medidas, inteiras ou em meio (logic/nutrition.js, PORCOES). [gramas, medida, fonte]
+// Onde a tabela do IBGE não tem a medida (sardinha fresca, nozes, chia), vale a porção desta tabela de alimentos.
+const IB = (c) => 'IBGE ' + c;
+export const MEDIDAS = {
+  'arroz-branco-cozido': [45, '1 colher de servir', IB(6300101)], 'arroz-integral-cozido': [45, '1 colher de servir', IB(6300101)],
+  'macarrao-cozido': [110, '1 pegador', IB(6503401)], 'batata-inglesa-cozida': [140, '1 unidade média', IB(6400101)], 'mandioca-cozida': [100, '1 pedaço médio', IB(6400609)],
+  'batata-doce-cozida': [100, '1 colher de servir', IB(6400401)], 'inhame-cozido': [60, '1 pedaço médio', IB(6400501)], 'cuscuz-de-milho-cozido': [135, '1 pedaço médio', IB(6902901)],
+  'feijao-carioca-cozido': [140, '1 concha média', IB(6303102)], 'feijao-preto-cozido': [140, '1 concha média', IB(6303102)], 'lentilha-cozida': [160, '1 concha média', IB(6302901)],
+  'grao-de-bico-cozido': [120, '1 concha média', IB(6302801)], 'soja-cozida': [57, '1 concha', IB(6303001)], 'proteina-de-soja-preparada': [48, '1 colher de servir', IB(6505601)],
+  'peito-de-frango-grelhado': [100, '1 filé médio', IB(7800402)], 'peito-de-frango-cozido': [100, '1 filé médio', IB(7800402)], 'patinho-grelhado': [100, '1 bife médio', IB(7100501)],
+  'coxao-mole-cozido': [100, '1 bife médio', IB(7109101)], 'carne-moida-cozida': [60, '1 colher de servir', IB(7104301)], 'sobrecoxa-de-frango-assada-sem-pele': [55, '1 pedaço', IB(7800302)],
+  'lombo-suino-assado': [95, '1 pedaço médio', IB(7103701)], 'tilapia-grelhada': [120, '1 filé médio', IB(7400101)], 'merluza-assada': [120, '1 filé médio', IB(7200101)],
+  'sardinha-assada': [40, '1 unidade média', 'porção da tabela'], 'ovo-cozido': [45, '1 unidade', IB(7803301)], tofu: [20, '1 fatia', IB(7903402)],
+  'pao-frances': [50, '1 unidade', IB(8000105)], 'pao-de-forma-integral': [25, '1 fatia', IB(8000501)], 'tapioca-pronta': [50, '1 unidade', IB(6501516)],
+  'aveia-em-flocos': [15, '1 colher de sopa cheia', IB(6500401)], 'pao-de-queijo-assado': [20, '1 unidade média', IB(8000801)],
+  'queijo-minas-frescal': [30, '1 fatia média', IB(7907301)], 'queijo-mucarela': [20, '1 fatia média', IB(7901801)], ricota: [35, '1 fatia média', IB(7902201)],
+  'queijo-cottage': [44, '1 colher de sopa cheia', IB(7902201)], 'pasta-de-amendoim': [12.5, '1 ponta de faca', IB(6901203)],
+  'leite-integral': [200, '1 xícara de chá (200 mL)', IB(7900101)], 'leite-desnatado': [200, '1 xícara de chá (200 mL)', IB(7903601)], 'leite-de-soja': [200, '1 xícara de chá (200 mL)', IB(7902301)],
+  'cafe-com-leite': [150, '1 copo americano (150 mL)', IB(8501303)], 'iogurte-natural': [200, '1 pote', IB(7901204)], 'manteiga-com-sal': [8, '1 colher de chá', IB(7901501)],
+  'coco-cru': [40, '1 pedaço médio', IB(6600101)], chia: [12, '1 colher de sopa', 'porção da tabela'], mel: [15, '1 colher de sopa', IB(6901602)],
+  'castanha-de-caju': [40, '1 punhado', IB(6600801)], 'castanha-do-para': [4, '1 unidade', IB(6600701)], nozes: [5, '1 unidade', 'porção da tabela'], amendoa: [1, '1 unidade', IB(6600501)],
+  'amendoim-torrado-salgado': [17, '1 colher de sopa', IB(6301001)],
+  'banana-prata': [75, '1 unidade', IB(6801101)], 'maca-fuji': [150, '1 unidade média', IB(6803001)], 'laranja-pera': [180, '1 unidade média', IB(6801801)], 'mamao-papaia': [170, '1 fatia média', IB(6803101)],
+  abacaxi: [75, '1 fatia média', IB(6802601)], melancia: [200, '1 fatia média', IB(6803401)], 'manga-palmer': [140, '1 unidade', IB(6803201)], morango: [12, '1 unidade média', IB(6805201)],
+  'goiaba-vermelha': [170, '1 unidade média', IB(6804201)], 'pera-williams': [130, '1 unidade média', IB(6803601)], 'tangerina-ponca': [135, '1 unidade média', IB(6802201)],
+  'uva-italia': [170, '1 cacho pequeno', IB(6803901)], melao: [90, '1 fatia média', IB(6803501)], kiwi: [94, '1 unidade média', IB(6807801)], abacate: [45, '1 colher de sopa cheia', IB(6802701)],
+  'alface-crespa': [10, '1 folha média', IB(6700101)], tomate: [15, '1 fatia média', IB(6705101)], rucula: [20, '1 pires', IB(6702001)], pepino: [18, '1 colher de sopa cheia', IB(6704001)],
+  'cenoura-crua': [12, '1 colher de sopa cheia', IB(6401201)], 'repolho-branco-cru': [10, '1 colher de sopa cheia', IB(6700901)],
+  'brocolis-cozido': [60, '1 ramo médio', IB(6701704)], 'abobrinha-cozida': [30, '1 colher de sopa cheia', IB(6703701)], 'cenoura-cozida': [40, '1 colher de servir', IB(6401201)],
+  'couve-refogada': [20, '1 colher de sopa cheia', IB(6700501)], 'chuchu-cozido': [45, '1 colher de servir', IB(6704101)], 'beterraba-cozida': [38, '1 colher de servir', IB(6401101)],
+  'couve-flor-cozida': [60, '1 ramo médio', IB(6700601)], 'vagem-cozida': [20, '1 colher de sopa cheia', IB(6705201)], 'abobora-cabotia-cozida': [36, '1 colher de sopa cheia', IB(6703901)],
+  'quiabo-cozido': [40, '1 colher de sopa cheia', IB(6705001)], 'berinjela-cozida': [25, '1 colher de sopa cheia', IB(6705401)],
+  'azeite-de-oliva': [8, '1 colher de sopa', IB(8400101)], 'oleo-de-soja': [8, '1 colher de sopa', IB(8400101)], 'farinha-de-mandioca-torrada': [16, '1 colher de sopa cheia', IB(6501401)],
+};
+// sucos: o copo médio de suco do IBGE (240 mL; códigos 8500402 a 8500418)
+for (const id of ['suco-de-laranja-natural', 'suco-de-abacaxi', 'suco-de-maracuja', 'suco-de-acerola', 'suco-de-caju', 'suco-de-goiaba', 'suco-de-manga', 'suco-de-tangerina', 'suco-de-melao', 'suco-de-mamao', 'suco-de-morango', 'suco-de-uva-integral']) MEDIDAS[id] = [240, '1 copo médio (240 mL)', IB(8500402)];
+
+// ---- Bebidas com açúcar ----
+// A POF 2008-2009 dá o café e os sucos naturais sem açúcar: o açúcar entrava à parte na análise (ref pof2008, notas da
+// publicação). A POF 2017-2018 conta cada açúcar adicionado como no máximo 10% do peso do alimento (Notas técnicas, itens
+// de adição — ref pof2017). A versão com açúcar é a bebida da tabela com 10% do peso em açúcar refinado (TACO): 100 g da
+// bebida + 10 g de açúcar, por 100 g do que se toma. Só para registrar no diário: o cardápio de exemplo não adoça.
+const COM_ACUCAR = [
+  ['cafe-com-leite', 'cafe-com-leite-com-acucar', 'Café com leite com açúcar'],
+  ['cafe-sem-acucar', 'cafe-com-acucar', 'Café coado com açúcar'],
+  ['suco-de-laranja-natural', 'suco-de-laranja-com-acucar', 'Suco de laranja natural com açúcar'],
+  ['suco-de-abacaxi', 'suco-de-abacaxi-com-acucar', 'Suco de abacaxi natural com açúcar'],
+  ['suco-de-acerola', 'suco-de-acerola-com-acucar', 'Suco de acerola natural com açúcar'],
+  ['suco-de-goiaba', 'suco-de-goiaba-com-acucar', 'Suco de goiaba natural com açúcar'],
+  ['suco-de-manga', 'suco-de-manga-com-acucar', 'Suco de manga natural com açúcar'],
+  ['suco-de-maracuja', 'suco-de-maracuja-com-acucar', 'Suco de maracujá natural com açúcar'],
+  ['suco-de-morango', 'suco-de-morango-com-acucar', 'Suco de morango natural com açúcar'],
+  ['suco-de-tangerina', 'suco-de-tangerina-com-acucar', 'Suco de tangerina natural com açúcar'],
+  ['suco-de-caju', 'suco-de-caju-com-acucar', 'Suco de caju com açúcar'],
+];
+export const ACUCAR_ADICIONADO = 0.1;
+{
+  const acucar = ALIMENTOS.find((f) => f.id === 'acucar-refinado');
+  const r2 = (v) => Math.round(v * 100) / 100;
+  for (const [de, id, nome] of COM_ACUCAR) {
+    const b = ALIMENTOS.find((f) => f.id === de);
+    const mistura = (k) => r2((b[k] + ACUCAR_ADICIONADO * acucar[k]) / (1 + ACUCAR_ADICIONADO));
+    ALIMENTOS.push({ id, nome, cat: b.cat, kcal: mistura('kcal'), p: mistura('p'), c: mistura('c'), g: mistura('g'), fibra: mistura('fibra'), porcao: { ...b.porcao }, nova: b.nova, tags: b.tags.filter((t) => acucar.tags.includes(t)), papel: 'bebida', fonte: b.fonte, soDiario: true, base: de });
+  }
+}
+// Outros nomes que as pessoas usam para buscar no diário (cada palavra vale como uma palavra do nome)
+const APELIDOS = {
+  'cafe-sem-acucar': 'cafezinho preto puro', 'cafe-com-acucar': 'cafezinho adocado', 'cafe-com-leite': 'pingado media', 'cafe-com-leite-com-acucar': 'pingado media adocado',
+  'leite-achocolatado': 'leite com achocolatado chocolate', 'suco-de-laranja-natural': 'sem acucar', 'refrigerante-de-cola': 'refri coca', 'refrigerante-de-guarana': 'refri',
+  'refrigerante-de-cola-zero': 'refri coca diet light', 'refrigerante-de-guarana-zero': 'refri diet light', 'refrigerante-de-laranja': 'refri', 'refrigerante-de-limao': 'refri soda',
+  'bebida-isotonica': 'isotonico', 'vitamina-de-banana': 'batida', 'pao-com-manteiga': 'pao na chapa', 'misto-quente': 'misto frio sanduiche de queijo e presunto',
+  'acai-na-tigela': 'acai', 'picole': 'sorvete de palito', 'suco-de-uva-integral': 'sem acucar', 'suco-de-caju-com-acucar': 'cajuada refresco',
+};
+for (const f of ALIMENTOS) if (APELIDOS[f.id]) f.apelidos = APELIDOS[f.id];
+// Industrializados e doces que já estavam na tabela: também só para o diário
+const SO_DIARIO = ['refrigerante-de-cola', 'refrigerante-de-guarana', 'bebida-isotonica', 'biscoito-recheado', 'bolo-de-chocolate', 'batata-chips', 'coxinha-de-frango', 'pastel-de-carne-frito',
+  'chocolate-ao-leite', 'chocolate-meio-amargo', 'leite-condensado', 'macarrao-instantaneo', 'salsicha', 'pacoca', 'pe-de-moleque', 'goiabada', 'bananada', 'rapadura', 'doce-de-leite', 'melado',
+  'achocolatado-em-po', 'acucar-refinado', 'acucar-cristal', 'acucar-mascavo'];
+for (const f of ALIMENTOS) if (SO_DIARIO.includes(f.id)) f.soDiario = true;
 
 // ---------- Faixa de preço de cada alimento ----------
 // Preço muda com o tempo, a cidade e a loja. Por isso o aplicativo NÃO mostra reais: guarda só uma faixa relativa
@@ -337,8 +456,9 @@ export const ALIMENTOS = [
 //   AN  Procon Anápolis (GO), carnes em 6 supermercados, 26 a 28/01/2026 (costela, fraldinha, linguiça de frango).
 //   RN  EMATER-RN, Portaria SEI nº 206 de 06/05/2026 (DOE-RN 08/05/2026): preços médios da agricultura familiar em 42
 //       municípios do Rio Grande do Norte, de ago/2024 a jul/2025 (frutas regionais, castanha, doces, laticínios).
-//   SD  Sonda Supermercados, loja on-line de São Paulo, preços de prateleira em 13/11/2026: mediana dos produtos comuns de
-//       cada busca, um alimento por consulta. É uma rede só, num dia só: vale para a faixa, não como preço médio.
+//   SD  Sonda Supermercados, loja on-line de São Paulo, preços de prateleira em 13/11/2026 (refrigerantes, pizzas, açaí e
+//       picolé: 16/11/2026): mediana dos produtos comuns de cada busca, um alimento por consulta. É uma rede só, num dia
+//       só: vale para a faixa, não como preço médio.
 //   MF  Super Muffato, loja on-line (Paraná), preços de prateleira em 13/11/2026, um alimento por consulta. Usado quando o
 //       produto não aparecia no Sonda. Mesma ressalva: uma rede, um dia.
 //   CG  Ceasa-GO (Goiânia), cotação diária de 10/11/2026: preço mais comum no ATACADO. No varejo custa mais; só entra onde
@@ -349,7 +469,9 @@ export const ALIMENTOS = [
 //   RC  receita: custo de 1 kg do prato pronto, somado em código (RECEITAS, abaixo da tabela) com os ingredientes e as
 //       quantidades da receita que a própria TACO analisou e os preços pesquisados desta tabela. É uma conta, não uma
 //       coleta de preço.
-// Não sobrou alimento com preço estimado "pelo parecido": todos os 269 têm fonte e data.
+//   MX  mistura: custo de 1 kg de bebida ou sanduíche montado com alimentos desta tabela (MISTURAS, abaixo), pelos preços
+//       pesquisados deles. Também é uma conta: café com leite, bebidas com açúcar, pão com ovo, misto-quente.
+// Não sobrou alimento com preço estimado "pelo parecido": todos têm fonte e data.
 // Conferência cruzada (não entram na conta): Conab/Prohort, boletim hortigranjeiro de set/2026 (atacado das Ceasas,
 // ago/2026); Dieese/Conab, cesta básica nas 27 capitais, set/2026; Procon Anápolis (cesta básica, mar/2026).
 // Faixas perto do limite (mudariam com 30% a mais ou a menos no preço): ricota, whey, ovo de codorna, abadejo, lagarto,
@@ -394,6 +516,8 @@ const PRECO_REF = {
   'soja-cozida': [2.55, 2.3, 'NT'], // indicador Cepea/Esalq, interior do PR, 10/11/2026: R$ 152,70 a saca de 60 kg (atacado; no pacote custa mais)
   tofu: [68.3, 1, 'MF'], // um só produto: 300 g a R$ 20,50
   'proteina-de-soja-texturizada': [22.4, 1, 'SD'], // 400 g a R$ 8,97
+  // a mesma proteína seca, hidratada: 1 kg seco rende 2,48 kg prontos (a conta da proteína: 45,9 g seca ÷ 18,51 g pronta)
+  'proteina-de-soja-preparada': [22.4, 2.48, 'SD'],
   // carnes e aves
   'peito-de-frango-grelhado': [25.76, 0.72, 'MM'],             // filé de peito
   'peito-de-frango-cozido': [25.76, 0.75, 'MM'],
@@ -632,6 +756,18 @@ const PRECO_REF = {
   'suco-de-uva-integral': [16.95, 1, 'DP'],
   'caldo-de-cana': [16, 1, 'NT'], // R$ 8 o copo de 500 mL (Campo Grande News, 03/02/2025)
   'cha-mate': [26.3, 66, 'MS'], // erva: 250 g a R$ 6,57; 1 kg rende cerca de 66 litros
+  // Sucos naturais: preço da fruta (a mesma linha da fruta, acima) e rendimento em suco. O rendimento é a conta do
+  // carboidrato, como nos pratos prontos: parte comestível × carboidrato da fruta (TACO) ÷ carboidrato do suco (tabela
+  // da composição) — ex.: maracujá, 0,4 × 12,3 ÷ 14,48 = 0,34 kg de suco por quilo comprado.
+  'suco-de-abacaxi': [7.02, 0.52, 'DP'], 'suco-de-acerola': [6.38, 1.41, 'RN'], 'suco-de-goiaba': [8.52, 0.79, 'DP'], 'suco-de-mamao': [6.57, 0.46, 'DP'],
+  'suco-de-manga': [7.67, 0.96, 'DP'], 'suco-de-maracuja': [10.24, 0.34, 'DP'], 'suco-de-melao': [7.41, 0.52, 'DP'], 'suco-de-morango': [28.32, 0.45, 'DP'],
+  'suco-de-tangerina': [4.72, 0.76, 'DP'], 'suco-de-caju': [5.68, 0.87, 'RN'],
+  // Sonda, 16/11/2026, garrafas de 2 L: cola zero de duas marcas, R$ 14,73 e R$ 7,99; guaraná zero, R$ 9,79; laranja,
+  // R$ 11,32 e R$ 7,69. Limão, sem garrafa de 2 L à venda: mediana por litro das de 200 mL a 600 mL (R$ 1,69 a 5,93).
+  'refrigerante-de-cola-zero': [5.68, 1, 'SD'], 'refrigerante-de-guarana-zero': [4.9, 1, 'SD'], 'refrigerante-de-laranja': [4.76, 1, 'SD'], 'refrigerante-de-limao': [9.5, 1, 'SD'],
+  // Sonda, 16/11/2026: pizzas congeladas com preço (250 g a R$ 14,29; 460 g a R$ 22,32), mediana por quilo; açaí com
+  // guaraná, um só produto vendido por peso (1,1 kg a R$ 52,35); picolés comuns (40 g a 62 g, R$ 6,11 a 11,76), mediana
+  'pizza-de-mucarela': [52.84, 1, 'SD'], 'pizza-de-calabresa': [52.84, 1, 'SD'], 'acai-na-tigela': [47.59, 1, 'SD'], picole: [177.6, 1, 'SD'],
   // outros
   'acucar-cristal': [3.1, 1, 'MS'],                            // 2 kg a R$ 6,20
   'acucar-mascavo': [17.83, 1, 'DP'],
@@ -693,6 +829,24 @@ export const custoDaReceita = (id) => {
 };
 for (const id of Object.keys(RECEITAS)) PRECO_REF[id] = [custoDaReceita(id), 1, 'RC'];
 
+// Misturas (fonte MX): bebidas e sanduíches que a própria tabela de composição monta somando alimentos (o IBGE fez
+// assim o café com leite e o pão com ovo — "50% de cada alimento"; ref pof2008). O preço sai dos ingredientes desta
+// tabela, já prontos para comer (preço de compra ÷ rendimento), na proporção em peso: [ingrediente, kg por kg pronto].
+//   vitamina de banana: a proporção que reproduz a composição do IBGE (gordura: leite; proteína: leite e banana;
+//   carboidrato: o resto em açúcar) — 680 g de leite, 226 g de banana e 73 g de açúcar por quilo;
+//   misto-quente: idem com pão de forma, queijo prato e presunto (carboidrato, gordura e proteína do IBGE);
+//   pão com manteiga: 50 g de pão e 10 g de manteiga; com açúcar: 1 kg da bebida e 100 g de açúcar (COM_ACUCAR).
+export const MISTURAS = {
+  'cafe-com-leite': [['cafe-sem-acucar', 0.5], ['leite-integral', 0.5]],
+  'vitamina-de-banana': [['leite-integral', 0.68], ['banana-prata', 0.226], ['acucar-refinado', 0.073]],
+  'pao-com-ovo': [['pao-frances', 0.5], ['ovo-frito', 0.5]],
+  'pao-com-manteiga': [['pao-frances', 0.833], ['manteiga-com-sal', 0.167]],
+  'misto-quente': [['pao-de-forma', 0.344], ['queijo-prato', 0.412], ['presunto-cozido', 0.244]],
+};
+for (const [de, id] of COM_ACUCAR) MISTURAS[id] = [[de, 1 / (1 + ACUCAR_ADICIONADO)], ['acucar-refinado', ACUCAR_ADICIONADO / (1 + ACUCAR_ADICIONADO)]];
+export const custoDaMistura = (id) => Math.round(MISTURAS[id].reduce((s, [k, kg]) => s + kg * (PRECO_REF[k][0] / PRECO_REF[k][1]), 0) * 100) / 100;
+for (const id of Object.keys(MISTURAS)) PRECO_REF[id] = [custoDaMistura(id), 1, 'MX'];
+
 // ---------- alergia alimentar ----------
 // Os grupos de alergênicos da lista oficial da Anvisa (RDC 26/2015, mantida no Anexo III da RDC 727/2022 — ref
 // anvisa_alergenicos): amendoim; castanhas (amêndoa, avelã, castanha-de-caju, castanha-do-pará, macadâmia, nozes, pecã,
@@ -716,11 +870,11 @@ const LISTA_ALERGENICOS = {
   // massas e pães com ovo na receita usual; empanados e salgados (a massa ou o empanado levam ovo)
   ovo: ['ovo-cozido', 'clara-de-ovo-cozida', 'ovo-frito', 'omelete-de-queijo', 'ovo-de-codorna', 'maionese', 'pao-de-queijo-assado', 'bolo-de-milho', 'bolo-de-chocolate',
     'lasanha-massa-cozida', 'nhoque-de-batata-cozido', 'file-de-frango-a-milanesa', 'almondegas-fritas', 'coxinha-de-frango', 'pastel-de-carne-frito', 'pao-de-forma', 'pao-de-forma-integral',
-    'biscoito-maisena', 'biscoito-recheado', 'macarrao-instantaneo'],
+    'biscoito-maisena', 'biscoito-recheado', 'macarrao-instantaneo', 'pao-com-ovo', 'misto-quente'],
   // grão, bebida, tofu e proteína de soja; óleo de soja; e os industriais em que soja (proteína ou lecitina) é comum
   soja: ['soja-cozida', 'tofu', 'proteina-de-soja-texturizada', 'leite-de-soja', 'oleo-de-soja', 'margarina-com-sal', 'chocolate-ao-leite', 'chocolate-meio-amargo', 'chocolate-amargo-70',
     'achocolatado-em-po', 'biscoito-recheado', 'biscoito-maisena', 'biscoito-cream-cracker', 'pao-de-forma', 'pao-de-forma-integral', 'salsicha', 'mortadela', 'hamburguer-bovino-grelhado',
-    'macarrao-instantaneo', 'whey-protein'],
+    'macarrao-instantaneo', 'whey-protein', 'proteina-de-soja-preparada', 'misto-quente', 'pizza-de-mucarela', 'pizza-de-calabresa'],
 };
 const OLEOS = new Set(['oleo-de-soja', 'oleo-de-girassol', 'oleo-de-milho', 'oleo-de-canola', 'azeite-de-oliva']);
 const ALERG = new Map(ALIMENTOS.map((f) => [f.id, new Set()]));

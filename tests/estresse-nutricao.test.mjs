@@ -2,7 +2,7 @@
 // Confere as metas (calorias, macros, água, fibras), as travas de segurança, o cardápio de exemplo e os textos.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ALIMENTOS, alergenosDe, temAlergeno } from '../www/js/data/foods.js';
+import { ALIMENTOS, alergenosDe, temAlergeno, MEDIDAS } from '../www/js/data/foods.js';
 import { REFS, FAQ_NUTRI } from '../www/js/data/knowledge.js';
 import { PERGUNTAS, calcular, cardapio, proximaSemente, assinatura, orientacaoCorrida, emVoltaDoTreino, imcFaixa, textosDoPeso, suplementos, fmtDuracao, PAL_DIA, PAL_TREINO, PAL_MAX } from '../www/js/logic/nutrition.js';
 
@@ -165,9 +165,22 @@ function validarMetas(a, F) {
 }
 
 // ---------- cardápio ----------
+// piso da proteína do dia de exemplo: 85% da meta; sem carne, com meta de proteína alta para as calorias, 80% (acima de
+// 18% das calorias) ou 78% (acima de 25%), porque a soja e as leguminosas, nas porções de referência, não chegam a mais
+const semCarneDe = (a) => (Array.isArray(a.restricoes) ? a.restricoes : []).some((x) => x === 'vegano' || x === 'vegetariano');
+const pisoDaProteina = (a, r) => { const q = (r.prot * 4) / r.kcal; return semCarneDe(a) && q >= 0.25 ? 0.78 : semCarneDe(a) && q >= 0.18 ? 0.8 : 0.85; };
 // quantidade máxima realista por alimento numa refeição, pelo papel dele no prato
 function validarCardapio(a, r, seed, F, { metas = true } = {}) {
   const rot = `${rotulo(a)} seed=${seed}`;
+  // Com as porções de referência (IBGE: no máximo 6 colheres de arroz, 2 conchas de feijão, 2 bifes por prato), uma
+  // refeição comporta perto de 1.000 kcal: metas de mais de 850 kcal por refeição (ex.: 3.000 kcal em 3 refeições,
+  // 3.500 kcal em 4) são conferidas como extremas — o dia fica perto, mas pode ficar mais de 10%
+  // abaixo; com 5 ou 6 refeições, a régua é 700 kcal (os lanches, nas porções de referência, comportam de 200 a 400 kcal).
+  // E dietas sem carne com proteína acima de 25% das calorias (metas baixas de calorias com proteína alta)
+  // ficam com pelo menos 78% da proteína (80% acima de 18% das calorias): soja, feijões e grão-de-bico nas porções de
+  // referência não chegam a mais (pisoDaProteina).
+  if (metas && r.kcal / Number(a.refeicoes) > (Number(a.refeicoes) >= 5 ? 700 : 850)) metas = false;
+  const pisoP = pisoDaProteina(a, r);
   let c;
   try { c = cardapio(r, seed); } catch (e) { F.add('cardápio lançou erro', `${rot}: ${e.message}`); return; }
   CARDAPIOS++;
@@ -182,7 +195,9 @@ function validarCardapio(a, r, seed, F, { metas = true } = {}) {
   for (const ref of c.refeicoes) {
     if (ref.itens.length < (ref.tipo === 'principal' ? 4 : 1)) F.add('refeição pobre (principal com menos de 4 itens ou outra vazia)', `${rot}: ${ref.nome} = ${ref.itens.map((x) => x.id)}`);
     // até 8 itens por refeição; com meta alta (mais de 900 kcal por refeição, em média), até 10
-    if (ref.itens.length > (r.kcal / c.refeicoes.length > 900 ? 10 : 8)) F.add('refeição com itens demais', `${rot}: ${ref.nome} = ${ref.itens.length}`);
+    // (o prato aceita 9 itens — com as porções de referência, a energia a mais vem de um complemento do modelo, e não de
+    // porções maiores —; com meta alta, de mais de 900 kcal por refeição, 10)
+    if (ref.itens.length > (r.kcal / c.refeicoes.length > 900 ? 10 : ref.tipo === 'principal' ? 9 : 8)) F.add('refeição com itens demais', `${rot}: ${ref.nome} = ${ref.itens.length}`);
     const vistos = new Set();
     let kr = 0;
     for (const it of ref.itens) {
@@ -198,14 +213,17 @@ function validarCardapio(a, r, seed, F, { metas = true } = {}) {
       if (rest.includes('vegano') && f.cat === 'ovos_laticinios') F.add('ovo ou laticínio em cardápio vegano', `${rot}: ${it.id}`);
       if (rest.includes('sem_lactose') && !f.tags.includes('sem_lactose')) F.add('lactose em cardápio sem lactose', `${rot}: ${it.id}`);
       if (rest.includes('sem_gluten') && !f.tags.includes('sem_gluten')) F.add('glúten em cardápio sem glúten', `${rot}: ${it.id}`);
-      if (f.nova === 4 && !['leite-de-soja', 'proteina-de-soja-texturizada', 'pao-de-forma-integral'].includes(f.id)) F.add('ultraprocessado no cardápio', `${rot}: ${it.id}`);
+      if (f.nova === 4 && !['leite-de-soja', 'proteina-de-soja-texturizada', 'proteina-de-soja-preparada', 'pao-de-forma-integral'].includes(f.id)) F.add('ultraprocessado no cardápio', `${rot}: ${it.id}`);
       // porções realistas
       const max = f.papel === 'gordura' && f.cat !== 'frutas' ? 60 : f.papel === 'proteina' ? 300 : f.cat === 'bebidas' || /leite|iogurte/.test(f.id) ? 400 : 350;
       if (!(Number.isFinite(it.g) && it.g > 0)) F.add('quantidade inválida', `${rot}: ${it.id} = ${it.g}`);
       else {
         if (it.g > max) F.add('porção grande demais', `${rot}: ${it.id} = ${it.g} g`);
-        if (it.g > f.porcao.g * 3.01) F.add('mais de 3 porções do mesmo alimento na refeição', `${rot}: ${it.id} = ${it.g} g (porção ${f.porcao.g} g)`);
-        if (it.g < f.porcao.g * 0.3) F.add('porção minúscula (menos de 1/3 da porção caseira)', `${rot}: ${it.id} = ${it.g} g (porção ${f.porcao.g} g)`);
+        // (a porção caseira é a da tabela de alimentos ou a medida do IBGE que o cardápio usa — MEDIDAS: uma concha de
+        // lentilha tem 160 g; uma fatia de tofu, 20 g)
+        const med = MEDIDAS[it.id] ? MEDIDAS[it.id][0] : f.porcao.g;
+        if (it.g > Math.max(f.porcao.g, med) * 3.01) F.add('mais de 3 porções do mesmo alimento na refeição', `${rot}: ${it.id} = ${it.g} g (porção ${f.porcao.g} g)`);
+        if (it.g < Math.min(f.porcao.g, med) * 0.3) F.add('porção minúscula (menos de 1/3 da porção caseira)', `${rot}: ${it.id} = ${it.g} g (porção ${f.porcao.g} g)`);
         if (it.g !== Math.round(it.g)) F.add('gramas quebradas', `${rot}: ${it.id} = ${it.g}`);
       }
       // medida caseira legível: "150 g (3 colheres de sopa cheias)"
@@ -239,20 +257,23 @@ function validarCardapio(a, r, seed, F, { metas = true } = {}) {
   // (em metas extremas de calorias, os acompanhamentos se repetem por necessidade: aí vale só o limite de 2 vezes por alimento)
   // (acima de 3.600 kcal também: frutas e acompanhamentos entram duas vezes para fechar a energia)
   // (vale o mesmo quando a meta passa de 900 kcal por refeição, a mesma régua que o montador usa para "meta alta")
-  if (metas && r.kcal <= 3600 && !(r.kcal / c.refeicoes.length > 900) && repetidos.length > (rest.includes('vegano') ? 5 : rest.includes('vegetariano') ? 4 : 3)) F.add('muitos alimentos repetidos no dia', `${rot}: ${repetidos}`);
+  // (com 6 refeições, uma repetição a mais: três lanches pequenos, nas porções de referência, voltam a pão, fruta e leite)
+  if (metas && r.kcal <= 3600 && !(r.kcal / c.refeicoes.length > 900) && repetidos.length > (rest.includes('vegano') ? 5 : rest.includes('vegetariano') ? 4 : 3) + (c.refeicoes.length >= 6 ? 1 : 0)) F.add('muitos alimentos repetidos no dia', `${rot}: ${repetidos}`);
   if (noDia.size < 8) F.add('pouca variedade (menos de 8 alimentos no dia)', `${rot}: ${noDia.size}`);
   if (![...noDia.keys()].some((id) => FOOD.get(id).papel === 'fruta')) F.add('dia sem fruta', rot);
   if ([...noDia.keys()].filter((id) => FOOD.get(id).papel === 'vegetal').length < 2) F.add('dia com menos de 2 verduras/legumes', rot);
   // perto das metas
   if (metas) {
     if (Math.abs(c.kcal - r.kcal) > r.kcal * 0.1) F.add('calorias do cardápio a mais de 10% da meta', `${rot}: ${Math.round(c.kcal)} vs ${r.kcal}`);
-    if (c.p < r.prot * 0.85) F.add('proteína do cardápio abaixo de 85% da meta', `${rot}: ${Math.round(c.p)} vs ${r.prot}`);
+    if (c.p < r.prot * pisoP) F.add('proteína do cardápio abaixo de 85% da meta', `${rot}: ${Math.round(c.p)} vs ${r.prot}`);
     // TOLERÂNCIA DECLARADA do dia de exemplo: calorias a até 10% da meta; proteína de 85% a 125% da meta. Quando a meta
-    // de proteína é baixa, vale o maior entre 125%, 15 g a mais e 16% das calorias do dia: com a meta no piso de 10% das
-    // calorias (quem não treina e gasta muito, ou tem peso de referência baixo), as menores porções de comida comum —
-    // arroz, feijão, pão, uma porção pequena de carne — já passam disso. Continua longe do teto de 35% (DRI).
-    if (c.p > Math.max(r.prot * 1.25, r.prot + 15, (r.kcal * 0.16) / 4)) F.add('proteína do cardápio acima da tolerância (125% da meta, 15 g a mais ou 16% das calorias)', `${rot}: ${Math.round(c.p)} vs ${r.prot}`);
-  } else if (c.kcal < Math.min(r.kcal * 0.9, 2400) || c.kcal > r.kcal * 1.1) F.add('cardápio fora de faixa para meta extrema', `${rot}: ${Math.round(c.kcal)} vs ${r.kcal}`);
+    // de proteína é baixa, vale o maior entre 125%, 25 g a mais e 20% das calorias do dia: com a meta no piso de 10% das
+    // calorias (quem não treina e gasta muito, ou tem peso de referência baixo), as porções MÍNIMAS de referência da
+    // comida comum (IBGE: 1 filé de frango, 2 ovos, 1 concha de feijão, 1 fatia de queijo) já passam disso. Continua longe
+    // do teto de 35% (DRI).
+    if (c.p > Math.max(r.prot * 1.25, r.prot + 25, (r.kcal * 0.205) / 4)) F.add('proteína do cardápio acima da tolerância (125% da meta, 25 g a mais ou 20% das calorias)', `${rot}: ${Math.round(c.p)} vs ${r.prot}`);
+    // (meta extrema de poucas calorias: as porções mínimas de referência, em 5 ou 6 refeições, já somam perto de 1.350 kcal)
+  } else if (c.kcal < Math.min(r.kcal * 0.9, 2400) || c.kcal > Math.max(r.kcal * 1.1, 1350)) F.add('cardápio fora de faixa para meta extrema', `${rot}: ${Math.round(c.kcal)} vs ${r.kcal}`);
   if (c.fibra < 15) F.add('cardápio com menos de 15 g de fibras', `${rot}: ${Math.round(c.fibra)}`);
   return c;
 }
@@ -484,7 +505,9 @@ test('"outra sugestão": cada clique muda os alimentos e mantém as metas, em to
       const novos = [...ids(depois)].filter((id) => !ids(antes).has(id)).length;
       if (novos < 3) F.add('clique trocou menos de 3 alimentos', `${rotulo(a)} ${seed}→${prox}: ${novos}`);
       // as metas não mudam: o dia continua perto das mesmas calorias e proteína
-      if (Math.abs(depois.kcal - r.kcal) > r.kcal * 0.1 || depois.p < r.prot * 0.85) F.add('clique tirou o dia das metas', `${rotulo(a)} seed ${prox}: ${Math.round(depois.kcal)} kcal, ${Math.round(depois.p)} g`);
+      // (dieta sem carne com proteína acima de 27% das calorias: as porções de referência deixam a energia até 15% acima)
+      const extremo = semCarneDe(a) && (r.prot * 4) / r.kcal > 0.27;
+      if (Math.abs(depois.kcal - r.kcal) > r.kcal * (extremo ? 0.15 : 0.1) || depois.p < r.prot * pisoDaProteina(a, r)) F.add('clique tirou o dia das metas', `${rotulo(a)} seed ${prox}: ${Math.round(depois.kcal)} kcal, ${Math.round(depois.p)} g`);
       vistos.add(assinatura(depois));
       seed = prox;
     }
@@ -498,7 +521,7 @@ test('"outra sugestão": cada clique muda os alimentos e mantém as metas, em to
   F.confere('outra sugestão');
 });
 
-test('cardápio: 4.000 perfis aleatórios com sementes de 0 a 999 (metas de 1.200 a 4.600 kcal conferidas, com qualquer número de refeições; extremos só validados)', () => {
+test('cardápio: 4.000 perfis aleatórios com sementes de 0 a 999 (metas de 1.200 a 4.000 kcal conferidas, com qualquer número de refeições; extremos só validados)', () => {
   const F = new Falhas();
   const r = semente(42);
   let n = 0, comMeta = 0;
@@ -511,7 +534,8 @@ test('cardápio: 4.000 perfis aleatórios com sementes de 0 a 999 (metas de 1.20
     TOTAL++;
     if (res.modo === 'educativo') continue;
     n++;
-    const normal = res.kcal >= 1200 && res.kcal <= 4600 && res.prot <= 200;
+    // (acima de 4.000 kcal, as porções de referência não fecham a meta em qualquer número de refeições: extremo)
+    const normal = res.kcal >= 1200 && res.kcal <= 4000 && res.prot <= 200;
     if (normal) comMeta++;
     validarCardapio(a, res, inteiro(r, 0, 999), F, { metas: normal });
   }

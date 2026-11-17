@@ -393,6 +393,7 @@ const SO_MANUAL = {
   'remada-invertida-sob-mesa': 'a pessoa se pendura na borda de uma mesa da casa. Não há estudo sobre exercícios apoiados em móveis; a única orientação publicada que achei é jornalística (a mesa precisa ser firme e pesada para não virar sobre a pessoa — Coach, 3/5/2019). O risco é do mesmo tipo de uma das principais causas das lesões de academia que chegam ao pronto-socorro: um objeto pesado caindo sobre a pessoa (ref gray2015), mais grave em casa e sem supervisão (ref faigenbaum2010)',
   'bom-dia-barra': 'barra nas costas com o tronco inclinado à frente: com apenas 25% do peso do corpo na barra, o momento na coluna lombar (L4/L5) já é igual ao do levantamento terra, e os autores pedem muito cuidado com a estabilidade do tronco com cargas maiores (ref schellenberg2013); a lombar não fica neutra, flexiona cerca de 25° (ref vigotsky2015). Nenhuma fonte o proíbe: fica só para a escolha manual por ser carga sobre a coluna sem ninguém para corrigir a técnica',
   'agachamento-hack-invertido': 'agachamento na hack de frente para o encosto: só há uma descrição de técnica publicada (um site de musculação), sem estudo nem guia de entidade profissional, e na plataforma inclinada os calcanhares sobem no fundo do movimento. Sem ninguém para corrigir a técnica, fica só para a escolha manual; o agachamento hack comum e o articulado fazem o mesmo movimento',
+  'agachamento-articulado-de-frente': 'agachamento articulado de frente para o encosto: a técnica só está descrita por fabricantes e por um aplicativo de treino, sem estudo nem guia de entidade profissional, e as fontes discordam sobre qual músculo trabalha mais. Só serve em aparelho feito para os dois lados (o V-squat comum é de um sentido só, segundo o fabricante), e o aplicativo não sabe qual é o da academia; erguer os calcanhares é o erro mais citado. Fica só para a escolha manual, pelo mesmo critério do hack invertido; o articulado comum faz o mesmo movimento',
   'hiit-bicicleta': 'treino intervalado de alta intensidade: com sobrepeso ou obesidade, só depois de avaliação do risco cardiovascular e com supervisão (ref oppert2021); em quem tem doença do coração, só em pacientes estáveis (ref esc2020); todos os estudos de segurança foram supervisionados, e o intervalado sem supervisão não foi avaliado (ref wewege2018); na gestação não há dados suficientes (ref sbc_gestacao2021). Adultos saudáveis e já ativos podem fazer esforço vigoroso (ref whitfield2017), mas o aplicativo não tem como conferir isso',
 };
 export const soManual = (id) => Object.prototype.hasOwnProperty.call(SO_MANUAL, id);
@@ -1206,7 +1207,8 @@ function ajustarVolume(dias, pf, tetoFoco = {}) {
   }
   return motivos;
 }
-function semanasRevisao(pf) { return pf.nivel === 1 ? 8 : 6; }
+// Semanas de treino até a hora de variar os auxiliares (regra e fontes em logic/variacao.js): 6, ou 8 para o nível 1
+export function semanasRevisao(pf) { return pf && pf.nivel === 1 ? 8 : 6; }
 
 // ---------- textos de orientação ----------
 function avisos(pf) {
@@ -1289,34 +1291,64 @@ function orientacoes(pf, estadoCardio = 'ok', focoCorrida = '') {
     o.push(['Corrida e musculação', txt]);
   }
   o.push(['Descanso', 'Durma bem e não treine forte o mesmo grupo muscular em dias seguidos.']);
-  o.push(['Troca de exercícios', `Mantenha os exercícios principais por 8 a 12 semanas para evoluir neles. A cada ${semanasRevisao(pf)} semanas eu sugiro trocar 1 ou 2 exercícios auxiliares por treino, para variar o estímulo sem perder o progresso. Você decide se aceita.`]);
+  // regra e fontes: logic/variacao.js
+  o.push(['Troca de exercícios', `Os exercícios principais e os de várias articulações com peso livre continuam: pedem técnica, e é neles que a carga mostra a sua evolução. A cada ${semanasRevisao(pf)} semanas de treino eu aviso que é hora de variar e sugiro trocar até 2 exercícios auxiliares por treino (de máquina, polia ou isolados), por outros do mesmo músculo. Antes disso, só se um auxiliar ficar 3 treinos sem evoluir. Você decide se aceita.`]);
   return o;
 }
 
 // ---------- rotação: sugestões de troca ----------
 // Regra: mantém os 2 primeiros exercícios compostos de cada treino; propõe trocar até 2 auxiliares por treino.
-export function sugerirTrocas(plan, respostas, gymBruta, max = 2, doresBrutas = null) {
+// O prazo, a ordem e o histórico das trocas ficam em logic/variacao.js, que passa `opc`:
+//   excluir: ids que não podem entrar (saíram há pouco: evita ir e voltar entre os mesmos dois exercícios);
+//   fixos: ids que não saem (entraram há pouco); so: só estes podem sair (exercícios travados, antes do prazo);
+//   ordem: Map id → quando entrou no plano (ms): os que estão há mais tempo saem primeiro (os travados antes de todos);
+//   opcoes: quantas alternativas devolver em cada troca, para a pessoa escolher outra (a primeira é a sugerida).
+// Exercício trocado por causa de uma dor (nota "dor:...") não entra na variação: ele volta quando a dor passar.
+const LIVRES = new Set(['barra', 'halteres', 'kettlebell', 'peso_corporal']);
+export function sugerirTrocas(plan, respostas, gymBruta, max = 2, doresBrutas = null, opc = {}) {
   const pf = perfil(respostas);
   const dores = limparDoresTreino(doresBrutas);
   // com dor contada, a troca nunca traz um exercício que pede cuidado por causa dela
   const livreDeDor = (c) => { const a = dores.length ? avaliarDor(c, dores, pf) : null; return !a || a.grau < 2; };
   const gym = academia(gymBruta);
+  const o = opc && typeof opc === 'object' ? opc : {};
+  const conjunto = (x) => (x instanceof Set ? x : new Set(Array.isArray(x) ? x : []));
+  const excluir = conjunto(o.excluir), fixos = conjunto(o.fixos), so = o.so ? conjunto(o.so) : null;
+  const ordem = o.ordem instanceof Map ? o.ordem : new Map();
+  const nOpcoes = Math.max(1, Math.min(6, Math.round(Number(o.opcoes)) || 1));
   const diasPlano = (plan && Array.isArray(plan.dias) ? plan.dias.filter((d) => d && Array.isArray(d.itens)) : []).map((d) => ({ ...d, itens: d.itens.map((it) => (it && typeof it === 'object' ? it : { ex: '' })) }));
-  const noPlano = new Set(diasPlano.flatMap((d) => d.itens.map((i) => i.ex)));
+  const noPlano = new Set([...diasPlano.flatMap((d) => d.itens.map((i) => i.ex)), ...excluir]);
   const trocas = [];
   for (const d of diasPlano) {
     let compostos = 0;
-    let n = 0;
-    for (let i = 0; i < d.itens.length && n < max; i++) {
+    const candidatos = [];
+    for (let i = 0; i < d.itens.length; i++) {
       const it = d.itens[i];
       const ex = EX_POR_ID.get(it.ex);
       if (!ex || ex.grupo === 'cardio' || ex.padrao === 'cardio') continue;
       if (ex.tipo === 'composto' && compostos < 2) { compostos++; continue; }
+      if (typeof it.nota === 'string' && it.nota.startsWith('dor:')) continue;
+      if (fixos.has(ex.id) || (so && !so.has(ex.id))) continue;
+      // `complexosFixos`: os compostos com peso livre ou com o peso do corpo (agachamento, remada curvada, supinos com
+      // halteres, barra fixa...) também ficam: pedem técnica (refs iusca2021, bazvalle2019); variam os de máquina,
+      // Smith e polia e os isolados
+      if (o.complexosFixos && ex.tipo === 'composto' && LIVRES.has(ex.modalidade)) continue;
+      candidatos.push({ i, ex });
+    }
+    // a ordem do treino, a não ser que `ordem` diga há quanto tempo cada exercício está no plano
+    const quando = (c) => (ordem.has(c.ex.id) ? ordem.get(c.ex.id) : -Infinity);
+    if (ordem.size) candidatos.sort((a, b) => quando(a) - quando(b) || a.i - b.i);
+    let n = 0;
+    for (const { i, ex } of candidatos) {
+      if (n >= max) break;
       // não vale trocar um exercício pela versão unilateral dele mesmo (mesmo aparelho): seria a mesma coisa
-      const alt = alternativas(ex, pf, gym, noPlano).find((c) => !(c.unilateral !== ex.unilateral && c.equip.join() === ex.equip.join()) && livreDeDor(c));
-      if (!alt) continue;
-      noPlano.add(alt.id);
-      trocas.push({ diaId: d.id, dia: d.nome, idx: i, de: ex.id, para: alt.id });
+      // com `complexosFixos`, o substituto também não é um composto com peso livre (ele ficaria fixo dali em diante)
+      const alts = alternativas(ex, pf, gym, noPlano).filter((c) => !(c.unilateral !== ex.unilateral && c.equip.join() === ex.equip.join()) && livreDeDor(c) && !(o.complexosFixos && c.tipo === 'composto' && LIVRES.has(c.modalidade))).slice(0, nOpcoes);
+      if (!alts.length) continue;
+      noPlano.add(alts[0].id);
+      const t = { diaId: d.id, dia: d.nome, idx: i, de: ex.id, para: alts[0].id };
+      if (o.opcoes) t.opcoes = alts.map((c) => c.id);
+      trocas.push(t);
       n++;
     }
   }
@@ -1379,7 +1411,8 @@ function semanasDaCorrida(st, hoje) {
       const d = s && Array.isArray(s.dias) ? s.dias[wd] : null;
       if (!d || d.tipo === 'descanso') continue;
       dias.add(wd);
-      if (d.tipo === 'longo') { longos.add(wd); if (atual) longo = wd; } else if (d.forte === true || d.intensidade === 'forte') fortes.add(wd);
+      // o longo com a mesma duração de outra corrida da semana aparece como rodagem leve (logic/corrida.js, nomearLongo)
+      if (d.tipo === 'longo' && !d.comoRodagem) { longos.add(wd); if (atual) longo = wd; } else if (d.forte === true || d.intensidade === 'forte') fortes.add(wd);
     }
   };
   try {
@@ -1816,7 +1849,7 @@ const MECANICA = {
 const SO_NO_ALERTA = { joelho: emPeComCarga, quadril: emPeComCarga };
 const MEC_CACHE = new Map();
 // o exercício carrega a região, pela mecânica (sem olhar as marcas de cuidado)?
-function carregaRegiao(ex, onde, alerta = false) {
+export function carregaRegiao(ex, onde, alerta = false) {
   const k = onde + '|' + ex.id + (alerta ? '|a' : '');
   let v = MEC_CACHE.get(k);
   if (v === undefined) { v = !!((MECANICA[onde] && MECANICA[onde](ex)) || (alerta && SO_NO_ALERTA[onde] && SO_NO_ALERTA[onde](ex))); MEC_CACHE.set(k, v); }

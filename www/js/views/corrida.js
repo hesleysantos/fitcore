@@ -6,7 +6,7 @@ import { interview, abasTreinador, cartaoLiberacao } from './coach.js';
 import { respostasParaEntrevista } from '../logic/saude.js';
 import { cartaoDores } from './dor.js';
 import { barChart } from './charts.js';
-import { keepAwake, unlockAudio, beep, vibrate } from '../device.js';
+import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate } from '../device.js';
 import { buscarFaq } from '../data/knowledge.js';
 import { REFS_CORRIDA, FAQ_CORRIDA, TIPOS_TREINO, FONTES_TELA } from '../data/corrida.js';
 import {
@@ -43,14 +43,22 @@ function cabecalho() {
   return h('div', { class: 'col' }, abasTreinador('corrida'),
     h('div', { class: 'coach-hd' }, h('div', { class: 'avatar' }, icon('run', 'l')), h('div', null, h('h2', { text: 'Treinador de corrida' }), h('p', { class: 'tiny muted', text: 'Baseado em estudos de treinamento. Não substitui um profissional.' }))));
 }
+// com proposta ou plano, o cabeçalho cabe em uma linha: o treino de hoje aparece logo
+function cabecalhoCurto() {
+  return h('div', { class: 'col gap-s' }, abasTreinador('corrida'),
+    h('div', { class: 'nutri-topo' }, h('div', { class: 'avatar' }, icon('run', 's')), h('p', { class: 'tiny muted', text: 'Treinador de corrida. Baseado em estudos de treinamento: não substitui um profissional.' })));
+}
 function fontes(chaves) {
   const box = h('div', { class: 'col gap-s' });
   for (const k of chaves || []) if (REFS_CORRIDA[k]) box.appendChild(h('p', { class: 'ref', text: '• ' + REFS_CORRIDA[k] }));
   return box;
 }
 const acc = (titulo, ...filhos) => h('details', { class: 'acc' }, h('summary', { text: titulo }), h('div', null, ...filhos));
-// "por quê" com as fontes, discreto
-const porQue = (texto, refs, rotulo = 'Por quê?') => h('details', { class: 'pq' }, h('summary', { text: rotulo }), texto ? h('p', { class: 'small', text: texto }) : null, refs && refs.length ? h('div', { class: 'mt' }, h('div', { class: 'tiny bold muted', text: 'FONTES' }), fontes(refs)) : null);
+const accId = (id, titulo, ...filhos) => { const d = acc(titulo, ...filhos); d.id = id; return d; };
+// avisos que mudam o que fazer (atenção, perigo ou destacados) ficam à vista; os informativos vão para "Cuidados"
+const avisoAlto = (av) => av.tipo !== 'info' || !!av.destaque;
+// "por quê" com as fontes, discreto (alvo de toque de 44 px)
+const porQue = (texto, refs, rotulo = 'Por quê?') => h('details', { class: 'pq alvo' }, h('summary', { text: rotulo }), texto ? h('p', { class: 'small', text: texto }) : null, refs && refs.length ? h('div', { class: 'mt' }, h('div', { class: 'tiny bold muted', text: 'FONTES' }), fontes(refs)) : null);
 const aviso = (a) => h('div', { class: 'note ' + (a.tipo === 'danger' ? 'danger' : a.tipo === 'warn' ? 'warn' : 'info') }, icon(a.tipo === 'info' ? 'info' : 'warn'), h('div', { class: 'grow' }, h('div', { text: a.texto }), a.refs && a.refs.length ? porQue('', a.refs, 'Fontes') : null));
 
 function faq() {
@@ -100,12 +108,15 @@ function tiposCard(p) {
 function semanasCard(p, atual) {
   const box = h('div');
   for (const s of p.semanas) {
-    const nomes = [...new Set(s.dias.filter((d) => d.tipo !== 'caminhada' && d.tipo !== 'descanso').map((d) => TIPOS_TREINO[d.tipo].nome.toLowerCase()))];
+    const nomes = [...new Set(s.dias.filter((d) => d.tipo !== 'caminhada' && d.tipo !== 'descanso').map((d) => (d.comoRodagem ? TIPOS_TREINO.leve : TIPOS_TREINO[d.tipo]).nome.toLowerCase()))];
     box.appendChild(h('div', { class: 'kv' }, h('span', { class: s.n === atual ? 'bold accent' : '' }, `Semana ${s.n} · ${ROTULO.fase[s.fase]}${s.descarga ? ' (leve)' : ''}`, h('div', { class: 'tiny muted', text: nomes.join(', ') || 'caminhada' })), h('span', { class: 'nowrap', text: volumeTxt(s) })));
   }
-  return acc(`As ${p.totalSemanas} semanas do plano`, box, porQue('O volume sobe até 10% por semana, com uma semana 30% mais leve a cada quatro, até o que amadores costumam correr para cada distância; antes da prova ele diminui (polimento), mantendo a intensidade.', FONTES_TELA.semanas));
+  return accId('corrida-semanas', `As ${p.totalSemanas} semanas do plano`, box, porQue('O volume sobe até 10% por semana, com uma semana 30% mais leve a cada quatro, até o que amadores costumam correr para cada distância; antes da prova ele diminui (polimento), mantendo a intensidade.', FONTES_TELA.semanas));
 }
-const orientacoesCard = (lista) => h('div', { class: 'col gap-s' }, ...lista.map(([t, txt, refs]) => acc(t, h('p', { text: txt }), refs ? porQue('', refs, 'Fontes') : null)));
+// orientações do plano dentro de uma seção fechada: um toque abre todas, cada uma com o seu título e as fontes
+const orientacoesCard = (lista) => h('div', { class: 'col gap-s' }, ...lista.flatMap(([t, txt, refs]) => [h('h3', { class: 'orient-t', text: t }), h('p', { class: 'small', text: txt }), refs ? porQue('', refs, 'Fontes') : null]));
+// os cuidados informativos do perfil, fechados
+const cuidadosCard = (lista) => (lista.length ? accId('corrida-cuidados', `Cuidados para o seu perfil (${lista.length})`, ...lista.map(aviso)) : null);
 function linhaDia(d, data, hoje, feito) {
   return h('button', { class: 'item' + (data === hoje ? ' hoje' : ''), type: 'button', 'data-data': data, onClick: () => go('corrida/dia/' + data) },
     h('div', { class: 'dia-wd', text: DIAS_CURTO[d.wd] }),
@@ -136,7 +147,8 @@ function proposta() {
   const inicio = inicioPara(a, hoje);
   const adiado = inicio > segundaDe(hoje); // nesta semana não sobra dia de treino: o plano começa na segunda-feira
   const p = gerarPlano(a, { ...opcoesDoPlano(), dores: [], adiado }); // a proposta mostra o plano inteiro; as dores ajustam os dias depois do aceite
-  const body = [cabecalho()];
+  // Ordem: resumo do plano → avisos que mudam o treino → resumo em linhas → a primeira semana → aceitar. O resto, fechado.
+  const body = [cabecalhoCurto()];
   const mudar = btn('Mudar respostas', () => { modo = 'entrevista'; refresh(); window.scrollTo(0, 0); }, 'block ghost', 'edit');
   for (const x of blocoDeSaude(sd, !p)) body.push(x);
   if (!p) {
@@ -165,28 +177,22 @@ function proposta() {
     h('p', { text: `Montei um plano de ${plural(p.totalSemanas, 'semana', 'semanas')} para ${meta}, com ${quantas}.` }),
     pf.objetivo === 'prova' && dataProva ? h('p', { class: 'bold', text: `A prova fica em ${fmtDia(dataProva)}. Confira a data: se não for essa, toque em “Mudar respostas” e ajuste as semanas.` }) : null,
     h('p', { class: 'small muted', text: pf.nivel <= 1 ? 'Seus treinos vão por tempo e esforço: é a forma mais indicada para quem está começando.' : p.modo === 'gps' ? 'Seus treinos saem em distância e faixa de ritmo.' : p.modo === 'esteira' ? 'Seus treinos saem em distância e velocidade da esteira.' : 'Seus treinos saem em tempo e esforço.' })));
-  for (const av of p.avisos) body.push(aviso(av));
+  for (const av of p.avisos.filter(avisoAlto)) body.push(aviso(av));
   if (doresAtivas(state, hoje).length) body.push(note('info', 'Você tem uma dor registrada: depois de aceitar, os treinos dos próximos dias saem ajustados a ela.'));
-  body.push(h('div', { class: 'card col gap-s' }, h('h3', { text: 'Resumo' }),
+  // (os dias de treino estão na primeira semana, logo abaixo, e o jeito de medir está no resumo acima)
+  body.push(h('div', { class: 'card col gap-s' },
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Nível' }), h('span', { text: ROTULO.nivel[pf.nivel] })),
-    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Dias' }), h('span', { text: s1.dias.map((d) => DIAS_CURTO[d.wd]).join(', ') })),
-    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Como medir' }), h('span', { text: ROTULO.modo[p.modo] })),
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Primeiro treino' }), h('span', { id: 'corrida-primeiro', text: fmtDia(primeiroData) + (primeiroData === hoje ? ' (hoje)' : '') })),
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Semana 1' }), h('span', { text: `${dmCurto(inicio)} a ${dmCurto(somaDias(inicio, 6))}${noMeio ? ' (esta semana)' : ''}` })),
     dataProva ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: pf.objetivo === 'prova' ? 'Prova' : 'Dia do desafio' }), h('span', { text: fmtDia(dataProva) })) : null));
   body.push(sectionTitle('A primeira semana'));
-  if (noMeio) body.push(note('info', `A semana 1 é esta, de segunda, ${dmCurto(inicio)}, a domingo, ${dmCurto(somaDias(inicio, 6))}. Os dias que já passaram ficam de fora: seu primeiro treino é ${primeiroData === hoje ? 'hoje, ' : ''}${fmtDia(primeiroData).toLowerCase()}.`));
+  // aceito no meio da semana: os dias que já passaram aparecem apagados, com "Já passou"
   body.push(h('div', { class: 'card col gap-s', id: 'corrida-semana1' }, ...s1.dias.map((d) => {
     const passou = dataDe(d.wd) < hoje;
     return h('div', { class: 'row top' + (passou ? ' passou' : '') }, h('div', { class: 'dia-wd', text: DIAS_CURTO[d.wd] }),
       h('div', { class: 'grow' }, h('div', { class: 'bold', text: d.nome }), h('div', { class: 'small muted', text: d.resumo }), d.ritmo && !passou ? h('div', { class: 'small', text: (p.modo === 'esteira' ? 'Velocidade: ' : 'Ritmo: ') + fmtFaixa(d.ritmo, p.modo) }) : null),
       passou ? badge('Já passou', '') : dataDe(d.wd) === hoje ? badge('Hoje', 'acc') : h('span', { class: 'tiny muted nowrap', text: dmCurto(dataDe(d.wd)) }));
   })));
-  body.push(semanasCard(p, 0));
-  body.push(tiposCard(p));
-  body.push(zonasCard(p));
-  body.push(sectionTitle('Como seguir este plano'));
-  body.push(orientacoesCard(p.orientacoes));
   let ciente = !pf.confirmar;
   const aceitar = btn('Aceitar e usar este plano', () => {
     if (!ciente) return;
@@ -205,14 +211,23 @@ function proposta() {
   }
   body.push(aceitar);
   body.push(mudar);
+  // o resto, fechado: cuidados informativos, as semanas, os tipos de treino, as zonas e como seguir o plano
+  const cuidados = cuidadosCard(p.avisos.filter((av) => !avisoAlto(av)));
+  if (cuidados) body.push(cuidados);
+  body.push(semanasCard(p, 0));
+  body.push(tiposCard(p));
+  body.push(zonasCard(p));
+  body.push(acc('Como seguir este plano', orientacoesCard(p.orientacoes)));
   return body;
 }
 
 // ---------- painel ----------
 function evolucaoCard(hoje) {
   const ev = evolucao(state.runs, hoje);
-  const card = h('div', { class: 'card col' }, h('h3', { text: 'Sua evolução' }));
-  if (!ev.totalCorridas) { card.appendChild(h('p', { class: 'small muted', text: 'Registre as corridas para ver aqui o volume, o ritmo e a constância. É pelos registros que o plano se ajusta.' })); return card; }
+  // fechada: abre com o volume, a constância, o ritmo e o gráfico das semanas
+  const card = h('div');
+  const caixa = (titulo) => h('details', { class: 'acc', id: 'corrida-evolucao' }, h('summary', { text: titulo }), card);
+  if (!ev.totalCorridas) { card.appendChild(h('p', { class: 'small muted', text: 'Registre as corridas para ver aqui o volume, o ritmo e a constância. É pelos registros que o plano se ajusta.' })); return caixa('Sua evolução'); }
   const atual = ev.semanas[ev.semanas.length - 1];
   card.appendChild(h('div', { class: 'stats' },
     h('div', { class: 'stat' }, h('b', { text: virgula(atual.km) }), h('span', { text: 'km nesta semana' })),
@@ -230,7 +245,7 @@ function evolucaoCard(hoje) {
   }
   if (atual.carga) card.appendChild(h('p', { class: 'small muted', text: `Carga desta semana (esforço × minutos): ${atual.carga}.` }));
   card.appendChild(porQue('Volume, regularidade e o esforço que você anota são os sinais que melhor acompanham a resposta ao treino. A carga soma esforço × minutos de cada corrida.', ev.refs, 'Como ler'));
-  return card;
+  return caixa(`Sua evolução · ${plural(ev.totalCorridas, 'corrida', 'corridas')}`);
 }
 // análise de uma corrida contra o treino do dia
 const seloAnalise = (a) => badge(a.titulo, a.selo === 'dentro' ? 'ok' : a.selo === 'acima' ? 'warn' : a.selo === 'abaixo' ? 'acc' : '');
@@ -245,7 +260,7 @@ const quando = (dias) => (dias <= 0 ? 'hoje' : dias === 1 ? 'amanhã' : dias < 1
 function painel() {
   const run = state.run;
   const hoje = hojeKey();
-  const body = [cabecalho()];
+  const body = [cabecalhoCurto()];
   const acoesFim = () => h('div', { class: 'col' },
     btn('Refazer a entrevista', async () => {
       if (!(await confirmSheet({ title: 'Refazer a entrevista?', text: 'Ao terminar as perguntas, o plano atual é trocado por um novo, que começa da semana 1. As corridas registradas continuam guardadas. Se desistir no meio, nada muda.', okLabel: 'Refazer' }))) return;
@@ -279,30 +294,59 @@ function painel() {
   guardarMostrado();
   const sem = planoDaSemana(state, hoje);
   const pf = p.perfil;
-  // semana atual
+  // Ordem: hoje (treino e botão) → avisos que mudam o treino (alertas, dores, ajustes) → a semana → seções fechadas
+  // (como foram os treinos, evolução, últimas corridas, dicas, o plano, cuidados, semanas, tipos, zonas, como seguir) →
+  // perguntas frequentes → pausar, refazer a entrevista, encerrar.
+  // 1. hoje, com a semana do plano em uma linha e a barra de progresso
   const feitas = sem.dias.filter((d) => d && d.feito).length, previstas = sem.dias.filter((d) => d && d.tipo !== 'descanso').length;
   const pct = Math.min(100, Math.round(((sem.concluido ? p.totalSemanas : sem.semana - 1) / p.totalSemanas) * 10) * 10);
-  const topo = h('div', { class: 'card hl col gap-s' },
-    h('div', { class: 'row between' }, h('h2', { text: sem.antesDoInicio ? 'Plano aceito' : sem.concluido ? 'Plano concluído' : `Semana ${sem.semana} de ${sem.totalSemanas}` }), sem.antesDoInicio || sem.concluido ? null : badge(sem.fase, 'acc')),
-    h('div', { class: 'barra-plano', role: 'progressbar', 'aria-label': 'Progresso do plano', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': pct }, h('i', { class: 'w' + pct })),
-    h('p', { class: 'small muted', text: sem.antesDoInicio ? `${sem.fase}. Até lá, descanse ou caminhe.` : sem.concluido ? 'Parabéns por chegar ao fim! Refaça a entrevista para montar o próximo plano a partir de onde você está.' : `${sem.foco}. ${feitas} de ${previstas} treinos feitos nesta semana.` }),
-    p.prova && p.prova.data >= hoje ? h('p', { class: 'small', text: `${p.prova.tipo === 'teste' ? 'Teste' : pf.objetivo === 'prova' ? 'Prova' : 'Desafio'} de ${ROTULO.distancia[pf.dist]}: ${fmtDia(p.prova.data)}, ${quando(diasEntre(hoje, p.prova.data))}.` }) : null);
-  body.push(topo);
-  // avisos graves (meta que não coube, prova retirada) ficam à vista, não só em "Cuidados"
-  for (const av of p.avisos) if (av.destaque) body.push(aviso(av));
-  // corrida e musculação: prioridade e fortalecimento (pergunta ou resumo da escolha)
-  const combinado = cartaoCombinado({ aoMudar: () => refresh() });
-  if (combinado) body.push(combinado);
-  if (sem.concluido) body.push(btn('Montar um novo plano', () => { modo = 'entrevista'; refresh(); window.scrollTo(0, 0); }, 'primary block', 'refresh'));
-  // ajustes feitos e por quê
+  const barra = h('div', { class: 'barra-plano', role: 'progressbar', 'aria-label': 'Progresso do plano', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': pct }, h('i', { class: 'w' + pct }));
+  const provaTxt = p.prova && p.prova.data >= hoje ? h('p', { class: 'small', text: `${p.prova.tipo === 'teste' ? 'Teste' : pf.objetivo === 'prova' ? 'Prova' : 'Desafio'} de ${ROTULO.distancia[pf.dist]}: ${fmtDia(p.prova.data)}, ${quando(diasEntre(hoje, p.prova.data))}.` }) : null;
+  if (sem.antesDoInicio || sem.concluido) {
+    body.push(h('div', { class: 'card hl col gap-s', id: 'corrida-hoje', dataset: { hoje: sem.concluido ? 'concluido' : 'antes' } },
+      h('h2', { text: sem.antesDoInicio ? 'Plano aceito' : 'Plano concluído' }), barra,
+      h('p', { class: 'small muted', text: sem.antesDoInicio ? `${sem.fase}. Até lá, descanse ou caminhe.` : 'Parabéns por chegar ao fim! Refaça a entrevista para montar o próximo plano a partir de onde você está.' }),
+      provaTxt,
+      sem.concluido ? btn('Montar um novo plano', () => { modo = 'entrevista'; refresh(); window.scrollTo(0, 0); }, 'primary block', 'refresh') : null));
+  } else {
+    const wdHoje = new Date(hoje + 'T12:00:00').getDay();
+    const dHoje = sem.dias[wdHoje];
+    const treinoHoje = dHoje && dHoje.tipo !== 'descanso';
+    // descanso: o próximo treino desta semana, ou da semana que vem
+    let proxTxt = '';
+    if (!treinoHoje) {
+      const prox = ORDEM.map((wd) => sem.dias[wd]).find((d) => d && d.tipo !== 'descanso' && d.data > hoje);
+      const seg = p.semanas[sem.semana] && p.semanas[sem.semana].dias.find((d) => d.tipo !== 'descanso');
+      proxTxt = prox ? `Próximo treino: ${DIAS_LONGO[prox.wd].toLowerCase().replace('-feira', '')}, ${prox.nome.toLowerCase()}.` : seg ? `Próximo treino: na semana que vem, ${DIAS_LONGO[seg.wd].toLowerCase().replace('-feira', '')}.` : '';
+    }
+    body.push(h('div', { class: 'card hl col gap-s', id: 'corrida-hoje', dataset: { hoje: treinoHoje ? (dHoje.feito ? 'feito' : 'treino') : 'descanso' } },
+      h('div', { class: 'row between' }, h('div', { class: 'tiny accent bold', text: `Semana ${sem.semana} de ${sem.totalSemanas} · ${sem.fase}` }), previstas ? h('span', { class: 'tiny muted nowrap', text: `${feitas} de ${previstas} feitos` }) : null),
+      barra,
+      h('div', { class: 'row between' }, h('h2', { text: treinoHoje ? `Hoje: ${dHoje.nome}` : 'Hoje: descanso' }), treinoHoje && dHoje.feito ? badge('Feita', 'ok') : null),
+      treinoHoje ? h('p', { class: 'small muted', text: dHoje.resumo }) : proxTxt ? h('p', { class: 'small muted', text: proxTxt }) : null,
+      provaTxt,
+      treinoHoje ? btn(dHoje.feito ? 'Ver a corrida de hoje' : 'Iniciar', () => go('corrida/dia/' + hoje), (dHoje.feito ? 'ghost' : 'primary') + ' block alvo', dHoje.feito ? 'right' : 'play') : null));
+  }
+  // 2. o que muda o treino: avisos graves (meta que não coube, prova retirada), alertas dos registros, dores e ajustes
+  for (const av of p.avisos) if (av.destaque || av.tipo === 'danger') body.push(aviso(av));
+  for (const al of alertas(state.runs, hoje)) body.push(aviso(al));
+  // dores: o mesmo registro vale para a musculação. Com dor contada, o cartão fica aqui; sem dor, só o botão, mais abaixo
+  const pfDor = perfilAtual();
+  // (o efeito da dor que já está em "O que ajustei no plano", com o porquê e as fontes, não se repete no cartão)
+  const cartaoDeDores = cartaoDores({ extra: (d) => { const t = efeitoDaDor(d, pfDor).texto; return t && p.ajustes.some((x) => typeof x.texto === 'string' && x.texto.includes(t)) ? '' : t; }, aoMudar: () => refresh() });
+  const comDor = doresAtivas(state, hoje);
+  if (comDor.length) body.push(cartaoDeDores);
+  const comOrientacao = comDor.filter((d) => orientacaoDor(d.onde));
+  if (comOrientacao.length) body.push(acc('O que fazer com essa dor na corrida', ...comOrientacao.flatMap((d) => { const o = orientacaoDor(d.onde); return [h('div', { class: 'bold', text: o.nome }), ...o.itens.map(([t, txt]) => h('p', { class: 'small' }, h('b', { text: t + ': ' }), txt)), porQue('', o.refs, 'Fontes')]; })));
+  // ajustes feitos: o que mudou, em uma linha cada; o porquê abre ao toque
   if (p.ajustes.length) {
     body.push(h('div', { class: 'card col gap-s', 'data-ajustes': String(p.ajustes.length) }, h('h3', { text: 'O que ajustei no plano' }),
       ...p.ajustes.map((x) => h('div', { class: 'dica plana atencao' }, h('div', { class: 'dica-ic' }, icon('swap')), h('div', { class: 'grow' }, h('div', { class: 'small bold', text: x.texto }), porQue(x.motivo, x.refs))))));
   }
-  for (const al of alertas(state.runs, hoje)) body.push(aviso(al));
-  // os dias da semana
+  // 3. a semana
   if (!sem.antesDoInicio && !sem.concluido) {
     body.push(sectionTitle('Esta semana'));
+    if (sem.foco) body.push(h('p', { class: 'small muted', text: sem.foco }));
     const lista = h('div', { class: 'list' });
     for (const wd of ORDEM) { const d = sem.dias[wd]; if (d) lista.appendChild(linhaDia(d, d.data, hoje, d.feito)); }
     body.push(lista);
@@ -310,54 +354,56 @@ function painel() {
     if (prox) body.push(acc(`Semana que vem (${volumeTxt(prox)})`, ...prox.dias.map((d) => h('div', { class: 'row top' }, h('div', { class: 'dia-wd', text: DIAS_CURTO[d.wd] }), h('div', { class: 'grow' }, h('div', { class: 'bold small', text: d.nome }), h('div', { class: 'small muted', text: d.resumo })))), h('p', { class: 'tiny muted', text: 'Pode mudar conforme o que você registrar nesta semana.' })));
   }
   body.push(btn('Registrar uma corrida', () => go('corrida/dia/' + hoje), 'block', 'plus'));
+  // corrida e musculação: prioridade e fortalecimento (pergunta ou resumo da escolha)
+  const combinado = cartaoCombinado({ aoMudar: () => refresh() });
+  if (combinado) body.push(combinado);
+  if (!comDor.length) body.push(cartaoDeDores);
+
+  // 4. seções fechadas
   // o que foi feito contra o que estava no plano
   const feitos = analiseRecente(state, hoje);
   if (feitos.itens.length) {
-    const card = h('div', { class: 'card col gap-s', id: 'como-foram' }, h('h3', { text: 'Como foram os seus treinos' }),
+    const card = accId('como-foram', `Como foram os seus treinos (${feitos.itens.length})`,
       h('p', { class: 'small muted', text: 'Cada corrida registrada, comparada com o treino do dia. Toque para ver a análise.' }));
+    const dentro = card.lastChild;
     for (const { registro: r, analise: a } of feitos.itens) {
-      card.appendChild(h('button', { class: 'item', type: 'button', onClick: () => go('corrida/dia/' + r.data) },
+      dentro.appendChild(h('button', { class: 'item', type: 'button', onClick: () => go('corrida/dia/' + r.data) },
         h('div', { class: 'grow' }, h('div', { class: 't', text: `${fmtDia(r.data)} · ${TIPOS_TREINO[r.tipo] ? TIPOS_TREINO[r.tipo].nome : 'Corrida'}` }), h('div', { class: 's', text: (a.itens.find((x) => x.tom === 'warn') || a.itens.find((x) => x.tom !== 'ok') || a.itens[0]).texto })),
         seloAnalise(a)));
     }
-    for (const pd of feitos.padroes) card.appendChild(h('div', { class: 'dica plana atencao' }, h('div', { class: 'dica-ic' }, icon('info')), h('div', { class: 'grow' }, h('div', { class: 'small', text: pd.texto }), porQue('', pd.refs, 'Fontes'))));
-    if (feitos.faltas.length) card.appendChild(h('p', { class: 'small muted', text: `${plural(feitos.faltas.length, 'treino do plano ficou', 'treinos do plano ficaram')} sem registro nas últimas 2 semanas. Treino perdido não se repõe: siga o plano.` }));
+    for (const pd of feitos.padroes) dentro.appendChild(h('div', { class: 'dica plana atencao' }, h('div', { class: 'dica-ic' }, icon('info')), h('div', { class: 'grow' }, h('div', { class: 'small', text: pd.texto }), porQue('', pd.refs, 'Fontes'))));
+    if (feitos.faltas.length) dentro.appendChild(h('p', { class: 'small muted', text: `${plural(feitos.faltas.length, 'treino do plano ficou', 'treinos do plano ficaram')} sem registro nas últimas 2 semanas. Treino perdido não se repõe: siga o plano.` }));
     body.push(card);
   }
-  // dores: o mesmo registro vale para a musculação
-  const pfDor = perfilAtual();
-  body.push(cartaoDores({ extra: (d) => efeitoDaDor(d, pfDor).texto, aoMudar: () => refresh() }));
-  const comOrientacao = doresAtivas(state, hoje).filter((d) => orientacaoDor(d.onde));
-  if (comOrientacao.length) body.push(acc('O que fazer com essa dor na corrida', ...comOrientacao.flatMap((d) => { const o = orientacaoDor(d.onde); return [h('div', { class: 'bold', text: o.nome }), ...o.itens.map(([t, txt]) => h('p', { class: 'small' }, h('b', { text: t + ': ' }), txt)), porQue('', o.refs, 'Fontes')]; })));
   body.push(evolucaoCard(hoje));
   // corridas registradas
   const ult = state.runs.slice(-5).reverse();
   if (ult.length) {
-    body.push(sectionTitle('Últimas corridas'));
-    body.push(h('div', { class: 'list' }, ...ult.map((r) => h('button', { class: 'item', type: 'button', onClick: () => go('corrida/dia/' + r.data) },
-      h('div', { class: 'grow' }, h('div', { class: 't', text: `${fmtDia(r.data)} · ${TIPOS_TREINO[r.tipo] ? TIPOS_TREINO[r.tipo].nome : 'Corrida'}` }), h('div', { class: 's', text: resumoRegistro(r) })), icon('right', 's muted')))));
+    body.push(accId('corrida-ultimas', 'Últimas corridas', h('div', { class: 'list' }, ...ult.map((r) => h('button', { class: 'item', type: 'button', onClick: () => go('corrida/dia/' + r.data) },
+      h('div', { class: 'grow' }, h('div', { class: 't', text: `${fmtDia(r.data)} · ${TIPOS_TREINO[r.tipo] ? TIPOS_TREINO[r.tipo].nome : 'Corrida'}` }), h('div', { class: 's', text: resumoRegistro(r) })), icon('right', 's muted'))))));
   }
   // dicas
-  body.push(sectionTitle('Dicas para você'));
-  for (const d of dicas(run.answers).slice(0, 4)) body.push(h('div', { class: 'dica' }, h('div', { class: 'dica-ic' }, icon('bolt')), h('div', { class: 'grow' }, h('div', { class: 'bold', text: d.titulo }), h('div', { class: 'small', text: d.texto }), porQue('', d.refs, 'Fontes'))));
-  // plano completo e cuidados
-  body.push(sectionTitle('O seu plano'));
-  body.push(h('div', { class: 'card col gap-s' },
+  const ds = dicas(run.answers).slice(0, 4);
+  if (ds.length) body.push(accId('corrida-dicas', 'Dicas para você', ...ds.map((d) => h('div', { class: 'dica plana' }, h('div', { class: 'dica-ic' }, icon('bolt')), h('div', { class: 'grow' }, h('div', { class: 'bold', text: d.titulo }), h('div', { class: 'small', text: d.texto }), porQue('', d.refs, 'Fontes'))))));
+  // o plano, os cuidados e as explicações
+  body.push(accId('corrida-plano', 'O seu plano',
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Objetivo' }), h('span', { text: ROTULO.objetivo[pf.objetivo] + (pf.dist ? ' · ' + ROTULO.distancia[pf.dist] : '') })),
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Nível' }), h('span', { text: ROTULO.nivel[pf.nivel] })),
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Como medir' }), h('span', { text: ROTULO.modo[p.modo] })),
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Musculação' }), h('span', { text: diasDeForca(state).forca.length ? diasDeForca(state).forca.map((wd) => DIAS_CURTO[wd]).join(', ') : 'sem treino marcado' }))));
-  if (p.avisos.length) body.push(acc('Cuidados para o seu perfil', ...p.avisos.map(aviso)));
+  const cuidados = cuidadosCard(p.avisos.filter((av) => !(av.destaque || av.tipo === 'danger')));
+  if (cuidados) body.push(cuidados);
   body.push(semanasCard(p, sem.semana));
   body.push(tiposCard(p));
   body.push(zonasCard(p));
   body.push(acc('Como seguir o plano', orientacoesCard(p.orientacoes)));
+  // 5. perguntas frequentes e, no fim, as ações sobre o plano
+  body.push(faq());
   body.push(h('div', { class: 'col' },
     btn('Pausar o plano', async () => {
       if (!(await confirmSheet({ title: 'Pausar o plano?', text: 'Os treinos de corrida saem da sua semana até você retomar. Use para férias, doença ou uma semana corrida.', okLabel: 'Pausar' }))) return;
       update((s) => { s.run.pausadoEm = new Date().toISOString(); }); toast('Plano pausado.'); refresh(); window.scrollTo(0, 0);
     }, 'block ghost', 'pause'), acoesFim()));
-  body.push(faq());
   return body;
 }
 
@@ -469,7 +515,7 @@ function cronometro(data, treino, aoTerminar) {
     cron.i++;
     if (cron.i >= passos.length) {
       cron.i = passos.length - 1; cron.terminado = t;
-      if (aviso) { beep(3); vibrate([300, 150, 300, 150, 300]); }
+      if (aviso) { tocarAlerta(); vibrate([300, 150, 300, 150, 300]); }
       keepAwake(false); gravar(); desenhar(); aoTerminar(Math.max(1, Math.round(decorrido() / 60)));
       return;
     }
@@ -662,7 +708,8 @@ export function corridaDiaView(data) {
   body.push(h('div', { class: 'row between' }, h('h2', { text: DIAS_LONGO[new Date(data + 'T12:00:00').getDay()] + ', ' + Number(data.slice(8, 10)) + '/' + data.slice(5, 7) }), data === hoje ? badge('Hoje', 'acc') : registros.length ? badge('Feita', 'ok') : null));
   let form = null;
   if (planejado) {
-    const t = TIPOS_TREINO[planejado.tipo];
+    // longo que não passa das outras corridas da semana aparece como rodagem leve (comoRodagem): a explicação acompanha
+    const t = TIPOS_TREINO[planejado.comoRodagem ? 'leve' : planejado.tipo];
     const card = h('div', { class: 'card hl col' },
       h('div', { class: 'tiny accent bold', text: `SEMANA ${planejado.semana} · ${ROTULO.fase[planejado.fase].toUpperCase()}` }),
       h('h2', { text: planejado.nome }), h('p', { text: planejado.resumo }), h('p', { class: 'small muted', text: planejado.detalhe }));

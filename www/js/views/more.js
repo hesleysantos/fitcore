@@ -7,10 +7,10 @@ import { EQUIPAMENTOS, CATEGORIAS_EQUIP } from '../data/equipment.js';
 import { REFS } from '../data/knowledge.js';
 import { REFS_CORRIDA } from '../data/corrida.js';
 import { REFS_SONO } from '../data/sono.js';
-import { cancelarAviso, avisoDisponivel, avisoPermitido, pedirPermissaoDeAviso, telaLigadaDisponivel } from '../device.js';
+import { cancelarAviso, avisoDisponivel, avisoPermitido, pedirPermissaoDeAviso, telaLigadaDisponivel, SONS_ALERTA, SOM_PADRAO, tocarAlerta, unlockAudio } from '../device.js';
 import { canSuggestInstall, openInstall, isIos } from '../install.js';
 
-export const APP_VERSAO = '1.4.0';
+export const APP_VERSAO = '1.5.0';
 
 // ---------- Minha academia ----------
 export function gymView() {
@@ -43,7 +43,7 @@ async function exportar() {
   if (!ok) return;
   const text = exportData();
   const nome = `fitcore-backup-${dateKey()}.json`; // data local do aparelho
-  try { readBackup(text); } catch { toast('O histórico ficou grande demais para um backup. Fale com o suporte do app.'); return; }
+  try { readBackup(text); } catch { toast('O histórico ficou grande demais para um backup. Fale com o suporte do aplicativo.'); return; }
   const marcar = () => update((st) => { st.ui.backupEm = new Date().toISOString(); });
   try {
     const blob = new Blob([text], { type: 'application/json' });
@@ -83,6 +83,15 @@ function copiar(text, marcar) {
     }, 'primary', 'copy')],
   });
 }
+// "12 treinos, 20 noites de sono e 2 planos": só o que tem registro (itens com 0 ficam de fora). '' = nada.
+function listaDeDados(r) {
+  const itens = [
+    [r.treinos, 'treino', 'treinos'], [r.corridas, 'corrida', 'corridas'], [r.noites, 'noite de sono', 'noites de sono'],
+    [r.diasDeDiario, 'dia de diário alimentar', 'dias de diário alimentar'], [r.dores, 'registro de dor', 'registros de dor'],
+    [r.pesos, 'registro de peso', 'registros de peso'], [r.planos, 'plano', 'planos'],
+  ].filter(([n]) => Number(n) > 0).map(([n, um, varios]) => plural(n, um, varios));
+  return itens.length <= 1 ? itens.join('') : itens.slice(0, -1).join(', ') + ' e ' + itens[itens.length - 1];
+}
 function importar() {
   const ta = h('textarea', { class: 'input', rows: 5, placeholder: 'Ou cole aqui o texto do backup', 'aria-label': 'Texto do backup' });
   const file = h('input', { type: 'file', accept: 'application/json,.json,text/plain', class: 'input', 'aria-label': 'Arquivo de backup' });
@@ -91,8 +100,11 @@ function importar() {
     let lido;
     try { lido = readBackup(text); } catch (e) { toast(e.message || 'Não foi possível ler o backup.'); return; }
     const r = lido.resumo;
-    const partes = [`Este backup tem ${plural(r.treinos, 'treino', 'treinos')} no histórico, ${plural(r.corridas || 0, 'corrida', 'corridas')}, ${plural(r.noites || 0, 'noite de sono', 'noites de sono')}, ${plural(r.diasDeDiario || 0, 'dia de diário alimentar', 'dias de diário alimentar')}, ${plural(r.dores || 0, 'dor contada', 'dores contadas')} e ${plural(r.planos, 'plano', 'planos')}${r.exportadoEm ? `, feito em ${fmtDate(r.exportadoEm, true)}` : ''}.`,
-      `Hoje este aparelho tem ${plural(state.sessions.length, 'treino', 'treinos')}, ${plural(state.runs.length, 'corrida', 'corridas')} e ${plural(state.plans.length, 'plano', 'planos')}, que serão substituídos.`];
+    const doBackup = listaDeDados(r);
+    const doAparelho = listaDeDados({ treinos: state.sessions.length, corridas: state.runs.length, noites: state.sono.registros.length, diasDeDiario: Array.isArray(state.diario.dias) ? state.diario.dias.length : 0, dores: state.dores.length, pesos: state.body.length, planos: state.plans.length });
+    const feito = r.exportadoEm ? ` Feito em ${fmtDate(r.exportadoEm, true)}.` : '';
+    const partes = [(doBackup ? `Este backup tem ${doBackup}.` : 'Este backup não tem registros.') + feito,
+      doAparelho ? `Hoje este aparelho tem ${doAparelho}, que serão substituídos.` : 'Este aparelho ainda não tem registros.'];
     if (state.current) partes.push('O treino em andamento será descartado.');
     if (r.descartados) partes.push(`${plural(r.descartados, 'registro inválido foi ignorado', 'registros inválidos foram ignorados')}.`);
     partes.push('Se mudar de ideia, use “Desfazer a última restauração” em Ajustes.');
@@ -121,6 +133,28 @@ function importar() {
   });
 }
 
+// Escolha do som do alerta (fim do descanso, fim de série por tempo e trocas da corrida): cada opção toca ao ser
+// escolhida e "Ouvir" repete. "Silencioso" desliga o som (settings.som = false) e guarda o último som escolhido.
+function escolhaDeSom(atual) {
+  let escolhido = SONS_ALERTA[atual] ? atual : SOM_PADRAO;
+  const box = h('div', { class: 'chips wrap', role: 'radiogroup', 'aria-label': 'Som do alerta', id: 'som-alerta' });
+  const sub = h('div', { class: 'small muted', id: 'som-alerta-sub' });
+  const ouvir = btn('Ouvir', () => { unlockAudio(); tocarAlerta(escolhido); }, 'sm ghost', 'play');
+  const desenhar = () => {
+    while (box.firstChild) box.removeChild(box.firstChild);
+    for (const [id, [nome]] of Object.entries(SONS_ALERTA)) box.appendChild(h('button', { type: 'button', class: 'chip' + (id === escolhido ? ' on' : ''), role: 'radio', 'aria-checked': id === escolhido ? 'true' : 'false', 'data-som': id,
+      onClick: () => {
+        escolhido = id;
+        update((s) => { s.settings.som = id !== 'silencioso'; if (id !== 'silencioso') s.settings.somAlerta = id; });
+        unlockAudio(); tocarAlerta(id); desenhar();
+      } }, nome));
+    sub.textContent = SONS_ALERTA[escolhido][1] + '.' + (escolhido === 'alto' ? ' Com fone de ouvido, prefira Equilibrado ou Discreto.' : '') + (isIos() && escolhido !== 'silencioso' ? ' No iPhone, não toca com o modo silencioso do aparelho ligado.' : '');
+    ouvir.style.visibility = escolhido === 'silencioso' ? 'hidden' : '';
+  };
+  desenhar();
+  return h('div', { class: 'col gap-s menu-item' }, h('div', { class: 'row between' }, h('div', { class: 'grow' }, h('div', { class: 'bold', text: 'Som do alerta' }), h('div', { class: 'small muted', text: 'Fim do descanso, de séries por tempo e trocas da corrida.' })), ouvir), box, sub);
+}
+
 // ---------- Ajustes ----------
 export function settingsView() {
   const st = state.settings;
@@ -133,14 +167,14 @@ export function settingsView() {
     linha('Figuras em movimento', 'As demonstrações tocam sozinhas, como um vídeo.', toggle(st.animar !== false, (v) => set('animar', v), 'Figuras em movimento'))));
   body.push(sectionTitle('Durante o treino'));
   body.push(h('div', { class: 'card tight' },
-    telaLigadaDisponivel() ? linha('Manter a tela ligada', isIos() ? 'Enquanto o treino está aberto. Em iPhones com sistema mais antigo pode não funcionar.' : 'Enquanto o treino está aberto.', toggle(st.telaLigada, (v) => set('telaLigada', v), 'Manter a tela ligada')) : linha('Manter a tela ligada', 'Este navegador não oferece esse recurso. Aumente o tempo de bloqueio da tela nas configurações do aparelho.', h('span', { class: 'small muted', text: 'Indisponível' })),
-    linha('Som ao fim do descanso', isIos() ? 'Dois bipes. No iPhone, não toca com o modo silencioso ligado.' : 'Dois bipes.', toggle(st.som, (v) => set('som', v), 'Som ao fim do descanso')),
+    telaLigadaDisponivel() ? linha('Manter a tela ligada', 'Durante o treino ou a corrida, a tela não apaga sozinha. Depois volta ao normal.' + (isIos() ? ' Em iPhones com sistema mais antigo pode não funcionar.' : ''), toggle(st.telaLigada, (v) => set('telaLigada', v), 'Manter a tela ligada')) : linha('Manter a tela ligada', 'Este navegador não oferece esse recurso. Aumente o tempo de bloqueio da tela nas configurações do aparelho.', h('span', { class: 'small muted', text: 'Indisponível' })),
+    escolhaDeSom(st.som ? st.somAlerta : 'silencioso'),
     linha('Vibrar ao fim do descanso', isIos() ? 'O iPhone não deixa páginas vibrarem: o aviso é o som e a tela.' : 'Só no Android.', toggle(st.vibrar, (v) => set('vibrar', v), 'Vibrar ao fim do descanso')),
     // aviso por notificação quando a pessoa troca de aplicativo durante o descanso (só onde o navegador oferece)
-    avisoDisponivel() ? linha('Avisar com o app em segundo plano', isIos() ? 'Notificação ao fim do descanso. No iPhone o sistema pausa o app em segundo plano: o aviso pode atrasar.' : 'Notificação ao fim do descanso, se você trocar de aplicativo.', toggle(!!st.avisoFundo && avisoPermitido(), async (v) => {
+    avisoDisponivel() ? linha('Avisar com o aplicativo em segundo plano', isIos() ? 'Se você sair do aplicativo no descanso, a notificação mostra quanto falta e avisa no fim. No iPhone o sistema pausa o aplicativo: a contagem pode parar e o aviso pode atrasar.' : 'Se você sair do aplicativo no descanso, a notificação mostra quanto falta e avisa no fim.', toggle(!!st.avisoFundo && avisoPermitido(), async (v) => {
       if (!v) { set('avisoFundo', false); return; }
       if (await pedirPermissaoDeAviso()) { set('avisoFundo', true); toast('Aviso ligado.'); } else { set('avisoFundo', false); toast('O navegador não deu permissão para notificações. Libere nas configurações do site e tente de novo.'); refresh(); }
-    }, 'Avisar com o app em segundo plano')) : null));
+    }, 'Avisar com o aplicativo em segundo plano')) : null));
   body.push(h('div', { class: 'card row between' }, h('div', { class: 'grow' }, h('div', { class: 'bold', text: 'Descanso padrão' }), h('div', { class: 'small muted', text: 'Para o treino livre, em segundos.' })), stepper({ value: st.descanso, min: 15, max: 600, step: 15, label: 'Descanso padrão em segundos', cls: 'sm', onChange: (v) => set('descanso', v) })));
 
   body.push(sectionTitle('Seus dados'));
@@ -163,7 +197,7 @@ export function settingsView() {
   }).catch(() => {});
   if (canSuggestInstall()) body.push(btn('Instalar o aplicativo neste aparelho', openInstall, 'block', 'phone'));
   body.push(btn('Apagar todos os meus dados', async () => {
-    const ok = await confirmSheet({ title: 'Apagar tudo?', text: 'Todos os treinos, planos, histórico e respostas serão apagados deste aparelho. Não dá para desfazer.', okLabel: 'Apagar tudo', danger: true });
+    const ok = await confirmSheet({ title: 'Apagar tudo?', text: 'Todos os seus dados (treinos, corridas, sono, alimentação, peso, dores e respostas) serão apagados deste aparelho. Não dá para desfazer.', okLabel: 'Apagar tudo', danger: true });
     if (!ok) return;
     const ok2 = await confirmSheet({ title: 'Tem certeza?', text: 'Esta é a última confirmação. Se quiser guardar os dados, cancele e faça um backup antes.', okLabel: 'Sim, apagar', danger: true });
     if (!ok2) return;

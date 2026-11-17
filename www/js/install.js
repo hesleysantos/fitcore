@@ -80,7 +80,7 @@ export function installCard() {
     h('div', { class: 'install' },
       h('img', { class: 'appic', src: 'icons/icon-192.png', alt: '', width: 48, height: 48 }),
       h('div', { class: 'grow' },
-        h('h3', { text: 'Instale o FitCore no seu celular' }),
+        h('h3', { text: 'Instale o FitCore no seu aparelho' }),
         h('p', { class: 'small muted', text: 'Abre como aplicativo, em tela cheia, e funciona sem internet.' }))),
     h('div', { class: 'row mt' },
       btn('Agora não', () => { update((s) => { s.ui.installDismissedAt = new Date().toISOString(); }); refresh(); }, 'ghost sm'),

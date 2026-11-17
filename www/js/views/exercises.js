@@ -6,7 +6,7 @@ import { EXERCICIOS, EX_POR_ID } from '../data/exercises.js';
 import { MUSCULOS, GRUPOS, MODALIDADES, CUIDADOS, PADROES } from '../data/muscles.js';
 import { EQUIPAMENTOS } from '../data/equipment.js';
 import { figure, muscleMap } from '../figure.js';
-import { exItem, filtrar, nivelBadge, cuidadosDoUsuario, addToPlanSheet } from './common.js';
+import { exItem, filtrar, nivelBadge, cuidadosDoUsuario, doresDeHoje, avisoDeDor, addToPlanSheet } from './common.js';
 import { historico, recorde, e1rm } from '../logic/progress.js';
 import { lineChart } from './charts.js';
 
@@ -31,10 +31,26 @@ export function exercisesView() {
     if (!items.length) {
       list.appendChild(h('div', { class: 'empty' }, icon('search'), 'Nenhum exercício encontrado.', btn('Limpar busca e filtros', () => { F.q = ''; F.grupo = ''; F.mods.clear(); F.nivel = 0; F.tipo = ''; F.soMinha = false; F.semCuidado = false; search.value = ''; drawChips(); syncFilterBtn(); draw(); }, 'sm')));
     }
-    for (const ex of items) list.appendChild(exItem(ex, { onClick: () => go('exercicio/' + ex.id), right: icon('right', 's') }));
+    const item = (ex) => exItem(ex, { onClick: () => go('exercicio/' + ex.id), right: icon('right', 's') });
+    // "Todos", sem busca e sem filtro: o catálogo inteiro numa lista só fica comprido demais; aparece por grupo muscular,
+    // em seções que abrem ao toque (a lista de cada uma é montada ao abrir)
+    if (!F.q.trim() && !F.grupo && !ativos()) {
+      list.className = 'col gap-s';
+      for (const [k, nome] of Object.entries(GRUPOS)) {
+        const doGrupo = items.filter((ex) => ex.grupo === k);
+        if (!doGrupo.length) continue;
+        const dentro = h('div', { class: 'list' });
+        const d = h('details', { class: 'acc grupo-ex', dataset: { grupo: k }, onToggle: () => { if (d.open && !dentro.firstChild) for (const ex of doGrupo) dentro.appendChild(item(ex)); } },
+          h('summary', null, h('span', { class: 'grow', text: nome }), h('span', { class: 'small muted', text: String(doGrupo.length) })), dentro);
+        list.appendChild(d);
+      }
+      return;
+    }
+    list.className = 'list';
+    for (const ex of items) list.appendChild(item(ex));
   };
   const search = h('input', { class: 'input', type: 'search', value: F.q, placeholder: 'Buscar por nome, músculo ou aparelho', 'aria-label': 'Buscar exercício', autocomplete: 'off', onInput: (e) => { F.q = e.target.value; draw(); } });
-  const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Grupo muscular' });
+  const chips = h('div', { class: 'chips grupos', role: 'group', 'aria-label': 'Grupo muscular' });
   const drawChips = () => {
     while (chips.firstChild) chips.removeChild(chips.firstChild);
     chips.appendChild(chip('Todos', !F.grupo, () => { F.grupo = ''; drawChips(); draw(); }));
@@ -51,8 +67,9 @@ export function exercisesView() {
       body.appendChild(h('div', { class: 'col gap-s' }, h('h3', { text: 'Tipo de exercício' }), seg([['', 'Todos'], ['composto', 'Composto'], ['isolado', 'Isolado']], F.tipo, (v) => { F.tipo = v; drawBody(); }),
         h('p', { class: 'tiny muted', text: 'Composto: movimenta mais de uma articulação (ex.: agachamento). Isolado: uma só (ex.: rosca).' })));
       body.appendChild(h('div', { class: 'row between' }, h('div', null, h('div', { class: 'bold', text: 'Só o que tem na minha academia' }), h('div', { class: 'tiny muted', text: state.gym.all ? 'Você ainda não marcou os aparelhos da sua academia.' : 'Usa a lista “Minha academia”.' })), toggle(F.soMinha, (v) => { F.soMinha = v; }, 'Só o que tem na minha academia')));
-      const cuid = cuidadosDoUsuario();
-      body.appendChild(h('div', { class: 'row between' }, h('div', null, h('div', { class: 'bold', text: 'Esconder os que pedem cuidado' }), h('div', { class: 'tiny muted', text: cuid.length ? 'Conforme as limitações que você informou ao Treinador.' : 'Informe suas limitações ao Treinador para usar este filtro.' })), toggle(F.semCuidado, (v) => { F.semCuidado = v; }, 'Esconder exercícios que pedem cuidado')));
+      const cuid = cuidadosDoUsuario(), dores = doresDeHoje().dores;
+      const sub = cuid.length && dores.length ? 'Conforme as limitações e as dores que você informou.' : cuid.length ? 'Conforme as limitações que você informou ao Treinador.' : dores.length ? 'Conforme as dores que você informou.' : 'Informe uma limitação ao Treinador ou conte uma dor para usar este filtro.';
+      body.appendChild(h('div', { class: 'row between' }, h('div', null, h('div', { class: 'bold', text: 'Esconder os que pedem cuidado' }), h('div', { class: 'tiny muted', text: sub })), toggle(F.semCuidado, (v) => { F.semCuidado = v; }, 'Esconder exercícios que pedem cuidado')));
     };
     drawBody();
     const s = sheet({
@@ -79,6 +96,9 @@ export function exerciseView(id) {
   // cuidados
   const meus = cuidadosDoUsuario().filter((c) => ex.cuidado.includes(c));
   if (meus.length) body.push(note('warn', `Atenção: este exercício pede cuidado com ${meus.map((c) => CUIDADOS[c]).join(', ')}, que você informou ao Treinador. Prefira uma alternativa.`));
+  // dor contada: o mesmo aviso da tela do treino (regra do Treinador)
+  const dor = avisoDeDor(ex.id);
+  if (dor) body.push(note(dor.nivel === 'evitar' ? 'warn' : 'info', dor.texto));
 
   // músculos
   const prim = h('div', { class: 'row wrap gap-s' });

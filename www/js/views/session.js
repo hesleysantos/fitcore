@@ -4,16 +4,30 @@ import { state, update, planById } from '../store.js';
 import { go, refresh, replace } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { figure, thumb } from '../figure.js';
-import { sugestao, retomada, recorde, e1rm, assistido, voltaDePausa, seriesNaVolta, descansoNaVolta } from '../logic/progress.js';
+import { recorde, e1rm, assistido, voltaDePausa, seriesNaVolta, descansoNaVolta } from '../logic/progress.js';
 import { nivelPausa, cortePausa, duracaoTxt } from '../logic/pausa.js';
 import { alertaDoExercicio, doresDoTreino, respostasParaAvisos } from '../logic/trainer.js';
 import { pickExercises, novoItem, subtitulo, folha } from './common.js';
-import { keepAwake, unlockAudio, beep, vibrate, agendarAviso, cancelarAviso, fimDoDescanso } from '../device.js';
+import { recomendacao } from '../logic/carga.js';
+import { REFS } from '../data/knowledge.js';
+import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate, agendarAviso, cancelarAviso, fimDoDescanso } from '../device.js';
+
+// ---------- carga recomendada ----------
+// Perfil para a carga inicial (logic/carga.js): as respostas do Treinador (com a proteção das outras entrevistas), o sexo
+// informado na Nutrição e a dor que o exercício pega. Com histórico, vale a sugestão de progress.js.
+function contextoCarga(exId) {
+  let respostas = null, dor = null;
+  try { respostas = respostasParaAvisos(state); } catch { respostas = null; }
+  try { dor = alertaDoExercicio(exId, doresDoTreino(state, dateKey(new Date()), respostas), respostas); } catch { dor = null; }
+  const n = state.nutri && state.nutri.answers;
+  return { respostas, dor, sexo: n && typeof n.sexo === 'string' ? n.sexo : '' };
+}
+const recomendar = (exId, alvo, series) => recomendacao(exId, alvo, series, contextoCarga(exId));
 
 // ---------- iniciar ----------
 function montarItem(planItem) {
   const ex = EX_POR_ID.get(planItem.ex);
-  const sug = retomada(planItem.ex, sugestao(planItem.ex, planItem.reps, planItem.series), planItem.reps);
+  const sug = recomendar(planItem.ex, planItem.reps, planItem.series);
   const sets = [];
   for (let i = 0; i < planItem.series; i++) {
     sets.push({ kg: ex.registro === 'peso_reps' ? (sug.kg ?? null) : null, reps: ex.registro === 'peso_reps' || ex.registro === 'reps' ? (sug.reps ?? null) : null, seg: ex.registro === 'segundos' || ex.registro === 'minutos' ? (sug.seg ?? Number(String(planItem.reps).split('-')[0])) : null, ok: false });
@@ -103,6 +117,21 @@ function numin({ value, step, min = 0, max = 2000, onChange, label, dec = false,
   repetir(menos, () => { unlockAudio(); set(desce()); });
   repetir(mais, () => { unlockAudio(); set(sobe()); });
   return h('div', { class: 'numin' }, menos, input, mais);
+}
+
+// De onde vem a carga sugerida: uma linha curta e, num "Por quê?" fechado, o ajuste, os cuidados e as fontes. Fica
+// aberto entre redesenhos do cartão se a pessoa abriu.
+const porQueAberto = new WeakSet();
+function origemDaCarga(it, sug) {
+  if (!sug || !sug.linha) return null;
+  const refs = (sug.refs || []).filter((k) => REFS[k]);
+  const corpo = h('div', { class: 'corpo' });
+  for (const t of sug.porque || []) corpo.appendChild(h('p', { class: 'small muted', text: t }));
+  if (refs.length) corpo.appendChild(h('div', { class: 'col gap-s' }, h('div', { class: 'tiny bold', text: 'Fontes' }), ...refs.map((k) => h('p', { class: 'ref', text: '• ' + REFS[k] }))));
+  const d = h('details', { class: 'carga', open: porQueAberto.has(it), onToggle: () => { if (d.open) porQueAberto.add(it); else porQueAberto.delete(it); } },
+    h('summary', null, h('span', { class: 'linha', text: sug.linha }), h('span', { class: 'pq-link', text: 'Por quê?' })),
+    corpo);
+  return d;
 }
 
 function infoSheet(ex) {
@@ -215,7 +244,7 @@ export function sessionView() {
     const ex = EX_POR_ID.get(it.ex);
     const old = cards.children[i];
     const tipo = ex.registro;
-    const sug = retomada(it.ex, sugestao(it.ex, it.alvo, it.sets.length), it.alvo);
+    const sug = recomendar(it.ex, it.alvo, it.sets.length);
     const grid = h('div', { class: 'setgrid' + (tipo === 'peso_reps' ? '' : ' one') });
     grid.appendChild(h('span'));
     if (tipo === 'peso_reps') { grid.appendChild(h('span', { class: 'hd', text: assistido(it.ex) ? 'Ajuda (kg)' : 'Carga (kg)' })); grid.appendChild(h('span', { class: 'hd', text: 'Repetições' })); }
@@ -270,7 +299,7 @@ export function sessionView() {
           h('div', { class: 'tiny ' + (feitas === it.sets.length ? 'ok bold' : 'muted'), text: feitas === it.sets.length ? 'Concluído' : `${feitas} de ${it.sets.length} séries` })),
         iconBtn('more', 'Opções: ' + ex.nome, () => itemMenu(i), '')),
       avisoDor ? note(avisoDor.nivel === 'evitar' ? 'warn' : 'info', avisoDor.texto) : null,
-      sug.texto ? h('p', { class: 'small muted', text: sug.texto }) : null,
+      origemDaCarga(it, sug),
       grid,
       h('div', { class: 'row acoes-ex' }, maisSerie, menosSerie,
         h('div', { class: 'grow' }),
@@ -399,7 +428,7 @@ export function sessionView() {
       const rem = (work.end - now) / 1000;
       if (rem <= 0) {
         const w = work; setWork(null);
-        beep(3); vibrate();
+        tocarAlerta(); vibrate();
         const st = c.itens[w.i] && c.itens[w.i].sets[w.j];
         if (st && !st.ok) {
           mutCur((x) => { x.itens[w.i].sets[w.j].seg = w.total; });
@@ -413,7 +442,7 @@ export function sessionView() {
     if (c.restEnd) {
       const rem = (c.restEnd - now) / 1000;
       if (rem <= 0) {
-        if (!alarmed) { alarmed = true; if (rem > -8) { beep(2); vibrate(); } doneUntil = now + 6000; }
+        if (!alarmed) { alarmed = true; if (rem > -8) { tocarAlerta(); vibrate(); } doneUntil = now + 6000; }
         mutCur((x) => { x.restEnd = 0; x.restTotal = 0; });
         fimDoDescanso();
         drawBar();

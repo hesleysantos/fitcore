@@ -9,7 +9,7 @@ import { FAQ_NUTRI, REFS } from '../data/knowledge.js';
 import { resumoParaNutricao } from '../logic/corrida.js';
 import { ALIMENTOS, CATEGORIAS_ALIMENTO, NOME_FAIXA } from '../data/foods.js';
 import {
-  PERGUNTAS, ROTULO, respostasCompletas, calcular, limparEmCasa, USADOS_EM_CASA, orientacaoCorrida, faltaDeCarboidrato, imcFaixa, suplementos, textosDoPeso, contextoDasEntrevistas,
+  PERGUNTAS, ROTULO, respostasCompletas, calcular, limparEmCasa, USADOS_EM_CASA, orientacaoCorrida, faltaDeCarboidrato, imcFaixa, suplementos, limiteDeCafeina, textosDoPeso, contextoDasEntrevistas,
   cardapioDoDia, outraSugestaoDoDia, trocarRefeicaoDoDia, limparAjustes, limparAjuste, orientacaoDoDia, rotuloDoTreino, carboidratoNaCorrida, listaDeCompras, textoDaListaDeCompras,
 } from '../logic/nutrition.js';
 import { treinosDoDia, semanaDoCardapio } from '../logic/semana-nutricao.js';
@@ -304,6 +304,53 @@ function abrirSemana(r) {
   const sh = sheet({ title: 'Cardápio da semana', full: true, body: corpo, footer: [btn('Fechar', () => sh.close(), 'ghost grow')] });
 }
 
+// ---------- suplementos e pré-treino (logic/nutrition.js, suplementos) ----------
+// Uma seção fechada, em três partes: "Com boa evidência" (com dose, quando cabe), "Pré-treino pronto: cuidados" e "Sem
+// evidência ou arriscados". Cada linha é curta; o porquê e as fontes ficam fechados. No modo educativo, sem doses: só a
+// orientação de procurar o médico ou o nutricionista.
+let xicarasDeCafe = 0;   // só nesta tela (não é salvo)
+const fontesSup = (refs) => h('div', { class: 'col gap-s mt' }, h('div', { class: 'tiny bold muted', text: 'FONTES' }), ...refs.filter((k) => REFS[k]).map((k) => h('p', { class: 'ref', text: '• ' + REFS[k] })));
+const porQueSup = (texto, refs, rotulo = 'Por quê?') => h('details', { class: 'pq' }, h('summary', { text: rotulo }), texto ? h('p', { class: 'small', text: texto }) : null, refs && refs.length ? fontesSup(refs) : null);
+const linhaSup = (nome, texto, porque, refs) => h('div', { class: 'sup-linha' }, h('p', { class: 'small' }, h('b', { text: nome + ': ' }), texto), porQueSup(porque, refs));
+// quanto de cafeína ainda cabe no pré-treino, pelas xícaras de café do dia
+function cafeinaQueCabe(r) {
+  const caixa = h('div', { class: 'col gap-s' });
+  const desenha = () => {
+    while (caixa.firstChild) caixa.removeChild(caixa.firstChild);
+    const lim = limiteDeCafeina(r, xicarasDeCafe);
+    caixa.append(h('div', { class: 'tiny muted', text: 'Xícaras de café por dia' }),
+      seg([[0, '0'], [1, '1'], [2, '2'], [3, '3'], [4, '4 ou mais']], xicarasDeCafe, (v) => { xicarasDeCafe = v; desenha(); }),
+      h('p', { class: 'small bold', 'aria-live': 'polite', text: lim ? lim.texto : '' }));
+  };
+  desenha();
+  return caixa;
+}
+function blocoSuplementos(r) {
+  const s = suplementos(r);
+  const p = s.preTreino;
+  const out = [h('p', { text: s.intro })];
+  if (s.boas.length) {
+    out.push(h('h3', { class: 'orient-t', text: 'Com boa evidência' }));
+    for (const b of s.boas) out.push(linhaSup(b.nome, b.texto, b.porque, b.refs));
+  } else out.push(note('warn', s.aviso));
+  out.push(h('h3', { class: 'orient-t', text: 'Pré-treino pronto: cuidados' }));
+  out.push(p.bloqueado ? note('warn', p.intro) : h('p', { class: 'small', text: p.intro }));
+  if (p.introRefs && p.introRefs.length) out.push(porQueSup('', p.introRefs, 'Fontes'));
+  for (const x of p.itens) {
+    const linha = linhaSup(x.titulo, x.texto, x.porque, x.refs);
+    if (x.cafeina) linha.insertBefore(cafeinaQueCabe(r), linha.lastChild);
+    out.push(linha);
+  }
+  out.push(h('h3', { class: 'orient-t', text: 'Sem evidência ou arriscados' }));
+  const ul = h('ul');
+  for (const x of s.semEvidencia) ul.appendChild(h('li', { class: 'small' }, h('b', { text: x.nome + ': ' }), x.texto));
+  out.push(ul, porQueSup('', [...new Set(s.semEvidencia.flatMap((x) => x.refs))], 'Fontes'));
+  if (s.boas.length) out.push(note('warn', s.aviso));
+  const d = acc('Suplementos e pré-treino', out);
+  d.id = 'suplementos';
+  return d;
+}
+
 // ---------- tela ----------
 function resultado() {
   const a = state.nutri.answers;
@@ -382,18 +429,12 @@ function resultado() {
   ])]));
   if (r.modo !== 'educativo') {
     body.push(acc('Como acompanhar o resultado', [lista([
-      'Pese-se 1 a 3 vezes por semana, ao acordar, e olhe a média — o peso oscila de um dia para o outro.',
+      'Pese-se pelo menos uma vez por semana, de preferência ao acordar, e olhe a tendência: o peso oscila de um dia para o outro.',
       'Mantenha a mesma meta por pelo menos 2 a 3 semanas antes de mudar.',
       'Registre o peso na tela Evolução para ver a tendência.',
     ])]));
   }
-  const sup = suplementos(r);
-  body.push(acc('Suplementos: o que a ciência diz', [
-    h('p', { text: sup.intro }),
-    ...(sup.linhas.length ? [lista(sup.linhas)] : []),
-    h('div', { class: 'note warn' }, icon('warn'), h('div', { text: sup.aviso })),
-    h('p', { class: 'ref', text: 'Fontes: posicionamentos da International Society of Sports Nutrition sobre creatina (2017), cafeína (2021) e proteína (2017); EFSA (2015).' }),
-  ]));
+  body.push(blocoSuplementos(r));
   body.push(faqBlock(FAQ_NUTRI, 'Pergunte à Nutricionista', 'Ex.: proteína, jejum, pré-treino, creatina'));
   body.push(btn('Refazer a entrevista', () => { modo = 'entrevista'; refresh(); window.scrollTo(0, 0); }, 'block ghost', 'edit'));
   return body;
@@ -406,7 +447,7 @@ export function nutritionView() {
       return {
         title: 'Nutrição',
         body: [cabecalho(),
-          h('div', { class: 'bubble' }, h('p', { text: 'Olá! Eu ajudo você a comer de acordo com o seu objetivo.' }), h('p', { class: 'small muted', text: `São ${PERGUNTAS.length} perguntas rápidas. Você recebe metas, o que comer em volta do treino e um cardápio de exemplo. As respostas ficam só neste aparelho.` })),
+          h('div', { class: 'bubble' }, h('p', { text: 'Olá! Eu ajudo você a comer de acordo com o seu objetivo.' }), h('p', { class: 'small muted', text: `São até ${PERGUNTAS.length} perguntas rápidas. Você recebe metas, o que comer em volta do treino e um cardápio de exemplo. As respostas ficam só neste aparelho.` })),
           btn('Começar', () => { modo = 'entrevista'; refresh(); }, 'primary lg block', 'play'),
           ...blocoDiario(null, { aoResponder: () => { modo = 'entrevista'; refresh(); } }),
           h('div', { class: 'mt' }), faqBlock(FAQ_NUTRI, 'Pergunte à Nutricionista', 'Ex.: proteína, jejum, pré-treino, creatina')],

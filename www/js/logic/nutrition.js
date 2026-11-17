@@ -3,7 +3,7 @@
 // Também: preferência por alimentos mais baratos (faixas de preço em data/foods.js), cardápio com o que há em casa e
 // alimentação para corrida (resumo vindo de logic/corrida.js).
 // Orientação educativa: não é prescrição dietética e não substitui consulta com nutricionista.
-import { ALIMENTOS, CATEGORIAS_ALIMENTO, rendimentoDeCompra, temAlergeno, NOME_ALERGIA } from '../data/foods.js';
+import { ALIMENTOS, CATEGORIAS_ALIMENTO, rendimentoDeCompra, temAlergeno, NOME_ALERGIA, MEDIDAS } from '../data/foods.js';
 import { uniaoSaude } from './saude.js';
 
 const FOOD = new Map(ALIMENTOS.map((f) => [f.id, f]));
@@ -96,13 +96,14 @@ const numero = (v, min, max, padrao) => (typeof v === 'number' && Number.isFinit
 const ONDE = { treinador: 'ao Treinador', corrida: 'ao Treinador de corrida', sono: 'na tela do sono' };
 // (também: doença do coração, outra doença crônica e qualquer sinal da triagem de saúde — eles tiram a dose de cafeína:
 // ver suplementos)
-const COND_DE_FORA = { gestante: 'gestação', posparto: 'pós-parto', renal: 'doença nos rins', diabetes: 'diabetes', hipertensao: 'pressão alta', cardiaco: 'doença do coração, da circulação ou AVC', outra: 'outra doença crônica', sinal: 'um sinal de alerta de saúde (como dor no peito, falta de ar ou tontura)' };
+const COND_DE_FORA = { gestante: 'gestação', posparto: 'pós-parto', renal: 'doença nos rins', diabetes: 'diabetes', hipertensao: 'pressão alta', cardiaco: 'doença do coração, da circulação ou AVC', transtorno: 'transtorno alimentar', outra: 'outra doença crônica', sinal: 'um sinal de alerta de saúde (como dor no peito, falta de ar ou tontura)' };
 const proprio = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
 const idadeValida = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 1 && v <= 130;
 // As condições, os sinais da triagem e os remédios vêm da união das entrevistas (logic/saude.js), com os nomes daqui:
 // "outra doença crônica" do Treinador vira "outra"; qualquer sinal da triagem vira "sinal"; insulina ou remédio que baixa
 // o açúcar vira "diabetes".
-const PARA_NUTRI = { gestante: 'gestante', posparto: 'posparto', renal: 'renal', diabetes: 'diabetes', hipertensao: 'hipertensao', cardiaco: 'cardiaco', cronica: 'outra' };
+// transtorno alimentar informado a um treinador vale como o daqui: modo educativo, sem números
+const PARA_NUTRI = { gestante: 'gestante', posparto: 'posparto', renal: 'renal', diabetes: 'diabetes', hipertensao: 'hipertensao', cardiaco: 'cardiaco', transtorno: 'transtorno', cronica: 'outra' };
 export function contextoDasEntrevistas(st) {
   const s = st && typeof st === 'object' && !Array.isArray(st) ? st : {};
   const resp = (o) => (o && typeof o === 'object' && o.answers && typeof o.answers === 'object' && !Array.isArray(o.answers) ? o.answers : {});
@@ -336,12 +337,12 @@ export function calcular(respostas, corrida = null, contexto = null) {
 
 // ---------- cardápio de exemplo ----------
 const POOL = {
-  cafe_carbo: ['pao-frances', 'tapioca-pronta', 'aveia-em-flocos', 'cuscuz-de-milho-cozido', 'pao-de-forma-integral', 'batata-doce-cozida'],
+  cafe_carbo: ['pao-frances', 'tapioca-pronta', 'aveia-em-flocos', 'cuscuz-de-milho-cozido', 'pao-de-forma-integral'],
   cafe_prot: ['ovo-cozido', 'queijo-minas-frescal', 'iogurte-natural', 'queijo-cottage', 'ricota', 'leite-integral', 'queijo-mucarela', 'tofu', 'pasta-de-amendoim', 'leite-de-soja'],
   fruta: ['banana-prata', 'mamao-papaia', 'maca-fuji', 'laranja-pera', 'abacaxi', 'melancia', 'manga-palmer', 'morango', 'goiaba-vermelha', 'pera-williams', 'tangerina-ponca', 'uva-italia', 'melao', 'kiwi'],
   carbo: ['arroz-branco-cozido', 'arroz-integral-cozido', 'batata-inglesa-cozida', 'macarrao-cozido', 'mandioca-cozida', 'batata-doce-cozida', 'quinoa-cozida', 'inhame-cozido'],
   legum: ['feijao-carioca-cozido', 'feijao-preto-cozido', 'lentilha-cozida', 'grao-de-bico-cozido'],
-  prot: ['peito-de-frango-grelhado', 'patinho-grelhado', 'tilapia-grelhada', 'carne-moida-cozida', 'sobrecoxa-de-frango-assada-sem-pele', 'merluza-assada', 'lombo-suino-assado', 'sardinha-assada', 'coxao-mole-cozido', 'ovo-cozido', 'tofu', 'soja-cozida', 'proteina-de-soja-texturizada'],
+  prot: ['peito-de-frango-grelhado', 'patinho-grelhado', 'tilapia-grelhada', 'carne-moida-cozida', 'sobrecoxa-de-frango-assada-sem-pele', 'merluza-assada', 'lombo-suino-assado', 'sardinha-assada', 'coxao-mole-cozido', 'ovo-cozido', 'tofu', 'soja-cozida', 'proteina-de-soja-preparada', 'proteina-de-soja-texturizada'],
   salada: ['alface-crespa', 'tomate', 'rucula', 'pepino', 'cenoura-crua', 'repolho-branco-cru'],
   legume: ['brocolis-cozido', 'abobrinha-cozida', 'cenoura-cozida', 'couve-refogada', 'chuchu-cozido', 'beterraba-cozida', 'couve-flor-cozida', 'vagem-cozida', 'abobora-cabotia-cozida', 'quiabo-cozido', 'berinjela-cozida'],
   lanche_prot: ['iogurte-natural', 'queijo-minas-frescal', 'ovo-cozido', 'queijo-cottage', 'leite-integral', 'tofu', 'leite-de-soja', 'amendoim-torrado-salgado', 'grao-de-bico-cozido'],
@@ -357,7 +358,7 @@ const LEITES = ['leite-integral', 'leite-semidesnatado', 'leite-desnatado', 'lei
 const QUEIJOS = ['queijo-minas-frescal', 'queijo-minas-meia-cura', 'queijo-mucarela', 'queijo-prato', 'queijo-cottage', 'ricota', 'requeijao-cremoso'];
 const doPapel = (papel, fora = []) => ALIMENTOS.filter((f) => f.papel === papel && !fora.includes(f.id)).map((f) => f.id);
 const MAIS_CASA = {
-  cafe_carbo: ['pao-de-forma', 'torrada', 'granola', 'biscoito-cream-cracker', 'cereal-matinal-de-milho', 'pao-de-queijo-assado', 'bolo-de-milho', 'canjica-com-leite', 'pamonha', 'polenta-cozida', 'milho-verde-espiga', 'mandioca-cozida', 'inhame-cozido', 'cara-cozido', 'banana-da-terra', 'biscoito-maisena', 'biscoito-de-polvilho', 'bolo-de-chocolate', 'biscoito-recheado'],
+  cafe_carbo: ['pao-de-forma', 'torrada', 'granola', 'biscoito-cream-cracker', 'cereal-matinal-de-milho', 'pao-de-queijo-assado', 'bolo-de-milho', 'canjica-com-leite', 'pamonha', 'milho-verde-espiga', 'batata-doce-cozida', 'mandioca-cozida', 'inhame-cozido', 'cara-cozido', 'banana-da-terra', 'biscoito-maisena', 'biscoito-de-polvilho', 'bolo-de-chocolate', 'biscoito-recheado'],
   cafe_prot: [...LEITES, ...QUEIJOS, ...FRIOS, 'ovo-frito', 'omelete-de-queijo', 'clara-de-ovo-cozida', 'ovo-de-codorna', 'whey-protein', 'amendoim-torrado-salgado', 'amendoim-cru'],
   fruta: doPapel('fruta', ['limao-tahiti']),
   carbo: ['batata-inglesa-assada', 'mandioquinha-cozida', 'cuscuz-de-milho-cozido', 'cara-cozido', 'polenta-cozida', 'milho-verde-espiga', 'milho-verde-enlatado', 'nhoque-de-batata-cozido', 'lasanha-massa-cozida', 'macarrao-a-bolonhesa', 'baiao-de-dois', 'batata-saute', 'pinhao-cozido', 'banana-da-terra', 'farinha-de-mandioca-torrada', 'pao-frances', 'batata-inglesa-frita', 'mandioca-frita', 'macarrao-instantaneo'],
@@ -371,29 +372,13 @@ const MAIS_CASA = {
   gordura: ['oleo-de-girassol', 'oleo-de-milho', 'oleo-de-canola', 'manteiga-com-sal', 'margarina-com-sal'],
 };
 const POOL_CASA = Object.fromEntries(Object.keys(POOL).map((k) => [k, [...new Set([...POOL[k], ...(MAIS_CASA[k] || [])])].filter((id) => FOOD.has(id))]));
-// os alimentos que o cardápio "em casa" sabe usar (os demais — açúcar, refrigerante, doces, molhos — podem ser marcados, mas não entram)
-export const USADOS_EM_CASA = new Set(Object.values(POOL_CASA).flat());
-// gramas mínimo e máximo por alimento numa refeição, e passo de arredondamento. Nenhum alimento passa de 3 porções caseiras.
-const LIMITE = {
-  'ovo-cozido': [50, 150, 50], 'queijo-minas-frescal': [30, 90, 30], 'queijo-cottage': [50, 150, 25], ricota: [50, 150, 50], 'iogurte-natural': [170, 340, 170],
-  'leite-integral': [200, 400, 100], 'leite-desnatado': [200, 400, 100], 'leite-de-soja': [200, 400, 100], tofu: [80, 300, 10], 'pasta-de-amendoim': [15, 45, 15],
-  'pao-frances': [50, 150, 25], 'pao-de-forma-integral': [25, 125, 25], 'tapioca-pronta': [40, 140, 10], 'aveia-em-flocos': [20, 80, 10], 'cuscuz-de-milho-cozido': [80, 300, 20],
-  'mandioca-cozida': [50, 300, 10], 'batata-doce-cozida': [70, 330, 10], 'inhame-cozido': [50, 300, 10], 'quinoa-cozida': [50, 250, 10], 'macarrao-cozido': [80, 330, 10],
-  'proteina-de-soja-texturizada': [25, 75, 5], 'soja-cozida': [80, 250, 10], 'castanha-do-para': [8, 16, 4], 'castanha-de-caju': [15, 40, 5], nozes: [10, 30, 5], amendoa: [10, 30, 5], chia: [12, 24, 12],
-  'amendoim-torrado-salgado': [15, 45, 15], 'grao-de-bico-cozido': [50, 200, 10], 'lentilha-cozida': [50, 200, 10], 'feijao-carioca-cozido': [50, 200, 10], 'feijao-preto-cozido': [50, 200, 10],
-  'batata-inglesa-cozida': [70, 350, 10], 'arroz-branco-cozido': [60, 300, 10], 'arroz-integral-cozido': [60, 300, 10],
-};
-// sem limite próprio, vale o padrão do grupo, sem passar de 3 porções caseiras nem ficar abaixo de meia porção
-const lim = (id, def) => {
-  if (LIMITE[id]) return LIMITE[id];
-  const pg = FOOD.get(id).porcao.g, st = def[2];
-  const mx = Math.max(st, Math.min(def[1], Math.floor((pg * 3) / st) * st));
-  return [Math.min(mx, Math.max(def[0], Math.ceil((pg * 0.5) / st) * st)), mx, st];
-};
-const MAX_ITENS = { principal: 8, cafe: 7, lanche: 5, ceia: 4 };
+// itens por refeição, no máximo (com meta alta, de mais de 900 kcal por refeição, 2 a mais)
+// (o prato aceita 9: arroz, feijão, carne, salada, legume, óleo e até três complementos — farofa, sobremesa, suco —, já
+// que as porções não passam do máximo de referência)
+const MAX_ITENS = { principal: 9, cafe: 7, lanche: 5, ceia: 4 };
 
 // alimentos de soja que só entram quando a pessoa não come carne ou não pode com lactose (para o exemplo ficar com cara de dia a dia)
-const SO_VEG = new Set(['tofu', 'soja-cozida', 'proteina-de-soja-texturizada', 'leite-de-soja']);
+const SO_VEG = new Set(['tofu', 'soja-cozida', 'proteina-de-soja-texturizada', 'proteina-de-soja-preparada', 'leite-de-soja']);
 // etiquetas que o alimento precisa ter para respeitar as restrições (todas são obrigatórias, sem exceção)
 function etiquetas(rest) {
   const need = [];
@@ -409,7 +394,8 @@ const ALERGIAS_VALIDAS = new Set(['amendoim', 'castanhas', 'peixe', 'ovo', 'leit
 const alergiasDe = (res) => (res && Array.isArray(res.alergias) ? res.alergias.filter((x) => ALERGIAS_VALIDAS.has(x)) : []);
 const restricoesDe = (res) => [...(res && Array.isArray(res.restricoes) ? res.restricoes : []), ...alergiasDe(res).map((x) => 'alergia:' + x)];
 const alergiasDoRest = (rest) => rest.filter((x) => typeof x === 'string' && x.startsWith('alergia:')).map((x) => x.slice(8));
-const permite = (id, rest) => { const f = FOOD.get(id); const need = etiquetas(rest); return !!f && need.every((t) => f.tags.includes(t)) && !temAlergeno(id, alergiasDoRest(rest)); };
+// (alimentos `soDiario` — refrigerantes, salgados, bebidas com açúcar — nunca entram no cardápio, nas trocas nem nas sugestões)
+const permite = (id, rest) => { const f = FOOD.get(id); const need = etiquetas(rest); return !!f && !f.soDiario && need.every((t) => f.tags.includes(t)) && !temAlergeno(id, alergiasDoRest(rest)); };
 // "Mais baratos": ficam os alimentos da menor faixa de preço que o grupo tem; se forem menos de `min`, entram também os
 // da faixa seguinte — nunca mais que um degrau. Havendo um alimento barato, o caro não entra, mesmo que sobrem só uma
 // ou duas opções (é o caso do cardápio vegano: soja e proteína de soja, sem tofu). As faixas vêm de data/foods.js.
@@ -427,7 +413,8 @@ function contexto(res, emCasa) {
   const barato = !casa && res.preco === 'barato';                // com a lista de casa, o preço não entra: a comida já está comprada
   const pode = (id) => permite(id, rest) && (!casa || casa.has(id));
   const filtra = (lista, min) => (barato ? economicos(lista, min) : lista);
-  return { rest, casa, barato, pode, filtra, semCarne: rest.includes('vegano') || rest.includes('vegetariano') };
+  const semCarne = rest.includes('vegano') || rest.includes('vegetariano');
+  return { rest, casa, barato, pode, filtra, semCarne, sojaLeve: semCarne || rest.includes('sem_lactose') || rest.includes('alergia:leite') };
 }
 function servem(pool, ctx) {
   const { rest, semCarne } = ctx;
@@ -453,12 +440,13 @@ function pick(list, i, usados, reserva = []) {
   // todos já apareceram: o que apareceu menos vezes
   return marca(roda([...new Set([...list, ...reserva])]).sort((a, b) => usados.get(a) - usados.get(b))[0]);
 }
-function porcao(id, g) {
-  const f = FOOD.get(id);
-  return { id, nome: f.nome, g, faixa: f.preco.faixa, kcal: (f.kcal * g) / 100, p: (f.p * g) / 100, c: (f.c * g) / 100, gd: (f.g * g) / 100, fibra: (f.fibra * g) / 100, medida: medida(f, g) };
+// (no cardápio, a medida caseira é a da tabela do IBGE, quando existe — data/foods.js, MEDIDAS; o peso sai em gramas inteiros)
+function porcao(id, g0) {
+  const f = FOOD.get(id), g = Math.round(g0), m = MEDIDAS[id];
+  return { id, nome: f.nome, g, faixa: f.preco.faixa, kcal: (f.kcal * g) / 100, p: (f.p * g) / 100, c: (f.c * g) / 100, gd: (f.g * g) / 100, fibra: (f.fibra * g) / 100, medida: medida(m ? { porcao: { g: m[0], desc: m[1] } } : f, g) };
 }
 // medida caseira aproximada: "200 g (4 unidades)", "150 g (3 colheres de sopa cheias)"
-const PLURAL = { pacote: 'pacotes', espiga: 'espigas', posta: 'postas', unidade: 'unidades', fatia: 'fatias', colher: 'colheres', pegador: 'pegadores', 'xícara': 'xícaras', escumadeira: 'escumadeiras', 'pedaço': 'pedaços', concha: 'conchas', 'filé': 'filés', bife: 'bifes', gomo: 'gomos', copo: 'copos', pote: 'potes', cacho: 'cachos', 'sachê': 'sachês', pires: 'pires', punhado: 'punhados', lata: 'latas', garrafa: 'garrafas', dosador: 'dosadores', barra: 'barras', folha: 'folhas', ramo: 'ramos', 'média': 'médias', 'médio': 'médios', grossa: 'grossas', pequena: 'pequenas', pequeno: 'pequenos', grande: 'grandes', cheia: 'cheias', cheio: 'cheios', rasa: 'rasas' };
+const PLURAL = { ponta: 'pontas', americano: 'americanos', pacote: 'pacotes', espiga: 'espigas', posta: 'postas', unidade: 'unidades', fatia: 'fatias', colher: 'colheres', pegador: 'pegadores', 'xícara': 'xícaras', escumadeira: 'escumadeiras', 'pedaço': 'pedaços', concha: 'conchas', 'filé': 'filés', bife: 'bifes', gomo: 'gomos', copo: 'copos', pote: 'potes', cacho: 'cachos', 'sachê': 'sachês', pires: 'pires', punhado: 'punhados', lata: 'latas', garrafa: 'garrafas', dosador: 'dosadores', barra: 'barras', folha: 'folhas', ramo: 'ramos', 'média': 'médias', 'médio': 'médios', grossa: 'grossas', pequena: 'pequenas', pequeno: 'pequenos', grande: 'grandes', cheia: 'cheias', cheio: 'cheios', rasa: 'rasas' };
 const SINGULAR = Object.fromEntries(Object.entries(PLURAL).map(([s, p]) => [p, s]));
 export function medida(f, g) {
   const m = /^(\d+)\s+([^()]+?)\s*(\(.*\))?$/.exec(f.porcao.desc);
@@ -475,10 +463,6 @@ export function medida(f, g) {
   const par = m[3] && !/^\(\d/.test(m[3]) ? ' ' + m[3] : '';
   return `${g} g (${String(n2).replace('.', ',')} ${resto}${par})`;
 }
-function ajusta(id, alvoG, def) {
-  const [mn, mx, st] = lim(id, def);
-  return Math.min(mx, Math.max(mn, Math.round(alvoG / st) * st));
-}
 const soma = (itens, k) => itens.reduce((s, x) => s + x[k], 0);
 
 // parte das calorias do alimento que vem da proteína
@@ -494,350 +478,675 @@ function oleoDoPrato(ctx) {
   // (com alergia à soja, o óleo de soja não entra: fica o azeite)
   return ctx.barato && ctx.pode('oleo-de-soja') ? 'oleo-de-soja' : 'azeite-de-oliva';
 }
-// Monta uma refeição. Cada parte só entra se houver alimento para ela (com a lista de casa, um grupo pode faltar).
-function refeicao(tipo, nome, kcalAlvo, pAlvo, ctx, seed, usados, rico) {
-  const itens = [];
-  const fontes = (pool) => (rico ? concentradas(servem(pool, ctx)) : servem(pool, ctx));
-  const reserva = (pool) => (rico ? servem(pool, ctx) : []);
-  const add = (id, g) => { if (id && g > 0 && !itens.some((x) => x.id === id)) itens.push(porcao(id, g)); };
-  const tem = (id) => itens.some((x) => x.id === id);
-  const fruta = pick(servem('fruta', ctx), seed * 3 + tipo.length, usados);
-  if (tipo === 'principal') {
-    const sal = pick(servem('salada', ctx), seed, usados);
-    if (sal) add(sal, FOOD.get(sal).porcao.g);
-    const lg = pick(servem('legume', ctx).filter((x) => !tem(x)), seed * 2 + 1, usados);
-    if (lg) add(lg, Math.round(FOOD.get(lg).porcao.g * 1.5 / 10) * 10);
-    const fj = pick(servem('legum', ctx), seed, usados);
-    add(fj, ctx.semCarne ? 150 : 100);
-    add(oleoDoPrato(ctx), 8);
-    const faltaP = Math.max(8, pAlvo - soma(itens, 'p') - 4);
-    const todas = servem('prot', ctx).filter((x) => !tem(x));
-    const capaz = todas.filter((id) => (FOOD.get(id).p * lim(id, [60, 240, 10])[1]) / 100 >= faltaP * 0.8);
-    const pr = pick(capaz.length ? capaz : todas, seed, usados);
-    if (pr) add(pr, ajusta(pr, (faltaP / FOOD.get(pr).p) * 100, [60, 220, 10]));
-    const cb = pick(servem('carbo', ctx).filter((x) => !tem(x)), seed + 1, usados);
-    const faltaK = kcalAlvo - soma(itens, 'kcal');
-    if (cb && faltaK > 45) add(cb, ajusta(cb, (faltaK / FOOD.get(cb).kcal) * 100, [50, 300, 10]));
-  } else if (tipo === 'cafe') {
-    if (fruta) add(fruta, FOOD.get(fruta).porcao.g);
-    const pr = pick(fontes('cafe_prot'), seed, usados, reserva('cafe_prot'));
-    if (pr) add(pr, ajusta(pr, ((pAlvo - soma(itens, 'p') - 4) / FOOD.get(pr).p) * 100, [30, 200, 10]));
-    if (pr && pAlvo - soma(itens, 'p') > 8) {
-      const pr2 = pick(fontes('cafe_prot').filter((x) => x !== pr), seed + 1, usados, reserva('cafe_prot').filter((x) => x !== pr));
-      if (pr2) add(pr2, ajusta(pr2, ((pAlvo - soma(itens, 'p') - 3) / FOOD.get(pr2).p) * 100, [30, 200, 10]));
-    }
-    const cb = pick(servem('cafe_carbo', ctx).filter((x) => !tem(x)), seed, usados);
-    const faltaK = kcalAlvo - soma(itens, 'kcal');
-    if (cb && faltaK > 45) add(cb, ajusta(cb, (faltaK / FOOD.get(cb).kcal) * 100, [40, 200, 10]));
-    if (kcalAlvo - soma(itens, 'kcal') > 90) { const ex = pick(servem('lanche_extra', ctx).filter((x) => !tem(x)), seed + 2, usados); if (ex) add(ex, ajusta(ex, ((kcalAlvo - soma(itens, 'kcal')) / FOOD.get(ex).kcal) * 100, [10, 40, 5])); }
-  } else if (tipo === 'lanche') {
-    if (fruta) add(fruta, FOOD.get(fruta).porcao.g);
-    const pr = pick(fontes('lanche_prot').filter((x) => !tem(x)), seed + 1, usados, reserva('lanche_prot').filter((x) => !tem(x)));
-    if (pr) add(pr, ajusta(pr, ((pAlvo - soma(itens, 'p')) / FOOD.get(pr).p) * 100, [50, 300, 10]));
-    const faltaK = kcalAlvo - soma(itens, 'kcal');
-    if (faltaK > 60) { const ex = pick(servem('lanche_extra', ctx).filter((x) => !tem(x)), seed, usados); if (ex) add(ex, ajusta(ex, (faltaK / FOOD.get(ex).kcal) * 100, [10, 50, 5])); }
-  } else {
-    const pr = pick(fontes('ceia'), seed, usados, reserva('ceia'));
-    if (pr) add(pr, ajusta(pr, (pAlvo / FOOD.get(pr).p) * 100, [50, 300, 10]));
-    if (fruta && kcalAlvo - soma(itens, 'kcal') > 25) add(fruta, Math.round(FOOD.get(fruta).porcao.g / 2 / 5) * 5);
+// ---------- modelos de refeição ----------
+// Cada refeição sai de um MODELO: uma combinação que se come junto no Brasil — pão com ovo e café com leite, tapioca
+// ou cuscuz com ovo, mingau de aveia; arroz, feijão, carne e salada; macarrão com frango; fruta com iogurte; leite com
+// aveia na ceia. O modelo tem lugares (base, proteína, fruta, bebida, leguminosa, salada, legume, óleo) e complementos
+// que só entram quando o dia precisa de mais energia ou proteína (manteiga no pão, farofa, batata e sobremesa no prato
+// feito, um ovo no prato). Cada lugar aceita só alimentos daquele papel, e cada alimento tem um limite de porção naquela
+// refeição (LIM_PEQUENA e LIM_PRATO): a meta fecha com porções de verdade, sem juntar alimentos que não combinam.
+// Papéis: [alimentos do cardápio de sempre, alimentos a mais que valem quando estão marcados em casa].
+const semRepetir = (a, b) => b.filter((id) => !a.includes(id));
+const PAPEIS = {
+  // café da manhã, lanches e ceia
+  pao: [['pao-frances', 'pao-de-forma-integral'], ['pao-de-forma', 'torrada', 'biscoito-cream-cracker', 'biscoito-maisena', 'biscoito-de-polvilho']],
+  tapioca: [['tapioca-pronta'], []],
+  cuscuz: [['cuscuz-de-milho-cozido'], []],
+  cereal: [['aveia-em-flocos'], ['granola', 'cereal-matinal-de-milho']],
+  raiz_cafe: [['mandioca-cozida', 'batata-doce-cozida', 'inhame-cozido'], ['cara-cozido', 'banana-da-terra', 'milho-verde-espiga']],
+  quitanda: [['pao-de-queijo-assado'], ['bolo-de-milho', 'pamonha', 'canjica-com-leite', 'bolo-de-chocolate', 'biscoito-recheado']],
+  ovo: [['ovo-cozido'], ['ovo-frito', 'omelete-de-queijo', 'clara-de-ovo-cozida', 'ovo-de-codorna']],
+  queijo: [['queijo-minas-frescal', 'queijo-mucarela', 'ricota', 'queijo-cottage'], ['queijo-prato', 'queijo-minas-meia-cura', 'requeijao-cremoso']],
+  // queijo que vai na tapioca, no cuscuz e na macaxeira (ricota e cottage, não)
+  queijo_quente: [['queijo-minas-frescal', 'queijo-mucarela'], ['queijo-prato', 'queijo-minas-meia-cura']],
+  frios: [[], FRIOS],
+  tofu: [['tofu'], []],
+  pasta: [['pasta-de-amendoim'], []],
+  leite: [['leite-integral', 'leite-desnatado', 'leite-de-soja'], ['leite-semidesnatado', 'leite-em-po-integral', 'leite-em-po-desnatado', 'leite-achocolatado']],
+  iogurte: [['iogurte-natural'], ['iogurte-natural-desnatado', 'iogurte-de-morango', 'bebida-lactea', 'leite-fermentado']],
+  whey: [[], ['whey-protein']],
+  manteiga: [['manteiga-com-sal'], ['margarina-com-sal']],
+  coco: [['coco-cru'], []],
+  semente: [['chia'], ['linhaca', 'gergelim']],
+  mel: [['mel'], []],
+  castanha: [['castanha-de-caju', 'castanha-do-para', 'nozes', 'amendoa', 'amendoim-torrado-salgado'], ['amendoim-cru', 'pacoca', 'pe-de-moleque', 'chocolate-amargo-70']],
+  fruta: [POOL.fruta, semRepetir(POOL.fruta, POOL_CASA.fruta)],
+  // almoço e jantar
+  arroz: [['arroz-branco-cozido', 'arroz-integral-cozido', 'quinoa-cozida'], []],
+  massa: [['macarrao-cozido'], ['lasanha-massa-cozida', 'nhoque-de-batata-cozido', 'macarrao-instantaneo']],
+  raiz: [['batata-inglesa-cozida', 'mandioca-cozida', 'batata-doce-cozida', 'inhame-cozido'], ['batata-inglesa-assada', 'mandioquinha-cozida', 'cara-cozido', 'polenta-cozida', 'pinhao-cozido', 'batata-saute', 'batata-inglesa-frita', 'mandioca-frita', 'milho-verde-espiga', 'banana-da-terra']],
+  pronto: [[], ['baiao-de-dois', 'feijao-tropeiro', 'feijoada', 'macarrao-a-bolonhesa']],
+  feijao: [POOL.legum, ['ervilha-enlatada', 'ervilha-fresca', 'feijao-fradinho-cozido', 'feijao-roxo-cozido', 'feijao-jalo-cozido']],
+  carne: [POOL.prot, semRepetir(POOL.prot, POOL_CASA.prot)],
+  // sem carne e sem soja (alergia), a proteína do prato é a leguminosa
+  leg_prot: [['grao-de-bico-cozido', 'lentilha-cozida'], ['feijao-fradinho-cozido', 'ervilha-fresca']],
+  reforco: [['ovo-cozido'], ['ovo-frito']],
+  reforco_veg: [['soja-cozida', 'proteina-de-soja-preparada', 'grao-de-bico-cozido'], ['tofu', 'proteina-de-soja-texturizada']],
+  salada: [POOL.salada, semRepetir(POOL.salada, CRUS)],
+  legume: [POOL.legume, semRepetir(POOL.legume, POOL_CASA.legume)],
+  farinha: [['farinha-de-mandioca-torrada'], []],
+  // (em casa, o macarrão também acompanha o arroz e feijão, como no prato feito)
+  guarnicao: [['batata-inglesa-cozida', 'mandioca-cozida'], ['batata-inglesa-frita', 'mandioca-frita', 'batata-saute', 'macarrao-cozido']],
+  // sucos naturais sem açúcar (POF 2008-2009 e TACO — data/foods.js)
+  suco: [['suco-de-laranja-natural', 'suco-de-abacaxi', 'suco-de-maracuja', 'suco-de-acerola', 'suco-de-caju', 'suco-de-goiaba', 'suco-de-manga', 'suco-de-tangerina', 'suco-de-melao', 'suco-de-mamao', 'suco-de-morango'], ['suco-de-uva-integral']],
+  // a bebida do café da manhã: café com leite (ou leite, ou bebida de soja)
+  bebida_cafe: [['cafe-com-leite', 'leite-integral', 'leite-desnatado', 'leite-de-soja'], ['leite-semidesnatado', 'leite-em-po-integral', 'leite-em-po-desnatado', 'leite-achocolatado']],
+};
+// sobremesa: fruta (ou abacate)
+// (a banana-da-terra, em casa, é acompanhamento do prato, não sobremesa)
+PAPEIS.sobremesa = [[...POOL.fruta, 'abacate'], PAPEIS.fruta[1].filter((id) => id !== 'banana-da-terra')];
+// os alimentos que o cardápio "em casa" sabe usar (os demais — açúcar, refrigerante, doces, molhos — podem ser marcados, mas não entram)
+export const USADOS_EM_CASA = new Set([...Object.values(PAPEIS).flat(2), ...POOL_CASA.gordura].filter((id) => FOOD.has(id) && !FOOD.get(id).soDiario));
+const SO_SEM_CARNE = new Set(['reforco_veg', 'leg_prot']);
+const COM_PASTA = new Set([...PAPEIS.pao[0], ...PAPEIS.pao[1], 'tapioca-pronta', 'aveia-em-flocos', 'granola']);
+// Uma bebida por refeição (café com leite, leite ou suco); com suco, uma fruta só — sem suco, até duas. Pasta de amendoim
+// só com pão, biscoito, tapioca ou aveia. `s` é um complemento desligado da refeição `r`: pode entrar?
+const eBebida = (id) => FOOD.get(id).cat === 'bebidas' || /^leite-|^cafe-com-leite/.test(id);
+function complementoCabe(r, s) {
+  const on = r.slots.filter((x) => x.on);
+  const temBebida = on.some((x) => eBebida(x.id));
+  const temSuco = on.some((x) => x.papel === 'suco');
+  const frutas = on.filter((x) => FOOD.get(x.id).papel === 'fruta').length;
+  // (com suco, uma fruta só, de uma unidade: "2 bananas e suco", não)
+  const frutaGrande = on.some((x) => FOOD.get(x.id).papel === 'fruta' && MEDIDAS[x.id] && x.g > MEDIDAS[x.id][0] + 1);
+  if ((s.papel === 'suco' || s.k === 'bebida') && (temBebida || (s.papel === 'suco' && (frutas >= 2 || (r.tipo === 'cafe' && frutaGrande))))) return false;
+  if (s.papel === 'fruta' && s.k === 'extra' && (temSuco || frutas >= 2)) return false;
+  if (s.papel === 'pasta' && !on.some((x) => x.k === 'base' && COM_PASTA.has(x.id))) return false;
+  return true;
+}
+// proteínas que combinam com macarrão e com cuscuz no prato
+const MASSA_PROT = new Set(['carne-moida-cozida', 'peito-de-frango-grelhado', 'peito-de-frango-cozido', 'sobrecoxa-de-frango-assada-sem-pele', 'sardinha-assada', 'atum-em-conserva', 'sardinha-em-conserva', 'almondegas-fritas', 'ovo-cozido', 'tofu', 'soja-cozida', 'proteina-de-soja-texturizada', 'proteina-de-soja-preparada', 'grao-de-bico-cozido', 'lentilha-cozida']);
+const CUSCUZ_PROT = new Set(['ovo-cozido', 'ovo-frito', 'peito-de-frango-grelhado', 'peito-de-frango-cozido', 'carne-moida-cozida', 'sobrecoxa-de-frango-assada-sem-pele', 'carne-seca-cozida', 'charque-cozido', 'sardinha-assada', 'tofu', 'soja-cozida', 'proteina-de-soja-texturizada', 'proteina-de-soja-preparada', 'grao-de-bico-cozido', 'lentilha-cozida']);
+// fruta: 'sim' (padrão, entra sempre), 'req' (o modelo não existe sem ela), 'opc' (só se faltar energia), 'nao'.
+// reserva: só quando nenhum outro modelo cabe nas restrições (ou na lista de casa, com `casa`); protOpc: proteína opcional.
+const MODELOS = {
+  cafe: [
+    { id: 'pao-ovo', base: ['pao'], prot: ['ovo'], prot2: ['queijo'], bebida: ['bebida_cafe'], extra: ['manteiga', 'suco', 'fruta'] },
+    { id: 'tapioca', base: ['tapioca'], prot: ['ovo', 'queijo_quente', 'tofu', 'pasta'], prot2: ['queijo_quente', 'ovo'], bebida: ['bebida_cafe'], extra: ['manteiga', 'coco', 'fruta', 'suco'] },
+    { id: 'pao-queijo', base: ['pao'], prot: ['queijo', 'frios'], prot2: ['ovo'], bebida: ['bebida_cafe'], extra: ['manteiga', 'suco', 'fruta'] },
+    { id: 'cuscuz', base: ['cuscuz'], prot: ['ovo', 'queijo_quente', 'tofu'], prot2: ['queijo_quente', 'ovo'], bebida: ['bebida_cafe'], extra: ['manteiga', 'coco', 'suco', 'fruta'] },
+    { id: 'mingau', base: ['cereal'], prot: ['iogurte', 'leite'], extra: ['pasta', 'semente', 'mel', 'fruta'] },
+    { id: 'pao-pasta', base: ['pao'], prot: ['pasta'], bebida: ['bebida_cafe'], extra: ['suco', 'fruta'] },
+    { id: 'raiz', base: ['raiz_cafe'], prot: ['ovo', 'queijo_quente'], prot2: ['queijo_quente', 'ovo'], bebida: ['bebida_cafe'], extra: ['manteiga', 'suco', 'fruta'] },
+    { id: 'pao-tofu', base: ['pao'], prot: ['tofu'], bebida: ['bebida_cafe'], extra: ['suco', 'fruta'] },
+    { id: 'quitanda', base: ['quitanda'], prot: ['leite', 'iogurte'], extra: ['suco', 'fruta'] },
+    { id: 'casa', reserva: true, casa: true, base: ['pao', 'tapioca', 'cuscuz', 'cereal', 'raiz_cafe', 'quitanda'], prot: ['ovo', 'queijo', 'frios', 'tofu', 'iogurte', 'whey'], protOpc: true, bebida: ['bebida_cafe'], extra: ['manteiga', 'coco', 'semente', 'mel'] },
+    { id: 'simples', reserva: true, base: ['tapioca', 'cuscuz', 'pao', 'raiz_cafe', 'cereal'], bebida: ['bebida_cafe'], extra: ['coco', 'manteiga', 'semente'] },
+  ],
+  lanche: [
+    { id: 'fruta-iogurte', fruta: 'req', prot: ['iogurte'], extra: ['cereal', 'semente'] },
+    { id: 'pao-queijo', base: ['pao'], prot: ['queijo', 'frios'], fruta: 'opc' },
+    { id: 'fruta-castanha', fruta: 'req', prot: ['castanha'] },
+    { id: 'vitamina', fruta: 'req', prot: ['leite'], extra: ['cereal'] },
+    { id: 'tapioca', base: ['tapioca'], prot: ['ovo', 'queijo_quente', 'tofu'], fruta: 'opc' },
+    { id: 'pao-pasta', base: ['pao'], prot: ['pasta'], fruta: 'opc' },
+    { id: 'casa', reserva: true, casa: true, prot: ['iogurte', 'leite', 'queijo', 'frios', 'ovo', 'whey', 'castanha'], protOpc: true, extra: ['cereal', 'semente', 'castanha'] },
+    { id: 'fruta', reserva: true, fruta: 'req', extra: ['semente', 'coco', 'cereal'] },
+  ],
+  ceia: [
+    { id: 'iogurte', prot: ['iogurte'], fruta: 'opc' },
+    { id: 'leite', prot: ['leite'], extra: ['cereal'], fruta: 'nao' },
+    { id: 'castanha', fruta: 'req', prot: ['castanha'] },
+    { id: 'casa', reserva: true, casa: true, prot: ['iogurte', 'leite', 'queijo', 'ovo', 'whey', 'castanha'], protOpc: true },
+    { id: 'fruta', reserva: true, fruta: 'req', extra: ['semente', 'cereal'] },
+  ],
+  principal: [
+    { id: 'arroz-feijao', base: ['arroz'], leg: ['feijao'], prot: ['carne'], prot2: ['reforco', 'reforco_veg'], extra: ['sobremesa', 'farinha', 'suco', 'guarnicao'] },
+    { id: 'macarrao', base: ['massa'], prot: ['carne'], so: MASSA_PROT, extra: ['sobremesa', 'suco'] },
+    { id: 'raiz', base: ['raiz'], prot: ['carne'], prot2: ['reforco', 'reforco_veg'], extra: ['feijao', 'sobremesa', 'suco'] },
+    { id: 'cuscuz', base: ['cuscuz'], prot: ['carne'], so: CUSCUZ_PROT, prot2: ['reforco', 'reforco_veg'], extra: ['sobremesa', 'suco'] },
+    // prato pronto (feijoada, baião de dois, feijão-tropeiro, macarrão à bolonhesa): já tem a carne ou o queijo
+    { id: 'pronto', reserva: true, casa: true, base: ['pronto'], protOpc: true, extra: ['sobremesa'] },
+    { id: 'casa', reserva: true, casa: true, base: ['arroz', 'massa', 'raiz', 'cuscuz'], leg: ['feijao'], prot: ['carne', 'leg_prot'], protOpc: true, extra: ['sobremesa'] },
+  ],
+};
+// almoço: quase sempre arroz e feijão; jantar: varia mais (cuscuz, macarrão, batata com carne)
+// (as duas listas usam a mesma semente e nunca repetem, na mesma posição, um prato que não seja arroz e feijão)
+const ORDEM_PRATO = { Almoço: ['arroz-feijao', 'arroz-feijao', 'macarrao', 'arroz-feijao', 'raiz', 'arroz-feijao'], Jantar: ['cuscuz', 'raiz', 'arroz-feijao', 'macarrao', 'arroz-feijao', 'raiz'] };
+
+// Gramas mínimo, máximo e passo de cada alimento na refeição. Nenhum passa de 3 porções caseiras.
+// Café da manhã, lanches e ceia: no máximo 2 pães, 3 ovos, 2 fatias de queijo branco (3 de muçarela), 1 copo e meio de leite.
+const LIM_PEQUENA = {
+  'pao-frances': [50, 100, 25], 'pao-de-forma-integral': [50, 100, 25], 'pao-de-forma': [50, 100, 25], torrada: [30, 60, 15], 'biscoito-cream-cracker': [30, 60, 15], 'biscoito-maisena': [30, 60, 15], 'biscoito-de-polvilho': [30, 60, 15],
+  'tapioca-pronta': [50, 100, 10], 'cuscuz-de-milho-cozido': [100, 250, 10], 'aveia-em-flocos': [20, 60, 10], granola: [20, 60, 10], 'cereal-matinal-de-milho': [20, 60, 10],
+  'mandioca-cozida': [100, 200, 10], 'batata-doce-cozida': [100, 200, 10], 'inhame-cozido': [100, 200, 10], 'cara-cozido': [100, 200, 10], 'banana-da-terra': [100, 200, 50], 'milho-verde-espiga': [100, 200, 100],
+  'pao-de-queijo-assado': [40, 120, 40], 'bolo-de-milho': [60, 120, 30], 'bolo-de-chocolate': [60, 120, 30], pamonha: [150, 150, 150], 'canjica-com-leite': [150, 300, 50], 'biscoito-recheado': [30, 60, 15],
+  'ovo-cozido': [50, 150, 50], 'ovo-frito': [50, 100, 50], 'omelete-de-queijo': [65, 130, 65], 'clara-de-ovo-cozida': [35, 105, 35], 'ovo-de-codorna': [25, 100, 25],
+  'queijo-minas-frescal': [30, 60, 30], 'queijo-mucarela': [15, 45, 15], 'queijo-prato': [15, 45, 15], 'queijo-minas-meia-cura': [30, 60, 30], ricota: [50, 100, 25], 'queijo-cottage': [50, 100, 25], 'requeijao-cremoso': [15, 30, 15],
+  'presunto-cozido': [15, 45, 15], 'peito-de-peru-defumado': [15, 45, 15], mortadela: [15, 30, 15], salame: [15, 30, 15],
+  tofu: [60, 150, 10], 'pasta-de-amendoim': [15, 30, 15],
+  'cafe-com-leite': [150, 300, 50], 'leite-integral': [150, 300, 50], 'leite-semidesnatado': [150, 300, 50], 'leite-desnatado': [150, 300, 50], 'leite-de-soja': [150, 300, 50], 'leite-achocolatado': [200, 200, 200], 'leite-em-po-integral': [20, 40, 10], 'leite-em-po-desnatado': [20, 40, 10],
+  'iogurte-natural': [170, 340, 170], 'iogurte-natural-desnatado': [170, 340, 170], 'iogurte-de-morango': [170, 170, 170], 'bebida-lactea': [200, 200, 200], 'leite-fermentado': [80, 80, 80],
+  'whey-protein': [15, 30, 15], 'manteiga-com-sal': [5, 15, 5], 'margarina-com-sal': [5, 15, 5], 'suco-de-laranja-natural': [200, 300, 100], 'coco-cru': [15, 30, 15], chia: [12, 12, 12], linhaca: [10, 20, 10], gergelim: [10, 10, 10], mel: [10, 20, 5],
+  'castanha-de-caju': [15, 40, 5], 'castanha-do-para': [8, 16, 4], nozes: [10, 30, 5], amendoa: [10, 30, 5], 'amendoim-torrado-salgado': [15, 45, 15], 'amendoim-cru': [15, 45, 15], pacoca: [20, 40, 20], 'pe-de-moleque': [20, 40, 20], 'chocolate-amargo-70': [10, 25, 5],
+};
+// Almoço e jantar: até 300 g de arroz, 2 conchas de feijão, 220 g de carne, 1 colher de sopa de óleo.
+const LIM_PRATO = {
+  'arroz-branco-cozido': [60, 300, 20], 'arroz-integral-cozido': [60, 300, 20], 'quinoa-cozida': [60, 250, 10], 'macarrao-cozido': [80, 330, 10],
+  'batata-inglesa-cozida': [100, 350, 10], 'mandioca-cozida': [80, 250, 10], 'batata-doce-cozida': [100, 300, 10], 'inhame-cozido': [80, 250, 10], 'cuscuz-de-milho-cozido': [100, 300, 10],
+  'feijao-carioca-cozido': [50, 200, 10], 'feijao-preto-cozido': [50, 200, 10], 'lentilha-cozida': [50, 200, 10], 'grao-de-bico-cozido': [50, 200, 10],
+  'ovo-cozido': [50, 150, 50], 'ovo-frito': [50, 100, 50], tofu: [80, 250, 10], 'soja-cozida': [80, 250, 10], 'proteina-de-soja-texturizada': [25, 75, 5],
+  'farinha-de-mandioca-torrada': [15, 60, 15], 'suco-de-laranja-natural': [200, 400, 100], 'suco-de-uva-integral': [200, 200, 200], abacate: [90, 180, 45],
+};
+const OLEO_PRATO = new Set(POOL_CASA.gordura);
+// Porções do cardápio, em medidas caseiras (o peso de cada medida vem da tabela do IBGE — data/foods.js, MEDIDAS):
+// [mínimo, máximo, passo], em número de medidas, por refeição. Carne, frango e peixe: de 1 a 2 bifes ou filés; feijão,
+// 1 a 2 conchas; arroz, 2 a 6 colheres de servir; farinha, 1 a 2 colheres de sopa; iogurte, 1 pote; suco, 1 copo;
+// fruta, 1 ou 2 unidades. As quantidades andam de meia em meia medida (ovo, fatia e unidade pequena, de uma em uma).
+const PORCOES = {
+  prato: {
+    'arroz-branco-cozido': [2, 6, 1], 'arroz-integral-cozido': [2, 6, 1], 'macarrao-cozido': [1, 3, 0.5], 'batata-inglesa-cozida': [1, 2, 0.5], 'mandioca-cozida': [1, 2.5, 0.5],
+    'batata-doce-cozida': [1, 3, 0.5], 'inhame-cozido': [2, 4, 1], 'cuscuz-de-milho-cozido': [1, 2, 0.5],
+    'feijao-carioca-cozido': [1, 2, 0.5], 'feijao-preto-cozido': [1, 2, 0.5], 'lentilha-cozida': [1, 2, 0.5], 'grao-de-bico-cozido': [1, 2, 0.5], 'soja-cozida': [1, 3, 0.5], 'proteina-de-soja-preparada': [2, 4, 1],
+    'peito-de-frango-grelhado': [1, 2, 0.5], 'peito-de-frango-cozido': [1, 2, 0.5], 'patinho-grelhado': [1, 2, 0.5], 'coxao-mole-cozido': [1, 2, 0.5], 'carne-moida-cozida': [1.5, 3, 0.5],
+    'sobrecoxa-de-frango-assada-sem-pele': [2, 4, 1], 'lombo-suino-assado': [1, 2, 0.5], 'tilapia-grelhada': [1, 2, 0.5], 'merluza-assada': [1, 2, 0.5], 'sardinha-assada': [2, 4, 1], 'ovo-cozido': [2, 3, 1],
+    'farinha-de-mandioca-torrada': [1, 2, 1], 'azeite-de-oliva': [0.5, 1.5, 0.5], 'oleo-de-soja': [0.5, 1.5, 0.5], abacate: [2, 4, 1],
+    // salada e legume: uma quantidade só (não entram no ajuste das calorias)
+    'alface-crespa': [3, 3, 1], tomate: [3, 3, 1], rucula: [1, 1, 1], pepino: [2, 2, 1], 'cenoura-crua': [2, 2, 1], 'repolho-branco-cru': [3, 3, 1],
+    'brocolis-cozido': [1.5, 1.5, 1], 'abobrinha-cozida': [2, 2, 1], 'cenoura-cozida': [1.5, 1.5, 1], 'couve-refogada': [2, 2, 1], 'chuchu-cozido': [1.5, 1.5, 1], 'beterraba-cozida': [1.5, 1.5, 1],
+    'couve-flor-cozida': [1.5, 1.5, 1], 'vagem-cozida': [2, 2, 1], 'abobora-cabotia-cozida': [2, 2, 1], 'quiabo-cozido': [2, 2, 1], 'berinjela-cozida': [3, 3, 1],
+  },
+  // a guarnição do prato feito e o reforço do prato (um ovo; sem carne, soja ou grão-de-bico)
+  guarnicao: { 'batata-inglesa-cozida': [0.5, 1, 0.5], 'mandioca-cozida': [0.5, 1, 0.5] },
+  reforco: { 'ovo-cozido': [1, 2, 1], 'soja-cozida': [1, 3, 0.5], 'proteina-de-soja-preparada': [1, 2, 1], 'grao-de-bico-cozido': [1, 1.5, 0.5] },
+  pequena: {
+    'pao-frances': [1, 2, 0.5], 'pao-de-forma-integral': [2, 4, 1], 'tapioca-pronta': [1, 2, 0.5], 'aveia-em-flocos': [2, 4, 1], 'cuscuz-de-milho-cozido': [1, 2, 0.5], 'mandioca-cozida': [1, 2, 0.5],
+    'batata-doce-cozida': [1, 2, 0.5], 'inhame-cozido': [2, 3, 1], 'pao-de-queijo-assado': [2, 5, 1],
+    'ovo-cozido': [1, 3, 1], 'queijo-minas-frescal': [1, 2, 1], 'queijo-mucarela': [1, 3, 1], ricota: [1, 2, 1], 'queijo-cottage': [1, 2, 1], tofu: [1, 2, 1], 'pasta-de-amendoim': [1, 2, 1],
+    'leite-integral': [1, 1.5, 0.5], 'leite-desnatado': [1, 1.5, 0.5], 'leite-de-soja': [1, 1.5, 0.5], 'cafe-com-leite': [1, 2, 1], 'iogurte-natural': [1, 1, 1],
+    'manteiga-com-sal': [1, 2, 1], 'coco-cru': [0.5, 1, 0.5], chia: [1, 1, 1], mel: [1, 1, 1],
+    'castanha-de-caju': [0.5, 1, 0.5], 'castanha-do-para': [2, 4, 1], nozes: [2, 6, 1], amendoa: [10, 20, 5], 'amendoim-torrado-salgado': [1, 2, 1],
+  },
+};
+// fruta: 1 ou 2 unidades (ou fatias); as grandes (laranja, mamão, melancia, goiaba), 1 a 1,5; morango, de 6 a 10; uva,
+// meio cacho a 1
+const PORCAO_FRUTA = { morango: [6, 10, 2], 'uva-italia': [0.5, 1, 0.5], abacate: [2, 4, 1] };
+// o alimento tem medida e porção definidas para este tipo de refeição?
+const temPorcao = (id, tipo) => !!MEDIDAS[id] && (FOOD.get(id).papel === 'fruta' || /^suco-/.test(id) || !!(tipo === 'principal' ? PORCOES.prato[id] || PORCOES.guarnicao[id] || PORCOES.reforco[id] : PORCOES.pequena[id]));
+// em gramas: [mínimo, máximo, passo] das porções acima, ou null se o alimento não tem medida da tabela
+export function porcaoMedida(id, tipo, papel) {
+  const m = MEDIDAS[id];
+  if (!m) return null;
+  const f = FOOD.get(id);
+  let n = null;
+  if (f.cat === 'bebidas' && id.startsWith('suco-')) n = [1, 1, 1];
+  else if (papel === 'guarnicao') n = PORCOES.guarnicao[id];
+  else if (papel === 'reforco') n = PORCOES.reforco[id];
+  else if (f.papel === 'fruta' || (id === 'abacate' && papel === 'sobremesa')) n = PORCAO_FRUTA[id] || (m[0] >= 170 ? [1, 1.5, 0.5] : [1, 2, 1]);
+  if (!n) n = (tipo === 'principal' ? PORCOES.prato[id] || PORCOES.guarnicao[id] || PORCOES.reforco[id] : PORCOES.pequena[id]);
+  return n ? [n[0] * m[0], n[1] * m[0], n[2] * m[0]] : null;
+}
+// limite de um alimento num lugar da refeição: [mínimo, máximo, passo]
+function limite(id, tipo, papel) {
+  const medido = porcaoMedida(id, tipo, papel);
+  if (medido) return medido;
+  const f = FOOD.get(id), pg = f.porcao.g;
+  if (f.papel === 'fruta') {
+    // fruta: de meia porção a uma porção e meia, sem passar de 10 unidades na medida caseira
+    const unidades = Number((/^(\d+)/.exec(f.porcao.desc) || [0, 1])[1]) || 1;
+    const meia = Math.max(5, Math.round(pg / 2 / 5) * 5);
+    return [meia, Math.max(pg, Math.floor((pg * Math.max(1, Math.min(1.5, 10 / unidades))) / 5) * 5), Math.max(5, pg - meia)];
   }
-  return { nome, tipo, itens, kcal: soma(itens, 'kcal'), p: soma(itens, 'p'), c: soma(itens, 'c'), g: soma(itens, 'gd'), fibra: soma(itens, 'fibra') };
+  // suco natural: 1 copo; no almoço e no jantar, até 2
+  if (f.cat === 'bebidas' && id.startsWith('suco-')) return tipo === 'principal' ? [200, 400, 100] : [200, 300, 100];
+  if (tipo !== 'principal') { if (LIM_PEQUENA[id]) return LIM_PEQUENA[id]; }
+  else {
+    if (papel === 'salada') return [pg, pg, pg];
+    if (papel === 'legume') return [pg, pg * 2, 10];
+    if (OLEO_PRATO.has(id)) return [5, 13, 4];
+    if (papel === 'guarnicao') return [60, Math.min(250, pg * 3), 10];
+    if (LIM_PRATO[id]) return LIM_PRATO[id];
+  }
+  const st = pg <= 30 ? 5 : 10;
+  const teto = f.papel === 'gordura' ? 60 : f.papel === 'proteina' ? (tipo === 'principal' ? 220 : 150) : /leite|iogurte|bebida/.test(id + f.cat) ? 400 : 350;
+  // (carne, frango e peixe no prato: de 40% da porção — um bife pequeno, para metas baixas de proteína — a 220 g)
+  const mn = Math.max(st, Math.ceil((pg * (f.papel === 'proteina' && tipo === 'principal' ? 0.4 : 0.5)) / st) * st);
+  return [mn, Math.max(mn, Math.floor(Math.min(pg * 3, teto) / st) * st), st];
+}
+// grama mais perto de `g` na grade do limite
+const encaixa = (g, [mn, mx, st]) => Math.min(mx, Math.max(mn, mn + Math.round((g - mn) / st) * st));
+
+// alimentos de um lugar (papéis), respeitando restrições, alergias, a lista de casa e a preferência de preço
+function opcoes(papeis, ctx, tipo) {
+  // (guardado por cardápio: o ajuste do dia pergunta a mesma coisa muitas vezes)
+  const chave = papeis.join() + '|' + tipo;
+  const cache = ctx.opcoes || (ctx.opcoes = new Map());
+  if (!cache.has(chave)) cache.set(chave, calcularOpcoes(papeis, ctx, tipo));
+  return cache.get(chave);
+}
+function calcularOpcoes(papeis, ctx, tipo) {
+  const prato = tipo === 'principal';
+  let ids = [...new Set(papeis.filter((p) => !SO_SEM_CARNE.has(p) || ctx.semCarne).flatMap((p) => (ctx.casa ? [...PAPEIS[p][0], ...PAPEIS[p][1]] : PAPEIS[p][0])))].filter(ctx.pode);
+  // soja (tofu, bebida de soja...) entra para quem não come carne; fora do prato, também sem lactose ou com alergia ao leite
+  if (!ctx.casa) ids = ids.filter((id) => !SO_VEG.has(id) || (prato ? ctx.semCarne : ctx.sojaLeve));
+  // no cardápio de sempre, só alimentos com medida caseira de referência (data/foods.js, MEDIDAS)
+  if (!ctx.casa) ids = ids.filter((id) => temPorcao(id, tipo));
+  // em casa: havendo opção, os ultraprocessados ficam de fora (Guia Alimentar — ref guia2014)
+  if (ctx.casa) { const mp = ids.filter((id) => FOOD.get(id).nova < 4); if (mp.length) ids = mp; }
+  // "mais baratos": nada da faixa cara; dos que sobram, os da menor faixa (ou da seguinte, se houver só um)
+  if (ctx.barato) ids = economicos(ids.filter((id) => faixa(id) <= 2), 2);
+  return ids;
+}
+function protDoModelo(m, ctx, tipo) {
+  let c = opcoes(m.prot, ctx, tipo);
+  if (m.so) c = c.filter((id) => m.so.has(id));
+  if (!c.length && tipo === 'principal' && ctx.semCarne) c = opcoes(['leg_prot'], ctx, tipo);
+  // proteína do prato: a que, na porção máxima, dá pelo menos 10 g (2 fatias de tofu, não)
+  if (tipo === 'principal') c = c.filter((id) => (FOOD.get(id).p * limite(id, tipo)[1]) / 100 >= 10);
+  return c;
+}
+function viavel(m, tipo, ctx) {
+  if (m.casa && !ctx.casa) return false;
+  const tem = (p) => opcoes(p, ctx, tipo).length > 0;
+  if (m.base && !tem(m.base) && !m.protOpc) return false;
+  if (m.prot && !m.protOpc && !protDoModelo(m, ctx, tipo).length) return false;
+  if (m.leg && !ctx.casa && !tem(m.leg)) return false;
+  if (m.fruta === 'req' && !tem(['fruta'])) return false;
+  // modelos de reserva: pelo menos um lugar com alimento
+  return !m.reserva || [m.base, m.prot, m.leg, m.fruta === 'nao' ? null : ['fruta']].some((p) => p && tem(p));
+}
+// os modelos possíveis, a partir do sorteado pela semente (e depois os de reserva)
+function modelosEmOrdem(tipo, nome, ctx, escolha) {
+  const todos = MODELOS[tipo];
+  const ordem = tipo === 'principal' ? (ORDEM_PRATO[nome] || ORDEM_PRATO['Almoço']).map((id) => todos.find((m) => m.id === id)) : todos.filter((m) => !m.reserva);
+  const n = ordem.length, out = [];
+  for (let k = 0; k < n; k++) { const m = ordem[(((escolha + k) % n) + n) % n]; if (!out.includes(m) && viavel(m, tipo, ctx)) out.push(m); }
+  return [...out, ...todos.filter((m) => m.reserva && viavel(m, tipo, ctx))];
+}
+// Energia que a refeição comporta com tudo no máximo (complementos incluídos): o modelo sorteado só fica se der conta
+// da sua parte da meta; senão, vale o próximo (com meta alta, o prato feito de arroz e feijão, que aceita farofa e batata).
+// (a proteína fica no tamanho calculado para a refeição: crescer a carne só para ganhar energia passaria da meta)
+function capacidade(r, ctx) {
+  let k = 0;
+  for (const s of r.slots) {
+    if (s.on) k += (FOOD.get(s.id).kcal * (s.k === 'prot' ? s.g : s.lim[1])) / 100;
+    else if (s.opc && s.k !== 'prot2') k += Math.max(0, ...opcoes(s.papeis, ctx, r.tipo).slice(0, 4).map((id) => (FOOD.get(id).kcal * limite(id, r.tipo, s.papel)[1]) / 100));
+  }
+  return k;
+}
+// Monta uma refeição a partir do modelo sorteado pela semente. Os lugares fixos já entram com uma porção; a proteína e
+// a base são calculadas para a parte da meta que cabe nesta refeição; os complementos ficam desligados (o ajuste do dia
+// liga os que precisar). Cada lugar só entra se houver alimento para ele (com a lista de casa, um grupo pode faltar), e
+// nenhum alimento aparece mais de 2 vezes no dia: se faltar alimento para um lugar obrigatório, vale o próximo modelo.
+function refeicao(tipo, nome, kcalAlvo, pAlvo, ctx, seed, escolha, usados, rico) {
+  let melhor = null;
+  for (const m of modelosEmOrdem(tipo, nome, ctx, escolha)) {
+    const us = new Map(usados);
+    const r = montarModelo(m, tipo, nome, kcalAlvo, pAlvo, ctx, seed, us, rico);
+    if (!r) continue;
+    // proteína que a refeição comporta (fontes de proteína no máximo e o reforço do modelo)
+    const capP = r.slots.reduce((t, s) => t + (s.on && LUGAR_PROT.has(s.k) ? (FOOD.get(s.id).p * s.lim[1]) / 100 : 0), 0)
+      + (r.slots.some((s) => s.k === 'prot2') ? Math.max(0, ...opcoes(r.slots.find((s) => s.k === 'prot2').papeis, ctx, tipo).map((id) => (FOOD.get(id).p * limite(id, tipo)[1]) / 100)) : 0);
+    const cap = Math.min(capacidade(r, ctx) / kcalAlvo, capP / Math.max(1, pAlvo));
+    // alimentos que já estão em outra refeição do dia (o azeite do prato não conta)
+    const rep = r.slots.filter((s) => s.on && s.k !== 'oleo' && usados.has(s.id)).length;
+    // fica o primeiro que dá conta da meta sem repetir alimento; senão, o que dá conta com menos repetição; senão, o maior
+    // (o café e os lanches podem ficar um pouco abaixo: almoço e jantar completam)
+    const basta = tipo === 'principal' ? 1.15 : 0.85;
+    // refeição pequena (lanche de 150 kcal): o modelo que, no mínimo, já passa muito da parte da meta fica para depois
+    // (os complementos, como a bebida do café, podem sair: não contam no mínimo)
+    const minimo = r.slots.reduce((t, s) => t + (s.on && !s.opc ? (FOOD.get(s.id).kcal * s.lim[0]) / 100 : 0), 0);
+    // (no prato, dar conta da meta pesa mais; no café e nos lanches, não repetir alimento)
+    const nota = tipo === 'principal' ? (cap >= basta ? 100 : cap * 50) - rep * 5 : (cap >= basta ? 30 : cap * 30) - rep * 10 - (minimo > kcalAlvo * 1.25 ? 50 : 0);
+    if (!melhor || nota > melhor.nota) melhor = { r, us, nota };
+    if (cap >= basta && !rep && minimo <= kcalAlvo * 1.25) break;
+  }
+  if (!melhor) return { nome, tipo, slots: [], alvo: kcalAlvo, seed };
+  usados.clear();
+  for (const [k, v] of melhor.us) usados.set(k, v);
+  return melhor.r;
+}
+function montarModelo(m, tipo, nome, kcalAlvo, pAlvo, ctx, seed, usados, rico) {
+  const r = { nome, tipo, slots: [], alvo: kcalAlvo, seed };
+  const dentro = (id) => r.slots.some((s) => s.id === id);
+  const lugar = (k, papeis, id, g, extra = {}) => {
+    const s = { k, papeis, id: id || null, g: 0, lim: null, on: !!id, opc: false, ...extra };
+    if (id) {
+      s.lim = limite(id, tipo, extra.papel);
+      s.g = encaixa(g, s.lim);
+    }
+    r.slots.push(s);
+    return s;
+  };
+  const livre = (id) => !dentro(id) && (usados.get(id) || 0) < 2;
+  const escolhe = (lista, sd) => pick(lista.filter(livre), sd, usados);
+  const kOf = () => r.slots.reduce((t, s) => t + (s.on ? (FOOD.get(s.id).kcal * s.g) / 100 : 0), 0);
+  const pOf = () => r.slots.reduce((t, s) => t + (s.on ? (FOOD.get(s.id).p * s.g) / 100 : 0), 0);
+  const porcaoDe = (id) => FOOD.get(id).porcao.g;
+  // proteína: só as mais concentradas quando a meta de proteína é alta
+  const fontes = (lista) => (rico && lista.length > 2 ? concentradas(lista) : lista);
+  let base = null, prot = null;
+  if (tipo === 'principal') {
+    // prato grande (mais de 900 kcal): a base que comporta mais energia (arroz, e não quinoa)
+    const bases = m.base ? opcoes(m.base, ctx, tipo) : [];
+    const cabeMais = (id) => (FOOD.get(id).kcal * limite(id, tipo)[1]) / 100;
+    const topo = kcalAlvo > 900 && bases.length ? bases.filter(livre).filter((id, _, l) => cabeMais(id) >= Math.max(...l.map(cabeMais)) * 0.9) : [];
+    const bid = m.base ? escolhe(topo.length ? topo : bases, seed + 1) : null;
+    base = lugar('base', m.base, bid, bid ? porcaoDe(bid) : 0);
+    const lid = m.leg ? escolhe(opcoes(m.leg, ctx, tipo), seed) : null;
+    if (m.leg) lugar('leg', m.leg, lid, ctx.semCarne ? 150 : 100);
+    const todas = m.prot ? protDoModelo(m, ctx, tipo).filter(livre) : [];
+    const falta = Math.max(8, pAlvo - pOf() - 4);
+    // dá conta da proteína desta refeição na porção máxima e não passa muito dela na mínima (meta baixa de proteína: o ovo
+    // ou o frango, e não o lombo, que já começa em 34 g)
+    const pMin = (id) => (FOOD.get(id).p * limite(id, tipo)[0]) / 100;
+    const capaz0 = todas.filter((id) => (FOOD.get(id).p * limite(id, tipo)[1]) / 100 >= falta * 0.8);
+    const justos = ctx.protBaixa ? capaz0.filter((id) => pMin(id) <= Math.max(falta * 1.3, 12)) : [];
+    const capaz = justos.length ? justos : capaz0;
+    // sem carne e com meta alta de proteína, a fonte mais concentrada (proteína de soja) pode vir no almoço e no jantar
+    const lista = fontes(capaz.length ? capaz : todas);
+    const pid = !m.prot ? null : rico && ctx.semCarne && lista.length ? pick([lista.slice().sort((a, b) => densidade(b) - densidade(a))[0]], 0, usados) : pick(lista, seed, usados);
+    prot = lugar('prot', m.prot, pid, pid ? (falta / FOOD.get(pid).p) * 100 : 0);
+    if (m.prot2) lugar('prot2', m.prot2, null, 0, { opc: true, papel: 'reforco' });
+    for (const e of m.extra || []) if (e === 'guarnicao' || e === 'farinha') lugar('extra', [e], null, 0, { opc: true, papel: e });
+    const sal = escolhe(opcoes(['salada'], ctx, tipo), seed);
+    lugar('salada', ['salada'], sal, sal ? porcaoDe(sal) : 0, { papel: 'salada' });
+    // (o legume não repete a verdura da salada: cenoura crua e cenoura cozida no mesmo prato, não)
+    const lg = escolhe(opcoes(['legume'], ctx, tipo).filter((id) => !sal || nomeDeCompra(FOOD.get(id).nome) !== nomeDeCompra(FOOD.get(sal).nome)), seed * 2 + 1);
+    lugar('legume', ['legume'], lg, lg ? porcaoDe(lg) * 1.5 : 0, { papel: 'legume' });
+    const ol = ctx.casa ? POOL_CASA.gordura.find(ctx.pode) || null : oleoDoPrato(ctx);
+    lugar('oleo', ['oleo'], ol, 8, { papel: 'oleo' });
+    for (const e of m.extra || []) if (e !== 'guarnicao' && e !== 'farinha') lugar('extra', [e], null, 0, { opc: true, papel: e });
+  } else {
+    // (a base gira num ritmo diferente do modelo, para o mesmo modelo não vir sempre com o mesmo pão)
+    const bid = m.base ? escolhe(opcoes(m.base, ctx, tipo), seed + Math.floor(seed / 5)) : null;
+    base = lugar('base', m.base, bid, bid ? porcaoDe(bid) : 0);
+    const pid = m.prot ? pick(fontes(protDoModelo(m, ctx, tipo).filter(livre)), seed, usados) : null;
+    prot = lugar('prot', m.prot, pid, pid ? FOOD.get(pid).porcao.g : 0);
+    if (m.prot2) lugar('prot2', m.prot2, null, 0, { opc: true });
+    for (const e of m.extra || []) lugar('extra', [e], null, 0, { opc: true, papel: e });
+    const bb = m.bebida ? escolhe(opcoes(m.bebida, ctx, tipo), seed + 2) : null;
+    // (uma bebida só: com leite ou iogurte líquido no lugar da proteína, a bebida do modelo fica de fora)
+    if (m.bebida) lugar('bebida', m.bebida, prot.on && eBebida(prot.id) ? null : bb, 200, { opc: true });
+    // fruta opcional: já entra quando a refeição é grande (lanche de mais de 300 kcal)
+    const comFruta = m.fruta !== 'nao' && (m.fruta !== 'opc' || kcalAlvo > 300);
+    const fr = comFruta ? escolhe(opcoes(['fruta'], ctx, tipo), seed * 3 + tipo.length) : null;
+    if (m.fruta !== 'nao') lugar('fruta', ['fruta'], fr, fr ? porcaoDe(fr) : 0, { papel: 'fruta', opc: m.fruta === 'opc' });
+    // proteína do tamanho da parte da meta desta refeição
+    if (prot.on) { const outros = pOf() - (FOOD.get(prot.id).p * prot.g) / 100; prot.g = encaixa(((pAlvo - outros) / Math.max(1, FOOD.get(prot.id).p)) * 100, prot.lim); }
+  }
+  // lugar obrigatório sem alimento (todos já apareceram 2 vezes no dia): este modelo não serve
+  if ((m.base && !base.on && !m.protOpc) || (m.prot && !prot.on && !m.protOpc) || (m.fruta === 'req' && !r.slots.some((s) => s.k === 'fruta' && s.on))) return null;
+  if (m.leg && !ctx.casa && !r.slots.some((s) => s.k === 'leg' && s.on)) return null;
+  if (!r.slots.some((s) => s.on)) return null;
+  // a base completa as calorias da refeição
+  if (base.on) { const outros = kOf() - (FOOD.get(base.id).kcal * base.g) / 100; base.g = encaixa(((kcalAlvo - outros) / FOOD.get(base.id).kcal) * 100, base.lim); }
+  // ainda longe da parte da meta (refeição sem base, como fruta com castanhas): a fruta e os complementos crescem
+  const cresce = (x) => encaixa(x.g + x.lim[2], x.lim) > x.g;
+  for (let k = 0; k < 30 && kOf() < kcalAlvo * 0.85; k++) {
+    const s = r.slots.find((x) => x.on && (x.k === 'fruta' || x.k === 'extra' || x.k === 'bebida') && cresce(x));
+    if (s) { s.g = encaixa(s.g + s.lim[2], s.lim); continue; }
+    const novo = r.slots.filter((x) => x.on).length < MAX_ITENS[tipo] && r.slots.find((x) => !x.on && x.opc && x.k !== 'prot2' && x.papel !== 'feijao' && complementoCabe(r, x) && opcoes(x.papeis, ctx, tipo).some(livre));
+    if (novo) { novo.id = escolhe(opcoes(novo.papeis, ctx, tipo), seed); novo.lim = limite(novo.id, tipo, novo.papel); novo.g = novo.lim[0]; novo.on = true; continue; }
+    // por último (refeição só com o iogurte ou o leite), a proteína cresce até umas 100 kcal
+    const pr = kOf() < Math.max(100, kcalAlvo * 0.5) && r.slots.find((x) => x.on && x.k === 'prot' && cresce(x));
+    if (!pr) break;
+    pr.g = encaixa(pr.g + pr.lim[2], pr.lim);
+  }
+  return r;
 }
 
-// Ajuste fino: aproxima o total do dia das metas de proteína e de calorias, sem sair das porções caseiras.
-const PROT_SET = new Set(POOL_CASA.prot);
-const CARB_SET = new Set(POOL_CASA.carbo);
-const LEGUM_SET = new Set(POOL_CASA.legum);
-const GORD_SET = new Set(POOL_CASA.gordura);
-function refaz(ref) { for (const k of ['kcal', 'p', 'c', 'fibra']) ref[k] = soma(ref.itens, k); ref.g = soma(ref.itens, 'gd'); }
-function equilibrar(refs, res, usados, ctx) {
-  const rest = ctx.rest;
-  const principais = refs.filter((r) => r.tipo === 'principal');
-  if (!principais.length) return;
-  const vegano = rest.includes('vegano');
-  const veg = vegano || rest.includes('vegetariano');
-  const noDia = (id) => refs.reduce((n, r) => n + (r.itens.some((x) => x.id === id) ? 1 : 0), 0);
-  // meta alta (mais de 900 kcal por refeição, em média): cada refeição aceita 2 itens a mais e os complementos crescem
-  const alta = res.kcal / refs.length > 900;
-  const cheia = (r) => r.itens.length >= MAX_ITENS[r.tipo] + (alta ? 2 : 0);
-  // um alimento novo só entra se respeitar as restrições, não estiver na refeição e não aparecer mais de 2 vezes no dia
-  const cabe = (r, id) => ctx.pode(id) && !r.itens.some((x) => x.id === id) && noDia(id) < 2;
-  const escolhe = (r, opcoes) => opcoes.filter((id) => cabe(r, id)).sort((a, b) => noDia(a) - noDia(b))[0];
-  // com a lista de casa, os reforços e os complementos saem dela (os mais ricos em proteína primeiro)
-  const daCasa = (pools) => [...new Set(pools.flatMap((p) => servem(p, ctx)))];
-  const reforcos = ctx.casa ? daCasa(['prot', 'cafe_prot', 'legum']).sort((a, b) => densidade(b) - densidade(a))
-    : ctx.filtra(vegano ? ['proteina-de-soja-texturizada', 'soja-cozida', 'tofu', 'grao-de-bico-cozido', 'lentilha-cozida']
-      : veg ? ['ovo-cozido', 'proteina-de-soja-texturizada', 'queijo-cottage', 'soja-cozida', 'tofu']
-        : ['ovo-cozido', 'queijo-cottage', 'queijo-minas-frescal', 'ricota', 'queijo-mucarela'], 2);
-  for (let rodada = 0; rodada < 3; rodada++) {
-    const faltaP = res.prot - soma(refs, 'p');
-    if (Math.abs(faltaP) > 5) {
-      for (const r of principais) {
-        const i = r.itens.findIndex((x) => PROT_SET.has(x.id));
-        if (i < 0) continue;
-        const f = FOOD.get(r.itens[i].id);
-        const [mn, mx, st] = lim(f.id, [60, 240, 10]);
-        const g = Math.min(mx, Math.max(mn, Math.round((r.itens[i].g + ((faltaP / principais.length) / f.p) * 100) / st) * st));
-        r.itens[i] = porcao(f.id, g);
-        refaz(r);
-      }
-      // se ainda faltar proteína com a porção principal no máximo, entra um reforço (ovos, queijo, soja...)
-      const ainda = res.prot - soma(refs, 'p');
-      if (ainda > 10) {
-        for (const r of principais) {
-          if (cheia(r)) continue;
-          const extra = escolhe(r, reforcos);
-          if (!extra) continue;
-          const f = FOOD.get(extra);
-          r.itens.push(porcao(extra, ajusta(extra, ((ainda / principais.length) / f.p) * 100, [25, 200, 5])));
-          refaz(r);
+// ---------- ajuste do dia ----------
+// Montadas as refeições, o dia é levado às metas de proteína e de calorias mexendo só nas quantidades, dentro dos
+// limites de porção de cada alimento, e ligando complementos do próprio modelo quando as porções já estão no máximo (ou
+// desligando-os quando sobra). A energia vai primeiro para a refeição mais abaixo da sua parte da meta; a proteína, para
+// as fontes mais concentradas. Quem corre: o carboidrato sobe e a gordura cede, sem passar das calorias.
+const kDe = (s, k = 'kcal') => (FOOD.get(s.id)[k] * s.g) / 100;
+const somaSlots = (r, k = 'kcal') => r.slots.reduce((t, s) => t + (s.on ? kDe(s, k) : 0), 0);
+const LUGAR_PROT = new Set(['prot', 'prot2', 'leg', 'bebida']);
+const LUGAR_ENERGIA = new Set(['base', 'oleo', 'fruta', 'extra', 'leg', 'bebida']);
+const CARBO_EXTRA = new Set(['sobremesa', 'suco', 'farinha', 'guarnicao', 'fruta', 'cereal', 'mel']);
+function balancear(refs, res, ctx) {
+  const K = res.kcal, P = res.prot;
+  const alta = K / refs.length > 900;
+  const total = (k = 'kcal') => refs.reduce((t, r) => t + somaSlots(r, k), 0);
+  const noDia = (id) => refs.reduce((n, r) => n + (r.slots.some((s) => s.on && s.id === id) ? 1 : 0), 0);
+  const cheia = (r) => r.slots.reduce((n, s) => n + (s.on ? 1 : 0), 0) >= Math.min(10, MAX_ITENS[r.tipo] + (alta ? 2 : 0));
+  const dens = (s) => { const f = FOOD.get(s.id); return f.kcal ? f.p / f.kcal : 1; };
+  const fracao = (s, n) => { const f = FOOD.get(s.id); return f.kcal ? (f[n] * (n === 'g' ? 9 : 4)) / f.kcal : 0; };
+  // (no café com suco, a fruta não passa de uma unidade)
+  const comSuco = (s) => FOOD.get(s.id).papel === 'fruta' && MEDIDAS[s.id] && refs.some((r) => r.tipo === 'cafe' && r.slots.includes(s) && r.slots.some((x) => x.on && x !== s && (x.papel === 'suco' || /^suco-/.test(x.id))));
+  const passo = (s, d) => {
+    let g = encaixa(s.g + d * s.lim[2], s.lim);
+    if (d > 0 && g > s.g && comSuco(s) && g > MEDIDAS[s.id][0] + 1) g = s.g;
+    return (d > 0 ? g > s.g : g < s.g) ? g : 0;
+  };
+  const muda = (s, d) => { const g = passo(s, d); if (g) s.g = g; return !!g; };
+  // liga um complemento do modelo: o alimento que ainda não está na refeição nem aparece 2 vezes no dia (os que ainda
+  // não apareceram primeiro), começando pela porção mínima. O segundo alimento de proteína não é da mesma família
+  // do primeiro (ovo com queijo, sim; dois queijos ou tofu com soja, não).
+  const candidatos = (r, s) => {
+    if (s.on || cheia(r)) return [];
+    // lanche e ceia: um complemento só (iogurte com aveia, e não aveia e chia)
+    // (lanche grande, de mais de 400 kcal: dois)
+    if (s.k === 'extra' && (r.tipo === 'lanche' || r.tipo === 'ceia') && r.slots.filter((x) => x.on && x.k === 'extra').length >= (r.alvo > 400 ? 2 : 1)) return [];
+    // uma bebida só; com suco, uma fruta; pasta de amendoim só com pão, biscoito, tapioca ou aveia
+    if (!complementoCabe(r, s)) return [];
+    const p1 = s.k === 'prot2' ? r.slots.find((x) => x.k === 'prot' && x.on) : null;
+    const papeis = p1 && r.tipo !== 'principal' ? s.papeis.filter((p) => !PAPEIS[p][0].includes(p1.id) && !PAPEIS[p][1].includes(p1.id)) : s.papeis;
+    const c = opcoes(papeis, ctx, r.tipo).filter((id) => !r.slots.some((x) => x.on && x.id === id) && noDia(id) < 2);
+    const n0 = c.length ? ((r.seed % c.length) + c.length) % c.length : 0;
+    return c.map((_, i) => c[(n0 + i) % c.length]);
+  };
+  // `prot`: para fechar a proteína, o mais concentrado primeiro
+  const ligar = (r, s, prot = false) => {
+    const c = candidatos(r, s).sort((a, b) => (prot ? densidade(b) - densidade(a) : 0) || noDia(a) - noDia(b));
+    if (!c.length) return false;
+    s.id = c[0]; s.lim = limite(s.id, r.tipo, s.papel); s.g = s.lim[0]; s.on = true;
+    return true;
+  };
+  // entre os complementos de uma refeição, liga o que traz um alimento ainda não usado no dia
+  // (entre os empatados, gira pela semente: nem todo dia tem farofa)
+  const ligarNaRefeicao = (r, quer, semRepetir = false) => {
+    const lugares = r.slots.filter((s) => !s.on && quer(s));
+    const n0 = lugares.length ? ((r.seed % lugares.length) + lugares.length) % lugares.length : 0;
+    // (com muita energia faltando, entre os que não repetem, o que comporta mais: sobremesa e suco antes da batata)
+    const falta = K - total();
+    const cabeMais = (s, c) => Math.max(...c.map((id) => (FOOD.get(id).kcal * limite(id, r.tipo, s.papel)[1]) / 100));
+    let melhor = null, nota = Infinity;
+    for (const s of lugares.map((_, i) => lugares[(n0 + i) % lugares.length])) {
+      const c = candidatos(r, s);
+      if (!c.length) continue;
+      const n = Math.min(...c.map(noDia)) - (falta > K * 0.08 ? cabeMais(s, c) / 1000 : 0);
+      if (n < nota) { nota = n; melhor = s; }
+    }
+    nota = Math.ceil(nota);
+    return !!melhor && !(semRepetir && nota > 0) && ligar(r, melhor);
+  };
+  const desligar = (s) => { s.on = false; s.id = null; };
+  // a refeição continua com pelo menos 90 kcal se o lugar `s` passar a ter `g` gramas (0: sair)
+  // (lanche e ceia: 65 kcal, uma fruta)
+  const fica = (r, s, g) => somaSlots(r) - kDe(s) + (g ? (FOOD.get(s.id).kcal * g) / 100 : 0) >= (r.tipo === 'lanche' || r.tipo === 'ceia' ? 65 : 90);
+  const ligarUm = (tipos, quer, prot = false) => { for (const t of tipos) for (const r of refs) if (r.tipo === t) for (const s of r.slots) if (!s.on && quer(s) && ligar(r, s, prot)) return true; return false; };
+  const TIPOS = ['principal', 'cafe', 'lanche', 'ceia'];
+  const proteina = () => {
+    for (let k = 0; k < 300; k++) {
+      const p = total('p');
+      if (p < P * 0.96) {
+        let melhor = null;
+        for (const r of refs) for (const s of r.slots) if (s.on && LUGAR_PROT.has(s.k) && dens(s) >= 0.04 && passo(s, 1) && (!melhor || dens(s) > dens(melhor))) melhor = s;
+        if (melhor) { muda(melhor, 1); continue; }
+        // tudo no máximo: um reforço — no prato (ovo, ou soja e grão-de-bico sem carne), depois no café e nos lanches
+        if (ligarUm(TIPOS, (s) => s.k === 'prot2' || s.k === 'bebida' || (s.k === 'extra' && s.papel === 'feijao'), true)) continue;
+        break;
+      } else if (p > P * 1.1) {
+        // sobra proteína: cedem primeiro as fontes fora do prato, as mais concentradas antes
+        let melhor = null, chave = Infinity;
+        for (const r of refs) for (const s of r.slots) if (s.on && LUGAR_PROT.has(s.k) && passo(s, -1) && fica(r, s, passo(s, -1))) { const c = (r.tipo === 'principal' ? 10 : 0) - dens(s); if (c < chave) { chave = c; melhor = s; } }
+        if (melhor) { muda(melhor, -1); continue; }
+        const op = refs.flatMap((r) => r.slots.map((s) => [r, s])).find(([r, s]) => s.on && s.opc && (s.k === 'prot2' || s.k === 'bebida') && fica(r, s, 0));
+        if (op) { desligar(op[1]); continue; }
+        // tudo na porção mínima e a proteína ainda passa de 25% da meta (metas baixas): o lanche fica só com a fruta, e o
+        // prato de quem come carne pode ficar sem a leguminosa
+        if (p > P * 1.25) {
+          // (a fruta vai à porção máxima, para o lanche não ficar com menos de 60 kcal)
+          const frutaMax = (r) => { const fr = r.slots.find((x) => x.on && x.k === 'fruta'); return fr ? (FOOD.get(fr.id).kcal * fr.lim[1]) / 100 : 0; };
+          const lanche = refs.filter((r) => r.tipo === 'lanche' || r.tipo === 'ceia').flatMap((r) => r.slots.filter((s) => s.on && s.k === 'prot' && r.slots.some((x) => x.on && x.k === 'fruta') && (somaSlots(r) - kDe(s) >= 60 || (r.slots.filter((x) => x.on).length === 2 && frutaMax(r) >= 60))).map((s) => [r, s]))[0];
+          if (lanche) { desligar(lanche[1]); const fr = lanche[0].slots.find((x) => x.on && x.k === 'fruta'); if (somaSlots(lanche[0]) < 60) fr.g = fr.lim[1]; continue; }
+          // o lanche de pão ou tapioca com queijo ou ovo troca a proteína pela fruta do modelo (tapioca com banana)
+          const semFruta = refs.filter((r) => r.tipo === 'lanche' || r.tipo === 'ceia').map((r) => [r, r.slots.find((s) => s.on && s.k === 'prot'), r.slots.find((s) => !s.on && s.k === 'fruta' && s.opc)]).find(([, pr, fr]) => pr && fr);
+          if (semFruta && ligar(semFruta[0], semFruta[2])) { desligar(semFruta[1]); while (somaSlots(semFruta[0]) < 65 && muda(semFruta[2], 1)); continue; }
+          // (sem deixar o dia com menos de 20 g de fibras)
+          const leg = !ctx.semCarne && refs.filter((r) => r.tipo === 'principal').flatMap((r) => r.slots.filter((s) => s.on && s.k === 'leg' && r.slots.some((x) => x.on && x.k === 'prot')))[0];
+          if (leg && total('fibra') - kDe(leg, 'fibra') >= 20) { desligar(leg); continue; }
         }
-      }
-      // proteína sobrando mesmo com a porção principal no mínimo: reduz a leguminosa do prato (até meia concha) e leva
-      // as fontes de proteína das outras refeições para a porção mínima
-      if (soma(refs, 'p') > res.prot * 1.15) {
-        for (const r of principais) {
-          const i = r.itens.findIndex((x) => LEGUM_SET.has(x.id));
-          if (i < 0 || soma(refs, 'p') <= res.prot * 1.15) continue;
-          r.itens[i] = porcao(r.itens[i].id, Math.max(50, r.itens[i].g - 50));
-          refaz(r);
-        }
-        for (const r of refs) {
-          if (r.tipo === 'principal') continue;
-          for (let i = 0; i < r.itens.length && soma(refs, 'p') > res.prot * 1.15; i++) {
-            const f = FOOD.get(r.itens[i].id);
-            if ((f.p * 4) / f.kcal < 0.2) continue;
-            const mn = lim(f.id, [f.porcao.g, f.porcao.g, 10])[0];
-            if (r.itens[i].g > mn) { r.itens[i] = porcao(f.id, mn); refaz(r); }
+        break;
+      } else break;
+    }
+  };
+  const energia = (lo, hi) => {
+    for (let k = 0; k < 400; k++) {
+      const e = total();
+      if (e < K * lo) {
+        let feito = false;
+        // com a proteína já acima da meta, a energia vem de alimentos com pouca proteína (óleo, fruta, arroz, suco)
+        const leve = total('p') > P * 1.06;
+        const ordem = refs.slice().sort((a, b) => (b.alvo - somaSlots(b)) - (a.alvo - somaSlots(a))).filter((r) => somaSlots(r) <= K * 0.48);
+        // Em cada refeição, nesta ordem: a base e a leguminosa crescem juntas (a que está mais longe do máximo primeiro);
+        // depois entra um complemento do modelo (fruta de sobremesa, suco, farofa, manteiga no pão...), primeiro os que
+        // trazem um alimento ainda não usado no dia; depois os complementos crescem; o óleo, por último.
+        const enche = (s) => (s.g - s.lim[0]) / Math.max(1, s.lim[1] - s.lim[0]);
+        for (const so of leve ? [true, false] : [false]) {
+          const quer = (s) => s.opc && s.k !== 'prot2' && (!so || s.k !== 'bebida');
+          for (const r of ordem) {
+            // (na segunda volta, com a proteína até 20% acima da meta, o ovo e o queijo do café e do lanche também crescem)
+            const pOk = !so && total('p') < P * 1.2;
+            const sobe = r.slots.filter((s) => s.on && (LUGAR_ENERGIA.has(s.k) || (s.k === 'prot' && (dens(s) < 0.05 || (pOk && r.tipo !== 'principal')))) && (!so || dens(s) < 0.04) && passo(s, 1));
+            const base = sobe.filter((s) => s.k === 'base' || s.k === 'leg').sort((a, b) => enche(a) - enche(b))[0];
+            if (base) { muda(base, 1); feito = true; break; }
+            if (ligarNaRefeicao(r, quer, true)) { feito = true; break; }
+            const outro = sobe.filter((s) => s.k !== 'base' && s.k !== 'leg' && s.k !== 'oleo').sort((a, b) => dens(a) - dens(b))[0] || sobe.find((s) => s.k === 'oleo');
+            if (outro) { muda(outro, 1); feito = true; break; }
+            if (ligarNaRefeicao(r, quer, false)) { feito = true; break; }
           }
+          if (feito) break;
         }
-        // ainda sobrando: os lanches ficam só com a fruta (as calorias voltam depois com castanhas ou aveia)
-        for (const r of refs) {
-          if (r.tipo !== 'lanche' || soma(refs, 'p') <= res.prot * 1.15) continue;
-          const i = r.itens.findIndex((x) => densidade(x.id) >= 0.2);
-          if (i < 0 || r.itens.length < 2) continue;
-          const troca = r.kcal - r.itens[i].kcal >= 80 ? null : escolhe(r, servem('lanche_extra', ctx));
-          if (r.kcal - r.itens[i].kcal < 80 && !troca) continue;
-          r.itens.splice(i, 1);
-          if (troca) r.itens.push(porcao(troca, lim(troca, [15, 30, 5])[0]));
-          refaz(r);
+        if (feito) continue;
+        // tudo no máximo: a proteína do prato cresce (até 20% acima da meta, ou 15% das calorias com meta de proteína
+        // baixa) ou entra o reforço do modelo
+        if (total('p') < P * 1.12) {
+          let melhor = null;
+          for (const r of refs) if (r.tipo === 'principal') for (const s of r.slots) if (s.on && (s.k === 'prot' || s.k === 'prot2') && passo(s, 1) && (!melhor || dens(s) < dens(melhor))) melhor = s;
+          if (melhor) { muda(melhor, 1); continue; }
+          if (ligarUm(['principal'], (s) => s.k === 'prot2')) continue;
         }
-      }
-    }
-    const faltaK = res.kcal - soma(refs, 'kcal');
-    if (Math.abs(faltaK) > res.kcal * 0.04) {
-      for (const r of principais) {
-        const i = r.itens.findIndex((x) => CARB_SET.has(x.id));
-        const cada = faltaK / principais.length;
-        if (i < 0) {
-          const cb = cada > 45 && !cheia(r) ? escolhe(r, servem('carbo', ctx)) : null;
-          if (cb) { r.itens.push(porcao(cb, ajusta(cb, (cada / FOOD.get(cb).kcal) * 100, [50, 300, 10]))); refaz(r); }
-          continue;
+        break;
+      } else if (e > K * hi) {
+        let feito = false;
+        // nenhuma refeição fica com menos de 90 kcal
+        const cabe = fica;
+        for (const r of refs.slice().sort((a, b) => (somaSlots(b) - b.alvo) - (somaSlots(a) - a.alvo))) {
+          let melhor = null;
+          // (castanhas, amendoim e pasta de amendoim, mesmo no lugar da proteína, são mais energia que proteína; com a
+          // proteína abaixo da meta, feijão e leite só cedem se as calorias passarem de 6% acima)
+          const segura = total('p') < P * 0.96 && e <= K * 1.075;
+          for (const s of r.slots) if (s.on && (LUGAR_ENERGIA.has(s.k) || (s.k === 'prot' && dens(s) < 0.05)) && !(segura && dens(s) >= 0.045) && passo(s, -1) && cabe(r, s, passo(s, -1)) && (!melhor || dens(s) < dens(melhor))) melhor = s;
+          if (melhor) { muda(melhor, -1); feito = true; break; }
+          // (com a proteína abaixo da meta, o leite do café e outros complementos com proteína ficam)
+          // (passando de 8% acima nas calorias, a meta de calorias vem primeiro)
+          const pBaixa = total('p') < P && e <= K * 1.08;
+          const op = r.slots.filter((s) => s.on && s.opc && s.k !== 'prot2' && cabe(r, s, 0) && !(pBaixa && dens(s) >= 0.04)).sort((a, b) => dens(a) - dens(b))[0];
+          if (op) { desligar(op); feito = true; break; }
         }
-        const f = FOOD.get(r.itens[i].id);
-        const [mn, mx] = lim(f.id, [50, 300, 10]);
-        const g = Math.round((r.itens[i].g + (cada / f.kcal) * 100) / 10) * 10;
-        if (g < mn) r.itens.splice(i, 1); else r.itens[i] = porcao(f.id, Math.min(mx, g));
-        refaz(r);
-      }
-    }
-  }
-  // se o dia ainda passar da meta de calorias, reduz aos poucos os itens de carboidrato e gordura mais calóricos
-  const cortar = (teto) => {
-    for (let k = 0; k < 24 && soma(refs, 'kcal') > teto; k++) {
-      let alvo = null;
-      for (const r of refs) {
-        for (let i = 0; i < r.itens.length; i++) {
-          const f = FOOD.get(r.itens[i].id);
-          // só carboidratos e gorduras; quem é fonte de proteína (20% ou mais das calorias) fica
-          if (PROT_SET.has(f.id) || (f.papel !== 'carbo' && f.papel !== 'gordura') || (f.p * 4) / f.kcal >= 0.2) continue;
-          const g = Math.round((r.itens[i].g * 0.75) / 5) * 5;
-          const sai = g < f.porcao.g * 0.5;                   // menos de meia porção caseira não vale a pena: o item sairia
-          if (sai && (r.itens.length <= 2 || r.kcal - r.itens[i].kcal < 80)) continue; // não esvazia a refeição
-          if (!alvo || r.itens[i].kcal > alvo.r.itens[alvo.i].kcal) alvo = { r, i, g, sai };
+        if (feito) continue;
+        // Tudo na porção mínima e ainda acima de 5%: o lanche ou a ceia ficam só com a fruta, e o prato de quem come carne
+        // pode ficar sem a leguminosa (arroz, carne e salada) — as porções não descem abaixo do mínimo de referência.
+        if (e > K * 1.05) {
+          // (a fruta do lanche vai à porção máxima, para a refeição não ficar com menos de 60 kcal)
+          const soFruta = (r) => { const fr = r.slots.find((x) => x.on && x.k === 'fruta'); return fr ? (FOOD.get(fr.id).kcal * fr.lim[1]) / 100 : 0; };
+          const fora = refs.filter((r) => r.tipo === 'lanche' || r.tipo === 'ceia').flatMap((r) => r.slots.filter((s) => s.on && s.k === 'prot' && soFruta(r) >= 60 && r.slots.filter((x) => x.on).length === 2).map((s) => [r, s]))[0];
+          if (fora && ((!ctx.semCarne && total('p') - kDe(fora[1], 'p') >= P * 0.9) || (e > K * 1.08 && total('p') - kDe(fora[1], 'p') >= P * 0.86))) { desligar(fora[1]); const fr = fora[0].slots.find((x) => x.on && x.k === 'fruta'); fr.g = fr.lim[1]; continue; }
+          // o lanche de tapioca ou pão com ovo ou queijo troca a proteína pela fruta do modelo (tapioca com banana)
+          const troca = refs.filter((r) => r.tipo === 'lanche' || r.tipo === 'ceia').map((r) => [r, r.slots.find((s) => s.on && s.k === 'prot'), r.slots.find((s) => !s.on && s.k === 'fruta' && s.opc)]).find(([, pr, fr]) => pr && fr && total('p') - kDe(pr, 'p') >= P * 0.9);
+          if (troca && !ctx.semCarne && ligar(troca[0], troca[2])) { desligar(troca[1]); const fr = troca[2]; while (somaSlots(troca[0]) < 65 && muda(fr, 1)); continue; }
+          const leg = !ctx.semCarne && refs.filter((r) => r.tipo === 'principal').flatMap((r) => r.slots.filter((s) => s.on && s.k === 'leg' && r.slots.some((x) => x.on && x.k === 'prot')))[0];
+          if (leg && total('p') - kDe(leg, 'p') >= P * 0.9 && total('fibra') - kDe(leg, 'fibra') >= 20) { desligar(leg); continue; }
         }
-      }
-      if (!alvo) break;
-      if (alvo.sai) alvo.r.itens.splice(alvo.i, 1); else alvo.r.itens[alvo.i] = porcao(alvo.r.itens[alvo.i].id, alvo.g);
-      refaz(alvo.r);
+        // tudo no mínimo: as fontes de proteína cedem (as menos concentradas primeiro), sem a proteína do dia cair abaixo
+        // de 87% da meta (e só quando as calorias passam de 6% acima da meta: até lá, vale mais a proteína)
+        if (total('p') <= P * 0.87 || e <= K * 1.075) break;
+        let melhor = null;
+        for (const r of refs) for (const s of r.slots) if (s.on && (s.k === 'prot' || s.k === 'prot2' || s.k === 'leg') && passo(s, -1) && fica(r, s, passo(s, -1)) && (!melhor || dens(s) < dens(melhor))) melhor = s;
+        if (melhor) { muda(melhor, -1); continue; }
+        const op = refs.flatMap((r) => r.slots).find((s) => s.on && s.k === 'prot2');
+        if (op) { desligar(op); continue; }
+        break;
+      } else break;
     }
   };
-  cortar(res.kcal * 1.05);
-  // Ainda acima de 8% da meta (acontece com metas baixas de calorias e altas de proteína, em dietas sem carne):
-  // as frutas dos lanches vão para meia porção e as fontes de proteína cedem um pouco, sem cair abaixo de 88% da meta.
-  if (soma(refs, 'kcal') > res.kcal * 1.08) {
-    for (const r of refs) {
-      if (r.tipo === 'cafe' || soma(refs, 'kcal') <= res.kcal * 1.08) continue;
-      const i = r.itens.findIndex((x) => FOOD.get(x.id).papel === 'fruta');
-      if (i < 0) continue;
-      const fr = FOOD.get(r.itens[i].id);
-      const g = Math.round(fr.porcao.g / 2 / 5) * 5;
-      if (g < r.itens[i].g) { r.itens[i] = porcao(fr.id, g); refaz(r); }
-    }
-    for (let k = 0; k < 40 && soma(refs, 'kcal') > res.kcal * 1.08 && soma(refs, 'p') > res.prot * 0.9; k++) {
-      let alvo = null;
-      for (const r of refs) for (let i = 0; i < r.itens.length; i++) {
-        const fp = FOOD.get(r.itens[i].id);
-        if ((fp.p * 4) / fp.kcal < 0.2 || fp.papel === 'vegetal') continue;
-        const [mn, , st] = lim(fp.id, [60, 240, 10]);
-        if (r.itens[i].g - st < mn) continue;
-        // cede primeiro quem tem menos proteína por caloria
-        if (!alvo || fp.p / fp.kcal < alvo.dens) alvo = { r, i, g: r.itens[i].g - st, dens: fp.p / fp.kcal };
+  // quem corre: sobe o carboidrato (arroz, massa, pão, fruta, suco) e a gordura (óleo, manteiga, castanhas) cede
+  const carboidrato = () => {
+    for (let k = 0; k < 80 && total('c') < res.carb * 0.95; k++) {
+      const copia = refs.map((r) => r.slots.map((s) => ({ ...s })));
+      let melhor = null;
+      for (const r of refs) for (const s of r.slots) if (s.on && LUGAR_ENERGIA.has(s.k) && fracao(s, 'c') >= 0.5 && passo(s, 1) && (!melhor || s.lim[1] - s.g > melhor.lim[1] - melhor.g)) melhor = s;
+      if (melhor) muda(melhor, 1);
+      else if (!ligarUm(TIPOS, (s) => s.opc && s.k !== 'prot2' && CARBO_EXTRA.has(s.papel))) break;
+      for (let j = 0; j < 30 && total() > K * 1.03; j++) {
+        let g = null;
+        // (as fontes de proteína não cedem: ovo e soja também são gordos)
+        for (const r of refs) for (const s of r.slots) if (s.on && !LUGAR_PROT.has(s.k) && fracao(s, 'g') >= 0.5 && passo(s, -1) && fica(r, s, passo(s, -1)) && (!g || kDe(s) > kDe(g))) g = s;
+        if (g) { muda(g, -1); continue; }
+        const op = refs.flatMap((r) => r.slots.map((s) => [r, s])).find(([r, s]) => s.on && s.opc && !LUGAR_PROT.has(s.k) && fracao(s, 'g') >= 0.5 && fica(r, s, 0));
+        if (op) { desligar(op[1]); continue; }
+        break;
       }
-      if (!alvo) break;
-      alvo.r.itens[alvo.i] = porcao(alvo.r.itens[alvo.i].id, alvo.g);
-      refaz(alvo.r);
-    }
-  }
-  // se ainda faltar energia: primeiro 1 colher de azeite no prato; depois acompanhamentos comuns, sem passar do limite de itens
-  if (soma(refs, 'kcal') < res.kcal * 0.95) {
-    for (const r of principais) { const i = r.itens.findIndex((x) => GORD_SET.has(x.id)); if (i >= 0) { r.itens[i] = porcao(r.itens[i].id, 13); refaz(r); } }
-  }
-  const faltaE = () => res.kcal * 0.97 - soma(refs, 'kcal');
-  for (const r of principais) {
-    const i = r.itens.findIndex((x) => LEGUM_SET.has(x.id));
-    if (i < 0 || faltaE() < res.kcal * 0.05) continue;
-    const fl = FOOD.get(r.itens[i].id);
-    const g = Math.min(lim(fl.id, [50, 200, 10])[1], r.itens[i].g + Math.round((faltaE() / principais.length / fl.kcal) * 10) * 10);
-    if (g > r.itens[i].g) { r.itens[i] = porcao(fl.id, g); refaz(r); }
-  }
-  const SEGUNDO = ctx.casa ? servem('carbo', ctx) : ctx.filtra(['arroz-branco-cozido', 'macarrao-cozido', 'mandioca-cozida', 'arroz-integral-cozido', 'batata-doce-cozida', 'quinoa-cozida']);
-  for (const r of principais) {
-    if (faltaE() < res.kcal * 0.05 || cheia(r)) continue;
-    const cb = escolhe(r, SEGUNDO.filter((id) => !usados.has(id) || noDia(id) < 1)) || escolhe(r, SEGUNDO);
-    if (!cb) continue;
-    r.itens.push(porcao(cb, ajusta(cb, (faltaE() / FOOD.get(cb).kcal) * 100, [60, 300, 10])));
-    refaz(r);
-  }
-  // complementos de energia: [alimento, gramas no máximo]
-  const pares = (lista) => { const ok = new Set(ctx.filtra(lista.map((x) => x[0]))); return lista.filter((x) => ok.has(x[0])); };
-  const umaEMeia = (ids) => ids.map((id) => [id, Math.min(lim(id, [0, 300, 10])[1], Math.round((FOOD.get(id).porcao.g * 1.5) / 5) * 5)]);
-  const EXTRAS_PRATO = ctx.casa ? umaEMeia(daCasa(['fruta', 'carbo', 'legum']))
-    : pares([['banana-prata', 130], ['arroz-branco-cozido', 150], ['feijao-carioca-cozido', 100], ['suco-de-laranja-natural', 300], ['mamao-papaia', 150], ['batata-doce-cozida', 150], ['abacate', 90], ['mandioca-cozida', 150]]);
-  const EXTRAS_LANCHE = ctx.casa ? umaEMeia(daCasa(['fruta', 'lanche_extra', 'cafe_carbo']))
-    : pares([['banana-prata', 130], ['castanha-de-caju', 25], ['pasta-de-amendoim', 30], ['aveia-em-flocos', 40], ['mamao-papaia', 150], ['amendoa', 20], ['nozes', 20], ['suco-de-laranja-natural', 300], ['abacate', 90]]);
-  let parado = 0;
-  for (let k = 0; k < 60 && parado < refs.length && soma(refs, 'kcal') < res.kcal * 0.95; k++) {
-    const r = refs[k % refs.length];
-    const falta = res.kcal - soma(refs, 'kcal');
-    const op = cheia(r) ? null : (r.tipo === 'principal' ? EXTRAS_PRATO : EXTRAS_LANCHE).filter(([id]) => cabe(r, id)).sort((a, b) => noDia(a[0]) - noDia(b[0]))[0];
-    if (!op) { parado++; continue; }
-    parado = 0;
-    const f = FOOD.get(op[0]);
-    const teto = alta ? Math.min(lim(op[0], [0, 300, 10])[1], Math.round((op[1] * 1.5) / 5) * 5) : op[1];
-    const g = Math.max(Math.round(f.porcao.g / 2 / 5) * 5, Math.min(teto, Math.round(((falta / f.kcal) * 100) / 5) * 5));
-    r.itens.push(porcao(op[0], g));
-    refaz(r);
-  }
-  // conferência final da proteína: se ficou abaixo de 90% da meta, as fontes de proteína sobem até o limite da porção e
-  // entra mais um reforço no prato, com os carboidratos cedendo espaço. Cada passo só vale se as calorias do dia não
-  // passarem de 8% acima da meta (no emagrecimento, o déficit vem primeiro).
-  if (soma(refs, 'p') < res.prot * 0.9) {
-    const teto = res.kcal * 1.08;
-    const tenta = (passo) => {
-      const copia = refs.map((r) => r.itens.slice());
-      passo();
-      cortar(res.kcal * 1.05);
-      if (soma(refs, 'kcal') <= teto) return true;
-      refs.forEach((r, i) => { r.itens = copia[i]; refaz(r); });
-      return false;
-    };
-    const falta = () => res.prot * 0.95 - soma(refs, 'p');
-    for (const r of refs) {
-      for (let i = 0; i < r.itens.length; i++) {
-        if (falta() <= 3) break;
-        const f = FOOD.get(r.itens[i].id);
-        if ((f.p * 4) / f.kcal < 0.2 || f.papel === 'vegetal') continue;
-        const [, mx, st] = lim(f.id, PROT_SET.has(f.id) ? [60, 240, 10] : [50, Math.min(300, f.porcao.g * 2), 10]);
-        const g = Math.min(mx, Math.round((r.itens[i].g + (falta() / f.p) * 100) / st) * st);
-        if (g > r.itens[i].g) tenta(() => { r.itens[i] = porcao(f.id, g); refaz(r); });
-      }
-    }
-    for (const r of principais) {
-      if (falta() <= 5 || cheia(r)) continue;
-      const extra = escolhe(r, reforcos);
-      if (extra) tenta(() => { r.itens.push(porcao(extra, ajusta(extra, (falta() / FOOD.get(extra).p) * 100, [25, 200, 5]))); refaz(r); });
-    }
-  }
-  // Proteína acima da meta (acontece com metas baixas, de quem não treina: as porções mínimas de carne, ovos e
-  // laticínios já somam mais que a meta). As fontes de proteína cedem — primeiro as do café, dos lanches e da ceia, que
-  // podem sair; depois as do prato, até uma porção pequena (40% da porção caseira) — e a energia volta com alimentos de
-  // pouca proteína: óleo do prato, frutas, arroz, mandioca, batata. Vale até 115% da meta de proteína.
-  const tetoP = res.prot * 1.15;
-  const rica = (id) => densidade(id) >= 0.2 && FOOD.get(id).papel !== 'vegetal';
-  const passoDe = (f) => lim(f.id, PROT_SET.has(f.id) ? [60, 240, 10] : [50, 300, 10])[2];
-  const pequena = (f) => { const st = passoDe(f); return Math.max(st, Math.ceil((f.porcao.g * 0.4) / st) * st); };
-  const intocaveis = new Set();
-  const enxugarProteina = () => {
-    for (let k = 0; k < 80 && soma(refs, 'p') > tetoP; k++) {
-      let alvo = null;
-      for (const r of refs) for (let i = 0; i < r.itens.length; i++) {
-        const it = r.itens[i], f = FOOD.get(it.id);
-        if (!rica(f.id) || intocaveis.has(r.nome + '/' + f.id)) continue;
-        const st = passoDe(f);
-        const fora = r.tipo !== 'principal';
-        let g;
-        if (it.g - st >= pequena(f)) g = it.g - st;
-        else if (fora && r.itens.length >= 2) g = 0;                    // no mínimo: sai (o prato fica sempre com a sua fonte de proteína)
-        else continue;
-        // cede primeiro quem está fora do prato; entre iguais, quem tem mais proteína
-        const peso = (fora ? 1000 : 0) + it.p;
-        if (!alvo || peso > alvo.peso) alvo = { r, i, g, peso };
-      }
-      if (!alvo) break;
-      const { r, i, g } = alvo;
-      const copia = r.itens.slice();
-      if (g > 0) r.itens[i] = porcao(r.itens[i].id, g); else r.itens.splice(i, 1);
-      refaz(r);
-      if (r.kcal < 80) {
-        // a refeição ficaria vazia demais: a fruta sobe para a porção inteira; se não bastar, o item fica e não é mais tentado
-        const j = r.itens.findIndex((x) => FOOD.get(x.id).papel === 'fruta');
-        if (j >= 0 && r.itens[j].g < FOOD.get(r.itens[j].id).porcao.g) { r.itens[j] = porcao(r.itens[j].id, FOOD.get(r.itens[j].id).porcao.g); refaz(r); }
-        if (r.kcal < 80) { r.itens = copia; refaz(r); intocaveis.add(r.nome + '/' + copia[i].id); }
-      }
+      if (total() > K * 1.05) { refs.forEach((r, i) => { r.slots = copia[i]; }); break; }
     }
   };
-  // energia com pouca proteína: a cada passo sobe o item que tem espaço e menos proteína por caloria
-  const reporEnergia = () => {
-    const espaco = (r, it) => {
-      const f = FOOD.get(it.id);
-      if (GORD_SET.has(f.id) && r.tipo === 'principal') return [13 - it.g, 5];
-      if (f.papel === 'fruta') {
-        const unidades = Number((/^(\d+)/.exec(f.porcao.desc) || [0, 1])[1]) || 1;
-        return [Math.floor((f.porcao.g * Math.max(1, Math.min(1.5, 10 / unidades))) / 5) * 5 - it.g, Math.max(5, Math.round(f.porcao.g / 2 / 5) * 5)];
-      }
-      if (CARB_SET.has(f.id)) return [lim(f.id, [50, 300, 10])[1] - it.g, 20];
-      if (CAFE_CARBO_SET.has(f.id)) return [lim(f.id, [40, 200, 10])[1] - it.g, 10];
-      return [0, 0];
-    };
-    for (let k = 0; k < 60 && soma(refs, 'kcal') < res.kcal * 0.97; k++) {
-      let alvo = null;
-      for (const r of refs) for (let i = 0; i < r.itens.length; i++) {
-        const [e, passo] = espaco(r, r.itens[i]);
-        if (e <= 0) continue;
-        const f = FOOD.get(r.itens[i].id), dens = f.p / f.kcal;
-        if (!alvo || dens < alvo.dens || (dens === alvo.dens && e > alvo.e)) alvo = { r, i, e, passo, dens };
-      }
-      if (!alvo) break;
-      const it = alvo.r.itens[alvo.i];
-      alvo.r.itens[alvo.i] = porcao(it.id, it.g + Math.min(alvo.e, alvo.passo));
-      refaz(alvo.r);
+  for (let rodada = 0; rodada < 4; rodada++) {
+    proteina();
+    energia(0.97, 1.03);
+    const p = total('p'), e = total();
+    if (p >= P * 0.96 && p <= P * 1.1 && e >= K * 0.97 && e <= K * 1.03) break;
+  }
+  // a proteína ainda abaixo da meta: as fontes mais concentradas sobem enquanto as calorias não passam de 7% acima
+  for (let k = 0; k < 40 && total('p') < P * 0.95; k++) {
+    let melhor = null;
+    for (const r of refs) for (const s of r.slots) if (s.on && LUGAR_PROT.has(s.k) && dens(s) >= 0.08 && passo(s, 1) && total() + (FOOD.get(s.id).kcal * (passo(s, 1) - s.g)) / 100 <= K * 1.07 && (!melhor || dens(s) > dens(melhor))) melhor = s;
+    if (!melhor) {
+      // (só se o que falta é espaço nas calorias, e não porção: alguma fonte concentrada ainda pode crescer)
+      if (!refs.some((r) => r.slots.some((s) => s.on && LUGAR_PROT.has(s.k) && dens(s) >= 0.08 && passo(s, 1)))) break;
+      // sem espaço nas calorias: sai um complemento que é quase só energia (manteiga, coco, castanhas do lanche com fruta)
+      const solta = refs.flatMap((r) => r.slots.map((s) => [r, s])).find(([r, s]) => s.on && dens(s) < 0.05 && ((s.opc && s.k === 'extra') || (s.k === 'prot' && (r.tipo === 'lanche' || r.tipo === 'ceia') && r.slots.some((x) => x.on && x.k === 'fruta'))) && somaSlots(r) - kDe(s) >= 60);
+      if (!solta) break;
+      desligar(solta[1]);
+      continue;
     }
-    // ainda falta: uma fruta a mais (ou outro complemento de pouca proteína) onde couber
-    const leves = (lista) => lista.filter(([id]) => { const f = FOOD.get(id); return f.p / f.kcal < 0.025; });
-    for (let k = 0, parou = 0; k < 20 && parou < refs.length && soma(refs, 'kcal') < res.kcal * 0.95; k++) {
-      const r = refs[k % refs.length];
-      const op = cheia(r) ? null : leves(r.tipo === 'principal' ? EXTRAS_PRATO : EXTRAS_LANCHE).filter(([id]) => cabe(r, id)).sort((a, b) => noDia(a[0]) - noDia(b[0]))[0];
-      if (!op) { parou++; continue; }
-      parou = 0;
-      const f = FOOD.get(op[0]);
-      r.itens.push(porcao(op[0], Math.max(Math.round(f.porcao.g / 2 / 5) * 5, Math.min(op[1], Math.round((((res.kcal - soma(refs, 'kcal')) / f.kcal) * 100) / 5) * 5))));
-      refaz(r);
+    muda(melhor, 1);
+  }
+  // Proteína ainda acima da meta com as fontes no mínimo (metas baixas: arroz, massa e pão já trazem bastante): a energia
+  // de alimentos com proteína dá lugar à de alimentos quase sem ela (óleo, fruta, suco, coco).
+  const LEVES = new Set(['sobremesa', 'suco', 'fruta', 'mel', 'coco']);
+  // a energia volta pela refeição mais abaixo da sua parte da meta, com o que tem pouca proteína
+  const repor = () => {
+    for (let j = 0; j < 12 && total() < K * 0.97; j++) {
+      let feito = false;
+      for (const r of refs.slice().sort((a, b) => (b.alvo - somaSlots(b)) - (a.alvo - somaSlots(a)))) {
+        let sobe = null;
+        for (const s of r.slots) if (s.on && LUGAR_ENERGIA.has(s.k) && dens(s) < 0.025 && passo(s, 1) && somaSlots(r) - kDe(s) + (FOOD.get(s.id).kcal * passo(s, 1)) / 100 <= K * 0.5 && (!sobe || dens(s) < dens(sobe))) sobe = s;
+        if (sobe) { muda(sobe, 1); feito = true; break; }
+        if (somaSlots(r) < K * 0.45 && ligarNaRefeicao(r, (s) => s.opc && ((s.k === 'extra' && LEVES.has(s.papel)) || s.k === 'fruta'))) { feito = true; break; }
+      }
+      if (!feito) break;
     }
   };
-  for (let rodada = 0; rodada < 3 && soma(refs, 'p') > tetoP; rodada++) { enxugarProteina(); reporEnergia(); }
-  // por fim, o dia não passa de 8% acima das calorias da meta
-  if (soma(refs, 'kcal') > res.kcal * 1.08) cortar(res.kcal * 1.05);
+  for (let k = 0; k < 80 && total('p') > P * 1.1; k++) {
+    let desce = null;
+    for (const r of refs) for (const s of r.slots) if (s.on && (LUGAR_ENERGIA.has(s.k) || (r.tipo !== 'principal' && LUGAR_PROT.has(s.k) && dens(s) >= 0.05)) && dens(s) >= 0.025 && passo(s, -1) && fica(r, s, passo(s, -1)) && (!desce || dens(s) > dens(desce))) desce = s;
+    const antes = refs.map((r) => r.slots.map((s) => ({ ...s })));
+    if (desce) muda(desce, -1);
+    else {
+      // no mínimo: sai um complemento com proteína (a aveia do lanche, o leite do café)
+      const op = refs.flatMap((r) => r.slots.map((s) => [r, s])).find(([r, s]) => s.on && s.opc && s.k !== 'fruta' && dens(s) >= 0.03 && somaSlots(r) - kDe(s) >= 70);
+      if (!op) break;
+      desligar(op[1]);
+    }
+    repor();
+    if (total() < K * 0.95) { refs.forEach((r, i) => { r.slots = antes[i]; }); break; }
+  }
+  if (res.corrida && res.carb) { carboidrato(); energia(0.95, 1.05); }
+  if (total() > K * 1.06) energia(0.9, 1.04);
 }
 
 const PLANO_REF = {
@@ -860,67 +1169,29 @@ export function cardapio(res, semente = 0, { emCasa = null, trocas = null } = {}
   const ctx = contexto(res, emCasa);
   const usados = new Map();
   const rico = (res.prot * 4) / res.kcal >= 0.26;
+  // meta de proteína baixa (menos de 20% das calorias): o prato prefere a proteína que, na porção mínima, não passa da conta
+  ctx.protBaixa = (res.prot * 4) / res.kcal < 0.2;
   const seedDe = (tipo, i) => seed + i * 2 + (tipo === 'principal' ? i : 0);
-  let refs = ref.map(([tipo, nome, fk, fp], i) => Object.assign(refeicao(tipo, nome, res.kcal * fk, res.prot * fp, ctx, seedDe(tipo, i), usados, rico), { ordem: i }));
+  // o modelo de cada refeição gira com a semente (e com a troca): dias seguidos têm combinações diferentes
+  const monta = (i, tr, us) => { const [tipo, nome, fk, fp] = ref[i]; return Object.assign(refeicao(tipo, nome, res.kcal * fk, res.prot * fp, ctx, seedDe(tipo, i) + tr * 7, seed + (tipo === 'principal' ? 0 : i) + tr, us, rico), { ordem: i }); };
+  let refs = ref.map((_, i) => monta(i, 0, usados));
   const tr = Array.isArray(trocas) ? trocas.map((k) => Math.max(0, Math.floor(Number(k)) || 0)) : [];
-  if (tr.some((k) => k > 0)) {
-    for (let i = 0; i < ref.length; i++) {
-      if (!tr[i]) continue;
-      // a refeição trocada evita os alimentos que já estão nas outras (como no dia original)
-      const outros = new Map();
-      refs.forEach((r, j) => { if (j !== i) for (const x of r.itens) outros.set(x.id, (outros.get(x.id) || 0) + 1); });
-      const [tipo, nome, fk, fp] = ref[i];
-      refs[i] = Object.assign(refeicao(tipo, nome, res.kcal * fk, res.prot * fp, ctx, seedDe(tipo, i) + tr[i] * 7, outros, rico), { ordem: i });
-    }
-    usados.clear();
-    for (const r of refs) for (const x of r.itens) usados.set(x.id, (usados.get(x.id) || 0) + 1);
+  for (let i = 0; i < ref.length; i++) {
+    if (!tr[i]) continue;
+    // a refeição trocada evita os alimentos que já estão nas outras (como no dia original)
+    const outros = new Map();
+    refs.forEach((r, j) => { if (j !== i) for (const s of r.slots) if (s.on) outros.set(s.id, (outros.get(s.id) || 0) + 1); });
+    refs[i] = monta(i, tr[i], outros);
   }
-  refs = refs.filter((r) => r.itens.length);
-  equilibrar(refs, res, usados, ctx);
-  if (res.corrida && res.carb) aproximarCarboidrato(refs, res);
-  const dia = { refeicoes: refs.filter((r) => r.itens.length), kcal: soma(refs, 'kcal'), p: soma(refs, 'p'), c: soma(refs, 'c'), g: soma(refs, 'g'), fibra: soma(refs, 'fibra') };
+  refs = refs.filter((r) => r.slots.some((s) => s.on));
+  if (refs.length) balancear(refs, res, ctx);
+  const refeicoes = refs.map((r) => {
+    const itens = r.slots.filter((s) => s.on).map((s) => porcao(s.id, s.g));
+    return { nome: r.nome, tipo: r.tipo, itens, kcal: soma(itens, 'kcal'), p: soma(itens, 'p'), c: soma(itens, 'c'), g: soma(itens, 'gd'), fibra: soma(itens, 'fibra'), ordem: r.ordem };
+  }).filter((r) => r.itens.length);
+  const dia = { refeicoes, kcal: soma(refeicoes, 'kcal'), p: soma(refeicoes, 'p'), c: soma(refeicoes, 'c'), g: soma(refeicoes, 'g'), fibra: soma(refeicoes, 'fibra') };
   if (ctx.casa) dia.faltas = faltasDaCasa(res, emCasa, dia);
   return dia;
-}
-// Quem corre: o dia de exemplo chega perto também da meta de carboidrato. Enquanto faltar carboidrato, sobe um passo o
-// arroz, a massa, o pão ou a fruta que ainda tem espaço e, para as calorias não passarem da meta, tira o equivalente dos
-// itens de gordura (óleo, castanhas, pasta de amendoim). A proteína não é tocada.
-const CAFE_CARBO_SET = new Set(POOL_CASA.cafe_carbo);
-function aproximarCarboidrato(refs, res) {
-  const falta = () => res.carb * 0.95 - soma(refs, 'c');
-  const espaco = (it) => {
-    const f = FOOD.get(it.id);
-    if (!(CARB_SET.has(f.id) || CAFE_CARBO_SET.has(f.id) || LEGUM_SET.has(f.id) || f.papel === 'fruta')) return 0;
-    // com a proteína do dia já acima da meta, o feijão não sobe mais (ele traz proteína junto): o carboidrato vem do resto
-    if (LEGUM_SET.has(f.id) && soma(refs, 'p') > res.prot * 1.1) return 0;
-    // fruta: até uma porção e meia, sem passar de 10 unidades na medida caseira
-    const unidades = Number((/^(\d+)/.exec(f.porcao.desc) || [0, 1])[1]) || 1;
-    const mx = f.papel === 'fruta' ? Math.floor((f.porcao.g * Math.max(1, Math.min(1.5, 10 / unidades))) / 5) * 5 : lim(f.id, CARB_SET.has(f.id) ? [50, 300, 10] : LEGUM_SET.has(f.id) ? [50, 200, 10] : [40, 200, 10])[1];
-    return mx - it.g;
-  };
-  for (let k = 0; k < 40 && falta() > 8; k++) {
-    // quem tem mais espaço sobe um passo (meia porção de fruta ou 20 g de arroz, massa, pão)
-    let alvo = null;
-    for (const r of refs) for (let i = 0; i < r.itens.length; i++) { const e = espaco(r.itens[i]); if (e > 0 && (!alvo || e > alvo.e)) alvo = { r, i, e }; }
-    if (!alvo) break;
-    const it = alvo.r.itens[alvo.i], f = FOOD.get(it.id);
-    const passo = Math.min(alvo.e, f.papel === 'fruta' ? Math.max(5, Math.round(f.porcao.g / 2 / 5) * 5) : 20);
-    const copia = refs.map((r) => r.itens.slice());
-    alvo.r.itens[alvo.i] = porcao(f.id, it.g + passo);
-    refaz(alvo.r);
-    // as calorias a mais saem dos itens de gordura, do mais calórico para o menos
-    for (let j = 0; j < 6 && soma(refs, 'kcal') > res.kcal * 1.03; j++) {
-      let gordo = null;
-      for (const r of refs) for (let i = 0; i < r.itens.length; i++) { const g = FOOD.get(r.itens[i].id); if (g.papel === 'gordura' && r.kcal - r.itens[i].kcal >= 80 && (!gordo || r.itens[i].kcal > gordo.r.itens[gordo.i].kcal)) gordo = { r, i }; }
-      if (!gordo) break;
-      const x = gordo.r.itens[gordo.i], fg = FOOD.get(x.id);
-      const menos = Math.round((x.g - Math.min(x.g, ((soma(refs, 'kcal') - res.kcal * 1.03) / fg.kcal) * 100 + 2)) / 5) * 5;
-      if (menos < fg.porcao.g * 0.4) { if (gordo.r.itens.length <= 2 || gordo.r.kcal - x.kcal < 80) break; gordo.r.itens.splice(gordo.i, 1); } else gordo.r.itens[gordo.i] = porcao(fg.id, menos);
-      refaz(gordo.r);
-    }
-    // se nem assim coube nas calorias, desfaz o passo e para
-    if (soma(refs, 'kcal') > res.kcal * 1.05) { refs.forEach((r, i) => { r.itens = copia[i]; refaz(r); }); break; }
-  }
 }
 // Se, mesmo assim, o dia de quem corre ficar mais de 10% abaixo da meta de carboidrato, a tela diz quanto falta e como
 // completar com comida comum (respeitando as restrições).
@@ -1186,32 +1457,168 @@ export function imcFaixa(imc, idade) {
   return 'obesidade grau III';
 }
 
-// Suplementos: doses só para quem pode usá-las sem orientação. Menores de 18, gestantes e lactantes, doença renal e
-// transtorno alimentar (modo educativo) não veem dose nenhuma; com pressão alta, a de cafeína não aparece.
-// Creatina: segura em adultos saudáveis; com doença renal, só com o médico (ISSN 2017 — ref kreider2017). Cafeína: até
-// 200 mg por vez e 400 mg por dia em adultos; gestantes, até 200 mg por dia de todas as fontes; para menores não há
-// dose de suplemento (resumo oficial da EFSA, de 2015, lido inteiro — ref efsa2015; ISSN 2021 — ref guest2021).
-export function suplementos(res) {
+// ---------- suplementos e pré-treino ----------
+// Doses só para quem pode usá-las sem orientação. Menores de 18, gestantes e lactantes, doença renal e transtorno
+// alimentar (modo educativo) não veem dose nenhuma; com pressão alta, doença do coração, outra doença crônica ou um
+// sinal de alerta (de qualquer entrevista: a união está em logic/saude.js), a cafeína e tudo o que é estimulante ou
+// pede liberação ficam sem dose, e o pré-treino pronto sai.
+// Fontes, todas lidas em texto completo (o que cada uma diz está anotado em data/knowledge.js, perto das REFS):
+//  • creatina: 3 a 5 g por dia; até 1 a 2 kg de água no começo; sem efeito ruim em até 4 anos (refs kreider2017,
+//    maughan2018); no Brasil, o rótulo pode indicar de 3 a 5 g por dia (ref anvisa_in28);
+//  • cafeína: 3 a 6 mg/kg, 60 min antes; 9 mg/kg ou mais não rende mais e dá enjoo, ansiedade e insônia (refs guest2021,
+//    maughan2018); seguro para adultos: até 200 mg por vez (cerca de 3 mg/kg) e 400 mg no dia (cerca de 5,7 mg/kg), de
+//    todas as fontes (ref efsa2015); no Brasil, suplemento com até 200 mg na recomendação diária, 400 mg só para atletas
+//    com doses de até 200 mg, e não permitido de 9 a 18 anos, na gestação e na amamentação (ref anvisa_in28);
+//  • beta-alanina: 4 a 6 g/dia por 2 a 4 semanas, efeito maior em esforços de 1 a 4 min; único efeito colateral, o
+//    formigamento (ref trexler2015); no Brasil, rótulo com até 2 g/dia em doses de até 300 mg (ref anvisa_in28);
+//  • nitrato: 5 a 9 mmol (310 a 560 mg), 2 a 3 h antes; efeito em esforços de 12 a 40 min, incerto abaixo de 12;
+//    bicarbonato: 0,2 a 0,4 g/kg, 60 a 150 min antes, para esforços de cerca de 60 s, perdendo o efeito acima de 10 min,
+//    com desconforto intestinal bem conhecido (ref maughan2018, tabela 3; grupo A da ref ais_abcd);
+//  • vitamina D e ferro: suplementar sem avaliação não é recomendado; ferro em dose alta só com falta de ferro (ref
+//    maughan2018, tabela 1);
+//  • pré-treino pronto: cafeína de 250 a 400 mg por dose e não passar de uma (ref jagim2019); doses abaixo do eficaz e
+//    misturas sem a quantidade no rótulo; DMAA retirado do mercado depois de 6 mortes (ref harty2018); sinefrina com
+//    cafeína: pulso e pressão (refs bfr2012, bella2025); ioimbina (ref porrill2024); DMAA proibido no Brasil (ref
+//    anvisa2013); em suplemento só entram os constituintes da IN 28, que não tem sinefrina, ioimbina nem DMAA (refs
+//    anvisa_rdc243, anvisa_in28); sono: a mesma regra de data/sono.js (ref gardiner2023);
+//  • sem evidência: "queimadores" (ref maughan2018), BCAA, glutamina e tribulus (refs kerksick2018, ais_abcd),
+//    anabolizantes e SARMs (refs cfm2333, maughan2018).
+const CAFE_XICARA_MG = 100;   // uma xícara de café: cerca de 100 mg (ref gardiner2023 — a mesma conta da tela do sono)
+// O que tira as doses e o pré-treino (a mesma trava da cafeína de antes, agora para todo estimulante)
+function travasDeSuplemento(res) {
   const cond = res && Array.isArray(res.condicoes) ? res.condicoes : [];
-  const aviso = 'Não use sem orientação médica se você está grávida ou amamentando, tem menos de 18 anos, doença nos rins ou no fígado, pressão alta ou arritmia, ou usa remédios de uso contínuo. Este aplicativo não prescreve suplementos.';
-  if (!res || res.modo === 'educativo') {
-    return { semDoses: true, intro: 'Suplemento não é obrigatório: comida de verdade resolve.', linhas: [],
-      aviso: 'No seu caso não mostro doses. Antes dos 18 anos, na gestação e na amamentação, com doença nos rins ou com transtorno alimentar, creatina, cafeína e proteína em pó só com orientação do seu médico ou nutricionista.' };
-  }
-  const linhas = ['Creatina monoidratada: 3 a 5 g por dia, todos os dias. Melhora força e ganho de massa.'];
+  const educ = !res || res.modo === 'educativo';
   // Sem dose de cafeína com pressão alta, doença do coração (inclui arritmia), outra doença crônica ou um sinal de alerta
   // marcado na triagem de qualquer entrevista: o aviso de sempre já diz "pressão alta ou arritmia" e "remédios de uso
   // contínuo" (refs guest2021, efsa2015); com sinal de alerta, a primeira coisa é a avaliação médica (ref whitfield2017).
-  const semCafeina = cond.includes('hipertensao') || cond.includes('cardiaco') || cond.includes('outra') || cond.includes('sinal');
-  linhas.push(cond.includes('hipertensao')
-    ? 'Cafeína: com pressão alta, não use como suplemento.'
-    : semCafeina
-      ? 'Cafeína: com doença do coração, outra doença crônica ou um sinal de alerta de saúde, não use como suplemento sem falar com o seu médico.'
-      : 'Cafeína: cerca de 3 mg por quilo de peso (até 200 mg por vez), 1 hora antes do treino, sem passar de 400 mg por dia. Evite à noite.');
-  // whey é feito de leite: com alergia ao leite, não entra (data/foods.js)
-  const alergias = res && Array.isArray(res.alergias) ? res.alergias : [];
-  linhas.push(alergias.includes('leite') ? 'Whey protein: é feito de leite; com alergia ao leite, não use.' : 'Whey protein: só uma forma prática de proteína; conta na meta do dia.');
-  return { semDoses: false, semCafeina, intro: 'Suplemento não é obrigatório. Os que têm boa evidência para quem treina são:', linhas, aviso: semCafeina && !cond.includes('hipertensao') ? `${aviso} Com o que você informou, a cafeína fica sem dose: converse com o seu médico.` : aviso };
+  const estimulo = cond.includes('hipertensao') || cond.includes('cardiaco') || cond.includes('outra') || cond.includes('sinal');
+  return { cond, educ, estimulo, semCafeina: educ || estimulo };
+}
+// Cafeína que ainda cabe no pré-treino, somando o café do dia. Por vez, até 200 mg; no dia, até 400 mg (ref efsa2015).
+// A EFSA dá os mesmos limites por quilo (3 e 5,7 mg/kg, os de um adulto de 70 kg): abaixo de 70 kg o aplicativo usa o
+// valor proporcional, mais baixo (escolha conservadora). Arredonda para baixo, de 10 em 10 mg. Sem dose (modo educativo
+// ou trava de estimulante), devolve null.
+export function limiteDeCafeina(res, xicaras = 0) {
+  if (travasDeSuplemento(res).semCafeina) return null;
+  const peso = typeof res.peso === 'number' && Number.isFinite(res.peso) ? Math.min(250, Math.max(30, res.peso)) : 70;
+  const dez = (n) => Math.floor(n / 10 + 1e-9) * 10;
+  const porVez = Math.min(200, dez((200 * peso) / 70));
+  const noDia = Math.min(400, dez((400 * peso) / 70));
+  const x = Math.min(10, Math.max(0, Math.floor(Number(xicaras)) || 0));
+  const doCafe = x * CAFE_XICARA_MG;
+  const sobra = Math.max(0, Math.min(porVez, noDia - doCafe));
+  const qx = x === 1 ? '1 xícara de café' : `${x} xícaras de café`;
+  const texto = !x ? `Sem café no dia, cabem até ${sobra} mg de cafeína no pré-treino.`
+    : sobra > 0 ? `Com ${qx} (cerca de ${doCafe} mg), cabem até ${sobra} mg de cafeína no pré-treino.`
+      : `Com ${qx} (cerca de ${doCafe} mg), você já ${doCafe > noDia ? 'passa do' : 'chega ao'} limite do dia: pré-treino com cafeína, não.`;
+  return { porVez, noDia, xicaras: x, doCafe, sobra, texto };
+}
+// DMAA, sinefrina e ioimbina: a mesma linha para quem pode e para quem não pode usar pré-treino
+const PRE_PROIBIDOS = { titulo: 'Fuja destes', texto: 'DMAA, ioimbina e sinefrina (laranja-amarga). Nenhum é permitido em suplemento no Brasil, e o DMAA é proibido.',
+  porque: 'Eles sobem o pulso e a pressão, ainda mais com cafeína, e já foram ligados a arritmia, AVC, convulsão e morte: o DMAA saiu do mercado americano depois de 6 mortes e mais de 100 casos de doença. A Anvisa também pede para não usar produto importado sem rótulo em português.',
+  refs: ['anvisa_rdc243', 'anvisa_in28', 'anvisa2013', 'harty2018', 'bfr2012', 'bella2025', 'porrill2024'] };
+const SEM_EVIDENCIA = [
+  { nome: 'Termogênicos e “queimadores”', texto: 'quase nenhum tem prova de que emagrece; muitos são cafeína com outros estimulantes.', refs: ['maughan2018', 'anvisa2013'] },
+  { nome: 'BCAA', texto: 'quem já come a proteína do dia não ganha nada: a comida e o whey já trazem BCAA.', refs: ['kerksick2018', 'ais_abcd'] },
+  { nome: 'Glutamina', texto: 'não aumentou massa muscular nem força nos estudos.', refs: ['kerksick2018'] },
+  { nome: 'Tribulus e “testosterona natural”', texto: 'não mudam força nem massa, e atletas não devem usar: há risco de contaminação.', refs: ['kerksick2018', 'ais_abcd'] },
+  { nome: 'Anabolizantes e SARMs', texto: 'nunca. Fazem mal ao fígado e ao comportamento; no Brasil, o médico não pode receitá-los para estética ou desempenho.', refs: ['cfm2333', 'maughan2018'] },
+];
+// Por que o pré-treino pronto sai, em uma linha (o caso mais protegido primeiro)
+function motivoSemPreTreino(res, t) {
+  const c = t.cond;
+  if (res && res.idade < 18) return { texto: 'Antes dos 18 anos, pré-treino e energético não. A Anvisa não permite suplemento de cafeína para menores, e a Academia Americana de Pediatria diz que energético não é para crianças e adolescentes.', refs: ['anvisa_in28', 'temple2017'] };
+  if (c.includes('gestante') || c.includes('posparto')) return { texto: 'Na gestação e na amamentação, pré-treino não: a Anvisa não permite suplemento de cafeína nessa fase. O café do dia, combine com o seu médico.', refs: ['anvisa_in28', 'efsa2015'] };
+  if (c.includes('renal')) return { texto: 'Com doença nos rins, pré-treino e outros suplementos só com o seu médico.', refs: ['anvisa2013'] };
+  if (c.includes('transtorno')) return { texto: 'Com histórico de transtorno alimentar, pré-treino e produtos para emagrecer não. Converse com quem acompanha você.', refs: ['anvisa2013'] };
+  if (t.estimulo) return { texto: 'Com pressão alta, doença do coração, outra doença crônica ou um sinal de alerta, pré-treino não: os estimulantes sobem o pulso e a pressão. Converse com o seu médico.', refs: ['bfr2012', 'bella2025', 'anvisa2013'] };
+  return { texto: 'No seu caso, pré-treino só com orientação do seu médico ou nutricionista.', refs: ['anvisa2013', 'harty2018'] };
+}
+// Devolve { semDoses, semCafeina, semPreTreino, intro, linhas (as boas, em texto: "Nome: texto"), boas: [{ id, nome,
+// texto, porque, refs }], preTreino: { bloqueado, intro, introRefs, itens: [{ titulo, texto, porque?, refs, cafeina? }] },
+// semEvidencia: [{ nome, texto, refs }], aviso, refs }. Puro.
+export function suplementos(res) {
+  const t = travasDeSuplemento(res);
+  const { cond, educ, estimulo } = t;
+  const aviso = 'Não use sem orientação médica se você está grávida ou amamentando, tem menos de 18 anos, doença nos rins ou no fígado, pressão alta ou arritmia, ou usa remédios de uso contínuo. Este aplicativo não prescreve suplementos.';
+  const semEvidencia = SEM_EVIDENCIA.map((x) => ({ ...x, refs: [...x.refs] }));
+  const proibidos = { ...PRE_PROIBIDOS, refs: [...PRE_PROIBIDOS.refs] };
+  const junta = (o) => [...new Set([...o.boas.flatMap((b) => b.refs), ...(o.preTreino.introRefs || []), ...o.preTreino.itens.flatMap((x) => x.refs), ...o.semEvidencia.flatMap((x) => x.refs)])];
+  if (educ) {
+    const m = motivoSemPreTreino(res, t);
+    const out = { semDoses: true, semCafeina: true, semPreTreino: true, intro: 'Suplemento não é obrigatório: comida de verdade resolve.', linhas: [], boas: [],
+      preTreino: { bloqueado: true, intro: m.texto, introRefs: m.refs, itens: [proibidos] }, semEvidencia,
+      aviso: 'No seu caso não mostro doses. Antes dos 18 anos, na gestação e na amamentação, com doença nos rins ou com transtorno alimentar, creatina, cafeína e proteína em pó só com orientação do seu médico ou nutricionista.' };
+    out.refs = junta(out);
+    return out;
+  }
+  const corre = !!res.corrida;
+  const hipert = cond.includes('hipertensao');
+  const alergias = Array.isArray(res.alergias) ? res.alergias : [];
+  const rest = Array.isArray(res.restricoes) ? res.restricoes : [];
+  const comMedico = 'Com o que você informou, use só se o seu médico liberar.';
+  const boas = [];
+  boas.push({ id: 'creatina', nome: 'Creatina monoidratada', texto: '3 a 5 g por dia, todos os dias. Melhora força e ganho de massa.',
+    porque: 'É o suplemento com mais evidência para força e massa. Nos primeiros dias o peso pode subir de 1 a 2 kg, de água. Nos estudos, não houve efeito ruim em até 4 anos de uso. No Brasil, o rótulo pode indicar de 3 a 5 g por dia. Com doença nos rins, só com o médico.',
+    refs: ['kreider2017', 'maughan2018', 'anvisa_in28'] });
+  boas.push({ id: 'cafeina', nome: 'Cafeína', texto: hipert ? 'com pressão alta, não use como suplemento.'
+    : estimulo ? 'com doença do coração, outra doença crônica ou um sinal de alerta de saúde, não use como suplemento sem falar com o seu médico.'
+      : `cerca de 3 mg por quilo de peso (até ${limiteDeCafeina(res).porVez} mg por vez), 1 hora antes do treino, sem passar de ${limiteDeCafeina(res).noDia} mg por dia. Evite à noite.`,
+  porque: estimulo ? 'A cafeína acelera o coração e pode subir a pressão; com essas condições, quem decide é o médico.'
+    : 'Os estudos mostram efeito com 3 a 6 mg por quilo, 1 hora antes; o aplicativo fica na parte baixa, a que a EFSA considera segura de uma vez. Com 9 mg por quilo ou mais, não rende mais e dá enjoo, ansiedade e insônia. No Brasil, suplemento de cafeína tem até 200 mg por dose.',
+  refs: estimulo ? ['guest2021', 'maughan2018', 'whitfield2017'] : ['guest2021', 'efsa2015', 'maughan2018', 'anvisa_in28'] });
+  // whey é feito de leite: com alergia ao leite, não entra (data/foods.js); veganos: proteína de planta
+  const vegano = rest.includes('vegano');
+  boas.push(alergias.includes('leite')
+    ? { id: 'proteina', nome: 'Whey protein', texto: 'é feito de leite; com alergia ao leite, não use.', porque: 'Whey e caseína são a própria proteína do leite, a que causa a alergia, mesmo nas versões sem lactose. Proteína em pó não é obrigatória: a meta do dia sai da comida.', refs: ['maughan2018', 'anvisa_alergenicos'] }
+    : vegano
+      ? { id: 'proteina', nome: 'Proteína em pó', texto: `whey vem do leite; para veganos, há as de ${alergias.includes('soja') ? 'outras plantas (confira os alérgenos no rótulo)' : 'soja e de outras plantas'}. Conta na meta do dia.`, porque: 'É só uma forma prática de proteína: quem chega à meta do dia com comida não precisa.', refs: ['maughan2018', 'rogerson2017', 'jager2017'] }
+      : { id: 'proteina', nome: 'Whey protein', texto: 'só uma forma prática de proteína; conta na meta do dia.', porque: 'Quem chega à meta do dia com comida não precisa. Uma porção de proteína em pó costuma ter de 20 a 50 g de proteína.', refs: ['jager2017', 'maughan2018'] });
+  // beta-alanina: dose (a do rótulo brasileiro) só para quem corre — o plano tem tiros e intervalados de 1 a 5 minutos
+  boas.push({ id: 'betaalanina', nome: 'Beta-alanina', texto: !corre ? 'só ajuda em esforços fortes de 1 a 4 minutos, como tiros de corrida; para a força, ainda não se sabe.'
+    : estimulo ? `ajuda em esforços fortes de 1 a 4 minutos, como os tiros. ${comMedico}`
+      : 'ajuda em esforços fortes de 1 a 4 minutos, como os tiros e o intervalado. Se usar, siga o rótulo: no Brasil, até 2 g por dia, em doses de até 300 mg. Pode dar formigamento.',
+  porque: corre && !estimulo ? 'Nos estudos, 4 a 6 g por dia, por 2 a 4 semanas, melhoraram o desempenho, mais em esforços de 1 a 4 minutos. O formigamento é o único efeito colateral relatado e diminui com doses menores e divididas. A Anvisa limita o rótulo a 2 g por dia.'
+    : 'O efeito aparece em esforços fortes de 1 a 4 minutos. O formigamento é o único efeito colateral relatado.',
+  refs: ['trexler2015', 'maughan2018', 'anvisa_in28'] });
+  if (corre) {
+    boas.push({ id: 'nitrato', nome: 'Nitrato (suco de beterraba)', texto: estimulo ? `ajuda em corridas de 12 a 40 minutos. ${comMedico}`
+      : 'ajuda em corridas de 12 a 40 minutos, como uma prova de 5 km: 310 a 560 mg de nitrato (veja no rótulo do suco concentrado), 2 a 3 horas antes. Teste em treino: pode mexer com a barriga.',
+    porque: 'Em esforços de menos de 12 minutos, o efeito é incerto. Beterraba, espinafre, rúcula e aipo também têm nitrato.', refs: ['maughan2018', 'ais_abcd'] });
+    boas.push({ id: 'bicarbonato', nome: 'Bicarbonato de sódio', texto: `só ajuda em esforços máximos de cerca de 1 a 10 minutos e costuma dar enjoo e diarreia. ${hipert || cond.includes('cardiaco') ? 'Tem muito sódio: com o que você informou, não use.' : estimulo ? `Tem muito sódio. ${comMedico}` : 'Tem muito sódio: só com nutricionista, testado em treino.'}`,
+      porque: estimulo ? 'Acima de 10 minutos de esforço, perde o efeito.' : 'Acima de 10 minutos de esforço, perde o efeito. Nos estudos, 0,2 a 0,4 g por quilo, de 1 a 2 horas e meia antes: para 70 kg, de 14 a 28 g, com cerca de 4 a 8 g de sódio.',
+      refs: ['maughan2018', 'ais_abcd'] });
+  }
+  boas.push({ id: 'vitaminas', nome: 'Vitamina D e ferro', texto: 'só com exame de sangue e orientação do médico. Sem falta confirmada, não tome por conta própria.',
+    porque: 'O consenso do Comitê Olímpico Internacional não recomenda suplementar sem avaliação, e ferro em dose alta só deve ser usado com falta de ferro. O Instituto Australiano do Esporte os classifica como suplementos médicos.', refs: ['maughan2018', 'ais_abcd'] });
+  const linhas = boas.map((b) => `${b.nome}: ${b.texto}`);
+
+  // pré-treino pronto
+  let preTreino;
+  if (estimulo) {
+    const m = motivoSemPreTreino(res, t);
+    preTreino = { bloqueado: true, intro: m.texto, introRefs: m.refs, itens: [proibidos] };
+  } else {
+    const lim = limiteDeCafeina(res, 0);
+    preTreino = { bloqueado: false, intro: 'Não é obrigatório: o efeito comprovado vem da cafeína, que também está no café.', introRefs: ['guest2021', 'harty2018'], itens: [
+      { titulo: 'O que tem dentro', texto: 'Quase sempre cafeína, muitas vezes de 250 a 400 mg por dose, com beta-alanina, citrulina e creatina. Se o rótulo não disser quanto de cafeína tem, não use.',
+        porque: 'Muitos misturam os ingredientes numa fórmula fechada, sem a quantidade de cada um, e alguns vêm em dose baixa demais para fazer efeito.', refs: ['jagim2019', 'harty2018'] },
+      { titulo: 'Quanto de cafeína', texto: `Até ${lim.porVez} mg por dose e ${lim.noDia} mg no dia, somando café, chá, refrigerante e energético. Rótulo com mais de ${lim.porVez} mg por dose: não use. Nunca tome duas doses.`,
+        porque: `Para adultos saudáveis, a EFSA considera seguros até 200 mg de uma vez (cerca de 3 mg por quilo) e 400 mg no dia (cerca de 5,7 mg por quilo), de todas as fontes.${lim.porVez < 200 ? ' Abaixo de 70 kg, o aplicativo usa o valor por quilo, que é menor.' : ''} No Brasil, suplemento de cafeína tem até 200 mg por dose. Uma xícara de café tem cerca de 100 mg.`,
+        refs: ['efsa2015', 'anvisa_in28', 'jagim2019', 'gardiner2023'], cafeina: true },
+      { titulo: 'Horário', texto: `Uma dose de pré-treino (cerca de 220 mg) ainda tira sono se tomada a menos de 13 horas da hora de dormir; uma xícara de café, a menos de 9.${res.horario === 'noite' ? ' Você treina à noite: prefira sem cafeína.' : ''}`,
+        porque: 'É a mesma regra da tela do sono. A sensibilidade varia de pessoa para pessoa: se o sono piorou, antecipe ou tire a cafeína.', refs: ['gardiner2023'] },
+      { titulo: 'Quando parar', texto: 'Pare se sentir palpitação, tontura, ansiedade ou insônia. Dor no peito, falta de ar ou desmaio: procure atendimento na hora.',
+        porque: 'Numa pesquisa com 872 usuários, 54% contaram algum efeito, como reação na pele, coração acelerado, enjoo e tontura. Dor no peito, falta de ar e desmaio são sinais de alerta que pedem avaliação médica.', refs: ['jagim2019', 'maughan2018', 'whitfield2017'] },
+      proibidos,
+      { titulo: 'Exame antidoping', texto: 'Suplemento pode vir contaminado com substância proibida. Prefira produto com certificação de terceira parte; mesmo assim, não há garantia total.',
+        porque: 'Num estudo com mais de 600 produtos do mundo todo, cerca de 15% tinham hormônios que não estavam no rótulo.', refs: ['maughan2018', 'harty2018', 'ais_abcd'] },
+    ] };
+  }
+  const out = { semDoses: false, semCafeina: estimulo, semPreTreino: estimulo, intro: 'Suplemento não é obrigatório. Os que têm boa evidência para quem treina são:', linhas, boas, preTreino, semEvidencia,
+    aviso: estimulo && !hipert ? `${aviso} Com o que você informou, a cafeína fica sem dose: converse com o seu médico.` : aviso };
+  out.refs = junta(out);
+  return out;
 }
 
 // Textos sobre o peso na tela de metas, montados num lugar só para não se contradizerem: a perda por semana sai do

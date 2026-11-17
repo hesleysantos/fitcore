@@ -236,6 +236,8 @@ export function faqBlock(lista, titulo, placeholder) {
       const d = h('details', { class: 'acc' }, h('summary', { text: it.q }));
       const inner = h('div');
       for (const p of it.a) inner.appendChild(h('p', { text: p }));
+      // resposta longa: o principal à vista e o resto em "Saiba mais", fechado
+      if (Array.isArray(it.mais) && it.mais.length) inner.appendChild(h('details', { class: 'pq' }, h('summary', { text: 'Saiba mais' }), ...it.mais.map((p) => h('p', { text: p }))));
       const refs = h('div', { class: 'col gap-s' });
       for (const k of it.f) if (REFS[k]) refs.appendChild(h('p', { class: 'ref', text: '• ' + REFS[k] }));
       inner.appendChild(h('div', { class: 'tiny bold muted', text: 'FONTES' }));

@@ -44,23 +44,36 @@ function blocoPerfil(a) {
   if (a.semPerfil) out.push(btn('Responder ao Treinador', () => go('treinador'), 'block sm', 'coach'));
   return out;
 }
+// "Definição" só aparece para quem quer emagrecer (no Treinador ou na Nutricionista)
+const querEmagrecer = () => state.trainer.answers.objetivo === 'emagrecimento' || state.nutri.answers.objetivo === 'emagrecer';
 function cartao(rotulo, a, corpo) {
   const selo = !a.semPerfil && SELO[a.perfil.veredito] ? badge(SELO[a.perfil.veredito][0], SELO[a.perfil.veredito][1]) : null;
   return h('details', { class: 'acc avaliacao' },
     h('summary', null, h('span', { class: 'grow', text: rotulo }), selo),
     h('div', null, linha(a.conclusao), ...corpo.filter(Boolean), ...blocoPerfil(a),
-      a.tipo.id ? linha(a.definicao, 'tiny muted') : null));
+      a.tipo.id && querEmagrecer() ? linha(a.definicao, 'tiny muted') : null));
+}
+// A avaliação é para treino montado à mão ou vindo de modelo. O plano do próprio Treinador (e o fortalecimento que ele
+// monta para quem corre) já sai com as regras de dor e de perfil: no lugar da avaliação, no máximo uma linha.
+const doTreinador = (plano) => !!plano && (plano.origem === 'treinador' || plano.origem === 'fortalecimento');
+function linhaDoTreinador() {
+  let dores = [];
+  try { dores = contexto().dores; } catch { dores = []; }
+  if (!dores.length) return null;
+  return h('button', { class: 'plainlink small avaliacao-link', type: 'button', onClick: () => go('treinador') },
+    h('span', { class: 'muted', text: 'O Treinador já ajusta este plano às suas dores ' }), h('span', { class: 'bold', text: '→ Ver' }));
 }
 
 // Avaliação de um treino (um dia do plano). Devolve o cartão, ou null se o treino não tem exercícios.
 export function cartaoAvaliacaoDoDia(plano, dia) {
+  if (doTreinador(plano)) return linhaDoTreinador();
   let a = null;
   try { a = avaliarDia(dia, contexto()); } catch { a = null; }
   if (!a || a.vazio) return null;
   const corpo = [
     kv('Foco', a.foco.texto),
-    a.mais ? kv('Mais trabalha', `${a.mais.nome} (${series(a.mais.series)})`) : null,
-    a.menos ? kv('Menos trabalha', `${a.menos.nome} (${series(a.menos.series)})`) : null,
+    a.mais ? kv('Mais trabalha', `${a.mais.nome} (${a.mais.diretas === false ? 'só como auxiliar' : series(a.mais.series) + (a.mais.series === 1 ? ' direta' : ' diretas')})`) : null,
+    a.menos ? kv('Menos trabalha', `${a.menos.nome} (${a.menos.diretas === false ? 'só como auxiliar' : series(a.menos.series) + (a.menos.series === 1 ? ' direta' : ' diretas')})`) : null,
     ...(a.tipo.id ? serve(a.tipo) : []),
     kv('Tamanho', `${a.exercicios} ${a.exercicios === 1 ? 'exercício' : 'exercícios'} · ${series(a.series)} · cerca de ${a.duracaoMin} min`),
   ];
@@ -71,6 +84,7 @@ export function cartaoAvaliacaoDoDia(plano, dia) {
 
 // Avaliação do plano inteiro (a semana). Devolve o cartão, ou null se o plano não tem exercícios.
 export function cartaoAvaliacaoDoPlano(plano) {
+  if (doTreinador(plano)) return linhaDoTreinador();
   let a = null;
   try { a = avaliarPlano(plano, contexto()); } catch { a = null; }
   if (!a || a.vazio) return null;
@@ -80,7 +94,7 @@ export function cartaoAvaliacaoDoPlano(plano) {
     kv('Duração', a.duracaoMin.menor === a.duracaoMin.maior ? `cerca de ${a.duracaoMin.menor} min` : `de ${a.duracaoMin.menor} a ${a.duracaoMin.maior} min por treino`),
     titulo('Séries por semana'),
     ...a.grupos.map((x) => h('div', { class: 'kv' }, h('span', { text: x.nome }), h('span', { class: 'row gap-s' }, h('span', { text: num(x.series) }), badge(FAIXA[x.faixa][0], FAIXA[x.faixa][1])))),
-    linha(`Referência: 4 séries por semana mantêm e já dão resultado; 10 ou mais são o indicado para ganhar massa; acima de ${a.teto} séries diretas é demais${a.semPerfil ? '' : ' para o seu nível'}. Músculo auxiliar conta meia série.`, 'tiny muted'),
+    linha(`Referência: 4 séries por semana mantêm e já dão resultado; 10 ou mais são o indicado para ganhar massa. A conta soma meia série quando o músculo só ajuda. “Demais” olha só as séries diretas, com o músculo como principal: acima de ${a.teto}${a.semPerfil ? '' : ' no seu nível'}.`, 'tiny muted'),
   ];
   if (a.equilibrio.length || a.corrida.length) {
     corpo.push(titulo('Equilíbrio'));

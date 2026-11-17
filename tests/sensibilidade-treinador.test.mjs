@@ -43,7 +43,7 @@ test('todas as perguntas da entrevista estão cobertas por este arquivo', () => 
   assert.deepEqual(opcoes('local'), ['completa', 'minha', 'halteres', 'corporal']);
   assert.deepEqual(opcoes('extras'), ['elastico', 'bola_suica', 'caixa', 'banco_inclinado', 'barra_fixa', 'kettlebell', 'trx', 'corda_pular', 'bicicleta', 'esteira', 'nenhum']);
   assert.deepEqual(opcoes('limitacoes'), ['ombro', 'joelho', 'lombar', 'cervical', 'cotovelo', 'punho', 'quadril', 'tornozelo', 'nenhuma']);
-  assert.deepEqual(opcoes('condicoes'), ['hipertensao', 'cardiaco', 'diabetes', 'renal', 'gestante', 'posparto', 'cronica', 'nenhuma']);
+  assert.deepEqual(opcoes('condicoes'), ['hipertensao', 'cardiaco', 'diabetes', 'renal', 'gestante', 'posparto', 'transtorno', 'cronica', 'nenhuma']);
   assert.deepEqual(opcoes('triagem'), ['dor_peito', 'falta_ar', 'falta_ar_deitado', 'palpitacao', 'tontura', 'tornozelos', 'perna', 'sopro', 'cansaco', 'osseo', 'medico', 'nenhum']);
   assert.deepEqual(opcoes('remedios'), ['pulso', 'glicose', 'outro', 'nenhum']);
   assert.deepEqual(opcoes('liberado'), ['sim', 'nao']);
@@ -312,6 +312,10 @@ test('condições de saúde: cada opção muda a dose, os exercícios ou a seman
   assert.ok(cron.perfil.cronica && cron.perfil.moderado);
   assert.ok(comPeso(cron).every((it) => lo(it) >= 8 && it.series <= 3));
   assert.ok(tem(cron, /Doença crônica/));
+  // transtorno alimentar: no treino, o mesmo efeito de "outra doença crônica" (logic/saude.js); a diferença é o diário
+  const trans = com('transtorno', { objetivo: 'forca' });
+  assert.ok(trans.perfil.cronica && trans.perfil.moderado);
+  assert.equal(dose(trans), dose(cron));
   for (const [nome, p] of [['hipertensao', has], ['cardiaco', card], ['gestante', gest], ['posparto', pos]]) assert.notEqual(dose(p), dose(semCond), nome + ' não mudou o plano');
   assert.notEqual(dose(diab), dose(gerarPlano({ ...base, dias: '5', objetivo: 'forca' }, GYM, 0)));
   assert.notEqual(dose(cron), dose(gerarPlano({ ...base, dias: '5', objetivo: 'forca' }, GYM, 0)));
@@ -700,8 +704,11 @@ test('outra versão e trocas continuam valendo para quem corre', () => {
   for (const it of itens(prox.plano)) for (const alt of alternativas(exDe(it), prox.plano.perfil, GYM)) assert.ok(permitido(alt, prox.plano.perfil));
 });
 
-test('agachamento hack invertido: só para escolha manual — nunca em plano automático, em troca sugerida nem em alternativa', () => {
-  const id = 'agachamento-hack-invertido';
+test('agachamento hack invertido e articulado de frente: só para escolha manual — nunca em plano automático, em troca sugerida nem em alternativa', () => {
+  for (const id of ['agachamento-hack-invertido', 'agachamento-articulado-de-frente']) soManualNuncaAutomatico(id);
+  assert.match(FAQ_TREINO.find((x) => /não escolhe sozinho/.test(x.q)).a.join(' '), /hack invertido e o articulado de frente/);
+});
+function soManualNuncaAutomatico(id) {
   assert.ok(EX_POR_ID.has(id) && soManual(id));
   assert.ok(!soManual('agachamento-articulado') && !soManual('hack-machine'), 'o hack comum e o articulado continuam podendo ser prescritos');
   const gymHack = { all: false, has: { hack: true, agachamento_articulado: true, halteres: true, banco_reto: true, leg_press_45: true, cadeira_extensora: true, mesa_flexora: true, polia_alta: true, colchonete: true } };
@@ -719,8 +726,7 @@ test('agachamento hack invertido: só para escolha manual — nunca em plano aut
   for (const ex of EXERCICIOS) for (const experiencia of ['intermediario', 'avancado']) assert.ok(!alternativas(ex, perfil({ ...base, experiencia, local: 'minha' }), { all: true, has: {} }).some((x) => x.id === id), 'hack invertido como alternativa de ' + ex.id);
   assert.ok(n >= 900 && comHack > 0, `${n} planos, ${comHack} com hack comum ou articulado`);
   assert.ok(motivosContra(EX_POR_ID.get(id), perfil({ ...base, experiencia: 'avancado' }), GYM).some((m) => m.id === 'manual' && m.grave));
-  assert.match(FAQ_TREINO.find((x) => /não escolhe sozinho/.test(x.q)).a.join(' '), /hack invertido/);
-});
+}
 
 // ---------- rodada 6: achados da auditoria de lesões e questionários ----------
 test('descanso semanal: a prioridade na corrida nunca tira o último dia sem treino; menores, 60+ e iniciantes não perdem descanso por causa dela', () => {

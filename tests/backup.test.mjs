@@ -35,7 +35,7 @@ function estadoCheio() {
   const corrida = responder(P_CORRIDA, 1);
   return {
     v: store.VERSAO,
-    settings: { tema: 'claro', descanso: 75, som: false, vibrar: false, telaLigada: false, animar: false, avisoFundo: true },
+    settings: { tema: 'claro', descanso: 75, som: false, somAlerta: 'sino', vibrar: false, telaLigada: false, animar: false, avisoFundo: true },
     gym: { all: false, has: Object.fromEntries(Object.keys(EQUIPAMENTOS).slice(0, 3).map((k) => [k, true])) },
     plans: [plano],
     activePlan: 'p1',
@@ -59,6 +59,11 @@ function estadoCheio() {
       { data: '2026-11-12', itens: [{ id: 'i1', ref: 'cafe', al: ALIMENTOS[0].id, g: 150, m: true }, { id: 'i2', ref: 'almoco', al: ALIMENTOS[5].id, g: 80, m: false }] },
       { data: '2026-11-13', itens: [{ id: 'i1', ref: 'outro', nome: 'Bolo de cenoura', kcal: 310, p: 4.5 }, { id: 'i2', ref: 'jantar', nome: 'Sopa da casa', kcal: 180, p: null }] },
     ] },
+    // "Não treinei" (com o treino passado para outro dia) e "Não corri"
+    perdidos: [
+      { tipo: 'musculacao', data: '2026-11-03', planId: 'p1', diaId: plano.dias[0].id, movs: [{ diaId: plano.dias[0].id, de: '2026-11-03', para: '2026-11-05' }], em: '2026-11-03T21:00:00.000Z' },
+      { tipo: 'corrida', data: '2026-11-04', em: '2026-11-04T21:00:00.000Z' },
+    ],
     ui: { onboarded: true, installDismissedAt: '2026-11-01T09:00:00.000Z', backupEm: '2026-11-07T09:00:00.000Z', backupAdiadoEm: '2026-11-05T09:00:00.000Z', objetivosOk: 'hipertrofia|emagrecer' },
   };
 }
@@ -92,6 +97,7 @@ test('backup: o estado completo sai no arquivo e volta idêntico', () => {
   assert.deepEqual(limpo.sono, cheio.sono, 'hora de acordar, idade e noites registradas preservadas');
   assert.deepEqual(limpo.diario, cheio.diario, 'diário alimentar preservado: dias, refeições, alimentos da lista e fora dela');
   assert.deepEqual(limpo.combo, cheio.combo);
+  assert.deepEqual(limpo.perdidos, cheio.perdidos, 'treinos marcados como não feitos preservados');
   assert.deepEqual(limpo.ui, cheio.ui);
   // validar duas vezes não muda mais nada
   assert.deepEqual(store.sanitize(J(limpo)), limpo);

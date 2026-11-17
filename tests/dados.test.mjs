@@ -111,7 +111,7 @@ test('alimentos: valores coerentes (calorias batem com os macronutrientes)', () 
     assert.ok(Math.abs(est - f.kcal) <= Math.max(30, f.kcal * 0.25), `calorias incoerentes: ${f.id} (${f.kcal} vs ${Math.round(est)})`);
     assert.ok(f.porcao && f.porcao.g > 0 && f.porcao.desc, 'porção: ' + f.id);
     assert.ok([1, 2, 3, 4].includes(f.nova), 'NOVA: ' + f.id);
-    assert.ok(['TACO', 'TBCA', 'USDA'].includes(f.fonte), 'fonte: ' + f.id);
+    assert.ok(['TACO', 'TBCA', 'USDA', 'IBGE'].includes(f.fonte), 'fonte: ' + f.id);
     if (f.tags.includes('vegano')) assert.ok(f.tags.includes('vegetariano'), 'vegano implica vegetariano: ' + f.id);
     if (['carnes', 'peixes'].includes(f.cat)) assert.ok(!f.tags.includes('vegetariano'), 'carne marcada como vegetariana: ' + f.id);
     if (f.cat === 'ovos_laticinios') assert.ok(!f.tags.includes('vegano'), 'ovo/laticínio marcado como vegano: ' + f.id);

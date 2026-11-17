@@ -109,8 +109,8 @@ export default async (page) => {
   itens = await hoje();
   const doCafe = itens.filter((x) => x.ref === 'cafe');
   ok(doCafe.length === cafe.length && doCafe.every((x, i) => x.al === cafe[i][0] && x.g === cafe[i][1]), `os ${cafe.length} alimentos do café da manhã sugerido foram para o diário`);
-  ok((await aviso()).includes('Café da manhã registrado no diário de hoje'), 'avisa que registrou: ' + (await aviso()));
-  ok((await botoesDe('cafe')) === 'Adicionar mais' && (await page.eval(`return document.querySelector('.diario-acoes[data-ref="cafe"]').textContent;`)).includes('registrado no diário de hoje'), 'a refeição copiada mostra "registrado" e não oferece "Comi isso" de novo');
+  ok((await aviso()).includes('Registrado no diário de hoje: Café da manhã'), 'avisa que registrou: ' + (await aviso()));
+  ok((await botoesDe('cafe')) === 'Adicionar mais' && (await page.eval(`return document.querySelector('.diario-acoes[data-ref="cafe"]').textContent;`)).includes('Registrado no diário de hoje'), 'a refeição copiada mostra "registrado" e não oferece "Comi isso" de novo');
   ok((await naRefeicao('cafe')).length === cafe.length && !(await page.eval(`return !!document.querySelector('.refeicao[data-ref="cafe"] details.sugestao');`)), 'o que foi comido aparece dentro do café da manhã, no lugar da sugestão (que foi a comida)');
   ok((await page.eval(`return [...document.querySelectorAll('#diario-hoje .diario-item')].map((e) => e.textContent.split(' ')[0] + ' ' + e.textContent.split(' ')[1]).join('|');`)).startsWith('Pão francês') && (await page.eval(`return document.querySelectorAll('#diario-hoje .diario-item').length;`)) === 1, 'em "Outros alimentos de hoje" fica só o pão do lanche da manhã (refeição que não está no cardápio de 4 refeições)');
 

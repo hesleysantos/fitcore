@@ -86,7 +86,7 @@ function cardioPermitido(ex, pf) {
 }
 // ---------- segurança: as regras escritas de novo aqui, sem usar a lógica do aplicativo ----------
 // exercícios que o Treinador nunca escolhe sozinho, para ninguém (ficam para a escolha manual)
-const SO_MANUAL = new Set(['remada-invertida-sob-mesa', 'bom-dia-barra', 'hiit-bicicleta', 'agachamento-hack-invertido']);
+const SO_MANUAL = new Set(['remada-invertida-sob-mesa', 'bom-dia-barra', 'hiit-bicicleta', 'agachamento-hack-invertido', 'agachamento-articulado-de-frente']);
 const NAO_USADOS = new Set(['remada_alta', 'mergulho', 'total', 'carregar']);
 const instavel = (ex) => ex.equip.includes('bola_suica') || ex.equip.includes('trx') || (ex.unilateral && ['afundo', 'agachar', 'dobradica_quadril', 'flexao_plantar'].includes(ex.padrao) && ex.modalidade !== 'maquina' && ex.modalidade !== 'smith');
 // devolve o motivo pelo qual o exercício não pode ser prescrito automaticamente para o perfil ('' = pode)
@@ -392,7 +392,7 @@ const rotulo = (a, gym, v) => JSON.stringify({ ...a, gym: a.local === 'minha' ? 
 let TOTAL = 0;
 
 test('estresse: todas as perguntas têm cada opção coberta pelos geradores', () => {
-  assert.deepEqual([OBJ.length, EXP.length, DIAS.length, TEMPO.length, LOCAL.length, LIM.length, COND.length, TRI.length, REM.length, FOCO.length], [5, 4, 5, 4, 4, 8, 7, 11, 3, 12]);
+  assert.deepEqual([OBJ.length, EXP.length, DIAS.length, TEMPO.length, LOCAL.length, LIM.length, COND.length, TRI.length, REM.length, FOCO.length], [5, 4, 5, 4, 4, 8, 8, 11, 3, 12]);
 });
 
 test('estresse: grade completa objetivo × nível × dias × tempo × local × faixa de idade (4.800 perfis)', () => {

@@ -11,6 +11,7 @@ import { limparSono, sonoPadrao } from './logic/sono.js';
 import { limparCombo, comboPadrao, chaveValida } from './logic/combinado.js';
 import { limparDiario, diarioPadrao } from './logic/diario.js';
 import { diaValido } from './logic/saude.js';
+import { limparPerdidos } from './logic/perdido.js';
 
 const DB_NAME = 'fitcore';
 const STORE = 'kv';
@@ -24,7 +25,7 @@ export const MAX_PLANOS = 60;
 
 const defaults = () => ({
   v: VERSAO,
-  settings: { tema: 'auto', descanso: 90, som: true, vibrar: true, telaLigada: true, animar: true, avisoFundo: false },
+  settings: { tema: 'auto', descanso: 90, som: true, somAlerta: 'equilibrado', vibrar: true, telaLigada: true, animar: true, avisoFundo: false },
   gym: { all: true, has: {} },
   plans: [],
   activePlan: '',
@@ -42,6 +43,7 @@ const defaults = () => ({
   sono: sonoPadrao(), // meta de sono e noites registradas (logic/sono.js)
   combo: comboPadrao(), // corrida + musculação: foco e fortalecimento (logic/combinado.js)
   diario: diarioPadrao(), // diário alimentar: o que a pessoa comeu de fato (logic/diario.js)
+  perdidos: [], // "Não treinei" e "Não corri": dias marcados e para onde o treino foi (logic/perdido.js)
   // objetivosOk: par "treino|alimentação" que o usuário escolheu manter diferente (logic/objetivos.js)
   // backupAdiadoEm: quando a pessoa tocou em "Depois" no lembrete de backup da tela inicial
   ui: { onboarded: false, installDismissedAt: '', backupEm: '', backupAdiadoEm: '', objetivosOk: '' },
@@ -151,6 +153,14 @@ const cleanDay = (d) => {
   if (!id) return null;
   return { id, nome: str(d.nome, 40, 'Treino'), foco: str(d.foco, 90), itens: arr(d.itens, 40, cleanPlanItem) };
 };
+// Variação dos exercícios (logic/variacao.js): desde quando conta o prazo, até quando a pessoa adiou e as últimas trocas
+// (o que saiu e o que entrou, para não trazer de volta um exercício que acabou de sair). Só aparece no plano que tem algo.
+const cleanVariacao = (v) => {
+  if (!isObj(v)) return null;
+  const trocas = arr(Array.isArray(v.trocas) ? v.trocas.slice(-40) : [], 40, (t) => (isObj(t) && EX_POR_ID.has(t.de) && EX_POR_ID.has(t.para) && iso(t.em) ? { de: t.de, para: t.para, em: t.em } : null));
+  const out = { desde: iso(v.desde), adiadoAte: iso(v.adiadoAte), travadoAte: iso(v.travadoAte), trocas };
+  return out.desde || out.adiadoAte || out.travadoAte || trocas.length ? out : null;
+};
 function cleanPlan(p) {
   if (!isObj(p)) return null;
   const id = idStr(p.id);
@@ -159,7 +169,8 @@ function cleanPlan(p) {
   const dias = arr(p.dias, 14, cleanDay).filter((d) => (vistos.has(d.id) ? false : vistos.add(d.id)));
   const agenda = {};
   if (isObj(p.agenda)) for (let i = 0; i < 7; i++) { const v = p.agenda[i]; if (typeof v === 'string' && vistos.has(v)) agenda[i] = v; }
-  return { id, nome: str(p.nome, 60, 'Meu treino'), origem: oneOf(p.origem, ['treinador', 'modelo', 'manual', 'fortalecimento'], 'manual'), criadoEm: iso(p.criadoEm), dias, agenda, info: str(p.info, 600) };
+  const variacao = cleanVariacao(p.variacao);
+  return { id, nome: str(p.nome, 60, 'Meu treino'), origem: oneOf(p.origem, ['treinador', 'modelo', 'manual', 'fortalecimento'], 'manual'), criadoEm: iso(p.criadoEm), dias, agenda, info: str(p.info, 600), ...(variacao ? { variacao } : {}) };
 }
 const cleanBody = (b) => {
   if (!isObj(b)) return null;
@@ -181,7 +192,7 @@ export function sanitize(raw, { doAparelho = false } = {}) {
   d.settings = {
     tema: oneOf(s.tema, ['auto', 'escuro', 'claro'], 'auto'),
     descanso: Math.round(num(s.descanso, 15, 600, 90)),
-    som: bool(s.som, true), vibrar: bool(s.vibrar, true), telaLigada: bool(s.telaLigada, true), animar: bool(s.animar, true), avisoFundo: bool(s.avisoFundo, false),
+    som: bool(s.som, true), somAlerta: ['equilibrado', 'sino', 'alto', 'longo', 'discreto'].includes(s.somAlerta) ? s.somAlerta : 'equilibrado', vibrar: bool(s.vibrar, true), telaLigada: bool(s.telaLigada, true), animar: bool(s.animar, true), avisoFundo: bool(s.avisoFundo, false),
   };
   const g = isObj(raw.gym) ? raw.gym : {};
   d.gym.all = bool(g.all, true);
@@ -209,6 +220,7 @@ export function sanitize(raw, { doAparelho = false } = {}) {
   d.diario = limparDiario(raw.diario, undefined, semCorte);
   d.run = limparCorrida(raw.run);
   d.runs = limparRegistros(raw.runs); // até 3000 registros, sem id repetido
+  d.perdidos = limparPerdidos(raw.perdidos);
   const u = isObj(raw.ui) ? raw.ui : {};
   d.ui = { onboarded: bool(u.onboarded, false), installDismissedAt: iso(u.installDismissedAt), backupEm: iso(u.backupEm), backupAdiadoEm: iso(u.backupAdiadoEm), objetivosOk: parValido(u.objetivosOk) ? u.objetivosOk : '' };
   return d;

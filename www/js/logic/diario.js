@@ -219,7 +219,7 @@ export function totaisDoDia(diario, data) {
 // Com o estado (`st`), a idade e as condições vêm de TODAS as entrevistas — Treinador, Nutricionista, corrida e, para a
 // idade, também a tela do sono (as mesmas fontes de logic/sono.js) —, e vale o modo mais protegido: a menor idade
 // informada decide se é menor de 18; gestação, pós-parto ou doença renal marcados em qualquer entrevista tiram a meta.
-// Transtorno alimentar só é perguntado pela Nutricionista: sem essa resposta, o adulto fica com a soma.
+// Transtorno alimentar marcado na Nutricionista, no Treinador ou na corrida tira o diário.
 export function perfilDoDiario(st, res = null) {
   const s = isObj(st) ? st : {};
   const resp = (o) => (isObj(o) && isObj(o.answers) ? o.answers : {});
@@ -326,7 +326,8 @@ export function lerProteina(texto) {
 // Cada palavra digitada tem de ser o COMEÇO de uma palavra do nome ("coca" não acha "Paçoca"). Primeiro vêm os nomes
 // que começam pelo termo, depois os demais, em ordem alfabética. Menos de 2 letras: lista vazia.
 const simples = (v) => String(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-const NOMES = ALIMENTOS.map((f) => ({ f, nome: simples(f.nome), palavras: simples(f.nome).split(' ') }));
+// (os apelidos de data/foods.js — "refri", "pingado", "cafezinho" — valem como palavras do nome)
+const NOMES = ALIMENTOS.map((f) => ({ f, nome: simples(f.nome), palavras: simples(f.nome + ' ' + (f.apelidos || '')).split(' ') }));
 export function buscarAlimentos(termo, max = 40) {
   const t = simples(typeof termo === 'string' ? termo.slice(0, 60) : '');
   if (t.length < 2) return [];

@@ -47,6 +47,10 @@ const planoAtivo = (st) => lista(st && st.plans).find((x) => x && x.id === st.ac
 // semanas de uso dentro de uma janela (no mínimo 1): quem começou há poucos dias não tem a média diluída
 const semanasDeUso = (ss, agora, desde) => (ss.length ? Math.max(1, (agora - Math.max(desde, ss[0].t)) / SEMANA) : 1);
 
+// Orientação de pesagem, a mesma em todas as telas: a diretriz AHA/ACC/TOS de 2013 (ref jensen2013) inclui, na manutenção
+// do peso perdido, acompanhar o peso toda semana ou com mais frequência.
+export const PESAGEM = 'Pese-se pelo menos uma vez por semana para acompanhar a tendência.';
+
 export function metaSemanal(st) {
   const p = planoAtivo(st);
   const agendados = p && p.agenda && typeof p.agenda === 'object' ? Object.keys(p.agenda).length : 0;
@@ -426,7 +430,7 @@ export function analisar(st, agora = Date.now()) {
       else if (tp.semanas >= 3) add({ id: 'peso', tom: 'ideia', icone: 'food', p: 3, titulo: 'O peso não sobe', texto: `${kg} em ${tp.semanas} semanas. Aumente um pouco as porções.`, porque: 'Para ganhar massa é preciso comer um pouco acima do que se gasta, com proteína suficiente.', refs: ['iraki2019', 'slater2019'], acao: abrir });
     }
   } else if (alvo && (tp.diasSemRegistro == null || tp.diasSemRegistro > 14)) {
-    add({ id: 'pesar', tom: 'ideia', icone: 'chart', p: 8, titulo: 'Registre o seu peso', texto: 'Uma vez por semana basta para acompanhar a tendência.', acao: { rotulo: 'Registrar peso', rota: 'progresso', aba: 'peso' } });
+    add({ id: 'pesar', tom: 'ideia', icone: 'chart', p: 8, titulo: 'Registre o seu peso', texto: PESAGEM, porque: 'A diretriz de obesidade dos Estados Unidos indica acompanhar o peso toda semana, ou mais vezes, para manter o resultado.', refs: ['jensen2013'], acao: { rotulo: 'Registrar peso', rota: 'progresso', aba: 'peso' } });
   }
 
   dicas.sort((a, b) => PESO_TOM[a.tom] - PESO_TOM[b.tom] || a.p - b.p);

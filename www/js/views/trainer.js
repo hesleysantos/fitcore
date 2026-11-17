@@ -1,10 +1,14 @@
 // Tela do Treinador virtual.
-import { h, btn, icon, note, badge, sectionTitle, toggle, toast, confirmSheet, plural, fmtDate, dateKey, uid } from '../ui.js';
+// Ordem da tela, por prioridade (plano aceito): o treino de hoje com o botão de iniciar → avisos que mudam o treino (saúde,
+// dores, prioridade com a corrida, trocas pendentes) → a semana e os treinos do plano → seções fechadas (sem evolução,
+// cuidados, perfil, séries por semana, como treinar) → perguntas frequentes → ações (trocas, novo treino, entrevista).
+// Na proposta: o resumo, os avisos, os treinos da semana (fechados, um toque abre os exercícios) e o botão de aceitar.
+import { h, btn, icon, note, badge, sectionTitle, toggle, toast, confirmSheet, plural, dateKey, uid, DIAS_CURTO, DIAS_LONGO } from '../ui.js';
 import { state, update, activePlan } from '../store.js';
 import { go, refresh } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { FAQ_TREINO } from '../data/knowledge.js';
-import { PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, sugerirTrocas, perfil, volumeSemanal, imcTexto, nomeGrupo, outraVersao, avisosDoPlano, orientacaoDaDor, ajustesPorDor, aplicarTrocasDor, voltasPorDor, aplicarVoltasDor, resumoCombinado, doresDoTreino, doresPendentes, avisosBloqueio, saudeDoTreinador } from '../logic/trainer.js';
+import { PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, perfil, volumeSemanal, imcTexto, nomeGrupo, outraVersao, avisosDoPlano, orientacaoDaDor, ajustesPorDor, aplicarTrocasDor, voltasPorDor, aplicarVoltasDor, resumoCombinado, doresDoTreino, doresPendentes, avisosBloqueio, saudeDoTreinador } from '../logic/trainer.js';
 import { respostasParaEntrevista } from '../logic/saude.js';
 import { comboAtual, chaveCombo, faltaPerguntar, temOsDois, temCorrida } from '../logic/combinado.js';
 import { cartaoCombinado, perguntarCombinado } from './combinado.js';
@@ -16,6 +20,8 @@ import { interview, faqBlock, notaObjetivo, conferirObjetivos, cartaoObjetivos, 
 import { treinoPara } from '../logic/objetivos.js';
 import { alvoTexto, duracaoEstimada } from './common.js';
 import { criarPlano } from './plans.js';
+import { startSession } from './session.js';
+import { situacaoDoPlano, cartaoVariacao } from './variacao.js';
 
 let modo = 'auto'; // 'auto' | 'entrevista' | 'proposta' | 'trocas'
 // exercícios que entraram no último toque em "Outra versão" (só para marcar "novo" na tela; não é gravado)
@@ -65,22 +71,25 @@ function blocoDeSaude(sd, pf, bloqueado) {
   return out;
 }
 
-export function revisaoPendente() {
-  const t = state.trainer;
-  if (!t.aceitoEm || !t.revisaoEm || !activePlan()) return '';
-  const now = Date.now();
-  if (now < Date.parse(t.revisaoEm)) return '';
-  if (t.adiadoAte && now < Date.parse(t.adiadoAte)) return '';
-  const semanas = Math.max(1, Math.round((now - Date.parse(t.aceitoEm)) / SEMANA));
-  return `Você segue o mesmo treino há ${plural(semanas, 'semana', 'semanas')}. Sugiro trocar alguns exercícios auxiliares para variar o estímulo.`;
-}
-
+// cabeçalho grande só nas boas-vindas; com plano ou proposta, uma linha (o que importa aparece logo)
 function cabecalho() {
   return h('div', { class: 'col' }, abasTreinador('forca'),
     h('div', { class: 'coach-hd' }, h('div', { class: 'avatar' }, icon('coach', 'l')), h('div', null, h('h2', { text: 'Treinador virtual' }), h('p', { class: 'tiny muted', text: 'Baseado em diretrizes de educação física. Não substitui um profissional.' }))));
 }
+function cabecalhoCurto() {
+  return h('div', { class: 'col gap-s' }, abasTreinador('forca'),
+    h('div', { class: 'nutri-topo' }, h('div', { class: 'avatar' }, icon('coach', 's')), h('p', { class: 'tiny muted', text: 'Treinador virtual. Baseado em diretrizes de educação física: não substitui um profissional.' })));
+}
+// seção que abre ao toque
+const acc = (titulo, filhos, id) => h('details', { class: 'acc', id }, h('summary', { text: titulo }), h('div', null, ...filhos));
+// avisos: os que mudam o que fazer (atenção e perigo) ficam à vista; os informativos vão para "Cuidados para o seu perfil"
+const separarAvisos = (lista) => ({ alto: lista.filter((av) => av.tipo !== 'info'), info: lista.filter((av) => av.tipo === 'info') });
+const cuidadosCard = (info) => (info.length ? acc(`Cuidados para o seu perfil (${info.length})`, info.map((av) => note(av.tipo, av.texto)), 'treinador-cuidados') : null);
 
-function diaCard(d, entrou) {
+// dias da semana em que cada treino cai (segunda primeiro)
+const ORDEM = [1, 2, 3, 4, 5, 6, 0];
+const diasDoTreino = (agenda, id) => ORDEM.filter((wd) => agenda && agenda[wd] === id).map((wd) => DIAS_CURTO[wd]);
+function listaExercicios(d, entrou) {
   const l = h('div', { class: 'col gap-s' });
   d.itens.forEach((it) => {
     const ex = EX_POR_ID.get(it.ex);
@@ -91,22 +100,44 @@ function diaCard(d, entrou) {
       entrou && entrou.has(it.ex) ? badge('novo', 'acc') : null,
       h('span', { class: 'small muted nowrap', text: alvoTexto(it) })));
   });
-  return h('div', { class: 'card col gap-s' }, h('h3', { text: d.nome }), h('div', { class: 'tiny muted', text: `${d.foco} · cerca de ${duracaoEstimada(d)} min` }), l);
+  return l;
+}
+// um treino da proposta: fechado, com os dias, o foco e o tempo no título; abre com os exercícios (e já aberto quando
+// "Outra versão" trouxe exercícios novos para ele)
+function diaCard(d, agenda, entrou) {
+  const dias = diasDoTreino(agenda, d.id);
+  const n = entrou ? d.itens.filter((it) => entrou.has(it.ex)).length : 0;
+  return h('details', { class: 'acc treino-prop', open: n > 0, dataset: { dia: d.id } },
+    h('summary', null, h('div', { class: 'grow' },
+      h('div', { text: d.nome + (dias.length ? ' · ' + dias.join(', ') : '') }),
+      h('div', { class: 'tiny muted resumo', text: `${d.foco ? d.foco + ' · ' : ''}${plural(d.itens.length, 'exercício', 'exercícios')} · ${duracaoEstimada(d)} min` })),
+      n ? badge(plural(n, 'novo', 'novos'), 'acc') : null),
+    h('div', null, listaExercicios(d, entrou), h('p', { class: 'tiny muted', text: 'Toque num exercício para ver a animação.' })));
 }
 function volumeCard(vol, nivel) {
-  const inner = h('div');
+  const inner = [];
   for (const g of Object.keys(vol)) {
     if (!vol[g]) continue;
-    inner.appendChild(h('div', { class: 'kv' }, h('span', { text: nomeGrupo(g) }), h('span', { text: String(vol[g]).replace('.', ',') })));
+    inner.push(h('div', { class: 'kv' }, h('span', { text: nomeGrupo(g) }), h('span', { text: String(vol[g]).replace('.', ',') })));
   }
-  inner.appendChild(h('p', { class: 'tiny muted', text: `Referência: 4 séries por semana já dão resultado; para hipertrofia, 10 ou mais${nivel === 1 ? ' (iniciantes evoluem com menos)' : ''}. Músculo auxiliar conta meia série.` }));
-  return h('details', { class: 'acc' }, h('summary', { text: 'Séries por semana em cada grupo' }), inner);
+  inner.push(h('p', { class: 'tiny muted', text: `Referência: 4 séries por semana já dão resultado; para hipertrofia, 10 ou mais${nivel === 1 ? ' (iniciantes evoluem com menos)' : ''}. Músculo auxiliar conta meia série.` }));
+  return acc('Séries por semana em cada grupo', inner);
 }
-function orientacoesCard(lista) {
-  const wrap = h('div', { class: 'col gap-s' });
-  for (const [t, txt] of lista) wrap.appendChild(h('details', { class: 'acc' }, h('summary', { text: t }), h('div', null, h('p', { text: txt }))));
-  return wrap;
+// orientações gerais num bloco só: um toque abre todas, cada uma com o seu título
+const orientacoesCard = (titulo, lista) => acc(titulo, lista.flatMap(([t, txt]) => [h('h3', { class: 'orient-t', text: t }), h('p', { class: 'small', text: txt })]), 'treinador-orientacoes');
+// perfil em linhas curtas (proposta e painel)
+function perfilCard(a, pf, extra) {
+  return acc('Seu perfil', [
+    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Objetivo' }), h('span', { text: ROTULO.objetivo[a.objetivo] })),
+    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Nível' }), h('span', { text: ROTULO.experiencia[a.experiencia] })),
+    pf.retorno ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Parado antes de voltar' }), h('span', { text: ROTULO.pausa[a.pausa] })) : null,
+    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Frequência' }), h('span', { text: `${plural(pf.dias, 'dia', 'dias')} por semana · ${pf.tempo >= 75 ? 'mais de 1 h' : pf.tempo + ' min'}` })),
+    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Local' }), h('span', { text: ROTULO.local[a.local] })),
+    pf.extras.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Também tem' }), h('span', { text: pf.extras.map((x) => ROTULO.extras[x] || x).join(', ') })) : null,
+    pf.limitacoes.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Cuidados' }), h('span', { text: pf.limitacoes.join(', ') })) : null,
+    ...(extra || [])].filter(Boolean), 'treinador-perfil');
 }
+const imcLinha = (pf) => (pf.imc ? h('p', { class: 'small muted', text: `IMC: ${String(Math.round(pf.imc * 10) / 10).replace('.', ',')} (${imcTexto(pf.imc, pf.idade)}) — só uma referência.` }) : null);
 
 function proposta() {
   const sd = saudeDeHoje();
@@ -115,7 +146,7 @@ function proposta() {
   const dores = doresDeHoje();
   const comb = corridaDeHoje();
   const p = gerarPlano(a, state.gym, versao, dores, comb);
-  const body = [cabecalho(), cartaoObjetivos()].filter(Boolean);
+  const body = [cabecalhoCurto(), cartaoObjetivos()].filter(Boolean);
   // contar uma dor ou marcar "Melhorou" refaz a proposta (quem chama redesenha a tela)
   const dorCard = () => cartaoDores({ extra: (d) => (orientacaoDaDor(d, a) || {}).texto || '', aoMudar: () => { novos = null; } });
   if (!p) {
@@ -126,34 +157,32 @@ function proposta() {
   }
   const pf = p.perfil;
   for (const x of blocoDeSaude(sd, pf, false)) body.push(x);
+  const avisos = separarAvisos(p.avisos.filter((av) => !av.dor || avisoDeDorForaDoCartao(av)));
   if (!p.dias.length) {
     body.push(dorCard());
     for (const c of cartoesDeDorPendente(() => { novos = null; })) body.push(c);
-    for (const av of p.avisos) if (!av.dor || avisoDeDorForaDoCartao(av)) body.push(note(av.tipo, av.texto));
+    for (const av of [...avisos.alto, ...avisos.info]) body.push(note(av.tipo, av.texto));
     body.push(note('warn', 'Com essas respostas e os aparelhos disponíveis não consegui montar um treino seguro. Marque mais aparelhos em “Minha academia” ou procure um profissional de educação física.'));
     body.push(btn('Mudar respostas', () => { modo = 'entrevista'; refresh(); }, 'block'));
     return body;
   }
+  // 1. o resumo do plano em uma frase, e a prioridade de músculo em uma linha por músculo
   // o texto fala do plano que foi montado de fato: na gestação a dose é de saúde; depois de pausa longa, o nível desce
   const paraQue = pf.gestante ? 'manter a saúde na gestação' : ROTULO.objetivo[pf.objetivo].toLowerCase();
   const nivelTxt = pf.nunca ? 'para quem está começando' : pf.retorno >= 4 ? 'como recomeço depois da pausa' : pf.nivel < pf.nivelBase ? 'um nível abaixo do seu, por causa da pausa' : 'no nível ' + ['', 'iniciante', 'intermediário', 'avançado'][pf.nivel];
-  body.push(h('div', { class: 'bubble' }, h('p', { text: `Montei um plano de ${plural(p.dias.length, 'treino', 'treinos')} por semana para ${paraQue}, ${nivelTxt}.` }), h('p', { class: 'small muted', text: 'Toque num exercício para ver a animação. Você pode editar tudo depois.' })));
-  // prioridade de músculo: o que mudou, em uma linha por músculo
-  if (p.foco.length) {
-    body.push(h('div', { class: 'card col gap-s' }, h('div', { class: 'tiny muted bold', text: 'PRIORIDADE' }),
-      ...p.foco.map((x) => h('div', { class: 'small', text: x.texto })),
-      p.focoFora.length ? h('div', { class: 'tiny muted', text: `Com este tempo de treino, priorizo até ${plural(p.foco.length, 'músculo', 'músculos')} por vez. Ficou de fora: ${p.focoFora.join(', ').toLowerCase()}.` }) : null));
-  }
-  body.push(dorCard());
+  body.push(h('div', { class: 'bubble', id: 'treinador-resumo' }, h('p', { text: `Montei um plano de ${plural(p.dias.length, 'treino', 'treinos')} por semana para ${paraQue}, ${nivelTxt}.` }),
+    ...p.foco.map((x) => h('p', { class: 'small', text: x.texto })),
+    h('p', { class: 'small muted', text: 'Toque num treino para ver os exercícios. Você pode editar tudo depois.' })));
+  // 2. o que muda o treino: dores contadas e avisos de atenção (os informativos ficam em "Cuidados", no fim)
+  const temDor = doresAtivas(state, dateKey(new Date())).length > 0;
+  if (temDor) body.push(dorCard());
   for (const c of cartoesDeDorPendente(() => { novos = null; })) body.push(c);
-  for (const av of p.avisos) if (!av.dor || avisoDeDorForaDoCartao(av)) body.push(note(av.tipo, av.texto));
+  for (const av of avisos.alto) body.push(note(av.tipo, av.texto));
   if (p.faltando.length) body.push(note('warn', `Com os aparelhos disponíveis, não encontrei exercícios suficientes para: ${p.faltando.join(', ')}. Marque mais aparelhos em “Minha academia” ou complete esses treinos manualmente.`));
-  if (pf.imc) body.push(h('p', { class: 'small muted', text: `IMC: ${String(Math.round(pf.imc * 10) / 10).replace('.', ',')} (${imcTexto(pf.imc, pf.idade)}) — só uma referência.` }));
+  // 3. os treinos da semana (um toque abre os exercícios) e o aceite
+  body.push(sectionTitle('Os treinos da semana'));
   const marca = novos && novos.versao === versao ? novos.dias : null;
-  p.dias.forEach((d, i) => body.push(diaCard(d, marca ? marca[i] : null)));
-  body.push(volumeCard(p.volume, pf.nivel));
-  body.push(sectionTitle('Como seguir este treino'));
-  body.push(orientacoesCard(p.orientacoes));
+  p.dias.forEach((d, i) => body.push(diaCard(d, p.agenda, marca ? marca[i] : null)));
   let ciente = !pf.liberacao;
   const aceitar = btn('Aceitar e usar este treino', () => {
     if (!ciente) return;
@@ -184,10 +213,60 @@ function proposta() {
       update((s) => { s.trainer.versao = v; });
       toast(`Outra versão: ${plural(prox.trocados, 'exercício novo', 'exercícios novos')}. Os principais continuam.`);
       refresh();
-    }, 'grow', 'refresh') : null,
-    btn('Mudar respostas', () => { modo = 'entrevista'; refresh(); }, 'grow ghost', 'edit')));
+    }, 'grow alvo', 'refresh') : null,
+    btn('Mudar respostas', () => { modo = 'entrevista'; refresh(); }, 'grow ghost alvo', 'edit')));
   if (!prox) body.push(h('p', { class: 'tiny muted center', text: 'Não há outra versão: com os seus aparelhos e respostas, esta é a única combinação de exercícios.' }));
-  return body;
+  // 4. o resto, fechado
+  if (!temDor) body.push(dorCard());
+  body.push(cuidadosCard(avisos.info));
+  body.push(perfilCard(a, pf, [imcLinha(pf), p.focoFora.length ? h('p', { class: 'tiny muted', text: `Com este tempo de treino, priorizo até ${plural(p.foco.length, 'músculo', 'músculos')} por vez. Ficou de fora: ${p.focoFora.join(', ').toLowerCase()}.` }) : null]));
+  body.push(volumeCard(p.volume, pf.nivel));
+  body.push(orientacoesCard('Como seguir este treino', p.orientacoes));
+  return body.filter(Boolean);
+}
+
+// ---------- painel (plano aceito) ----------
+// o próximo dia com treino depois de hoje
+function proximoTreino(plan, wd) {
+  for (let i = 1; i <= 7; i++) {
+    const d = (wd + i) % 7;
+    const dia = plan.dias.find((x) => x.id === plan.agenda[d]);
+    if (dia) return { dia, quando: i === 1 ? 'amanhã' : DIAS_LONGO[d].toLowerCase().replace('-feira', '') };
+  }
+  return null;
+}
+// 1. hoje: o treino do dia com o botão de iniciar, ou o descanso e o próximo treino
+function cartaoHoje(plan, bloqueado) {
+  const agora = new Date();
+  const wd = agora.getDay();
+  const dia = plan.dias.find((d) => d.id === plan.agenda[wd]);
+  if (!dia) {
+    const prox = proximoTreino(plan, wd);
+    return h('div', { class: 'card col gap-s', id: 'treinador-hoje', dataset: { hoje: 'descanso' } },
+      h('h2', { text: 'Hoje: descanso' }),
+      h('p', { class: 'small muted', text: prox ? `Próximo treino: ${prox.dia.nome}, ${prox.quando}.` : 'Nenhum treino na agenda. Escolha os dias na aba Treinos.' }));
+  }
+  const hoje = dateKey(agora);
+  const feito = state.sessions.some((x) => x.planId === plan.id && x.diaId === dia.id && dateKey(new Date(x.inicio)) === hoje);
+  return h('div', { class: 'card hl col gap-s', id: 'treinador-hoje', dataset: { hoje: feito ? 'feito' : 'treino' } },
+    h('div', { class: 'row between' }, h('h2', { text: `Hoje: ${dia.nome}` }), feito ? badge('Feito', 'ok') : null),
+    h('p', { class: 'small muted', text: `${dia.foco ? dia.foco + ' · ' : ''}${plural(dia.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(dia)} min` }),
+    bloqueado ? null : h('div', { class: 'row par-de-botoes' },
+      btn(feito ? 'Treinar de novo' : 'Iniciar', () => startSession(plan.id, dia.id), (feito ? '' : 'primary ') + 'grow alvo', 'play'),
+      btn('Ver exercícios', () => go(`treino/${plan.id}/${dia.id}`), 'ghost grow alvo')));
+}
+// 3. a semana em uma lista curta: cada treino, os dias em que cai e o foco
+function semanaCard(plan) {
+  const wd = new Date().getDay();
+  const lista = h('div', { class: 'list', id: 'treinador-semana' });
+  for (const d of plan.dias) {
+    const dias = diasDoTreino(plan.agenda, d.id);
+    const hoje = plan.agenda[wd] === d.id;
+    lista.appendChild(h('button', { class: 'item' + (hoje ? ' hoje' : ''), type: 'button', onClick: () => go(`treino/${plan.id}/${d.id}`) },
+      h('div', { class: 'grow' }, h('div', { class: 't', text: d.nome + (dias.length ? ' · ' + dias.join(', ') : '') }), h('div', { class: 's', text: `${d.foco ? d.foco + ' · ' : ''}${plural(d.itens.length, 'exercício', 'exercícios')}` })),
+      hoje ? badge('Hoje', 'acc') : icon('right', 's muted')));
+  }
+  return lista;
 }
 
 function painel() {
@@ -195,11 +274,16 @@ function painel() {
   const a = sd.respostas;
   const pf = perfil(a);
   const plan = activePlan();
-  const body = [cabecalho(), cartaoObjetivos()].filter(Boolean);
+  const body = [cabecalhoCurto(), cartaoObjetivos()].filter(Boolean);
   const dores = doresDeHoje();
+  const bloqueado = !!(pf.bloqueado && plan && plan.origem === 'treinador');
   // a saúde mudou depois do aceite (outra entrevista, liberação vencida): o aviso vem antes de tudo
   for (const x of blocoDeSaude(sd, pf, pf.bloqueado)) body.push(x);
-  if (pf.bloqueado && plan && plan.origem === 'treinador') body.push(note('danger', 'Não use o treino abaixo até resolver o que está acima.'));
+  if (bloqueado) body.push(note('danger', 'Não use o treino abaixo até resolver o que está acima.'));
+  // 1. hoje: o treino do dia e o botão de iniciar (com a saúde bloqueando, sem o botão)
+  if (plan) body.push(cartaoHoje(plan, bloqueado));
+
+  // 2. o que muda o treino: dores, ajustes por dor, prioridade com a corrida, trocas pendentes, avisos de atenção
 
   // dores contadas: orientação de cada uma; ao marcar "Melhorou", os exercícios trocados voltam
   const trocadosPor = (onde) => (plan ? plan.dias.reduce((n, d) => n + d.itens.filter((it) => typeof it.nota === 'string' && it.nota.startsWith('dor:' + onde + ':')).length, 0) : 0);
@@ -212,17 +296,18 @@ function painel() {
     if (n) toast(`${plural(n, 'exercício voltou', 'exercícios voltaram')} ao treino.`);
     return n;
   };
-  body.push(cartaoDores({
+  const cartaoDeDores = cartaoDores({
     extra: (d) => { const o = orientacaoDaDor(d, a); const n = trocadosPor(d.onde); return o ? o.texto + (n ? ` ${plural(n, 'exercício trocado', 'exercícios trocados')} no seu treino.` : '') : ''; },
     aoMudar: (d) => { if (!d) desfazer(); },
-  }));
+  });
+  // com dor contada, o cartão fica aqui; sem dor, só o botão "Contar uma dor", depois da semana
+  const temDor = doresAtivas(state, dateKey(new Date())).length > 0;
+  if (temDor) body.push(cartaoDeDores);
   for (const c of cartoesDeDorPendente(null)) body.push(c);
   // região em volta gradual depois de uma dor de alerta que melhorou
   for (const d of dores.filter((x) => x.volta)) { const o = orientacaoDaDor(d, a); if (o) body.push(note('info', `${LOCAIS_DOR[d.onde]}: ${o.texto.charAt(0).toLowerCase() + o.texto.slice(1)}`)); }
-  // corrida e musculação: a escolha, e o ajuste do treino quando ela mudou depois de o plano ser aceito
+  // corrida e musculação: o ajuste do treino quando a escolha mudou depois de o plano ser aceito
   const comb = corridaDeHoje();
-  const cc = cartaoCombinado({ aoMudar: () => refresh() });
-  if (cc) body.push(cc);
   const escolha = comboAtual(state);
   if (plan && plan.origem === 'treinador' && comb && temOsDois(state) && state.trainer.combo !== chaveCombo(escolha) && (escolha.foco || pedeFortalecimento(escolha))) {
     const novo = gerarPlano(a, state.gym, state.trainer.versao || 0, dores, comb);
@@ -279,77 +364,46 @@ function painel() {
     body.push(card);
   }
 
-  // sugestão de troca (rotação)
-  const pend = revisaoPendente();
-  if ((pend || modo === 'trocas') && plan) {
-    const trocas = sugerirTrocas(plan, a, state.gym, 2, dores);
-    const card = h('div', { class: 'card hl col' }, h('h2', { text: 'Hora de variar o treino' }), h('p', { class: 'small muted', text: pend || 'Trocas sugeridas agora. Os exercícios principais continuam.' }));
-    if (!trocas.length) {
-      card.appendChild(note('info', 'Não encontrei alternativas com os seus aparelhos. O treino pode continuar como está.'));
-    } else {
-      const sel = new Set(trocas.map((_, i) => i));
-      trocas.forEach((t, i) => {
-        const de = EX_POR_ID.get(t.de), para = EX_POR_ID.get(t.para);
-        card.appendChild(h('div', { class: 'row top' },
-          h('div', { class: 'grow col gap-s' },
-            h('div', { class: 'tiny muted bold', text: t.dia.toUpperCase() }),
-            h('div', { class: 'small' }, h('span', { class: 'muted', text: 'Sai: ' }), de.nome),
-            h('button', { class: 'row gap-s plainlink', type: 'button', onClick: () => go('exercicio/' + para.id) }, h('div', { class: 'thumb mini' }, thumb(para)), h('span', { class: 'small bold grow', text: 'Entra: ' + para.nome }))),
-          toggle(true, (v) => { if (v) sel.add(i); else sel.delete(i); }, 'Aceitar esta troca')));
-      });
-      card.appendChild(btn('Aplicar as trocas marcadas', () => {
-        const aplicar = trocas.filter((_, i) => sel.has(i));
-        update((s) => {
-          const p = s.plans.find((x) => x.id === plan.id);
-          if (p) for (const t of aplicar) { const d = p.dias.find((x) => x.id === t.diaId); if (d && d.itens[t.idx] && d.itens[t.idx].ex === t.de) d.itens[t.idx] = { ...d.itens[t.idx], ex: t.para }; }
-          const now = Date.now();
-          s.trainer.revisaoEm = new Date(now + (pf.nivel === 1 ? 8 : 6) * SEMANA).toISOString();
-          s.trainer.adiadoAte = '';
-          s.trainer.versao = (s.trainer.versao || 0) + 1;
-        });
-        modo = 'auto';
-        toast(aplicar.length ? `${plural(aplicar.length, 'exercício trocado', 'exercícios trocados')}` : 'Nenhuma troca aplicada');
-        refresh();
-      }, 'primary block', 'check'));
-    }
-    card.appendChild(h('div', { class: 'row' },
-      btn('Agora não', () => { update((s) => { s.trainer.adiadoAte = new Date(Date.now() + 2 * SEMANA).toISOString(); }); modo = 'auto'; toast('Combinado. Lembro você daqui a 2 semanas.'); refresh(); }, 'grow ghost'),
-      btn('Manter meu treino', () => { update((s) => { s.trainer.revisaoEm = new Date(Date.now() + (pf.nivel === 1 ? 8 : 6) * SEMANA).toISOString(); s.trainer.adiadoAte = ''; }); modo = 'auto'; toast('Treino mantido.'); refresh(); }, 'grow ghost')));
-    body.push(card);
-  }
+  // hora de variar (prazo ou exercício travado) e as trocas pedidas agora: o mesmo cartão da aba Treinos (views/variacao.js)
+  const sitVar = plan && !bloqueado ? situacaoDoPlano(plan, modo === 'trocas') : null;
+  const cartaoVar = sitVar ? cartaoVariacao(plan, sitVar, { forcar: modo === 'trocas', aoFechar: () => { modo = 'auto'; } }) : null;
+  if (cartaoVar) body.push(cartaoVar);
 
-  // exercícios sem evolução
-  const est = estagnados(plan).map((id) => EX_POR_ID.get(id)).filter(Boolean);
-  if (est.length) {
-    const card = h('div', { class: 'card col' }, h('h3', { text: 'Exercícios sem evolução' }), h('p', { class: 'small muted', text: 'Marca parada há 3 treinos. Baixe a carga uns 10% e suba de novo, ou troque o exercício.' }));
-    for (const ex of est.slice(0, 4)) card.appendChild(h('button', { class: 'menu-item', type: 'button', onClick: () => go('exercicio/' + ex.id) }, icon('swap'), h('span', { class: 'grow', text: ex.nome }), icon('right', 's muted')));
-    body.push(card);
-  }
-
-  // perfil
-  const resumo = h('div', { class: 'card col gap-s' }, h('h3', { text: 'Seu perfil' }),
-    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Objetivo' }), h('span', { text: ROTULO.objetivo[a.objetivo] })),
-    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Nível' }), h('span', { text: ROTULO.experiencia[a.experiencia] })),
-    pf.retorno ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Parado antes de voltar' }), h('span', { text: ROTULO.pausa[a.pausa] })) : null,
-    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Frequência' }), h('span', { text: `${plural(pf.dias, 'dia', 'dias')} por semana · ${pf.tempo >= 75 ? 'mais de 1 h' : pf.tempo + ' min'}` })),
-    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Local' }), h('span', { text: ROTULO.local[a.local] })),
-    pf.extras.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Também tem' }), h('span', { text: pf.extras.map((x) => ROTULO.extras[x] || x).join(', ') })) : null,
-    pf.limitacoes.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Cuidados' }), h('span', { text: pf.limitacoes.join(', ') })) : null,
-    state.trainer.revisaoEm ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Próxima revisão' }), h('span', { text: fmtDate(state.trainer.revisaoEm, true) })) : null);
-  body.push(resumo);
   // Avisos e orientações do perfil, sem as dores: o que as dores mudam no treino ATIVO está no cartão de ajustes, acima.
   // (Com as dores, os avisos falariam de um plano novo — "este plano ficou sem..." —, que não é o que a pessoa está usando.)
   // (O mesmo vale para os avisos do encaixe com a corrida: eles aparecem na proposta, não aqui.)
+  // Os de atenção ficam à vista; os informativos, em "Cuidados para o seu perfil".
   const pBase = gerarPlano(a, state.gym, state.trainer.versao || 0, null, comb);
   const p0 = dores.length ? gerarPlano(a, state.gym, state.trainer.versao || 0, dores, comb) : pBase;
-  if (pBase) for (const av of pBase.avisos) if (!av.combo) body.push(note(av.tipo, av.texto));
+  const lista = pBase ? pBase.avisos.filter((av) => !av.combo) : [];
   // treino sem cardio de quem tinha plano de corrida e não tem mais: o cardio volta num treino novo
-  if (plan && plan.origem === 'treinador' && !comb && !temCorrida(state) && Object.keys(state.run.answers || {}).length && pBase && pBase.minCardio > 0 && !plan.dias.some((d) => d.itens.some((it) => (EX_POR_ID.get(it.ex) || {}).registro === 'minutos'))) body.push(note('info', 'Este treino está sem cardio e você não tem plano de corrida ativo. Para o cardio voltar, monte um novo treino.'));
+  if (plan && plan.origem === 'treinador' && !comb && !temCorrida(state) && Object.keys(state.run.answers || {}).length && pBase && pBase.minCardio > 0 && !plan.dias.some((d) => d.itens.some((it) => (EX_POR_ID.get(it.ex) || {}).registro === 'minutos'))) lista.push({ tipo: 'info', texto: 'Este treino está sem cardio e você não tem plano de corrida ativo. Para o cardio voltar, monte um novo treino.' });
   // avisos dos exercícios que a pessoa pôs no treino à mão (ex.: testar a mesa antes da remada sob a mesa)
-  if (plan) for (const av of avisosDoPlano(plan.dias)) body.push(note(av.tipo, av.texto));
+  if (plan) lista.push(...avisosDoPlano(plan.dias));
   // plano que foi montado poupando uma região dolorida, quando a dor já não pede isso
-  if (plan && p0 && !p0.perfil.dor && typeof plan.info === 'string' && plan.info.includes(MARCA_DOR)) body.push(note('info', 'Este treino foi montado poupando uma região dolorida. Como a dor passou, você pode montar um novo treino completo.'));
+  if (plan && p0 && !p0.perfil.dor && typeof plan.info === 'string' && plan.info.includes(MARCA_DOR)) lista.push({ tipo: 'info', texto: 'Este treino foi montado poupando uma região dolorida. Como a dor passou, você pode montar um novo treino completo.' });
+  const avisos = separarAvisos(lista);
+  for (const av of avisos.alto) body.push(note(av.tipo, av.texto));
 
+  // 3. a semana e os treinos do plano; a escolha com a corrida; "Contar uma dor"
+  if (plan) { body.push(sectionTitle('Seu treino')); body.push(semanaCard(plan)); }
+  const cc = cartaoCombinado({ aoMudar: () => refresh() });
+  if (cc) body.push(cc);
+  if (!temDor) body.push(cartaoDeDores);
+
+  // 4. seções fechadas: sem evolução, cuidados, perfil, séries por semana, como treinar
+  const est = estagnados(plan).map((id) => EX_POR_ID.get(id)).filter(Boolean);
+  if (est.length) {
+    body.push(acc(`Exercícios sem evolução (${est.length})`, [h('p', { class: 'small muted', text: 'Marca parada há 3 treinos. Baixe a carga uns 10% e suba de novo, ou troque o exercício.' }),
+      ...est.slice(0, 4).map((ex) => h('button', { class: 'menu-item', type: 'button', onClick: () => go('exercicio/' + ex.id) }, icon('swap'), h('span', { class: 'grow', text: ex.nome }), icon('right', 's muted')))], 'treinador-estagnados'));
+  }
+  body.push(cuidadosCard(avisos.info));
+  body.push(perfilCard(a, pf, [sitVar && !sitVar.devido ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Hora de variar' }), h('span', { text: sitVar.faltam ? `em ${plural(sitVar.faltam, 'semana', 'semanas')} de treino` : 'agora' })) : null]));
+  if (plan) body.push(volumeCard(volumeSemanal(plan.dias), pf.nivel));
+  if (pBase) body.push(orientacoesCard('Como treinar', pBase.orientacoes));
+
+  // 5. perguntas frequentes e, no fim, as ações sobre o plano
+  body.push(faqBlock(FAQ_TREINO, 'Pergunte ao Treinador', 'Ex.: descanso, falha, joelho, cardio'));
   body.push(h('div', { class: 'col' },
     plan ? btn('Sugerir trocas de exercícios agora', () => { modo = 'trocas'; refresh(); window.scrollTo(0, 0); }, 'block', 'swap') : null,
     btn('Montar um novo treino', async () => {
@@ -362,11 +416,7 @@ function painel() {
       modo = 'proposta'; refresh(); window.scrollTo(0, 0);
     }, 'block', 'refresh'),
     btn('Refazer a entrevista', () => { modo = 'entrevista'; refresh(); window.scrollTo(0, 0); }, 'block ghost', 'edit')));
-
-  if (plan) body.push(volumeCard(volumeSemanal(plan.dias), pf.nivel));
-  if (pBase) { body.push(sectionTitle('Como treinar')); body.push(orientacoesCard(pBase.orientacoes)); }
-  body.push(faqBlock(FAQ_TREINO, 'Pergunte ao Treinador', 'Ex.: descanso, falha, joelho, cardio'));
-  return body;
+  return body.filter(Boolean);
 }
 
 export function trainerView() {

@@ -25,9 +25,10 @@
 //    sulfonilureia tem risco de hipoglicemia no exercício (ref colberg2016).
 //
 // Ids canônicos (os mesmos nas entrevistas do Treinador e da corrida): condições hipertensao, cardiaco, diabetes, renal,
-// gestante, posparto, cronica; sinais da lista SINAIS; remédios pulso, glicose, outro. Na Nutricionista, "outra" e
-// "transtorno" (transtorno alimentar, uma das condições de saúde mental do PAR-Q+) valem como "cronica"; "gestante" lá é
-// "gestação ou amamentação" e não dá para saber qual das duas.
+// gestante, posparto, transtorno, cronica; sinais da lista SINAIS; remédios pulso, glicose, outro. Na Nutricionista,
+// "outra" vale como "cronica" e "transtorno" (transtorno alimentar, uma das condições de saúde mental do PAR-Q+) como
+// "transtorno" — que nos treinadores tem o efeito de "cronica" (ver condicoesDe); "gestante" lá é "gestação ou
+// amamentação" e não dá para saber qual das duas.
 
 // ---------- datas ----------
 export const diaValido = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v + 'T12:00:00Z')) && new Date(v + 'T12:00:00Z').toISOString().slice(0, 10) === v;
@@ -43,7 +44,8 @@ export const CONDICOES = [
   ['renal', 'Doença nos rins', ''],
   ['gestante', 'Gestação', ''],
   ['posparto', 'Parto nos últimos 6 meses', ''],
-  ['cronica', 'Outra doença crônica', 'Por exemplo: asma, osteoporose, câncer, epilepsia, depressão ou transtorno alimentar'],
+  ['transtorno', 'Transtorno alimentar', 'Atual ou no passado'],
+  ['cronica', 'Outra doença crônica', 'Por exemplo: asma, osteoporose, câncer, epilepsia ou depressão'],
   ['nenhuma', 'Nenhuma', ''],
 ];
 export const SINAIS = [
@@ -71,7 +73,7 @@ const COND_IDS = ids(CONDICOES, 'nenhuma'), SINAL_IDS = ids(SINAIS, 'nenhum'), R
 const nomeDe = (l, id) => { const o = l.find((x) => x[0] === id); return o ? o[1] : id; };
 // nomes curtos, em minúsculas, para as frases "Você informou ... ao Treinador de corrida"
 const CURTO = {
-  condicao: { hipertensao: 'pressão alta', cardiaco: 'doença do coração, da circulação ou AVC', diabetes: 'diabetes', renal: 'doença nos rins', gestante: 'gestação', posparto: 'parto nos últimos 6 meses', cronica: 'outra doença crônica' },
+  condicao: { hipertensao: 'pressão alta', cardiaco: 'doença do coração, da circulação ou AVC', diabetes: 'diabetes', renal: 'doença nos rins', gestante: 'gestação', posparto: 'parto nos últimos 6 meses', transtorno: 'transtorno alimentar', cronica: 'outra doença crônica' },
   sinal: { dor_peito: 'dor ou pressão no peito', falta_ar: 'falta de ar com pouco esforço', falta_ar_deitado: 'falta de ar deitado ou à noite', palpitacao: 'palpitações', tontura: 'tontura ou desmaio', tornozelos: 'inchaço nos tornozelos', perna: 'dor na perna ao caminhar', sopro: 'sopro no coração', cansaco: 'cansaço fora do comum', osseo: 'problema nos ossos ou articulações', medico: 'restrição médica (exercício só com supervisão)' },
   remedio: { pulso: 'remédio que deixa o pulso mais baixo', glicose: 'remédio que pode baixar o açúcar no sangue', outro: 'remédio de uso contínuo' },
 };
@@ -97,14 +99,19 @@ export const sinaisDe = (a) => lista(a && a.triagem).filter((x) => SINAL_IDS.has
 export const remediosDe = (a) => lista(a && a.remedios).filter((x) => REMEDIO_IDS.has(x));
 // Condições, já com o que os remédios dizem: insulina ou remédio que baixa o açúcar é tratamento de diabetes (colberg2016);
 // remédio de uso contínuo para doença crônica sem nenhuma condição marcada vale como "outra doença crônica" (parq2023,
-// perguntas 4 e 5).
+// perguntas 4 e 5). Transtorno alimentar tem opção própria (protege o diário alimentar: logic/diario.js, modoDoDiario),
+// mas nos treinadores tem o mesmo efeito de "outra doença crônica": o PAR-Q+ não dá a ele um efeito próprio no treino.
 export function condicoesDe(a) {
   const c = lista(a && a.condicoes).filter((x) => COND_IDS.has(x));
   const r = remediosDe(a);
   if (r.includes('glicose') && !c.includes('diabetes')) c.push('diabetes');
   if (r.includes('outro') && !c.length) c.push('cronica');
+  if (c.includes('transtorno') && !c.includes('cronica')) c.push('cronica');
   return c;
 }
+// "outra doença crônica" que só existe por causa do transtorno alimentar (com transtorno marcado, o remédio contínuo não
+// acrescenta "crônica": ver acima)
+const cronicaDoTranstorno = (a, c) => c.includes('transtorno') && !lista(a && a.condicoes).includes('cronica');
 export const soComSupervisao = (a) => sinaisDe(a).includes('medico');
 
 // Liberação médica guardada: 'valida' | 'vencida' (mais de 12 meses) | 'sem_data' (resposta antiga, sem data, ou data
@@ -119,17 +126,20 @@ export function estadoLiberacao(a, hoje) {
 
 // ---------- união das três entrevistas ----------
 export const ORIGEM = { treinador: 'ao Treinador', corrida: 'ao Treinador de corrida', nutri: 'à Nutricionista' };
-const DA_NUTRI = { diabetes: 'diabetes', hipertensao: 'hipertensao', renal: 'renal', cardiaco: 'cardiaco', outra: 'cronica', transtorno: 'cronica' };
+const DA_NUTRI = { diabetes: 'diabetes', hipertensao: 'hipertensao', renal: 'renal', cardiaco: 'cardiaco', outra: 'cronica', transtorno: 'transtorno' };
 const NOME_NUTRI = { outra: 'outra doença crônica', transtorno: 'transtorno alimentar' };
-// Tudo o que as entrevistas dizem sobre a saúde: itens [{ tipo: 'condicao'|'sinal'|'remedio', id, origem, nome }],
-// gestação ou amamentação na Nutricionista, alergias alimentares e as idades.
+// Tudo o que as entrevistas dizem sobre a saúde: itens [{ tipo: 'condicao'|'sinal'|'remedio', id, origem, nome,
+// derivada? }], gestação ou amamentação na Nutricionista, alergias alimentares e as idades. `derivada`: a "outra doença
+// crônica" que vem só do transtorno alimentar — vale para quem lê o efeito (Nutricionista), mas não é copiada como
+// resposta para as outras entrevistas (lá, o próprio transtorno já dá o mesmo efeito).
 export function uniaoSaude(st) {
   const s = st && typeof st === 'object' ? st : {};
   const itens = [];
-  const add = (tipo, id, origem, nome) => { if (!itens.some((x) => x.tipo === tipo && x.id === id && x.origem === origem)) itens.push({ tipo, id, origem, nome: nome || nomeCurto(tipo, id) }); };
+  const add = (tipo, id, origem, nome, derivada = false) => { if (!itens.some((x) => x.tipo === tipo && x.id === id && x.origem === origem)) itens.push({ tipo, id, origem, nome: nome || nomeCurto(tipo, id), ...(derivada ? { derivada: true } : {}) }); };
   const idades = [];
   for (const [origem, a] of [['treinador', resp(s.trainer)], ['corrida', resp(s.run)]]) {
-    for (const c of condicoesDe(a)) add('condicao', c, origem);
+    const cs = condicoesDe(a);
+    for (const c of cs) { if (c === 'cronica' && cronicaDoTranstorno(a, cs)) add('condicao', c, origem, nomeCurto('condicao', 'transtorno'), true); else add('condicao', c, origem); }
     for (const x of sinaisDe(a)) add('sinal', x, origem);
     for (const x of remediosDe(a)) add('remedio', x, origem);
     if (typeof a.idade === 'number' && Number.isFinite(a.idade)) idades.push({ valor: a.idade, origem });
@@ -158,7 +168,7 @@ export function respostasProtegidas(alvo, st, hoje) {
   const deFora = u.itens.filter((x) => x.origem !== proprio && !tem[x.tipo].has(x.id));
   const out = { ...own };
   const soma = (k, tipo, nenhum) => {
-    const novos = [...new Set(deFora.filter((x) => x.tipo === tipo).map((x) => x.id))];
+    const novos = [...new Set(deFora.filter((x) => x.tipo === tipo && !x.derivada).map((x) => x.id))];
     if (novos.length) out[k] = semNenhum([...new Set([...lista(own[k]), ...novos])], nenhum);
   };
   soma('condicoes', 'condicao', 'nenhuma'); soma('triagem', 'sinal', 'nenhum'); soma('remedios', 'remedio', 'nenhum');
@@ -194,7 +204,7 @@ export function respostasParaEntrevista(alvo, st) {
   const u = uniaoSaude(s);
   const out = { ...own };
   const junta = (k, tipo, nenhum, extra = []) => {
-    const novos = [...new Set([...u.itens.filter((x) => x.tipo === tipo && x.origem !== proprio).map((x) => x.id), ...extra])];
+    const novos = [...new Set([...u.itens.filter((x) => x.tipo === tipo && x.origem !== proprio && !x.derivada).map((x) => x.id), ...extra])];
     // só os ids que a pergunta tem (condições derivadas de remédio entram pelo remédio)
     const validos = tipo === 'condicao' ? COND_IDS : tipo === 'sinal' ? SINAL_IDS : REMEDIO_IDS;
     const cur = lista(own[k]);

@@ -148,6 +148,7 @@ li + li { margin-top: 0.35rem; }
 }
 .iconbtn:active { background: var(--surface-2); }
 .iconbtn.soft { background: var(--surface-2); }
+.iconbtn.danger { color: var(--danger); }
 .fab-bar {
   position: fixed; left: 0; right: 0; bottom: calc(var(--nav-h) + var(--safe-b)); z-index: 25; display: flex; justify-content: center;
   padding: 10px 14px; background: linear-gradient(0deg, var(--bg) 60%, transparent); pointer-events: none;
@@ -187,6 +188,8 @@ textarea.input { min-height: 84px; resize: vertical; }
 .search .ic { position: absolute; left: 12px; top: 13px; color: var(--muted); }
 .search .input { padding-left: 42px; }
 .switch { position: relative; width: 50px; height: 30px; flex: none; }
+/* área de toque de 54 × 44 px sem mudar o desenho (o toque no rótulo liga e desliga o interruptor) */
+.switch::before { content: ''; position: absolute; top: -7px; bottom: -7px; left: -2px; right: -2px; }
 .switch input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
 .switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--border); transition: background 0.15s; }
 .switch i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform 0.15s; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
@@ -307,6 +310,10 @@ textarea.input { min-height: 84px; resize: vertical; }
 /* ===== Números e gráficos ===== */
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .stats.two { grid-template-columns: repeat(2, 1fr); }
+/* treino concluído com o gasto estimado: 2 × 2 no celular, 4 numa linha em tela larga */
+.stats.quatro { grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 520px) { .stats.quatro { grid-template-columns: repeat(4, 1fr); } }
+.plainlink.gasto-peso { min-height: 44px; }
 .stat { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px; text-align: center; }
 .stat b { display: block; font-size: 1.25rem; line-height: 1.15; font-variant-numeric: tabular-nums; }
 .stat span { font-size: 0.74rem; color: var(--muted); }
@@ -360,6 +367,12 @@ details.acc > div { padding: 0 14px 14px; display: flex; flex-direction: column;
 label.menu-item { cursor: pointer; }
 .spacer { height: 96px; }
 .plainlink { border: 0; background: transparent; color: var(--text); padding: 0; text-align: left; width: 100%; }
+/* "Troque por:" da avaliação e a linha do Treinador no lugar dela: alvo de toque de 44 px */
+details.avaliacao .plainlink, .plainlink.avaliacao-link { min-height: 44px; padding: 10px 0; }
+/* chips de grupo muscular (Exercícios) e seções por grupo */
+.chips.grupos .chip { min-height: 44px; }
+details.grupo-ex > summary { min-height: 48px; padding: 10px 14px; }
+details.grupo-ex > .list { padding: 0 8px 8px; }
 .appic-l { border-radius: 18px; margin: 0 auto; }
 .avatar { font-weight: 800; font-size: 1.1rem; }
 .card.click { width: 100%; text-align: left; color: var(--text); font: inherit; }
@@ -387,9 +400,16 @@ body.modal-open { overflow: hidden; }
 .dica-ic { width: 38px; height: 38px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex: none; background: var(--info-soft); color: var(--info); }
 .dica.atencao .dica-ic { background: var(--warn-soft); color: var(--warn); }
 .dica.bom .dica-ic { background: var(--ok-soft); color: var(--ok); }
-details.pq > summary { cursor: pointer; color: var(--accent); font-size: 0.85rem; font-weight: 650; list-style: none; min-height: 32px; display: inline-flex; align-items: center; }
+details.pq > summary { cursor: pointer; color: var(--accent); font-size: 0.85rem; font-weight: 650; list-style: none; min-height: 44px; display: inline-flex; align-items: center; }
 details.pq > summary::-webkit-details-marker { display: none; }
 details.pq p { margin: 4px 0 0; }
+/* treino: de onde vem a carga sugerida (uma linha) e o "Por quê?" fechado */
+details.carga > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; min-height: 32px; font-size: 0.85rem; }
+details.carga > summary::-webkit-details-marker { display: none; }
+details.carga > summary .linha { color: var(--muted); flex: 1; min-width: 0; }
+details.carga > summary .pq-link { color: var(--accent); font-weight: 650; flex: none; }
+details.carga .corpo { display: flex; flex-direction: column; gap: 8px; padding: 4px 0 2px; }
+details.carga .corpo p { margin: 0; }
 .chart .zona { fill: var(--ok-soft); }
 .chart .bar.low { fill: var(--warn); }
 .chart .bar.high { fill: var(--danger); }
@@ -412,6 +432,8 @@ details.acc > div > ul { margin: 0; }
 .sec-rot { display: flex; align-items: center; gap: 6px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .sec-rot > span { flex: 1 1 auto; }
 .chip.sm { min-height: 32px; padding: 4px 10px; font-size: 0.8rem; flex: 0 0 auto; }
+/* "Trocar" / "Definir treino" da agenda (Treinos): alvo de toque de 44 px */
+.chip.sm.chip-agenda { min-height: 44px; }
 
 /* Nutrição: o dia de hoje no alto, o cardápio com o que foi comido em cada refeição, a semana e a lista de compras.
    Botões da tela com pelo menos 44 px de altura (alvo de toque). */
@@ -443,3 +465,18 @@ details.acc > div > ul { margin: 0; }
 .semana-dia .resumo { font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .compras h3 { margin-top: 6px; }
 .compras .kv > :first-child { min-width: 0; }
+
+/* Treinadores (musculação e corrida): o treino de hoje no alto, os treinos da proposta fechados (abrem ao toque) e
+   "Por quê?" com alvo de toque de 44 px */
+#treinador-hoje h2, #corrida-hoje h2 { font-size: 1.15rem; }
+details.treino-prop > summary .grow { min-width: 0; }
+details.treino-prop .resumo { font-weight: 400; }
+details.pq.alvo > summary { min-height: 44px; }
+details.acc .orient-t { font-size: 0.96rem; margin-top: 6px; }
+
+/* "Não treinei" / "Não corri" (views/perdido.js): botão discreto, com 44 px de toque */
+.perdido-acoes { display: flex; justify-content: flex-end; }
+.btn.nao-treinei { min-height: 44px; }
+.treino.perdido { align-items: center; gap: 10px; }
+.treino.perdido .grow { min-width: 0; }
+details.pq.perdido-pq > summary { min-height: 44px; }

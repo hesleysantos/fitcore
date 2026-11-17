@@ -11,13 +11,15 @@ import { mostrarSemana, guardarCorridaMostrada } from './plans.js';
 import { cartaoCombinado } from './combinado.js';
 import { faltaPerguntar } from '../logic/combinado.js';
 import { installCard } from '../install.js';
-import { metaSemanal, dicaCard } from './history.js';
+import { metaSemanal, temAgenda, dicaCard } from './history.js';
 import { analisar, destaques } from '../logic/insights.js';
-import { revisaoPendente } from './trainer.js';
+import { situacaoDoPlano, avisoVariacao } from './variacao.js';
 import { calcular, respostasCompletas as nutriOk, contextoDasEntrevistas } from '../logic/nutrition.js';
 import { planoDaSemana, resumoParaNutricao } from '../logic/corrida.js';
 import { cartaoSono } from './sono.js';
 import { resumoDeHoje } from '../logic/diario.js';
+import { semanaEfetiva, segundaDe, podeMarcar, podeMarcarCorrida, corridaPerdidaEm, nomeDoDia } from '../logic/perdido.js';
+import { botaoNaoTreinei, botaoNaoCorri, linhaNaoTreinado, linhaNaoCorrida } from './perdido.js';
 
 function saudacao() {
   const hora = new Date().getHours();
@@ -50,11 +52,16 @@ export function homeView() {
     const n = Math.round((seg(ini).getTime() - seg(hoje).getTime()) / (7 * 86400000));
     if (n >= 1) body.push(h('div', { class: 'card row', id: 'corrida-comeca' }, icon('run', 'accent'), h('div', { class: 'grow' }, h('div', { class: 'bold', text: `Seu plano de corrida começa ${n === 1 ? 'na semana que vem' : 'em ' + n + ' semanas'}` }), h('div', { class: 'small muted', text: `${DIAS_LONGO[ini.getDay()]}, ${ini.getDate()}/${String(ini.getMonth() + 1).padStart(2, '0')}.` })), btn('Ver semana', () => { mostrarSemana(n); go('treinos'); }, 'sm')));
   }
-  if (corridaHoje) {
+  const hojeK = dateKey(hoje);
+  const corridaNaoFeita = corridaHoje && !corridaHoje.feito ? corridaPerdidaEm(state, corridaHoje.data) : null;
+  if (corridaNaoFeita) {
+    body.push(h('div', { class: 'card col' }, h('div', { class: 'tiny muted bold', text: 'CORRIDA DE HOJE' }), linhaNaoCorrida(corridaNaoFeita, String(corridaHoje.nome || 'Corrida'), refresh)));
+  } else if (corridaHoje) {
     body.push(h('div', { class: 'card hl col' },
       h('div', { class: 'row between' }, h('div', null, h('div', { class: 'tiny accent bold', text: corridaHoje.feito ? 'CORRIDA DE HOJE · FEITA' : 'CORRIDA DE HOJE' }), h('h2', { text: String(corridaHoje.nome || 'Corrida') })), corridaHoje.feito ? badge('Concluída', 'ok') : null),
       corridaHoje.resumo ? h('p', { class: 'small muted', text: String(corridaHoje.resumo) }) : null,
-      btn(corridaHoje.feito ? 'Ver corrida' : 'Abrir corrida', () => go('corrida/dia/' + corridaHoje.data), (corridaHoje.feito ? '' : 'primary ') + 'lg block', 'run')));
+      btn(corridaHoje.feito ? 'Ver corrida' : 'Abrir corrida', () => go('corrida/dia/' + corridaHoje.data), (corridaHoje.feito ? '' : 'primary ') + 'lg block', 'run'),
+      !corridaHoje.feito && podeMarcarCorrida(state, corridaHoje.data, hojeK) ? h('div', { class: 'perdido-acoes' }, botaoNaoCorri(corridaHoje.data, refresh)) : null));
   }
 
   // corrida + musculação: enquanto falta dizer o que priorizar (ou se quer fortalecimento), a pergunta aparece aqui
@@ -86,8 +93,18 @@ export function homeView() {
         passo(3, 'Acompanhe a sua evolução e as dicas')));
     }
   } else if (!state.current) {
-    const dia = plan.dias.find((d) => d.id === plan.agenda[wd]);
-    if (dia) {
+    // o treino de hoje já com as marcas da semana ("Não treinei" e treinos que mudaram de dia: logic/perdido.js)
+    const semEf = semanaEfetiva(plan, state.perdidos, segundaDe(hojeK));
+    const efHoje = semEf[(wd + 6) % 7];
+    const dia = plan.dias.find((d) => d.id === efHoje.diaId);
+    const perdidoHoje = efHoje.perdido ? plan.dias.find((d) => d.id === efHoje.perdido.diaId) : null;
+    if (perdidoHoje) {
+      const prox = proximoTreino(plan, wd, semEf);
+      body.push(h('div', { class: 'card col', id: 'inicio-nao-treinado' },
+        h('div', { class: 'tiny muted bold', text: 'TREINO DE HOJE' }),
+        linhaNaoTreinado(efHoje, perdidoHoje.nome, refresh),
+        prox ? h('p', { class: 'small muted', text: `Próximo treino: ${prox.dia.nome}, ${prox.quando}.` } ) : null));
+    } else if (dia) {
       const thumbs = h('div', { class: 'row gap-s' });
       for (const it of dia.itens.slice(0, 4)) { const ex = EX_POR_ID.get(it.ex); if (ex) thumbs.appendChild(h('div', { class: 'thumb mini' }, thumb(ex))); }
       const lista = h('div', { class: 'col gap-s' });
@@ -97,15 +114,19 @@ export function homeView() {
       body.push(h('div', { class: 'card hl col' },
         h('div', { class: 'row between' }, h('div', null, h('div', { class: 'tiny accent bold', text: feitoHoje ? 'TREINO DE HOJE · FEITO' : 'TREINO DE HOJE' }), h('h2', { text: dia.nome })), feitoHoje ? badge('Concluído', 'ok') : null),
         !feitoHoje && treinouHoje ? h('p', { class: 'small muted', text: 'Você já fez outro treino hoje; este é o agendado para o dia.' }) : null,
+        efHoje.veioDe ? h('p', { class: 'small', id: 'inicio-movido', text: `Veio de ${nomeDoDia(efHoje.veioDe, hojeK)}.` }) : null,
         dia.foco ? h('p', { class: 'small muted', text: dia.foco }) : null,
         thumbs, lista,
         h('p', { class: 'tiny muted', text: `${plural(dia.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(dia)} min` }),
-        btn(feitoHoje ? 'Treinar de novo' : 'Iniciar treino', () => startSession(plan.id, dia.id), (feitoHoje ? '' : 'primary ') + 'lg block', 'play')));
+        btn(feitoHoje ? 'Treinar de novo' : 'Iniciar treino', () => startSession(plan.id, dia.id), (feitoHoje ? '' : 'primary ') + 'lg block', 'play'),
+        podeMarcar(state, hojeK, hojeK).pode ? h('div', { class: 'perdido-acoes' }, botaoNaoTreinei(hojeK, refresh)) : null));
     } else {
-      const prox = proximoTreino(plan, wd);
+      const prox = proximoTreino(plan, wd, semEf);
+      const saiu = efHoje.foiPara ? plan.dias.find((d) => d.id === plan.agenda[wd]) : null;
       body.push(h('div', { class: 'card col' },
         h('div', { class: 'tiny muted bold', text: 'HOJE' }),
         h('h2', { text: 'Dia de descanso' }),
+        saiu ? h('p', { class: 'small', text: `${saiu.nome} passou para ${nomeDoDia(efHoje.foiPara, hojeK)}.` }) : null,
         h('p', { class: 'muted small', text: prox ? `Próximo treino: ${prox.dia.nome}, ${prox.quando}.` : 'Nenhum treino agendado. Escolha os dias na aba Treinos.' }),
         btn('Ver treinos e agenda', () => go('treinos'), 'block')));
     }
@@ -123,11 +144,8 @@ export function homeView() {
     }
   }
 
-  // revisão do treinador
-  const rev = revisaoPendente();
-  if (rev) {
-    body.push(h('div', { class: 'card col' }, h('div', { class: 'row' }, h('div', { class: 'avatar' }, icon('coach')), h('div', { class: 'grow' }, h('h3', { text: 'O Treinador tem uma sugestão' }), h('p', { class: 'small muted', text: rev }))), btn('Ver sugestão', () => go('treinador'), 'primary block')));
-  }
+  // hora de variar os exercícios (qualquer plano: do Treinador, de modelo ou montado à mão); as trocas ficam na aba Treinos
+  if (plan && !state.current) { const av = avisoVariacao(plan, situacaoDoPlano(plan)); if (av) body.push(av); }
 
   // semana
   const feitos = semanaAtual();
@@ -144,14 +162,19 @@ export function homeView() {
     const d = new Date(ini); d.setDate(d.getDate() + i);
     const key = dateKey(d);
     const done = feitos.has(key);
-    const planned = plan && plan.agenda[d.getDay()];
+    // com as marcas da semana: dia marcado "Não treinei" não conta como agendado; o dia que recebeu o treino conta
+    const ef = plan ? semanaEfetiva(plan, state.perdidos, segundaDe(key)).find((x) => x.data === key) : null;
+    const planned = !!(ef && ef.diaId);
     const isToday = key === dateKey(hoje);
-    week.appendChild(h('div', null, DIAS_CURTO[d.getDay()], h('div', { class: 'dot' + (done ? ' done' : planned ? ' plan' : '') + (isToday ? ' today' : ''), role: 'img', 'aria-label': `${DIAS_LONGO[d.getDay()]}: ${done ? 'treino feito' : planned ? 'treino agendado' : 'descanso'}`, title: done ? 'Treino feito' : planned ? 'Treino agendado' : 'Descanso' }, done ? icon('check') : null),
+    week.appendChild(h('div', null, DIAS_CURTO[d.getDay()], h('div', { class: 'dot' + (done ? ' done' : planned ? ' plan' : '') + (isToday ? ' today' : ''), role: 'img', 'aria-label': `${DIAS_LONGO[d.getDay()]}: ${done ? 'treino feito' : planned ? 'treino agendado' : ef && ef.perdido ? 'não treinado' : 'descanso'}`, title: done ? 'Treino feito' : planned ? 'Treino agendado' : ef && ef.perdido ? 'Não treinado' : 'Descanso' }, done ? icon('check') : null),
       comCorrida ? h('div', { class: 'run-mk' + (corridos.has(key) ? ' done' : corridasPlan[d.getDay()] ? ' plan' : ''), role: 'img', 'aria-label': corridos.has(key) ? 'corrida feita' : corridasPlan[d.getDay()] ? 'corrida agendada' : 'sem corrida', title: corridos.has(key) ? 'Corrida feita' : corridasPlan[d.getDay()] ? 'Corrida agendada' : 'Sem corrida' }, corridos.has(key) || corridasPlan[d.getDay()] ? icon('run') : null) : null));
   }
-  const seq = sequenciaSemanas(meta);
+  // sem agenda no plano e sem os dias informados ao Treinador não há meta (o "3" seria inventado): só a contagem
+  const comMeta = temAgenda() || Number(state.trainer.answers.dias) > 0;
+  const seq = comMeta ? sequenciaSemanas(meta) : 0;
+  const feitosTxt = `${feitos.size} ${feitos.size === 1 ? 'treino' : 'treinos'}`;
   body.push(h('div', { class: 'card col' },
-    h('div', { class: 'row between' }, h('h2', { text: 'Sua semana' }), h('span', { class: 'small muted', text: comCorrida ? `Musculação ${feitos.size}/${meta} · Corrida ${corridos.size}/${Math.max(nCorridas, corridos.size)}` : `${feitos.size} de ${meta} ${meta === 1 ? 'treino' : 'treinos'}` })),
+    h('div', { class: 'row between' }, h('h2', { text: 'Sua semana' }), h('span', { class: 'small muted', id: 'semana-contagem', text: comCorrida ? `Musculação ${comMeta ? `${feitos.size}/${meta}` : feitos.size} · Corrida ${corridos.size}/${Math.max(nCorridas, corridos.size)}` : comMeta ? `${feitos.size} de ${meta} ${meta === 1 ? 'treino' : 'treinos'}` : `${feitosTxt} nesta semana` })),
     week,
     seq > 0 ? h('div', { class: 'row small' }, icon('flame', 's accent'), h('span', { text: seq === 1 ? '1 semana com a meta cumprida' : `${seq} semanas seguidas com a meta cumprida` })) : null));
 
@@ -199,10 +222,13 @@ export function homeView() {
   return { title: 'FitCore', actions: [iconBtn('settings', 'Ajustes', () => go('ajustes'))], body };
 }
 
-function proximoTreino(plan, wd) {
+// `semEf` = a semana atual com as marcas (logic/perdido.js); depois de domingo vale a agenda
+function proximoTreino(plan, wd, semEf = null) {
   for (let i = 1; i <= 7; i++) {
     const d = (wd + i) % 7;
-    const dia = plan.dias.find((x) => x.id === plan.agenda[d]);
+    const nestaSemana = semEf && ((wd + 6) % 7) + i <= 6;
+    const id = nestaSemana ? semEf[((wd + 6) % 7) + i].diaId : plan.agenda[d];
+    const dia = plan.dias.find((x) => x.id === id);
     if (dia) return { dia, quando: i === 1 ? 'amanhã' : DIAS_LONGO[d].toLowerCase() };
   }
   return null;

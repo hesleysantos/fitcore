@@ -215,7 +215,7 @@ function cartaoMeta(pn) {
   const { meta, perfil } = pn;
   const card = h('div', { class: 'card hl col', id: 'sono-meta' },
     h('div', { class: 'row between' },
-      h('div', null, h('div', { class: 'tiny bold muted', text: `META DESTA NOITE · ${proximaNoite(pn.hoje)}` }), h('div', { class: 'sono-alvo', text: fmtHoras(meta.alvo) })),
+      h('div', null, h('div', { class: 'tiny bold muted', text: `Meta desta noite · ${proximaNoite(pn.hoje)}` }), h('div', { class: 'sono-alvo', text: fmtHoras(meta.alvo) })),
       badge('faixa: ' + fmtFaixa(meta.min, meta.max), 'ok')),
     h('ul', { class: 'sono-motivos' }, ...meta.motivos.map((m) => h('li', { text: m.texto }))),
     porQue(meta.motivos.flatMap((m) => m.refs)));
@@ -233,7 +233,7 @@ function cartaoHorario(pn, aoMudar) {
   const mostrar = () => {
     while (saida.firstChild) saida.removeChild(saida.firstChild);
     const d = horaDeDormir(state.sono.acordar, meta.alvo);
-    if (d) { saida.className = ''; saida.append(`Para dormir ${fmtHoras(meta.alvo)}, apague a luz às `, h('b', { text: d }), '.'); }
+    if (d) { saida.className = ''; saida.append('Deite até as ', h('b', { text: d }), ` para dormir ${fmtHoras(meta.alvo)}.`); }
     else { saida.className = 'small muted'; saida.textContent = 'Informe a hora em que você costuma acordar para ver a hora de deitar.'; }
   };
   mostrar();
@@ -277,7 +277,7 @@ function cartaoCochilos(pn) {
   const { meta, semana, hoje } = pn;
   const d = semana.dias[semana.dias.length - 1];
   const min = d ? d.cochiloMin : 0;
-  let texto = meta.soma24h ? 'Na sua idade, a faixa vale para o sono em 24 horas: o cochilo soma à noite.' : 'Para adultos, a meta é a da noite. O cochilo aparece à parte: ajuda em noite curta, sem substituí-la.';
+  let texto = meta.soma24h ? 'Na sua idade, a faixa vale para o sono em 24 horas: o cochilo soma à noite.' : 'Em adultos, o cochilo não conta na meta da noite.';
   if (min && meta.soma24h && d.total != null) texto = `Noite + cochilos: ${fmtHoras(d.total)} (${ESTADO[d.estado][0].toLowerCase()}).`;
   else if (min) texto = `Cochilos de hoje: ${fmtMin(min)}. ${meta.soma24h ? 'Registre a noite de hoje para eles somarem na comparação com a faixa.' : 'Não entram na meta, que é a da noite.'}`;
   return h('div', { class: 'card col gap-s', id: 'sono-cochilo' },
@@ -338,12 +338,12 @@ function cartaoSemana(pn) {
     h('div', { class: 'row between' }, h('h3', { text: 'Últimos 7 dias' }), h('span', { class: 'small muted', text: `${semana.n} de 7 noites` })),
     grafico(semana), dias,
     ck.dias ? h('div', { class: 'sono-legenda tiny muted' }, h('span', null, h('i', { class: 'cochilo' }), 'cochilo, por cima da barra da noite')) : null,
-    h('p', { class: 'tiny muted', text: 'Cada dia é a noite que terminou nele. Faixa verde: o recomendado para você. Linha tracejada: o alvo. Toque em um dia para registrar ou corrigir a noite e os cochilos.' }));
+    h('p', { class: 'tiny muted', text: 'Verde: sua faixa. Tracejado: o alvo. Toque num dia para corrigir.' }));
   if (semana.n) {
     card.appendChild(h('div', { class: 'stats' },
       h('div', { class: 'stat' }, h('b', { text: fmtHoras(semana.mediaDaMeta) }), h('span', { text: semana.soma24h ? 'média 24 h' : 'média' })),
       h('div', { class: 'stat' }, h('b', { text: `${semana.abaixo} de ${semana.n}` }), h('span', { text: semana.soma24h ? 'dias curtos' : 'noites curtas' })),
-      h('div', { class: 'stat' }, h('b', { text: semana.desvioMin == null ? '–' : `± ${semana.desvioMin} min` }), h('span', { text: 'variação' }))));
+      h('div', { class: 'stat' }, h('b', { class: 'nowrap', text: semana.desvioMin == null ? '–' : `± ${semana.desvioMin} min` }), h('span', { text: 'variação' }))));
     card.appendChild(h('div', null,
       h('p', { class: 'small', text: semana.regularidade ? REGULARIDADE[semana.regularidade] : `Com ${NOITES_PARA_REGULARIDADE} noites registradas na semana, eu mostro o quanto o seu sono varia.` }),
       h('details', { class: 'pq' }, h('summary', { text: 'Como ler' }),
@@ -352,7 +352,8 @@ function cartaoSemana(pn) {
   }
   if (ck.dias) {
     // até os 18 anos o cochilo soma à noite do mesmo dia; sem a noite registrada, não há o que somar, e a tela avisa
-    const comoContam = !semana.soma24h ? ' Não entram na média da noite.'
+    // (nos adultos, que o cochilo não entra na meta já está dito no cartão dos cochilos)
+    const comoContam = !semana.soma24h ? ''
       : ck.semNoite === 0 ? ' Já estão somados na média acima.'
         : ck.semNoite === ck.dias ? ' Ainda não entram na média em 24 horas: falta registrar a noite desses dias.'
           : ` Entram na média em 24 horas só nos dias com a noite registrada: ${ck.semNoite === 1 ? '1 dia de cochilo ficou de fora' : `${ck.semNoite} dias de cochilo ficaram de fora`}.`;
@@ -366,15 +367,23 @@ function desenharDicas(box, dicas) {
   while (box.firstChild) box.removeChild(box.firstChild);
   if (!dicas.length) return;
   box.appendChild(h('h2', { text: 'Dicas para você' }));
-  for (const d of dicas) box.appendChild(h('div', { class: 'dica' + (d.tom === 'atencao' ? ' atencao' : ''), 'data-dica': d.id }, h('div', { class: 'dica-ic' }, icon(d.tom === 'atencao' ? 'bolt' : 'moon')), h('div', { class: 'grow' }, h('div', { class: 'bold', text: d.titulo }), h('div', { class: 'small', text: d.texto }), porQue(d.refs))));
+  const cartaoDica = (d) => h('div', { class: 'dica' + (d.tom === 'atencao' ? ' atencao' : ''), 'data-dica': d.id }, h('div', { class: 'dica-ic' }, icon(d.tom === 'atencao' ? 'bolt' : 'moon')), h('div', { class: 'grow' }, h('div', { class: 'bold', text: d.titulo }), h('div', { class: 'small', text: d.texto }), porQue(d.refs)));
+  // as 2 primeiras à vista; as outras, recolhidas (a tela não fica cheia demais)
+  for (const d of dicas.slice(0, 2)) box.appendChild(cartaoDica(d));
+  if (dicas.length > 2) {
+    const resto = dicas.slice(2);
+    box.appendChild(h('details', { class: 'pq mais-dicas' }, h('summary', { text: `Ver mais ${resto.length === 1 ? '1 dica' : resto.length + ' dicas'}` }), h('div', { class: 'col gap-s' }, ...resto.map(cartaoDica))));
+  }
 }
 
 function sinais() {
-  return h('div', { class: 'note warn sono-sinais' }, icon('warn'), h('div', { class: 'grow' },
-    h('div', { class: 'bold', text: 'Quando procurar um médico' }),
-    h('ul', null, ...SINAIS_SONO.itens.map((t) => h('li', { text: t }))),
-    h('p', { class: 'small', text: SINAIS_SONO.nota }),
-    porQue(SINAIS_SONO.refs)));
+  // fechada: o título diz o que tem dentro, e a tela não fica cheia
+  return h('details', { class: 'acc sono-sinais' },
+    h('summary', null, h('span', { class: 'row gap-s grow' }, icon('warn', 's warn'), h('span', { text: 'Quando procurar um médico' }))),
+    h('div', null,
+      h('ul', null, ...SINAIS_SONO.itens.map((t) => h('li', { text: t }))),
+      h('p', { class: 'small', text: SINAIS_SONO.nota }),
+      porQue(SINAIS_SONO.refs)));
 }
 
 function faq() {
@@ -445,6 +454,6 @@ export function cartaoSono() {
       btn('Registrar', () => { if (mesmoDia(hoje) && salvarNoite(hoje, r)) refresh(); }, 'sm primary', 'check')));
   }
   if (cochilo) card.appendChild(h('div', { class: 'small', id: 'cartao-sono-cochilo' }, 'Cochilo de hoje: ', h('b', { text: fmtMin(cochilo) }), meta.soma24h && u ? ` · noite + cochilo: ${fmtHoras(u.horas + cochilo / 60)}` : ''));
-  if (deitar) card.appendChild(h('p', { class: 'small muted', text: `Para acordar às ${state.sono.acordar}, deite até as ${deitar}.` }));
+  if (deitar) card.appendChild(h('p', { class: 'small muted', text: `Deite até as ${deitar} para acordar às ${state.sono.acordar}.` }));
   return card;
 }

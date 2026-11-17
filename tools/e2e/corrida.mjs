@@ -9,6 +9,8 @@ export default async (page) => {
   const falhas = [];
   const ok = (cond, msg) => { console.log((cond ? '  ✔ ' : '  ✖ ') + msg); if (!cond) falhas.push(msg); };
   const texto = () => page.text();
+  // conteúdo de uma seção fechada (details) pelo id: o que foi para "Cuidados", "Sua evolução" etc. continua conferido
+  const fechado = (id) => page.eval(`const d = document.getElementById(${JSON.stringify(id)}); return d && d.tagName === 'DETAILS' ? d.textContent : '';`);
   const estado = (expr) => page.eval(`const s = (await import('/js/store.js')).state; return ${expr};`);
   const foto = async (nome) => { if (process.env.FOTOS_CORRIDA) await page.shot('corr/' + nome); };
   // O roteiro roda como se hoje fosse segunda-feira (o relógio da página é adiantado até a próxima segunda): assim a semana 1
@@ -81,7 +83,8 @@ export default async (page) => {
   t = await texto();
   ok(t.includes('Montei um plano de 14 semanas') && t.includes('3 corridas por semana'), 'proposta: 14 semanas, 3 corridas por semana (começo mais lento pelo IMC)');
   ok(t.includes('tempo e esforço') && t.includes('mais indicada para quem está começando'), 'iniciante com GPS recebe treinos por tempo e esforço, com a explicação');
-  ok(t.includes('menos de 3 km de corrida na primeira semana'), 'aviso do começo mais lento aparece');
+  ok((await fechado('corrida-cuidados')).includes('menos de 3 km de corrida na primeira semana') && !t.includes('menos de 3 km de corrida na primeira semana'), 'aviso do começo mais lento aparece em “Cuidados para o seu perfil”, fechado');
+  ok(await page.eval(`const pos = (s) => document.querySelector(s).getBoundingClientRect().top; const b = [...document.querySelectorAll('.btn')].find((e) => e.textContent.includes('Aceitar e usar este plano')); return pos('.bubble') < pos('#corrida-semana1') && pos('#corrida-semana1') < b.getBoundingClientRect().top && b.getBoundingClientRect().top < pos('#corrida-semanas');`), 'proposta: resumo → primeira semana → aceitar → seções fechadas');
   ok(t.includes('1 min correndo + 2 min caminhando'), 'primeira semana alterna corrida e caminhada');
   await foto('2-proposta-iniciante');
   await page.click('Aceitar e usar este plano'); await page.sleep(700);
@@ -89,6 +92,8 @@ export default async (page) => {
   ok((await estado('s.combo.fortalecimento')) === 'nao' && (await texto()).includes('Fortalecimento: sem fortalecimento'), 'a escolha fica gravada e aparece no cartão do painel');
   t = await texto();
   ok(t.includes('Semana 1 de 14') && t.includes('Esta semana'), 'painel mostra a semana 1 de 14');
+  const topo = await page.eval(`const c = document.getElementById('corrida-hoje'); const b = [...c.querySelectorAll('.btn')].map((x) => x.textContent.trim()); return { tipo: c.dataset.hoje, h2: c.querySelector('h2').textContent, b, alto: c.getBoundingClientRect().bottom, alvo: Math.min(...[...c.querySelectorAll('.btn')].map((x) => x.getBoundingClientRect().height)) };`);
+  ok(topo.tipo === 'treino' && topo.h2.startsWith('Hoje: ') && topo.b.includes('Iniciar') && topo.alvo >= 44, 'no alto, o treino de hoje com o botão Iniciar: ' + JSON.stringify(topo));
   const st1 = await estado(`{ aceito: !!s.run.aceitoEm, inicio: s.run.inicio, wd: new Date(s.run.inicio + 'T12:00:00').getDay(), dias: s.run.answers.dias }`);
   ok(st1.aceito && st1.wd === 1 && st1.dias.length === 3, `plano gravado, começando na segunda-feira ${st1.inicio}`);
   await foto('3-painel-iniciante');
@@ -160,7 +165,8 @@ export default async (page) => {
   await page.goto(B + '#/corrida', 900);
   t = await texto();
   ok(t.includes('O que ajustei no plano') && t.includes('Joelho:'), 'painel explica o ajuste feito por causa da dor no joelho');
-  ok(t.includes('Sua evolução') && t.includes('corrida registrada') && t.includes('Constância'), 'evolução mostra volume, corridas e constância');
+  const evol = await fechado('corrida-evolucao');
+  ok(t.includes('Sua evolução') && evol.includes('corrida registrada') && evol.includes('Constância'), 'evolução (seção fechada) mostra volume, corridas e constância');
   ok(t.includes('Como foram os seus treinos') && (await page.eval(`return document.querySelectorAll('#como-foram .item').length === 1;`)), 'painel resume como foram os treinos, com o selo de cada corrida');
   ok(t.includes('Dores que você contou') && t.includes('Feita'), 'cartão de dores e treino marcado como feito');
   await page.eval(`const d = [...document.querySelectorAll('details.pq summary')].find((e) => e.textContent === 'Por quê?'); d.click(); return true;`); await page.sleep(150);
@@ -231,9 +237,9 @@ export default async (page) => {
   t = await propor({ ...corredor, condicoes: ['cardiaco'], liberado: 'nao' });
   ok(t.includes('liberação médica') && t.includes('vigoroso') && !t.includes('Aceitar e usar este plano'), 'doença do coração sem liberação: sem plano, com a explicação');
   t = await propor({ ...corredor, condicoes: ['nenhuma'], resultado: '5', resultadoMin: 45 });
-  ok(t.includes('caminhada rápida') && t.includes('tempo e esforço') && !/\d:\d\d a \d\d?:\d\d por km/.test(t), 'resultado muito lento: treinos por tempo e esforço, sem faixas de ritmo');
+  ok((await fechado('corrida-cuidados')).includes('caminhada rápida') && t.includes('tempo e esforço') && !/\d:\d\d a \d\d?:\d\d por km/.test(t), 'resultado muito lento: treinos por tempo e esforço, sem faixas de ritmo (o porquê em “Cuidados”)');
   t = await propor({ experiencia: 'irregular', longoAtual: 4, objetivo: 'saude', dias: ['1', '3', '5', '6'], diaLongo: 'auto', tempo: '45', aparelho: 'gps', local: 'rua', idade: 35, peso: 72, altura: 175, lesao12m: 'nao', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'] });
-  ok(t.includes('sem regularidade') && t.includes('3 corridas por semana') && t.includes('tempo e esforço') && !/\d:\d\d a \d\d?:\d\d por km/.test(t), 'corredor irregular: 3 corridas por semana, por tempo e esforço, com a explicação');
+  ok((await fechado('corrida-cuidados')).includes('sem regularidade') && t.includes('3 corridas por semana') && t.includes('tempo e esforço') && !/\d:\d\d a \d\d?:\d\d por km/.test(t), 'corredor irregular: 3 corridas por semana, por tempo e esforço, com a explicação');
   // a opção aparece na entrevista
   await page.click('Mudar respostas'); await page.sleep(400);
   // a entrevista começa pela idade e pelas perguntas de segurança (ordem do PAR-Q+); a experiência vem depois delas
@@ -265,7 +271,7 @@ export default async (page) => {
   ok(t.includes('Prioridade: musculação') && t.includes('Corrida como complemento da musculação') && (await page.eval(`return document.querySelectorAll('.list .item[data-data]').length;`)) <= 3 && corridasSemFoco >= 5, 'prioridade para a musculação: corrida vira complemento (até 3 por semana), e o ajuste aparece explicado');
   t = await doisTreinos('equilibrio');
   ok(t.includes('Prioridade: os dois por igual') && t.includes('até 4 corridas por semana') && (await page.eval(`return document.querySelectorAll('.list .item[data-data]').length;`)) <= 4, 'os dois por igual: até 4 corridas por semana');
-  ok(t.includes('Como foram os seus treinos') && t.includes('Acima do plano'), 'corrida de 40 min em treino de 30, mais rápida e com esforço 6: selo “Acima do plano”');
+  ok(t.includes('Como foram os seus treinos') && (await fechado('como-foram')).includes('Acima do plano'),'corrida de 40 min em treino de 30, mais rápida e com esforço 6: selo “Acima do plano”');
   await page.goto(B + '#/corrida/dia/' + hojeK, 800);
   t = await texto();
   ok(t.includes('10 min a mais que o planejado (30 min)') && t.includes('mais rápido que a faixa (5:50 a 6:10)') && t.includes('virou moderado') && t.includes('O plano:'), 'análise diz o que foi diferente (mais tempo, mais rápido, esforço alto) e o que o plano faz');
@@ -289,7 +295,7 @@ export default async (page) => {
   await page.click('Agora não');
   await page.click('Começar'); await page.sleep(400);
   await entrevista({
-    'Como é a sua corrida': 'Treino há anos, com bom volume', 'quilômetros você corre': 58, 'corrida mais longa': 24, 'completou uma maratona': 'Sim, já completei uma maratona', 'sem correr': 'Estou correndo',
+    'Como é a sua corrida': 'Treino há anos, com bom volume', 'quilômetros você corre': 58, 'corrida mais longa': 24, 'maior prova': 'Maratona', 'sem correr': 'Estou correndo',
     'objetivo na corrida': 'Preparar uma prova com data', 'Qual distância': 'Maratona', 'quantas semanas': 16, 'tempo em mente': 'Sim', 'tempo-alvo': 225,
     'resultado recente': 'Meia maratona', 'Em quanto tempo?': 104.5, 'quais dias': [dia(0), dia(1), dia(2), dia(3), dia(5), dia(6)], 'melhor dia para o treino mais longo': dia(6),
     'tempo você tem por treino': 'Até 1h30', 'treino mais longo': 'Até 3 horas', 'mede as suas corridas': 'Relógio ou aplicativo com GPS', 'Onde você corre': 'Rua, parque ou calçadão',

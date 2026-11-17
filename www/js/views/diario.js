@@ -159,14 +159,14 @@ export function acoesDaRefeicao(refeicao) {
   // some só quando a refeição SUGERIDA já está no diário; um alimento avulso no mesmo horário não tira o botão
   if (refeicaoCopiada(state.diario, hoje, refeicao)) {
     return h('div', { class: 'row between diario-acoes', dataset: { ref } },
-      h('span', { class: 'small muted grow', text: `${refeicao.nome}: registrado no diário de hoje.` }),
+      h('span', { class: 'small muted grow', text: `Registrado no diário de hoje: ${refeicao.nome}.` }),
       btn('Adicionar mais', outra, 'sm ghost', 'plus'));
   }
   const comi = () => {
     if (!mesmoDia(hoje)) return;
     let n = 0;
     update((s) => { n = copiarRefeicao(s.diario, hoje, refeicao, hoje); });
-    toast(n ? `${refeicao.nome} registrado no diário de hoje${n < refeicao.itens.length ? ' (sem repetir o que já estava lá)' : ''}.` : 'Não consegui registrar esta refeição.');
+    toast(n ? `Registrado no diário de hoje: ${refeicao.nome}${n < refeicao.itens.length ? ' (sem repetir o que já estava lá)' : ''}.` : 'Não consegui registrar esta refeição.');
     refresh();
   };
   return h('div', { class: 'row par-de-botoes diario-acoes', dataset: { ref } },

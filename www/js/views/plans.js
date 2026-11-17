@@ -11,6 +11,10 @@ import { novoItem, alvoTexto, duracaoEstimada, pickExercises, subtitulo, folha }
 import { startSession, startFree } from './session.js';
 import { cartaoCombinado } from './combinado.js';
 import { cartaoAvaliacaoDoDia, cartaoAvaliacaoDoPlano } from './avaliacao.js';
+import { semanaEfetiva, podeMarcar, podeMarcarCorrida, corridaPerdidaEm, nomeDoDia } from '../logic/perdido.js';
+import { botaoNaoTreinei, botaoNaoCorri, linhaNaoTreinado, linhaNaoCorrida } from './perdido.js';
+import { situacaoDoPlano, cartaoVariacao } from './variacao.js';
+import { registrarTrocaManual } from '../logic/variacao.js';
 
 const ORDEM_SEMANA = [1, 2, 3, 4, 5, 6, 0];
 const AGENDA_PADRAO = { 1: [1], 2: [1, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5], 6: [1, 2, 3, 4, 5, 6], 7: [1, 2, 3, 4, 5, 6, 0] };
@@ -182,6 +186,8 @@ export function plansView() {
       h('div', { class: 'grow' }, h('h2', { class: 'ellipsis', text: plan.nome }), h('div', { class: 'row gap-s mt' }, badge('Musculação'), badge(ORIGEM[plan.origem], plan.origem === 'treinador' ? 'acc' : ''))),
       iconBtn('more', 'Opções do plano', () => planMenu(plan), 'soft')));
     if (plan.info) body.push(h('p', { class: 'small muted', text: plan.info }));
+    // hora de variar os exercícios auxiliares (só quando chega o prazo ou um auxiliar trava): views/variacao.js
+    if (semanaVista === 0) { const cv = cartaoVariacao(plan, situacaoDoPlano(plan)); if (cv) body.push(cv); }
   } else {
     body.push(h('h2', { text: 'Sua semana' }));
   }
@@ -214,36 +220,50 @@ export function plansView() {
   const feitoEm = (d, wd) => { const k = dateKey(dataDe(wd)); return state.sessions.some((s) => s.diaId === d.id && dateKey(new Date(s.inicio)) === k); };
   const rotulo = (ic, t, extra) => h('div', { class: 'sec-rot' }, icon(ic, 's'), h('span', { text: t }), extra || null);
   // botão que troca o treino de musculação de um dia (o rótulo diz o dia e o treino atual)
-  const chipAgenda = (wd, d) => h('button', { class: 'chip sm' + (d ? ' on' : ''), type: 'button', 'aria-label': `${DIAS_LONGO[wd]}: ${d ? d.nome : 'descanso'}`, onClick: () => agendaSheet(plan, wd) }, d ? 'Trocar' : 'Definir treino');
-  const blocoTreino = (d, wd = null) => h('div', { class: 'treino col gap-s', 'data-treino': d.id },
+  const chipAgenda = (wd, d) => h('button', { class: 'chip sm chip-agenda' + (d ? ' on' : ''), type: 'button', 'aria-label': `${DIAS_LONGO[wd]}: ${d ? d.nome : 'descanso'}`, onClick: () => agendaSheet(plan, wd) }, d ? 'Trocar' : 'Definir treino');
+  // "Não treinei" / "Não corri": só na semana atual, em hoje ou num dia que já passou (logic/perdido.js)
+  const hojeK = dateKey(hojeD);
+  const efetiva = plan ? semanaEfetiva(plan, state.perdidos, dateKey(segunda)) : null;
+  const acoesPerdido = (b) => h('div', { class: 'perdido-acoes' }, b);
+  // `ef` = o dia na semana com as marcas: treino que veio de outro dia mostra de onde veio (no lugar do "Trocar")
+  const blocoTreino = (d, wd = null, ef = null) => h('div', { class: 'treino col gap-s', 'data-treino': d.id, ...(ef && ef.veioDe ? { 'data-movido': ef.veioDe } : {}) },
     h('div', { class: 'row top' },
       h('div', { class: 'grow' }, h('h3', { text: d.nome }), h('div', { class: 'small muted', text: d.foco || 'Sem descrição' }),
+        ef && ef.veioDe ? h('div', { class: 'small', text: `Veio de ${nomeDoDia(ef.veioDe, hojeK)}.` }) : null,
         h('div', { class: 'tiny muted mt', text: d.itens.length ? `${plural(d.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(d)} min` : 'Nenhum exercício ainda' })),
-      wd != null ? chipAgenda(wd, d) : h('button', { class: 'chip sm', type: 'button', onClick: () => diaSheet(plan, d) }, 'Definir dia')),
+      ef && ef.veioDe ? badge('Movido', 'acc') : wd != null ? chipAgenda(wd, d) : h('button', { class: 'chip sm', type: 'button', onClick: () => diaSheet(plan, d) }, 'Definir dia')),
     h('div', { class: 'row' },
       btn('Editar', () => go(`treino/${plan.id}/${d.id}`), 'ghost grow', 'edit'),
-      semanaVista === 0 || wd == null ? btn('Iniciar', () => startSession(plan.id, d.id), 'primary grow', 'play') : null));
+      semanaVista === 0 || wd == null ? btn('Iniciar', () => startSession(plan.id, d.id), 'primary grow', 'play') : null),
+    ef && semanaVista === 0 && podeMarcar(state, ef.data, hojeK).pode ? acoesPerdido(botaoNaoTreinei(ef.data, refresh)) : null);
   const blocoCorrida = (c) => h('div', { class: 'treino col gap-s' },
     h('div', { class: 'row top' },
       h('div', { class: 'grow' }, h('h3', { text: String(c.nome || 'Corrida') }), c.resumo ? h('div', { class: 'small muted', text: String(c.resumo) }) : null),
       c.feito ? badge('Feita', 'ok') : null),
-    btn(c.feito ? 'Ver corrida' : 'Abrir corrida', () => go('corrida/dia/' + c.data), c.feito ? 'ghost block' : 'block', 'run'));
+    btn(c.feito ? 'Ver corrida' : 'Abrir corrida', () => go('corrida/dia/' + c.data), c.feito ? 'ghost block' : 'block', 'run'),
+    !c.feito && semanaVista === 0 && podeMarcarCorrida(state, c.data, hojeK) ? acoesPerdido(botaoNaoCorri(c.data, refresh)) : null);
   const semana = h('div', { class: 'col semana' });
   for (const wd of ORDEM_SEMANA) {
-    const d = plan ? plan.dias.find((x) => x.id === plan.agenda[wd]) : null;
+    const ef = efetiva ? efetiva[(wd + 6) % 7] : null;
+    const d = plan && ef ? plan.dias.find((x) => x.id === ef.diaId) : null;
     const c = corrida && Array.isArray(corrida.dias) ? corrida.dias[wd] : null;
     const card = h('div', { class: 'card col dia' + (wd === hojeWd ? ' hl' : ''), 'data-wd': String(wd) },
       h('div', { class: 'row between' }, h('div', { class: 'dia-nome' }, DIAS_LONGO[wd], h('span', { class: 'small muted', text: ' · ' + diaMes(dataDe(wd)) })), wd === hojeWd ? badge('Hoje', 'acc') : d && feitoEm(d, wd) ? badge('Feito', 'ok') : null));
     const extras = corrida && Array.isArray(corrida.extras) && Array.isArray(corrida.extras[wd]) ? corrida.extras[wd] : [];
     if (c || extras.length) card.appendChild(rotulo('run', 'Corrida'));
-    if (c) { card.appendChild(blocoCorrida(c)); if (c.estimado && !c.feito) card.appendChild(h('div', { class: 'tiny muted', text: 'Previsão de hoje para esse dia (o que foi mostrado na época não ficou guardado).' })); }
+    const corridaPerdida = c && !c.feito ? corridaPerdidaEm(state, c.data) : null;
+    if (corridaPerdida) card.appendChild(linhaNaoCorrida(corridaPerdida, String(c.nome || 'Corrida'), refresh, semanaVista === 0));
+    else if (c) { card.appendChild(blocoCorrida(c)); if (c.estimado && !c.feito) card.appendChild(h('div', { class: 'tiny muted', text: 'Previsão de hoje para esse dia (o que foi mostrado na época não ficou guardado).' })); }
     for (const x of extras) {
       const partes = [x.distKm ? String(x.distKm).replace('.', ',') + ' km' : '', x.durMin ? Math.round(x.durMin) + ' min' : ''].filter(Boolean).join(' · ');
       card.appendChild(h('div', { class: 'treino row', 'data-extra': String(x.id || '') }, h('div', { class: 'grow' }, h('div', { class: 'bold', text: 'Corrida feita fora do plano' }), h('div', { class: 'small muted', text: partes || 'Registrada neste dia' })), btn('Ver', () => go('corrida/dia/' + x.data), 'sm ghost')));
     }
     if (plan) {
-      card.appendChild(rotulo('dumbbell', 'Musculação', d ? null : chipAgenda(wd, null)));
-      card.appendChild(d ? blocoTreino(d, wd) : h('div', { class: 'small muted', text: c || extras.length ? 'Sem musculação neste dia.' : 'Descanso.' }));
+      const perdido = ef && ef.perdido ? plan.dias.find((x) => x.id === ef.perdido.diaId) : null;
+      const saiu = ef && ef.foiPara ? plan.dias.find((x) => x.id === plan.agenda[wd]) : null;
+      card.appendChild(rotulo('dumbbell', 'Musculação', d || perdido ? null : chipAgenda(wd, null)));
+      if (perdido) card.appendChild(linhaNaoTreinado(ef, perdido.nome, refresh, semanaVista === 0));
+      else card.appendChild(d ? blocoTreino(d, wd, ef) : h('div', { class: 'small muted', text: saiu ? `${saiu.nome} passou para ${nomeDoDia(ef.foiPara, hojeK)}.` : c || extras.length ? 'Sem musculação neste dia.' : 'Descanso.' }));
     } else if (!c && !extras.length) card.appendChild(h('div', { class: 'small muted', text: 'Descanso.' }));
     semana.appendChild(card);
   }
@@ -348,16 +368,18 @@ export function dayView(planId, dayId) {
           const [novo] = await pickExercises({ title: 'Trocar ' + ex.nome, multi: false, padrao: ex.padrao, excluir: usados });
           if (!novo) return;
           const nx = EX_POR_ID.get(novo);
-          mutDay((d) => { if (d.itens[i]) d.itens[i] = nx.registro === ex.registro ? { ...d.itens[i], ex: novo } : novoItem(nx); });
+          // a troca à mão entra no histórico da variação: o novo não sai logo e o antigo não volta logo (logic/variacao.js)
+          mutDay((d, p) => { if (d.itens[i]) { d.itens[i] = nx.registro === ex.registro ? { ...d.itens[i], ex: novo } : novoItem(nx); registrarTrocaManual(p, ex.id, novo, new Date().toISOString()); } });
           toast('Exercício trocado'); refresh();
         }, 'sm', 'swap'),
-        btn('Remover', async () => {
+        // só o ícone (com nome para leitor de tela): com texto, ↑ ↓ Trocar Remover não cabem em 360 px
+        iconBtn('trash', `Remover ${ex.nome}`, async () => {
           const ok = await confirmSheet({ title: 'Remover este exercício?', text: `“${ex.nome}” sai deste treino. O histórico de treinos já feitos não muda.`, okLabel: 'Remover', danger: true });
           if (!ok) return;
           // remove o exercício confirmado, mesmo que a lista tenha mudado enquanto a pergunta estava aberta
           mutDay((d) => { const k = d.itens[i] && d.itens[i].ex === it.ex ? i : d.itens.findIndex((x) => x.ex === it.ex); if (k >= 0) d.itens.splice(k, 1); });
           refresh();
-        }, 'sm danger', 'trash'))));
+        }, 'soft danger'))));
   });
   body.push(btn('Adicionar exercícios', async () => {
     if (day.itens.length >= MAX_ITENS) { toast(`Este treino já tem ${MAX_ITENS} exercícios, que é o limite.`); return; }

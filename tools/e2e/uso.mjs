@@ -62,6 +62,23 @@ export default async (page) => {
   await page.click('Iniciar'); await page.sleep(1200);
   const sess = await page.eval(`return { cards: document.querySelectorAll('.check').length, figs: document.querySelectorAll('.thumb svg.fig').length };`);
   ok(sess.cards > 0, `sessão aberta com ${sess.cards} séries para marcar`);
+  // carga recomendada: cada série já vem com a sugestão (pelo perfil ou pelo esforço), com uma linha curta de origem e o
+  // "Por quê?" fechado
+  const rec = await page.eval(`
+    const S = await import('/js/store.js'); const { recomendacao } = await import('/js/logic/carga.js'); const T = await import('/js/logic/trainer.js'); const { dateKey } = await import('/js/ui.js');
+    const resp = T.respostasParaAvisos(S.state); const sexo = (S.state.nutri.answers || {}).sexo || '';
+    const cards = [...document.querySelectorAll('.card')].filter((c) => c.querySelector('.setgrid'));
+    return S.state.current.itens.map((it, i) => {
+      const dor = T.alertaDoExercicio(it.ex, T.doresDoTreino(S.state, dateKey(new Date()), resp), resp);
+      const r = recomendacao(it.ex, it.alvo, it.sets.length, { respostas: resp, sexo, dor });
+      const c = cards[i]; const d = c && c.querySelector('details.carga');
+      const kgs = [...c.querySelectorAll('input[aria-label^="carga da série"]')].map((x) => x.value);
+      return { ex: it.ex, esperado: r.kg, kgs, linha: d ? d.querySelector('summary .linha').textContent : '', fechado: !!d && !d.open, pq: !!d && d.querySelector('summary .pq-link').textContent === 'Por quê?', soltos: c.querySelectorAll(':scope > p').length };
+    });`);
+  const fmt = (n) => (n == null ? '' : String(n).replace('.', ','));
+  ok(rec.every((x) => x.kgs.every((v) => v === fmt(x.esperado))), 'cada série já vem preenchida com a carga recomendada (ou vazia, quando ela é pelo esforço)');
+  ok(rec.every((x) => x.linha && x.linha.length <= 41 && x.fechado && x.pq && x.soltos === 0), 'cada exercício mostra só uma linha curta de origem e o "Por quê?" fechado, sem parágrafo solto');
+  console.log('     origem da carga: ' + [...new Set(rec.map((x) => x.linha))].join(' | '));
   // preenche cargas vazias e marca todas as séries, uma a uma
   let marcadas = 0;
   for (let n = 0; n < 80; n++) {
@@ -86,6 +103,52 @@ export default async (page) => {
   ok(/séries|Séries/.test(t) && !t.includes('Finalizar treino'), 'treino finalizado e resumo exibido');
   const salvo = await page.eval(`const s = await import('/js/store.js'); return { n: s.state.sessions.length, feitas: s.state.sessions[0] ? s.state.sessions[0].itens.reduce((a, it) => a + it.sets.filter((x) => x.ok).length, 0) : 0, emAndamento: !!s.state.current };`);
   ok(salvo.n === 1 && salvo.feitas === sess.cards && !salvo.emAndamento, `treino gravado no histórico (${salvo.feitas} séries)`);
+  // gasto estimado (logic/gasto.js): com o treino durando 45 min, o quarto cartão mostra as calorias e o "Por quê?" fechado
+  const gasto = await page.eval(`const S = await import('/js/store.js'); const G = await import('/js/logic/gasto.js'); const s0 = S.state.sessions[0];
+    S.update((s) => { s.sessions[0].inicio = new Date(Date.parse(s0.fim) - 45 * 60000).toISOString(); });
+    const R = await import('/js/router.js'); if (location.hash === '#/historico/' + s0.id) R.refresh(); else location.hash = '#/historico/' + s0.id; await new Promise((r) => setTimeout(r, 700));
+    const g = G.gastoDoTreino(S.state.sessions[0], S.state); const c = document.getElementById('gasto-treino'); const pq = document.getElementById('gasto-porque');
+    return { g: { mostrar: g.mostrar, kcal: g.kcal, motivo: g.motivo }, card: c ? c.textContent : '', pq: !!pq && !pq.open && pq.textContent.includes('Compendium') };`);
+  ok(gasto.g.mostrar && gasto.g.kcal > 0 && gasto.card.includes('≈ ' + gasto.g.kcal.toLocaleString('pt-BR') + ' kcal') && gasto.card.includes('gasto estimado') && gasto.pq, 'treino concluído mostra o gasto estimado, com o "Por quê?" fechado e a fonte: ' + gasto.card);
+
+  console.log('3b. Carga pelo perfil num exercício com estudo, e edição');
+  // o sexo entra na conta (vem da Nutrição, que ainda não foi respondida): marcado só para este passo e depois desfeito
+  await page.eval(`const S = await import('/js/store.js'); window.__nutriAntes = JSON.stringify(S.state.nutri.answers || {}); S.update((s) => { s.nutri.answers = { ...s.nutri.answers, sexo: 'm' }; }); return true;`);
+  await page.goto(B + '#treinos', 900);
+  await page.click('Treino livre agora'); await page.sleep(700);
+  await page.click('Exercício'); await page.sleep(500);
+  const add = await page.eval(`
+    const sh = [...document.querySelectorAll('.sheet')].pop(); const busca = sh.querySelector('.search input');
+    busca.value = 'Supino reto com barra'; busca.dispatchEvent(new Event('input', { bubbles: true })); await new Promise((r) => setTimeout(r, 200));
+    const it = [...sh.querySelectorAll('.list .item')].find((e) => e.querySelector('.t') && e.querySelector('.t').textContent === 'Supino reto com barra'); if (!it) return 'sem item';
+    it.click(); await new Promise((r) => setTimeout(r, 100)); sh.querySelector('.sheet-ft .btn.primary').click(); await new Promise((r) => setTimeout(r, 500));
+    const S = await import('/js/store.js'); const c = S.state.current; return c && c.itens.length === 1 ? c.itens[0].ex : 'nada';`);
+  ok(add === 'supino-reto-barra', 'supino reto com barra entrou no treino livre');
+  const livre = await page.eval(`
+    const S = await import('/js/store.js'); const { recomendacao } = await import('/js/logic/carga.js'); const T = await import('/js/logic/trainer.js');
+    const it = S.state.current.itens[0]; const r = recomendacao(it.ex, it.alvo, it.sets.length, { respostas: T.respostasParaAvisos(S.state), sexo: 'm' });
+    const d = document.querySelector('details.carga'); const antes = d.open; d.querySelector('summary').click(); await new Promise((x) => setTimeout(x, 100));
+    return { r: r.kg, origem: r.origem, sets: it.sets.map((x) => x.kg), valor: document.querySelector('input[aria-label="carga da série 1"]').value, linha: d.querySelector('summary .linha').textContent, antes, abriu: d.open, corpo: d.querySelector('.corpo').innerText };`);
+  ok(livre.origem === 'perfil' && livre.r > 0 && livre.sets.every((k) => k === livre.r) && livre.valor === fmt(livre.r), `carga inicial pelo perfil já preenchida em todas as séries: ${livre.r} kg`);
+  ok(livre.linha.startsWith('Estimativa pelo perfil') && /1ª série é teste/.test(livre.linha), 'a linha diz que é estimativa e que a 1ª série é teste');
+  ok(!livre.antes && livre.abriu && /Sobraram mais de 3: aumente/.test(livre.corpo) && /Fontes/.test(livre.corpo) && /Dias RMR/.test(livre.corpo), '"Por quê?" abre com o ajuste e as fontes');
+  // editar: a pessoa muda a carga da 1ª série, marca, e as séries seguintes acompanham; nada fica travado
+  const edit = await page.eval(`
+    const set = (inp, v) => { inp.value = v; inp.dispatchEvent(new Event('change', { bubbles: true })); };
+    const S = await import('/js/store.js'); const novo = ${JSON.stringify(livre.r)} + 6;
+    set(document.querySelector('input[aria-label="carga da série 1"]'), String(novo)); await new Promise((r) => setTimeout(r, 60));
+    const k1 = S.state.current.itens[0].sets[0].kg;
+    document.querySelector('button[aria-label="Marcar série 1 como feita"]').click(); await new Promise((r) => setTimeout(r, 150));
+    const pular = [...document.querySelectorAll('button')].find((e) => e.textContent.trim() === 'Pular'); if (pular) pular.click();
+    const depois = S.state.current.itens[0].sets.map((x) => x.kg);
+    document.querySelector('button[aria-label="Aumentar carga da série 2"]').click(); await new Promise((r) => setTimeout(r, 60));
+    return { novo, k1, depois, s2: S.state.current.itens[0].sets[1].kg, aberto: !!document.querySelector('details.carga').open };`);
+  ok(edit.k1 === edit.novo && edit.depois.every((k) => k === edit.novo), `a carga editada (${edit.novo} kg) vale na série e passa para as seguintes`);
+  ok(edit.s2 > edit.novo && edit.aberto, 'dá para mudar qualquer série a qualquer momento, e o "Por quê?" continua aberto depois de redesenhar');
+  await page.click('Descartar treino'); await page.sleep(400);
+  await page.click('Descartar'); await page.sleep(600);
+  await page.eval(`const S = await import('/js/store.js'); const a = JSON.parse(window.__nutriAntes || '{}'); S.update((s) => { s.nutri.answers = a; }); return true;`);
+  ok(await page.eval(`const S = await import('/js/store.js'); return !S.state.current && S.state.sessions.length === 1 && !S.state.nutri.answers.sexo;`), 'treino livre descartado sem gravar; o histórico continua com 1 treino');
 
   console.log('4. Evolução e dicas');
   await page.goto(B, 900);

@@ -1,12 +1,14 @@
 // Saúde entre as entrevistas (logic/saude.js): o que uma entrevista diz sobre a saúde protege as outras, sempre pelo
 // lado mais protegido; a liberação médica vale por 12 meses e deixa de valer quando a saúde muda (PAR-Q+ 2023).
 import test from 'node:test';
+import { calcular as calcularNutri, contextoDasEntrevistas as ctxNutri } from '../www/js/logic/nutrition.js';
 import assert from 'node:assert/strict';
 import { uniaoSaude, respostasProtegidas, respostasParaEntrevista, estadoLiberacao, condicoesDe, textoDaLiberacao, SINAIS, CONDICOES, REMEDIOS, VALIDADE_LIBERACAO } from '../www/js/logic/saude.js';
 import { gerarPlano as planoTreino, perfil as perfilTreino, saudeDoTreinador, planoFortalecimento } from '../www/js/logic/trainer.js';
 import { planoAtual, saudeDaCorrida, perfil as perfilCorrida } from '../www/js/logic/corrida.js';
 import { calcular, contextoDasEntrevistas, suplementos } from '../www/js/logic/nutrition.js';
 import { sanitize } from '../www/js/store.js';
+import { modoDoDiario } from '../www/js/logic/diario.js';
 
 const HOJE = '2026-11-16';
 const GYM = { all: true, has: {} };
@@ -112,7 +114,7 @@ test('S2: o que a musculação marcou protege a corrida', () => {
 });
 
 test('S2: a Nutricionista também protege os treinadores (transtorno alimentar, doença crônica, gestação ou amamentação)', () => {
-  // transtorno alimentar e outra doença crônica: valem como "outra doença crônica" no Treinador
+  // transtorno alimentar e outra doença crônica: têm o efeito de "outra doença crônica" no Treinador
   for (const c of ['transtorno', 'outra']) {
     const sd = saudeDoTreinador(estado({ n: { ...nutri, condicoes: [c] } }), HOJE);
     assert.ok(perfilTreino(sd.respostas).cronica, c);
@@ -127,6 +129,35 @@ test('S2: a Nutricionista também protege os treinadores (transtorno alimentar, 
   assert.ok(respostasParaEntrevista('corrida', st).condicoes.includes('gestante'));
   // marcada na própria entrevista, o aviso não aparece
   assert.ok(!saudeDoTreinador(estado({ t: { ...treino, condicoes: ['gestante'] }, n: { ...nutri, condicoes: ['gestante'] } }), HOJE).avisos.some((x) => x.saude === 'gestacao'));
+});
+
+test('transtorno alimentar tem opção própria nos treinadores: protege o diário e vale como "outra doença crônica" no treino', () => {
+  assert.ok(CONDICOES.some((o) => o[0] === 'transtorno'));
+  assert.ok(!CONDICOES.find((o) => o[0] === 'cronica')[2].includes('transtorno'), '"outra doença crônica" não cita mais o transtorno');
+  assert.deepEqual(condicoesDe({ condicoes: ['transtorno'] }), ['transtorno', 'cronica']);
+  // no Treinador: o mesmo plano de "outra doença crônica"
+  const t = (c) => ({ ...treino, condicoes: [c] });
+  assert.ok(perfilTreino(t('transtorno')).cronica);
+  const resumo = (p) => ({ dias: p.dias.map((d) => d.itens.map((i) => [i.ex, i.series, i.reps])), volume: p.volume, avisos: p.avisos.map((x) => x.texto), perfil: { ...p.perfil, condicoes: null } });
+  assert.deepEqual(resumo(planoTreino(t('transtorno'), GYM, 0)), resumo(planoTreino(t('cronica'), GYM, 0)));
+  // na corrida: o mesmo efeito também
+  const r = (c) => ({ ...corrida, condicoes: [c] });
+  const pr = perfilCorrida(r('transtorno')), pc = perfilCorrida(r('cronica'));
+  assert.ok(pr.cronica);
+  assert.deepEqual({ ...pr, condicoes: null }, { ...pc, condicoes: null });
+  // protege o diário alimentar, marcado em qualquer entrevista
+  for (const st of [estado({ t: t('transtorno') }), estado({ r: r('transtorno') }), estado({ n: { ...nutri, condicoes: ['transtorno'] } })]) assert.equal(modoDoDiario(null, st), 'sem');
+  assert.notEqual(modoDoDiario(null, estado({ t: t('cronica') })), 'sem');
+  // vindo da Nutricionista, entra como transtorno (não como "outra doença crônica") na entrevista e no plano do Treinador
+  const sn = estado({ n: { ...nutri, condicoes: ['transtorno'] } });
+  assert.deepEqual(respostasParaEntrevista('treinador', sn).condicoes, ['transtorno']);
+  assert.deepEqual(saudeDoTreinador(sn, HOJE).respostas.condicoes, ['transtorno']);
+  // contado ao Treinador: a corrida recebe o transtorno, com um aviso só
+  const sc = respostasProtegidas('corrida', estado({ t: t('transtorno') }), HOJE);
+  assert.deepEqual(sc.respostas.condicoes, ['transtorno']);
+  assert.equal(sc.avisos.length, 1);
+  assert.match(sc.avisos[0].texto, /Você informou transtorno alimentar ao Treinador, mas não aqui/);
+  assert.deepEqual(respostasParaEntrevista('corrida', estado({ t: t('transtorno') })).condicoes, ['transtorno']);
 });
 
 test('S2: na Nutricionista, coração, outra doença crônica ou um sinal da triagem tiram a dose de cafeína', () => {
@@ -170,4 +201,13 @@ test('fortalecimento para quem só corre: a liberação da musculação também 
   assert.equal(sem.motivo, 'saude');
   const com = planoFortalecimento(estado({ t: { ...treino, triagem: ['tontura'], liberado: 'sim', liberadoEm: '2026-09-01' }, r }), { local: 'academia', hoje: HOJE, ocupados: [] });
   assert.ok(com.dias.length > 0);
+});
+
+test('transtorno alimentar informado a um treinador protege a Nutricionista (modo educativo, sem números)', () => {
+  const st = { trainer: { answers: { condicoes: ['transtorno'] } }, run: { answers: {} }, nutri: { answers: {} } };
+  const ctx = ctxNutri(st);
+  assert.ok(ctx.condicoes.some((c) => c.id === 'transtorno' && c.origem === 'treinador'));
+  const r = calcularNutri({ objetivo: 'emagrecer', sexo: 'f', idade: 30, peso: 70, altura: 165, atividade: 'leve', treinos: '3', refeicoes: '4', restricoes: ['nenhuma'], condicoes: ['nenhuma'] }, null, ctx);
+  assert.equal(r.modo, 'educativo');
+  assert.ok(r.avisos.some((a) => /transtorno alimentar/.test(a.texto)));
 });

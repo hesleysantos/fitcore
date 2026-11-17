@@ -1,11 +1,11 @@
 // Peças reutilizadas por várias telas.
-import { h, btn, icon, sheet, toast, norm, badge, chip, uid, plural } from '../ui.js';
+import { h, btn, icon, sheet, toast, norm, badge, chip, uid, plural, dateKey } from '../ui.js';
 import { state, update, hasEquip, activePlan } from '../store.js';
 import { EXERCICIOS, EX_POR_ID } from '../data/exercises.js';
 import { MUSCULOS, GRUPOS, MODALIDADES, NIVEIS } from '../data/muscles.js';
 import { EQUIPAMENTOS } from '../data/equipment.js';
 import { thumb } from '../figure.js';
-import { perfil } from '../logic/trainer.js';
+import { perfil, alertaDoExercicio, doresDoTreino, respostasParaAvisos } from '../logic/trainer.js';
 
 export const subtitulo = (ex) => `${GRUPOS[ex.grupo]} · ${MODALIDADES[ex.modalidade]}`;
 export const nomeMusculos = (ids) => ids.map((m) => (MUSCULOS[m] ? MUSCULOS[m].nome : m)).join(', ');
@@ -16,6 +16,20 @@ export function cuidadosDoUsuario() {
   const a = state.trainer.answers;
   if (!a || !a.objetivo) return [];
   return perfil(a).cuidados;
+}
+// Dores que valem hoje para o Treinador (ativas, pendentes de resposta e em volta gradual) e as respostas usadas nos
+// avisos: as mesmas da tela do treino (views/session.js).
+export function doresDeHoje() {
+  try {
+    const respostas = respostasParaAvisos(state);
+    return { dores: doresDoTreino(state, dateKey(new Date()), respostas), respostas };
+  } catch { return { dores: [], respostas: null }; }
+}
+// Aviso de dor para um exercício, pela regra do Treinador (região da dor × mecânica, músculos e marcas do catálogo:
+// alertaDoExercicio em logic/trainer.js). null = a dor não pega este exercício.
+export function avisoDeDor(exId, ctx = doresDeHoje()) {
+  if (!ctx.dores.length) return null;
+  try { return alertaDoExercicio(exId, ctx.dores, ctx.respostas); } catch { return null; }
 }
 
 // item de lista de exercício
@@ -72,6 +86,7 @@ const raiz = (t) => (t.length >= 5 ? t.replace(/(as|os|es|a|o|s)$/, '') : t);
 export function filtrar({ q = '', grupo = '', mods = null, nivel = 0, tipo = '', soMinha = false, semCuidado = false, padrao = '', excluir = null } = {}) {
   const termos = norm(q).split(/\s+/).filter(Boolean);
   const cuid = semCuidado ? cuidadosDoUsuario() : [];
+  const dor = semCuidado ? doresDeHoje() : { dores: [] };
   return EXERCICIOS.filter((e) => {
     if (grupo && e.grupo !== grupo) return false;
     if (padrao && e.padrao !== padrao) return false;
@@ -81,6 +96,7 @@ export function filtrar({ q = '', grupo = '', mods = null, nivel = 0, tipo = '',
     if (soMinha && !hasEquip(e)) return false;
     if (excluir && excluir.has(e.id)) return false;
     if (cuid.length && e.cuidado.some((c) => cuid.includes(c))) return false;
+    if (dor.dores.length && avisoDeDor(e.id, dor)) return false;
     if (termos.length) { const idx = INDEX.get(e.id); if (!termos.every((t) => idx.includes(t) || idx.includes(raiz(t)))) return false; }
     return true;
   });

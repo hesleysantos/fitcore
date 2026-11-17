@@ -416,6 +416,63 @@ export function vSquat() {
   };
 }
 
+// Agachamento articulado de frente (reverse V-squat), como o Reverse V-Squat da Hammer Strength e o V-Squat da Booty
+// Builder: o aparelho do vSquat visto do outro lado — o eixo da alavanca fica à frente da pessoa, a meia altura — com a
+// pessoa virada para o encosto: o peito na almofada, os ombros sob as ombreiras e as mãos nos pegadores. A plataforma
+// fica embaixo do corpo, com os calcanhares um pouco mais altos que as pontas. Os ombros andam num arco em volta do
+// eixo: ao descer, vão para baixo e para trás, e o encosto, preso à alavanca, gira junto e fica em pé. O tronco
+// acompanha o encosto, como num agachamento frontal; no fundo, as coxas ficam paralelas à plataforma.
+// A alavanca é mais comprida que a do vSquat (o eixo fica mais longe): com o raio do vSquat, o encosto giraria mais de
+// 30° na descida e o peito sairia da almofada. Com este raio, o tronco fica no máximo 6° fora do encosto, no fundo.
+// O encosto e as ombreiras são desenhados pela alavanca (não pelo tronco): o peito nunca passa para dentro da almofada.
+export function reverseVSquat() {
+  const PV = [160, 40], R = 60;
+  const fa = 15, an = [116, 17];
+  const A0 = 130, A1 = 156; // ângulo dos ombros em volta do eixo, em pé e no fundo
+  // direções da alavanca para um ângulo a: up = ao longo do encosto, fr = do encosto para o eixo
+  const lado = (a) => { const r = (a - 60) * D2R; const up = [Math.cos(r), Math.sin(r)]; return { up, fr: [up[1], -up[0]] }; };
+  const mk = (s) => {
+    const a = lerp(A0, A1, s) * D2R;
+    const sh = [PV[0] + R * Math.cos(a), PV[1] + R * Math.sin(a)];
+    const torso = lerp(20, 0, s);
+    const f = frame(torso);
+    return { hip: add(sh, f.up, -L.torso), torso, head: lerp(-14, -6, s), leg: { foot: an, footAng: fa }, arm: { hand: add(add(sh, f.front, 6.5), f.up, 0.5), la: 0.6, lb: 0.6 } };
+  };
+  return {
+    view: 'side', pega: 'neutra', label: 'De frente para o encosto: peito na almofada',
+    frames: passos(5).map(mk),
+    equip: [
+      sapata(98, 176),
+      // quadro que sustenta o eixo, à frente da pessoa
+      { k: 'frame', pts: [[PV[0] + 13, CHAO], PV, [PV[0] - 11, CHAO]], w: 2.2, z: 'back' },
+      // plataforma dos pés, com o suporte de trás e o trilho de regulagem até o quadro
+      { k: 'fn', z: 'back', f: (o, J) => {
+        const c = add(add(J.heelN, J.fdN, 4.2), J.fuN, -1.6);
+        P.tubo(o, [add(c, J.fdN, -5), [add(c, J.fdN, -5)[0], CHAO]], 1.8);
+        P.tubo(o, [add(c, J.fdN, 4), [PV[0] - 7.9, 12]], 1.6); // ponto na perna de trás do quadro
+        P.chapa(o, c, J.fdN, 8, 1.1, 'fg-steel');
+      } },
+      // alavanca (dos dois lados do corpo) com as ombreiras, o encosto do peito, os pegadores e o pino das anilhas
+      { k: 'fn', z: 'back', f: (o, J) => {
+        const { up, fr } = lado(Math.atan2(J.sh[1] - PV[1], J.sh[0] - PV[0]) / D2R);
+        const om = add(J.sh, up, 4.8);           // ombreira, em cima do ombro
+        const Y = add(om, fr, 12);                // ponta da alavanca, presa à ombreira
+        const q = (u, b) => add(add(J.sh, fr, b), up, u - L.torso);
+        P.tubo(o, [PV, Y], 2.2);
+        P.anilha(o, mix(PV, Y, 0.42), 7.5);
+        o.line(Y, q(10, 12), 'fg-eq', 2.4);        // coluna do encosto
+        P.tubo(o, [q(12, 12), q(12, 9.4)], 1.2);
+        P.estofado(o, q(11, 8.7), q(25.5, 8.7), 1.9); // almofada do peito: da boca do estômago até a altura dos ombros
+        o.line(Y, add(om, fr, 4), 'fg-eq', 1.6);
+        P.estofado(o, add(om, fr, 4.5), add(om, fr, -3.5), 2);
+        o.line(add(om, fr, 4), J.handN, 'fg-eq', 1.4); // pegador
+        P.eixo(o, PV, 2.3);
+      } },
+      { k: 'handle' },
+    ],
+  };
+}
+
 // Agachamento hack invertido: a mesma hack machine, usada de frente para o encosto. Os ombros ficam sob as ombreiras e
 // andam com o carro pelo trilho; os pés ficam na plataforma, atrás; ao descer, o quadril vai para trás e o tronco inclina
 // mais do que o trilho (o peito sai do encosto), com a coluna reta. Os pés ficam inteiros na plataforma: por isso a
@@ -575,6 +632,7 @@ export const ANIMS_MAIS = {
   'ergometro-de-braco': [armErgometer],
   'arremesso-medicine-ball-parede': [wallBall],
   'agachamento-articulado': [vSquat],
+  'agachamento-articulado-de-frente': [reverseVSquat],
   'agachamento-hack-invertido': [reverseHack],
   'abdutora-em-pe-maquina': [standingAbductor],
   'puxada-articulada-de-frente': [frontLeverPulldown],

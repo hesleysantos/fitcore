@@ -34,9 +34,11 @@
 .sono-dia.hoje { border-color: var(--accent); }
 .sono-dia:active { background: var(--border); }
 /* cartão do Início: o link para a tela mostra a meta; o convite (sem meta) é um cartão-link */
-.sono-abrir { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; color: var(--muted); font-size: 0.86rem; text-align: right; }
+.sono-abrir { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; color: var(--muted); font-size: 0.86rem; text-align: right; }
 a.sono-convite { text-decoration: none; }
+.sono-sinais > summary .ic { color: var(--warn); }
 .sono-sinais ul { margin: 4px 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 4px; }
+.mais-dicas > div { margin-top: 8px; }
 .sono-sinais li + li { margin-top: 0; }
 /* linha "horas + Registrar": cabe no cartão em telas de 360 px */
 .sono-passo + .btn { white-space: nowrap; padding: 0 12px; flex: 0 1 auto; min-width: 0; }

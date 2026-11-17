@@ -162,6 +162,12 @@ function repetidos(itens) {
   }
   return [...m.values()].filter((x) => x.nomes.length >= 3);
 }
+const G_SUP = ['peito', 'costas', 'ombros', 'biceps', 'triceps'], G_INF = ['quadriceps', 'posteriores', 'gluteos', 'panturrilhas'];
+// [texto do foco, começo da conclusão]
+function regiaoDoFoco(gs) {
+  const s = gs.some((g) => G_SUP.includes(g)), i = gs.some((g) => G_INF.includes(g));
+  return s && !i ? ['Parte de cima do corpo', 'Treino da parte de cima do corpo'] : i && !s ? ['Pernas e glúteos', 'Treino de pernas e glúteos'] : ['Corpo inteiro', 'Treino de corpo inteiro'];
+}
 const ordenados = (vol) => GRUPOS_AV.filter((g) => vol[g] > 0).sort((a, b) => vol[b] - vol[a] || GRUPOS_AV.indexOf(a) - GRUPOS_AV.indexOf(b));
 const vazio = (texto) => ({ vazio: true, conclusao: texto, refs: [] });
 const fraseDoPerfil = (p, c, bom) => (p.veredito === 'nao' ? 'Para o seu perfil, não é recomendado como está: veja o que trocar.'
@@ -181,22 +187,34 @@ export function avaliarDia(dia, contexto) {
   const { vol, dir } = contar([itens]);
   const ordem = ordenados(vol);
   const forca = itens.filter((it) => !ehCardio(it.ex));
-  const topo = ordem.length ? vol[ordem[0]] : 0;
-  const focoGrupos = ordem.filter((g) => vol[g] >= topo * 0.6).slice(0, 3);
+  // foco pelas séries DIRETAS (o músculo como principal): a meia série do ombro no supino não faz de um treino de
+  // superiores um "treino de ombros". Empate: todo grupo com 60% ou mais das séries do primeiro. Sem série direta em
+  // nenhum grupo (só auxiliares), vale o total.
+  const comDir = GRUPOS_AV.filter((g) => dir[g] > 0).sort((a, b) => dir[b] - dir[a] || vol[b] - vol[a] || GRUPOS_AV.indexOf(a) - GRUPOS_AV.indexOf(b));
+  const baseFoco = comDir.length ? comDir : ordem;
+  const valFoco = (g) => (comDir.length ? dir[g] : vol[g]);
+  const topo = baseFoco.length ? valFoco(baseFoco[0]) : 0;
+  const focoTodos = baseFoco.filter((g) => valFoco(g) >= topo * 0.6);
+  const focoGrupos = focoTodos.slice(0, 3);
   const padroes = [...new Set(forca.map((it) => nomePadrao(it.ex.padrao)))];
   const tipo = tipoDoTreino(itens);
   const duracao = duracaoEstimada({ itens: itens.map((it) => it.bruto) });
-  const item = (g) => ({ g, nome: nomeGrupo(g), series: vol[g] });
-  const mais = ordem.length ? item(ordem[0]) : null;
-  const menos = ordem.length > 1 ? item(ordem[ordem.length - 1]) : null;
+  // o que mais e o que menos trabalha, pela mesma conta do foco (séries diretas); sem outro grupo com série direta, o
+  // "menos" é o que só entra como auxiliar (diretas: false)
+  const item = (g, diretas) => ({ g, nome: nomeGrupo(g), series: diretas ? dir[g] : vol[g], diretas });
+  const mais = comDir.length ? item(comDir[0], true) : ordem.length ? item(ordem[0], false) : null;
+  const soAux = ordem.filter((g) => !comDir.includes(g));
+  const menos = comDir.length > 1 ? item(comDir[comDir.length - 1], true) : mais && soAux.length && soAux[soAux.length - 1] !== mais.g ? item(soAux[soAux.length - 1], false) : null;
   const teto = c.pf ? tetoSeries(c.pf.nivel) : 20;
   // muito de um músculo num treino só: mais séries diretas do que o teto de uma semana inteira
   const sobra = GRUPOS_AV.filter((g) => (dir[g] || 0) > teto).map((g) => ({ g, nome: nomeGrupo(g), series: dir[g], teto }));
   const rep = repetidos(itens);
   const p = conferirPerfil(itens, c, [], sobra.length > 0 || rep.length > 0);
   const soCardio = !forca.length;
-  const focoTexto = soCardio ? 'Cardio' : focoGrupos.length ? e(focoGrupos.map(nomeGrupo)) : 'Sem grupo muscular principal';
-  const partes = [soCardio ? `Treino de cardio, com cerca de ${duracao} min.` : `Treino de ${min(focoTexto)}${tipo.id ? ', de ' + NOME_TIPO[tipo.id] : ''}, com cerca de ${duracao} min.`];
+  // mais de 3 grupos empatados: o foco é a região (parte de cima, pernas ou corpo inteiro)
+  const reg = focoTodos.length > 3 ? regiaoDoFoco(focoTodos) : null;
+  const focoTexto = soCardio ? 'Cardio' : reg ? reg[0] : focoGrupos.length ? e(focoGrupos.map(nomeGrupo)) : 'Sem grupo muscular principal';
+  const partes = [soCardio ? `Treino de cardio, com cerca de ${duracao} min.` : `${reg ? reg[1] : 'Treino de ' + min(focoTexto)}${tipo.id ? ', de ' + NOME_TIPO[tipo.id] : ''}, com cerca de ${duracao} min.`];
   if (sobra.length) partes.push(`Tem séries demais de ${min(e(sobra.map((x) => x.nome)))} para um treino só.`);
   if (!sobra.length || p.veredito === 'nao') partes.push(fraseDoPerfil(p, c, 'Serve para o seu perfil.'));
   return {
@@ -252,14 +270,18 @@ export function avaliarPlano(plano, contexto) {
     const seguidos = wds.some((w) => wds.includes((w + 1) % 7));
     if (forca.length > 3 || seguidos) extras.push(`${c.pf.jovem ? 'Antes dos 18 anos' : 'Com diabetes'}, o indicado são até 3 treinos de força por semana, em dias não seguidos.`);
   }
-  // quem corre: treino de pernas na véspera de corrida forte ou do longo (de qualquer semana do plano de corrida)
+  // quem corre: treino de pernas na véspera de corrida forte ou do longão (de qualquer semana do plano de corrida)
   const corrida = [];
   if (c.corrida) {
-    const chave = new Set([...lista(c.corrida.fortes), ...lista(c.corrida.longos)].filter(Number.isInteger));
-    if (Number.isInteger(c.corrida.longo)) chave.add(c.corrida.longo);
+    const fortes = new Set(lista(c.corrida.fortes).filter(Number.isInteger));
+    const longos = new Set(lista(c.corrida.longos).filter(Number.isInteger));
+    if (Number.isInteger(c.corrida.longo)) longos.add(c.corrida.longo);
     for (const x of semana) {
-      if (x.wd == null || !chave.has((x.wd + 1) % 7)) continue;
-      if (x.itens.filter((it) => G_PERNA.includes(it.ex.grupo)).length >= 2) corrida.push({ wd: x.wd, texto: `Treino de pernas na ${DIAS_NOME[x.wd]}, véspera de corrida forte ou do longo: troque de dia ou faça mais leve.` });
+      const amanha = x.wd == null ? null : (x.wd + 1) % 7;
+      if (amanha == null || (!fortes.has(amanha) && !longos.has(amanha))) continue;
+      // (o "longão" só conta quando é mesmo a corrida mais longa da semana: logic/corrida.js, nomearLongo)
+      const qual = fortes.has(amanha) && longos.has(amanha) ? 'de corrida forte ou do longão' : fortes.has(amanha) ? 'de corrida forte' : 'do longão';
+      if (x.itens.filter((it) => G_PERNA.includes(it.ex.grupo)).length >= 2) corrida.push({ wd: x.wd, texto: `Treino de pernas na ${DIAS_NOME[x.wd]}, véspera ${qual}: troque de dia ou faça mais leve.` });
     }
     // corrida e musculação tomando os 7 dias da semana
     const ocupados = new Set([...lista(c.corrida.dias).filter(Number.isInteger), ...semana.map((x) => x.wd).filter((w) => w != null)]);

@@ -94,13 +94,14 @@ export default async (page) => {
   e = await estado();
   ok(e.pausa === '3a6m', 'resposta do tempo parado gravada');
   await page.goto(B + '#/treinador', 1200);
-  t = await texto();
-  ok(t.includes('Volta depois de 3 a 6 meses parado'), 'proposta traz a orientação de volta');
+  // a orientação de volta é informativa: fica em "Cuidados para o seu perfil", seção fechada da proposta
+  const cuidados = await page.eval(`const d = document.getElementById('treinador-cuidados'); return d && d.tagName === 'DETAILS' ? d.textContent : '';`);
+  ok(cuidados.includes('Volta depois de 3 a 6 meses parado'), 'proposta traz a orientação de volta (em “Cuidados para o seu perfil”)');
   const maxSeries = await page.eval(`const { gerarPlano } = await import('/js/logic/trainer.js'); const s = (await import('/js/store.js')).state; const p = gerarPlano(s.trainer.answers, s.gym, s.trainer.versao || 0); return Math.max(...p.dias.flatMap((d) => d.itens.map((i) => i.series)));`);
   ok(maxSeries <= 3, `plano de volta com até 3 séries por exercício (máximo: ${maxSeries})`);
   await page.click('Aceitar e usar este treino'); await page.sleep(800);
   await page.goto(B + '#/treinador', 1200);
-  ok((await texto()).includes('Parado antes de voltar'), 'perfil mostra o tempo parado');
+  ok((await page.eval(`const d = document.getElementById('treinador-perfil'); return d && d.tagName === 'DETAILS' ? d.textContent : '';`)).includes('Parado antes de voltar'), 'perfil (seção fechada “Seu perfil”) mostra o tempo parado');
   // quem nunca treinou não vê a pergunta
   await page.click('Refazer a entrevista'); await page.sleep(500);
   vistas = await entrevista({ experiência: 'Nunca treinei musculação' });
@@ -127,8 +128,10 @@ export default async (page) => {
   await page.goto(B + '#/treinos', 1200);
   await page.click('Iniciar'); await page.sleep(1200);
   ok(await page.eval(`return !!(await import('/js/store.js')).state.current;`), 'treino iniciado');
+  // a linha curta fica à vista; a explicação, no "Por quê?" (fechado: conta o texto da página inteira, não só o visível)
   t = await texto();
-  ok(/Você ficou \d+ semanas sem treinar/.test(t) && t.includes('antes da pausa'), 'treino sugere a carga reduzida e explica por quê');
+  const pq = await page.eval(`return [...document.querySelectorAll('details.carga .corpo')].map((e) => e.textContent).join(' ');`);
+  ok(t.includes('Volta da pausa: hoje mais leve') && /Você ficou \d+ semanas sem treinar/.test(pq) && pq.includes('antes da pausa'), 'treino sugere a carga reduzida e explica por quê');
   const cargas = await page.eval(`
     const store = await import('/js/store.js'); const { historico, assistido } = await import('/js/logic/progress.js'); const { EX_POR_ID } = await import('/js/data/exercises.js');
     const out = [];

@@ -92,8 +92,8 @@ export const PERGUNTAS = [
   { k: 'distancia', tipo: 'um', se: comDistancia, titulo: 'Qual distância?', op: [['5', '5 km', ''], ['10', '10 km', ''], ['21', 'Meia maratona', '21,1 km'], ['42', 'Maratona', '42,2 km']] },
   // só muda algo na maratona: o aviso de quem vai fazer a primeira (smyth2021muro, smyth2020vc)
   {
-    k: 'provas', tipo: 'um', se: (a) => corre(a) && comDistancia(a) && a.distancia === '42', titulo: 'Você já completou uma maratona?', ajuda: 'Para a primeira maratona, eu explico os cuidados de quem vai completar a distância pela primeira vez. Não muda os treinos.',
-    op: [['nenhuma', 'Nunca fiz prova', ''], ['5a10', 'Já fiz 5 km ou 10 km', ''], ['meia', 'Já fiz meia maratona', ''], ['maratona', 'Sim, já completei uma maratona', '']],
+    k: 'provas', tipo: 'um', se: (a) => corre(a) && comDistancia(a) && a.distancia === '42', titulo: 'Qual a maior prova que você já completou?', ajuda: 'Para a primeira maratona, eu explico os cuidados de quem vai completar a distância pela primeira vez. Não muda os treinos.',
+    op: [['nenhuma', 'Nenhuma ainda', ''], ['5a10', '5 km ou 10 km', ''], ['meia', 'Meia maratona', '21,1 km'], ['maratona', 'Maratona', '42,2 km']],
   },
   { k: 'semanasProva', tipo: 'numero', se: (a) => a.objetivo === 'prova', titulo: 'Em quantas semanas é a prova?', ajuda: 'Esta semana conta como a primeira. Na proposta eu mostro o dia em que a prova cai, para você conferir.', min: 1, max: 52, un: 'semanas', padrao: 12 },
   { k: 'temAlvo', tipo: 'um', se: (a) => a.objetivo === 'ritmo' || a.objetivo === 'prova', titulo: 'Você tem um tempo em mente?', op: [['nao', 'Não', 'Quero completar bem ou só melhorar'], ['sim', 'Sim', 'Tenho um tempo-alvo']] },
@@ -978,7 +978,20 @@ function diasDaSemana(s, pf, c, cfg, cont, pernas) {
   if (ehEvento) out.set(pf.diaLongo, tEvento(pf, c, cfg));
   // 5) dias disponíveis que sobraram: caminhada (iniciantes) ou atividade livre (menores de 14)
   for (const d of pf.dias) if (!out.has(d)) out.set(d, tCaminhada(Math.min(30, pf.tempo), c, pf.idade < 14 ? 'Atividade livre' : ''));
-  return ORDEM.filter((d) => out.has(d)).map((d) => ({ wd: d, ...out.get(d) }));
+  return nomearLongo(ORDEM.filter((d) => out.has(d)).map((d) => ({ wd: d, ...out.get(d) })));
+}
+// "Longão" é a corrida mais longa da semana (TIPOS_TREINO.longo). Quando ele dura o mesmo que outra corrida da semana — nas
+// primeiras semanas de quem começa, em que as rodagens já têm o mínimo de 20 minutos, ou depois do corte por dor —, ele
+// aparece como rodagem leve e não conta como longão na combinação com a musculação (logic/trainer.js). Só o nome muda: a
+// duração, o tipo e as regras de progressão continuam as do longo.
+function nomearLongo(dias) {
+  const lg = dias.find((d) => d.tipo === 'longo');
+  if (!lg) return dias;
+  const empata = dias.some((d) => d !== lg && d.tipo !== 'caminhada' && d.tipo !== 'descanso' && d.durMin >= lg.durMin);
+  if (empata === !!lg.comoRodagem) return dias;
+  const novo = { ...lg, nome: TIPOS_TREINO[empata ? 'leve' : 'longo'].nome };
+  if (empata) novo.comoRodagem = true; else delete novo.comoRodagem;
+  return dias.map((d) => (d === lg ? novo : d));
 }
 // tempo previsto para a prova: na maratona, o meio da faixa (a fórmula é otimista para amadores: vickers2016)
 const previstoDe = (P, dist) => (dist === 42 ? P.previsoes[42] * 1.025 : P.previsoes[dist]);
@@ -1223,7 +1236,7 @@ function limitarAo(t, maxMin, c) {
 // dentro da janela da dor, as rodagens continuam mais curtas que o longo
 function ordenarLongo(dias, c, naJanela) {
   const lg = dias.find((d) => d.tipo === 'longo' && naJanela(d));
-  return lg ? dias.map((d) => (naJanela(d) && d !== lg ? { ...limitarAo(d, lg.durMin, c), wd: d.wd } : d)) : dias;
+  return nomearLongo(lg ? dias.map((d) => (naJanela(d) && d !== lg ? { ...limitarAo(d, lg.durMin, c), wd: d.wd } : d)) : dias);
 }
 function aplicarDor(dia, ef, c) {
   if (dia.tipo === 'caminhada' || dia.tipo === 'descanso' || ef.nivel === 0) return dia;

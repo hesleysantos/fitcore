@@ -122,7 +122,7 @@ async function registerSw() {
       if (!nw) return;
       nw.addEventListener('statechange', () => {
         if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-          import('./ui.js').then(({ toast }) => toast('Nova versão instalada. Feche e abra o app para atualizar.'));
+          import('./ui.js').then(({ toast }) => toast('Nova versão instalada. Feche e abra o aplicativo para atualizar.'));
         }
       });
     });
@@ -146,7 +146,7 @@ async function boot() {
     const mq = window.matchMedia('(prefers-color-scheme: light)');
     if (mq.addEventListener) mq.addEventListener('change', applyTheme); else if (mq.addListener) mq.addListener(applyTheme); // Safari antigo
   }
-  onExternalChange((motivo) => { render(true); toast(motivo === 'conflito' ? 'O app estava aberto em outra janela: carreguei os dados mais recentes.' : 'Dados atualizados a partir de outra janela do app.'); });
+  onExternalChange((motivo) => { render(true); toast(motivo === 'conflito' ? 'O aplicativo estava aberto em outra janela: carreguei os dados mais recentes.' : 'Dados atualizados a partir de outra janela do aplicativo.'); });
   onSaveError(() => toast('Atenção: não foi possível salvar. Libere espaço no aparelho e faça um backup em Ajustes.'));
   render();
   if (!armazenamentoOk()) toast('Atenção: o armazenamento principal do aparelho não respondeu. Seus dados estão indo para uma cópia de reserva. Faça um backup em Ajustes.');
