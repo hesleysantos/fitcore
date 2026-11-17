@@ -24,7 +24,7 @@
 import { EX_POR_ID } from '../data/exercises.js';
 import { FORCA_INICIANTE, BARRA_KG } from '../data/cargas.js';
 import { historico, sugestao, retomada, parseReps, assistido } from './progress.js';
-import { perfil, carregaRegiao } from './trainer.js';
+import { perfil, carregaRegiao, respostasParaAvisos, alertaDoExercicio, doresDoTreino } from './trainer.js';
 
 const pos = (n) => (typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : 0);
 const kgTxt = (n) => String(Math.round(n * 10) / 10).replace('.', ',');
@@ -191,4 +191,15 @@ export function recomendacao(exId, alvoReps, nSeries, ctx = {}, agora = Date.now
   }
   const ci = cargaInicial(exId, alvoReps, ctx);
   return { ...sug, kg: ex.registro === 'peso_reps' ? ci.kg : null, origem: ci.origem, linha: ci.linha, porque: ci.porque, refs: ci.refs, estimativa: ci.estimativa };
+}
+
+// Contexto da carga inicial a partir do estado: as respostas do Treinador (com a proteção das outras entrevistas), o
+// sexo informado na Nutrição e a dor que o exercício pega. É o mesmo que o treino usa (views/session.js) e o chat do
+// Treinador (logic/chat/treino.js), para os dois darem sempre a mesma carga.
+export function contextoDoEstado(st, exId, hoje) {
+  let respostas = null, dor = null;
+  try { respostas = respostasParaAvisos(st); } catch { respostas = null; }
+  try { dor = alertaDoExercicio(exId, doresDoTreino(st, hoje, respostas), respostas); } catch { dor = null; }
+  const n = st && st.nutri && st.nutri.answers;
+  return { respostas, dor, sexo: n && typeof n.sexo === 'string' ? n.sexo : '' };
 }

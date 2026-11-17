@@ -19,6 +19,7 @@ import {
 import { faltaPerguntar } from '../logic/combinado.js';
 import { cartaoCombinado, perguntarCombinado } from './combinado.js';
 import { LOCAIS_DOR, doresAtivas, limparDor, MAX_DORES } from '../logic/dor.js';
+import { botaoChat } from './chat.js';
 
 let modo = 'auto'; // 'auto' | 'entrevista' | 'proposta'
 const ORDEM = [1, 2, 3, 4, 5, 6, 0];
@@ -337,6 +338,8 @@ function painel() {
       provaTxt,
       treinoHoje ? btn(dHoje.feito ? 'Ver a corrida de hoje' : 'Iniciar', () => go('corrida/dia/' + hoje), (dHoje.feito ? 'ghost' : 'primary') + ' block alvo', dHoje.feito ? 'right' : 'play') : null));
   }
+  // dúvida ou imprevisto (chuva, juntar com a musculação, dor): o chat do Treinador de corrida (views/chat.js)
+  body.push(botaoChat('corrida', 'Perguntar ao treinador de corrida'));
   // 2. o que muda o treino: avisos graves (meta que não coube, prova retirada), alertas dos registros, dores e ajustes
   for (const av of p.avisos) if (av.destaque || av.tipo === 'danger') body.push(aviso(av));
   for (const al of alertas(state.runs, hoje)) body.push(aviso(al));
@@ -417,6 +420,13 @@ function painel() {
   return body;
 }
 
+// Abre a entrevista da corrida vindo do chat (views/chat.js), com o mesmo aviso do botão "Refazer a entrevista"
+export async function abrirEntrevistaCorrida() {
+  if (state.run.aceitoEm && !(await confirmSheet({ title: 'Refazer a entrevista?', text: 'Ao terminar as perguntas, o plano atual é trocado por um novo, que começa da semana 1. As corridas registradas continuam guardadas. Se desistir no meio, nada muda.', okLabel: 'Refazer' }))) return;
+  modo = 'entrevista';
+  go('corrida');
+  window.scrollTo(0, 0);
+}
 export function corridaView() {
   const a = state.run.answers;
   const completo = respostasCompletas(a);

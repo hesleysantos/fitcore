@@ -4,7 +4,7 @@
 // Explicações e fontes ficam em seções que abrem ao toque. "Ver a semana" abre os 7 dias e a lista de compras.
 import { h, btn, iconBtn, chip, seg, sheet, icon, note, sectionTitle, toast, norm, fmtInt, dateKey, DIAS_LONGO } from '../ui.js';
 import { state, update } from '../store.js';
-import { refresh } from '../router.js';
+import { refresh, go } from '../router.js';
 import { FAQ_NUTRI, REFS } from '../data/knowledge.js';
 import { resumoParaNutricao } from '../logic/corrida.js';
 import { ALIMENTOS, CATEGORIAS_ALIMENTO, NOME_FAIXA } from '../data/foods.js';
@@ -17,6 +17,7 @@ import { somarDias, idDaRefeicao, refeicaoCopiada } from '../logic/diario.js';
 import { interview, faqBlock, notaObjetivo, conferirObjetivos, cartaoObjetivos } from './coach.js';
 import { nutriPara } from '../logic/objetivos.js';
 import { blocoDiario, acoesDaRefeicao, resumoDoDiario, comidoNaRefeicao, diarioDeHoje, historicoDoDiario } from './diario.js';
+import { botaoChat } from './chat.js';
 
 let modo = 'auto';
 const dec = (n, d = 1) => String(Math.round(n * 10 ** d) / 10 ** d).replace('.', ',');
@@ -440,6 +441,8 @@ function resultado() {
   return body;
 }
 
+// Abre a entrevista da Nutrição vindo do chat (views/chat.js, "Refazer a entrevista")
+export function abrirEntrevistaNutri() { modo = 'entrevista'; go('nutricao'); window.scrollTo(0, 0); }
 export function nutritionView() {
   const a = state.nutri.answers;
   if (modo === 'entrevista' || !respostasCompletas(a)) {
@@ -468,5 +471,6 @@ export function nutritionView() {
       })],
     };
   }
-  return { title: 'Nutrição', body: resultado() };
+  // dúvida do dia a dia: o chat da Nutricionista (views/chat.js) na barra do topo, para o cardápio continuar na 1ª tela
+  return { title: 'Nutrição', actions: [botaoChat('nutri', 'Perguntar', 'sm plain')], body: resultado() };
 }

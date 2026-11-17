@@ -7,6 +7,7 @@ import { thumb } from '../figure.js';
 import { semanaAtual, sequenciaSemanas, inicioSemana } from '../logic/progress.js';
 import { duracaoEstimada, alvoTexto } from './common.js';
 import { startSession } from './session.js';
+import { botaoChat } from './chat.js';
 import { mostrarSemana, guardarCorridaMostrada } from './plans.js';
 import { cartaoCombinado } from './combinado.js';
 import { faltaPerguntar } from '../logic/combinado.js';
@@ -119,7 +120,8 @@ export function homeView() {
         thumbs, lista,
         h('p', { class: 'tiny muted', text: `${plural(dia.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(dia)} min` }),
         btn(feitoHoje ? 'Treinar de novo' : 'Iniciar treino', () => startSession(plan.id, dia.id), (feitoHoje ? '' : 'primary ') + 'lg block', 'play'),
-        podeMarcar(state, hojeK, hojeK).pode ? h('div', { class: 'perdido-acoes' }, botaoNaoTreinei(hojeK, refresh)) : null));
+        // imprevisto ou dúvida: "Não treinei" e o chat do Treinador, discretos, na mesma linha
+        h('div', { class: 'perdido-acoes' }, podeMarcar(state, hojeK, hojeK).pode ? botaoNaoTreinei(hojeK, refresh) : null, botaoChat('treinador', 'Dúvida? Pergunte', 'sm plain'))));
     } else {
       const prox = proximoTreino(plan, wd, semEf);
       const saiu = efHoje.foiPara ? plan.dias.find((d) => d.id === plan.agenda[wd]) : null;

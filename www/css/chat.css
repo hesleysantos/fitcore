@@ -1,0 +1,33 @@
+/* Chat com os treinadores (views/chat.js): balões curtos, botões grandes e o campo de texto no fim da conversa.
+   Tudo em rem e com quebra de linha: funciona com a letra maior e o alto contraste (as cores são as variáveis de app.css)
+   e não cria rolagem para o lado em 360 px. */
+.chat { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.chat-topo .avatar { flex: none; }
+.chat-lista { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.chat-msg { display: flex; flex-direction: column; gap: 8px; min-width: 0; scroll-margin-top: calc(var(--top-h) + var(--safe-t) + 12px); }
+.chat-msg.de-eu { align-items: flex-end; }
+.chat-bolha { min-width: 0; overflow-wrap: break-word; }
+.chat-bolha > .note { margin-bottom: 8px; }
+.chat-bolha details.pq { margin-top: 4px; }
+.chat-eu {
+  max-width: 85%; padding: 10px 14px; border-radius: 16px 4px 16px 16px; overflow-wrap: anywhere;
+  background: var(--accent-soft); border: 1px solid var(--accent); color: var(--text); font-weight: 600;
+}
+.chat-opcoes { display: flex; flex-direction: column; gap: 8px; }
+.chat-opcoes .btn { white-space: normal; line-height: 1.25; padding-top: 8px; padding-bottom: 8px; }
+.chat-opcoes .btn.chat-op { justify-content: flex-start; text-align: left; border-color: var(--accent); color: var(--accent); background: var(--surface); }
+.chat-faq summary { overflow-wrap: break-word; }
+/* o campo acompanha o fim da tela enquanto se lê a conversa; com o teclado aberto, o navegador o traz para a parte visível */
+.chat-campo {
+  position: sticky; bottom: 0; z-index: 2; display: flex; gap: 8px; align-items: stretch;
+  padding: 10px 0 calc(10px + var(--safe-b)); background: var(--bg); border-top: 1px solid var(--border);
+}
+.chat-campo .input { flex: 1 1 auto; min-width: 0; min-height: 48px; }
+.chat-campo .btn { flex: none; padding: 0 14px; }
+.chat-fim { align-self: center; }
+.chat-entrada .ic { color: var(--accent); }
+/* letra maior: o botão de enviar fica só com o ícone para o campo continuar largo */
+:root[data-letra] .chat-enviar { display: none; }
+:root[data-letra] .chat-eu { max-width: 92%; }
+/* Início: "Não treinei" e a entrada do chat dividem a linha do cartão de hoje */
+.perdido-acoes { gap: 4px; flex-wrap: wrap; }

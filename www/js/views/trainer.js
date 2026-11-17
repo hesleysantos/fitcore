@@ -22,6 +22,7 @@ import { alvoTexto, duracaoEstimada } from './common.js';
 import { criarPlano } from './plans.js';
 import { startSession } from './session.js';
 import { situacaoDoPlano, cartaoVariacao } from './variacao.js';
+import { botaoChat } from './chat.js';
 
 let modo = 'auto'; // 'auto' | 'entrevista' | 'proposta' | 'trocas'
 // exercícios que entraram no último toque em "Outra versão" (só para marcar "novo" na tela; não é gravado)
@@ -284,6 +285,8 @@ function painel() {
   if (bloqueado) body.push(note('danger', 'Não use o treino abaixo até resolver o que está acima.'));
   // 1. hoje: o treino do dia e o botão de iniciar (com a saúde bloqueando, sem o botão)
   if (plan) body.push(cartaoHoje(plan, bloqueado));
+  // dúvida ou imprevisto no treino: o chat do Treinador (views/chat.js)
+  body.push(botaoChat('treinador', 'Perguntar ao Treinador'));
 
   // 2. o que muda o treino: dores, ajustes por dor, prioridade com a corrida, trocas pendentes, avisos de atenção
 
@@ -411,16 +414,27 @@ function painel() {
     btn('Montar um novo treino', async () => {
       const ok = !plan || await confirmSheet({ title: 'Montar um novo treino?', text: 'Crio um novo plano com as suas respostas. O atual fica guardado em “Outros planos”.', okLabel: 'Montar' });
       if (!ok) return;
-      // abre a proposta na próxima versão que seja diferente do treino atual (se existir)
-      const prox = plan ? outraVersao(a, state.gym, state.trainer.versao || 0, { dores, plano: plan, combinado: comb }) : null;
-      if (prox) update((s) => { s.trainer.versao = guardarVersao(prox.versao); });
-      novos = null;
+      prepararNovo();
       modo = 'proposta'; refresh(); window.scrollTo(0, 0);
     }, 'block', 'refresh'),
     btn('Refazer a entrevista', () => { modo = 'entrevista'; refresh(); window.scrollTo(0, 0); }, 'block ghost', 'edit')));
   return body.filter(Boolean);
 }
 
+// "Montar um novo treino": a proposta abre na próxima versão que seja diferente do treino atual (se existir)
+function prepararNovo() {
+  const plan = activePlan();
+  const prox = plan ? outraVersao(saudeDeHoje().respostas, state.gym, state.trainer.versao || 0, { dores: doresDeHoje(), plano: plan, combinado: corridaDeHoje() }) : null;
+  if (prox) update((s) => { s.trainer.versao = guardarVersao(prox.versao); });
+  novos = null;
+}
+// Abre o Treinador já num modo, vindo do chat (views/chat.js): 'entrevista' (mudar as respostas), 'trocas' (sugerir
+// trocas de exercícios) ou 'novo' (a proposta de um treino novo). Nada vale antes de a pessoa aceitar na tela.
+export function abrirNoTreinador(qual) {
+  if (qual === 'novo') { prepararNovo(); modo = 'proposta'; } else modo = qual === 'trocas' ? 'trocas' : 'entrevista';
+  go('treinador');
+  window.scrollTo(0, 0);
+}
 export function trainerView() {
   const a = state.trainer.answers;
   const completo = respostasCompletas(a);

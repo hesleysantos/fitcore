@@ -287,6 +287,10 @@ export const REFS = {
   chen2023: 'Chen KC et al. 2023 TAMIS/TSOC/TACVPR consensus statement for patients with acute myocardial infarction rehabilitation. Acta Cardiol Sin. 2023;39(6):783-806.',
   ahtiainen2016: 'Ahtiainen JP, Walker S, Peltonen H et al. Heterogeneity in resistance training-induced muscle strength and mass responses in men and women of different ages. Age (Dordr). 2016;38(1):10.',
   precos2026: 'Pesquisa de preços de alimentos feita para este aplicativo em novembro de 2026: Procon-SP/Dieese (cesta básica, set/2026); DERAL/SEAB-PR, Portaria nº 32/2026 (feiras do produtor); Mercado Mineiro (carnes, out/2026); Procon-MS, Procon Goiás e Procon Anápolis (2025–2026); EMATER-RN, Portaria SEI nº 206/2026; IEPE/UFRGS (dez/2025); Conab/Prohort (boletim de set/2026); preços de prateleira de duas redes de supermercados, em São Paulo e no Paraná (13/11/2026); Ceasa-GO, cotação de atacado de 10/11/2026. Em seis alimentos, por falta de pesquisa de preço: notícias e levantamentos divulgados pela imprensa (Procon-PE e Procon-PB, O Liberal, Diario de Pernambuco, Campo Grande News), comparador de preços e indicador Cepea/Esalq (2025–2026).',
+  // apoio em sofrimento com a comida e risco à vida (logic/chat/nutri.js), lidos em texto completo
+  ms_transtornos2025: 'Brasil. Ministério da Saúde. Biblioteca Virtual em Saúde. “Quebre o preconceito e apoie as famílias”: 02/6 – Dia Mundial de Ação contra os Transtornos Alimentares 2025. Brasília, 5 de junho de 2025.',
+  ms_raps2022: 'Brasil. Ministério da Saúde. Dados da Rede de Atenção Psicossocial (RAPS) no Sistema Único de Saúde (SUS). Brasília: CGMAD/Saps, setembro de 2022.',
+  cvv: 'Centro de Valorização da Vida (CVV). Apoio emocional e prevenção do suicídio: telefone 188, chat e e-mail. cvv.org.br, consulta em novembro de 2026.',
 };
 
 export const FAQ_TREINO = [

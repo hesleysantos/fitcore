@@ -14,6 +14,7 @@ import { sonoView } from './views/sono.js';
 import { nutritionView } from './views/nutrition.js';
 import { gymView, settingsView, aboutView } from './views/more.js';
 import { resumoView } from './views/exportar.js';
+import { chatView } from './views/chat.js';
 
 const ROUTES = [
   { re: /^$/, view: homeView, tab: 'inicio' },
@@ -29,6 +30,10 @@ const ROUTES = [
   { re: /^corrida$/, view: corridaView, tab: 'treinador' },
   { re: /^corrida\/dia\/(\d{4}-\d{2}-\d{2})$/, view: corridaDiaView, tab: 'treinador' },
   { re: /^sono$/, view: sonoView, tab: 'inicio' },
+  // chat com os treinadores (views/chat.js): a aba é a do treinador da conversa
+  { re: /^chat\/(treinador)$/, view: chatView, tab: 'treinador', noNav: true },
+  { re: /^chat\/(corrida)$/, view: chatView, tab: 'treinador', noNav: true },
+  { re: /^chat\/(nutri)$/, view: chatView, tab: 'nutricao', noNav: true },
   { re: /^nutricao$/, view: nutritionView, tab: 'nutricao' },
   { re: /^academia$/, view: gymView, tab: 'inicio' },
   { re: /^ajustes$/, view: settingsView, tab: 'inicio' },

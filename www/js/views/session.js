@@ -8,7 +8,7 @@ import { recorde, e1rm, assistido, voltaDePausa, seriesNaVolta, descansoNaVolta 
 import { nivelPausa, cortePausa, duracaoTxt } from '../logic/pausa.js';
 import { alertaDoExercicio, doresDoTreino, respostasParaAvisos } from '../logic/trainer.js';
 import { pickExercises, novoItem, subtitulo, folha, exItem } from './common.js';
-import { recomendacao, temRegistro } from '../logic/carga.js';
+import { recomendacao, temRegistro, contextoDoEstado } from '../logic/carga.js';
 import { aquecimentoGeral, primeiroDoMusculo, seriesDeAproximacao, aparelhoOcupado, testeDaPrimeira, limparGuia, REFS_TESTE } from '../logic/guiado.js';
 import { EQUIPAMENTOS } from '../data/equipment.js';
 import { REFS } from '../data/knowledge.js';
@@ -17,13 +17,7 @@ import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate, agendarAviso, cance
 // ---------- carga recomendada ----------
 // Perfil para a carga inicial (logic/carga.js): as respostas do Treinador (com a proteção das outras entrevistas), o sexo
 // informado na Nutrição e a dor que o exercício pega. Com histórico, vale a sugestão de progress.js.
-function contextoCarga(exId) {
-  let respostas = null, dor = null;
-  try { respostas = respostasParaAvisos(state); } catch { respostas = null; }
-  try { dor = alertaDoExercicio(exId, doresDoTreino(state, dateKey(new Date()), respostas), respostas); } catch { dor = null; }
-  const n = state.nutri && state.nutri.answers;
-  return { respostas, dor, sexo: n && typeof n.sexo === 'string' ? n.sexo : '' };
-}
+const contextoCarga = (exId) => contextoDoEstado(state, exId, dateKey(new Date()));
 const recomendar = (exId, alvo, series) => recomendacao(exId, alvo, series, contextoCarga(exId));
 
 // ---------- treino guiado (logic/guiado.js) ----------
@@ -75,17 +69,20 @@ async function podeIniciar() {
   const ok = await confirmSheet({ title: 'Já existe um treino em andamento', text: `“${state.current.nome}” ainda não foi finalizado. Quer descartá-lo e começar outro?`, okLabel: 'Descartar e começar', cancelLabel: 'Continuar o atual', danger: true });
   return ok;
 }
-export async function startSession(planId, dayId) {
+// `opc.itens`: começa com estes itens no lugar dos do plano (a versão curta que o chat do Treinador monta — logic/chat/
+// treino.js); o plano não muda.
+export async function startSession(planId, dayId, opc = {}) {
   const plan = planById(planId);
   const day = plan && plan.dias.find((d) => d.id === dayId);
   if (!day) return;
-  if (!day.itens.length) { toast('Este treino ainda não tem exercícios.'); return; }
+  const itensDoDia = opc && Array.isArray(opc.itens) && opc.itens.length ? opc.itens : day.itens;
+  if (!itensDoDia.length) { toast('Este treino ainda não tem exercícios.'); return; }
   if (!(await podeIniciar())) { if (state.current) go('sessao'); return; }
   unlockAudio();
   // Volta depois de 2 semanas ou mais parado (consenso CSCCa/NSCA de 2019, regra FIT): nas 2 primeiras semanas o treino
   // começa com menos séries por grupo muscular e mais descanso; a carga e o cardio reduzidos vêm de retomada().
   const volta = voltaDePausa();
-  let base = day.itens.filter((i) => EX_POR_ID.has(i.ex));
+  let base = itensDoDia.filter((i) => i && EX_POR_ID.has(i.ex));
   if (volta && volta.semana <= 2) {
     const series = seriesNaVolta(base);
     base = base.map((it, i) => ({ ...it, series: series[i], descanso: descansoNaVolta(it.ex, it.descanso, volta) }));
