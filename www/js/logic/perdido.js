@@ -26,6 +26,14 @@
 //    repõe treino perdido e ajusta o volume pelo que foi feito nas últimas semanas. Juntar a corrida perdida a outra faria
 //    uma corrida maior, e uma corrida mais de 10% maior do que a mais longa dos últimos 30 dias aumenta o risco de lesão por
 //    sobrecarga (ref frandsen2025).
+//  • O motivo (MOTIVOS): fica na marca e muda a proposta, sem regra nova — sem tempo e viagem: o treino muda de dia (o
+//    volume da semana, ref pelland2026); cansaço ou sono ruim: o app propõe não repor ("perder um treino tira pouca
+//    força", refs acsm2009, caterisano2019) e, se quiser, a versão curta (iversen2021, logic/chat/treino.js); dor: o
+//    fluxo de dor (logic/dor.js); doente ou machucado: o fluxo de saúde fora do treino (logic/saude-fora.js). Enquanto um
+//    problema de saúde muda o treino de um dia (musculação leve ou sem treino; corrida diferente da normal), nenhum
+//    treino é reposto nesse dia (diasDeSaude). Cansaço em marcas que se estendem por mais de uma semana: a regra que o app
+//    já usa — "cansaço alto por mais de uma semana pede redução ou descanso", com médico depois de 4 semanas (refs
+//    saw2016, meeusen2013; FAQ "Como saber se estou treinando demais?" de data/corrida.js). Menos que isso: só mostra.
 import { EX_POR_ID } from '../data/exercises.js';
 import { MUSCULOS } from '../data/muscles.js';
 import { planoDaSemanaEm } from './corrida.js';
@@ -33,6 +41,7 @@ import { comboAtual } from './combinado.js';
 import { perfil } from './trainer.js';
 import { respostasProtegidas } from './saude.js';
 import { diasBloqueados } from './dias-livres.js';
+import { efeitoDeHoje } from './saude-fora.js';
 
 export const MAX_PERDIDOS = 200;
 // 'troca': um treino de musculação da semana feito ANTES do dia dele (o "treino de amanhã hoje"), marcado pelo chat
@@ -43,6 +52,11 @@ export const REFS_CORRIDA = ['frandsen2025'];
 export const PESADO = 3; // séries do grupo como músculo principal a partir das quais o treino conta como pesado para ele
 export const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
+// o motivo de não ter treinado (o mesmo para musculação e corrida; 'chuva' só aparece na corrida)
+export const MOTIVOS = { tempo: 'Sem tempo', cansaco: 'Cansaço ou dormi mal', dor: 'Dor', doente: 'Doente ou machucado', viagem: 'Viagem', chuva: 'Chuva', outro: 'Outro' };
+export const MOTIVO_CURTO = { tempo: 'sem tempo', cansaco: 'cansaço', dor: 'dor', doente: 'doente', viagem: 'viagem', chuva: 'chuva', outro: '' };
+export const REFS_CANSACO = ['saw2016', 'meeusen2013'];
+const motivoOk = (v) => (typeof v === 'string' && Object.prototype.hasOwnProperty.call(MOTIVOS, v) ? v : '');
 const DIA_MS = 86400000;
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const BAD = new Set(['__proto__', 'constructor', 'prototype']);
@@ -65,17 +79,20 @@ export function nomeDoDia(k, hoje) {
 export const naProxima = (k) => { const w = diaDaSemana(k); return (w === 0 || w === 6 ? 'no próximo ' : 'na próxima ') + DIAS[w]; };
 
 // ---------- validação ----------
-// musculação: { tipo, data, planId, diaId, movs: [{ diaId, de, para }], em } — movs vazio = "Seguir a semana"; o primeiro é o
+// musculação: { tipo, data, planId, diaId, movs: [{ diaId, de, para }], em, motivo? } — movs vazio = "Seguir a semana"; o primeiro é o
 // treino perdido (de = data); os outros são os treinos que andaram junto. Tudo dentro da semana (segunda a domingo) da
 // data, sempre para um dia depois. corrida: { tipo, data, em, para? } — `para` (opcional) = a corrida mudou para outro dia
-// da mesma semana (o chat propõe com as regras do plano: avaliarMoverCorrida). troca: { tipo, data (dia em que o treino é
+// da mesma semana (o chat propõe com as regras do plano: avaliarMoverCorrida). `motivo` (opcional, nas duas): uma chave
+// de MOTIVOS. troca: { tipo, data (dia em que o treino é
 // feito), de (dia em que ele estava), planId, diaId, em } — tudo na mesma semana.
 export function limparPerdido(x) {
   if (!isObj(x) || !TIPOS_PERDIDO.includes(x.tipo) || !diaOk(x.data)) return null;
   const em = iso(x.em);
+  const motivo = motivoOk(x.motivo);
+  const comMotivo = (o) => (motivo ? { ...o, motivo } : o);
   if (x.tipo === 'corrida') {
     const para = diaOk(x.para) && x.para !== x.data && segundaDe(x.para) === segundaDe(x.data) ? x.para : '';
-    return para ? { tipo: 'corrida', data: x.data, em, para } : { tipo: 'corrida', data: x.data, em };
+    return comMotivo(para ? { tipo: 'corrida', data: x.data, em, para } : { tipo: 'corrida', data: x.data, em });
   }
   if (x.tipo === 'troca') {
     const planId = idStr(x.planId), diaId = idStr(x.diaId);
@@ -90,7 +107,7 @@ export function limparPerdido(x) {
     && movs[0].diaId === diaId && movs[0].de === x.data
     && new Set(movs.map((m) => m.de)).size === movs.length && new Set(movs.map((m) => m.para)).size === movs.length;
   if (!valido) movs = [];
-  return { tipo: 'musculacao', data: x.data, planId, diaId, movs, em };
+  return comMotivo({ tipo: 'musculacao', data: x.data, planId, diaId, movs, em });
 }
 export function limparPerdidos(raw) {
   if (!Array.isArray(raw)) return [];
@@ -236,8 +253,24 @@ export function podeMarcar(st, data, hoje, opc = {}) {
   return { pode: true, motivo: '', diaId: dia.diaId, nome: d ? d.nome : 'Treino' };
 }
 
+// Dias desta semana (de `hoje` a domingo) em que um problema de saúde fora do treino (logic/saude-fora.js) muda o treino:
+// `tipo` 'musc' (musculação leve ou sem treino) ou 'corrida' (corrida diferente da normal). Nesses dias nada é reposto.
+export function diasDeSaude(st, hoje, tipo = 'musc') {
+  const out = new Set();
+  if (!st || !Array.isArray(st.saudeFora) || !st.saudeFora.length || !diaOk(hoje)) return out;
+  const seg = segundaDe(hoje);
+  for (let k = 0; k < 7; k++) {
+    const d = somaDias(seg, k);
+    if (d < hoje) continue;
+    try { const ef = efeitoDeHoje(st, d); if ((tipo === 'corrida' ? ef.corrida : ef.musc) !== 'normal') out.add(d); } catch { /* sem o registro */ }
+  }
+  return out;
+}
+
 // A proposta para o treino de `data`: { pode, diaId, nome, movs: [{ diaId, de, para }] (vazio = seguir a semana), motivo:
-// 'livre' | 'sem_dia' | 'sem_descanso' | 'corrida', titulo, texto }. `hoje` = 'AAAA-MM-DD'.
+// 'livre' | 'sem_dia' | 'saude' | 'sem_descanso' | 'sem_folga' | 'corrida', titulo, texto, alternado }. `hoje` = 'AAAA-MM-DD'.
+// `opc.para`: o treino perdido só pode ir para esse dia (sem jeito, a proposta é seguir a semana e diz por quê);
+// `opc.futuro`: ver podeMarcar. Dias com problema de saúde que muda o treino (diasDeSaude) não recebem treino.
 export function propor(st, data, hoje, opc = {}) {
   const base = podeMarcar(st, data, hoje, opc);
   if (!base.pode) return { ...base, movs: [] };
@@ -281,6 +314,8 @@ export function propor(st, data, hoje, opc = {}) {
   // e fora dos dias em que a pessoa não treina (a não ser o treino que já estava lá, que pode ficar)
   const bloq = new Set(diasBloqueados(st));
   const bloqueado = (k) => bloq.has(sem[k].wd);
+  const saude = diasDeSaude(st, hoje, 'musc');
+  const alvo = opc && diaOk(opc.para) ? opc.para : '';
   const vagas = [];
   for (let k = Math.max(iHoje, i + 1); k < 7; k++) if (!fixo[at(k)] && (!bloqueado(k) || conteudo[at(k)])) vagas.push(k);
   // os treinos que podem andar junto: os que estão nessas vagas
@@ -312,7 +347,7 @@ export function propor(st, data, hoje, opc = {}) {
       }
       if (corre[s]) custo += 0.5;
     }
-    if (!erro && descansos(cs) < Math.min(minDescanso, descansoAntes)) erro = 'sem_descanso';
+    if (!erro && descansos(cs) < Math.min(minDescanso, descansoAntes)) erro = 'sem_folga';
     if (erro) { motivos.add(erro); return; }
     let movidos = 0, desloc = 0;
     for (let j = 1; j < elems.length; j++) if (atual[j] !== elems[j].de) { movidos++; desloc += atual[j] - elems[j].de; }
@@ -323,14 +358,17 @@ export function propor(st, data, hoje, opc = {}) {
     if (j === elems.length) { avaliar(); return; }
     for (const k of vagas) {
       if (usada.has(k) || (j > 0 && k < elems[j].de)) continue;
-      if (bloqueado(k) && !(j > 0 && k === elems[j].de)) continue; // dia sem treino: só o treino que já era dele
+      if (j === 0 && alvo && datas[k] !== alvo) continue; // o dia escolhido pela pessoa
+      const fica = j > 0 && k === elems[j].de;
+      if (bloqueado(k) && !fica) continue; // dia sem treino: só o treino que já era dele
+      if (saude.has(datas[k]) && !fica) continue; // problema de saúde nesse dia: nada é reposto nele
       usada.add(k); atual[j] = k; tenta(j + 1); usada.delete(k);
     }
   };
   if (vagas.length) tenta(0);
 
   const nomeDe = (id) => (diaPorId.get(id) || {}).nome || 'Treino';
-  const out = { pode: true, diaId: base.diaId, nome: base.nome, movs: [], motivo: '', titulo: '', texto: '' };
+  const out = { pode: true, diaId: base.diaId, nome: base.nome, movs: [], motivo: '', titulo: '', texto: '', alternado };
   if (melhor) {
     out.movs = elems.map((e, j) => ({ diaId: e.diaId, de: datas[e.de], para: datas[melhor[j]] })).filter((m, j) => j === 0 || m.para !== m.de);
     out.motivo = 'livre';
@@ -339,22 +377,96 @@ export function propor(st, data, hoje, opc = {}) {
     const outros = out.movs.slice(1).map((m) => `o ${nomeDe(m.diaId)} vai para ${nomeDoDia(m.para, hoje)}`);
     out.texto = outros.length ? `Para manter o descanso entre os treinos, ${outros.length > 1 ? outros.slice(0, -1).join(', ') + ' e ' + outros[outros.length - 1] : outros[0]}.` : 'Os outros continuam nos dias deles.';
   } else {
-    out.motivo = !livres ? 'sem_dia' : motivos.has('sem_descanso') || !motivos.size ? 'sem_descanso' : 'corrida';
+    const semSaude = vagas.filter((k) => !conteudo[at(k)] && !bloqueado(k) && !saude.has(datas[k])).length;
+    out.motivo = !livres ? 'sem_dia' : !semSaude ? 'saude' : motivos.has('sem_descanso') || !motivos.size ? 'sem_descanso' : motivos.has('corrida') ? 'corrida' : 'sem_folga';
     out.titulo = 'Seguir a semana?';
     const por = out.motivo === 'sem_dia' ? 'Não há outro dia livre nesta semana.'
-      : out.motivo === 'corrida' ? 'Nos dias livres, o treino de pernas ficaria perto da corrida forte ou do longo.'
-        : 'Nenhum dia livre desta semana deixa 48 horas de descanso para os mesmos músculos.';
+      : out.motivo === 'saude' ? 'O problema de saúde que você contou ainda muda o treino nos outros dias.'
+        : out.motivo === 'corrida' ? 'Nos dias livres, o treino de pernas ficaria perto da corrida forte ou do longo.'
+          : out.motivo === 'sem_folga' ? 'Nos dias livres, a semana ficaria sem nenhum dia de descanso.'
+            : 'Nenhum dia livre desta semana deixa 48 horas de descanso para os mesmos músculos.';
     out.texto = `${por} O ${base.nome} volta ${naProxima(data)}, no dia de sempre.`;
   }
   return out;
 }
 
 // A marca a gravar: 'mover' (a proposta, se houver) ou 'seguir'. `em` = ISO de agora. null se não dá para marcar.
+// `opc.para`: o dia escolhido (o mesmo de propor); `opc.motivo`: uma chave de MOTIVOS, guardada na marca.
 export function novaMarca(st, data, hoje, escolha, em, opc = {}) {
   const p = propor(st, data, hoje, opc);
   if (!p.pode) return null;
   const plan = planoAtivo(st);
-  return limparPerdido({ tipo: 'musculacao', data, planId: plan.id, diaId: p.diaId, movs: escolha === 'mover' ? p.movs : [], em });
+  return limparPerdido({ tipo: 'musculacao', data, planId: plan.id, diaId: p.diaId, movs: escolha === 'mover' ? p.movs : [], em, motivo: opc && opc.motivo });
+}
+
+// Para que dias desta semana o treino perdido de `data` pode ir: de hoje (ou de amanhã, se o perdido é o de hoje) até
+// domingo, cada um com as mesmas regras de propor. { ...propor(), dias: [{ data, pode, motivo, movs, titulo, texto,
+// ocupadoPor }], melhor: data | '' } — motivo de um dia que não dá: 'bloqueado' | 'saude' | 'treinou' | 'marcado' |
+// 'sem_descanso' | 'sem_folga' | 'corrida'.
+export function opcoesDeDia(st, data, hoje, opc = {}) {
+  const base = propor(st, data, hoje, { ...opc, para: '' });
+  if (!base.pode) return { ...base, dias: [], melhor: '' };
+  const plan = planoAtivo(st);
+  const sem = semanaEfetiva(plan, st.perdidos, segundaDe(hoje));
+  const bloq = new Set(diasBloqueados(st));
+  const saude = diasDeSaude(st, hoje, 'musc');
+  const sessoes = (Array.isArray(st.sessions) ? st.sessions : []).filter((s) => s && typeof s.inicio === 'string');
+  const nomeDe = (id) => (plan.dias.find((x) => x.id === id) || {}).nome || '';
+  const dias = [];
+  for (const d of sem) {
+    if (d.data < hoje || d.data <= data) continue;
+    const ocupadoPor = d.diaId ? nomeDe(d.diaId) : '';
+    const nao = (motivo) => dias.push({ data: d.data, pode: false, motivo, movs: [], titulo: '', texto: '', ocupadoPor });
+    if (bloq.has(d.wd)) { nao('bloqueado'); continue; }
+    if (saude.has(d.data)) { nao('saude'); continue; }
+    if (sessoes.some((s) => diaLocal(s.inicio) === d.data)) { nao('treinou'); continue; }
+    if (d.perdido) { nao('marcado'); continue; }
+    const p = propor(st, data, hoje, { ...opc, para: d.data });
+    if (p.movs.length) dias.push({ data: d.data, pode: true, motivo: '', movs: p.movs, titulo: p.titulo, texto: p.texto, ocupadoPor });
+    else nao(p.motivo === 'sem_dia' || p.motivo === 'livre' ? 'sem_descanso' : p.motivo);
+  }
+  return { ...base, dias, melhor: base.movs.length ? base.movs[0].para : '' };
+}
+const capi = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+// Por que o treino perdido não vai para um dia (uma frase curta, para a folha e o chat). `o` = um item de opcoesDeDia().dias.
+export function porQueNaoDia(o, hoje, alternado = false) {
+  const q = capi(nomeDoDia(o.data, hoje));
+  switch (o.motivo) {
+    case 'bloqueado': return `${q} é um dia em que você não treina.`;
+    case 'saude': return `${q}, o problema de saúde que você contou ainda muda o treino.`;
+    case 'treinou': return `${q} já tem treino feito.`;
+    case 'marcado': return `${q} também está marcado como não treinado.`;
+    case 'corrida': return `${q}, o treino de pernas ficaria perto da corrida forte ou do longão.`;
+    case 'sem_folga': return `${q}, a semana ficaria sem nenhum dia de descanso.`;
+    default:
+      if (alternado) return `${q} não dá: para você, a musculação fica em dias não seguidos.`;
+      return o.ocupadoPor ? `${q} já tem o ${o.ocupadoPor}. O app não junta dois treinos, e trocar a ordem deixaria os mesmos músculos sem 48 horas de descanso.`
+        : `${q}, os mesmos músculos ficariam sem 48 horas de descanso.`;
+  }
+}
+// O estado como fica com mais uma marca (para mostrar a semana antes de confirmar). Não muda `st`.
+export const comMarca = (st, m) => (m ? { ...st, perdidos: limparPerdidos([...(Array.isArray(st.perdidos) ? st.perdidos : []), m]) } : st);
+// A semana em uma linha, de hoje a domingo: "amanhã Treino A · sexta Treino B" (tipo 'musc') ou as corridas ('corrida').
+export function linhaDaSemana(st, hoje, tipo = 'musc') {
+  let sem = [];
+  try { sem = semanaDoChat(st, hoje, hoje); } catch { sem = []; }
+  const partes = [];
+  for (const d of sem) {
+    if (d.data < hoje) continue;
+    const q = nomeDoDia(d.data, hoje);
+    if (tipo === 'corrida') { const c = d.corrida; if (c && !c.movidaPara && !c.perdida) partes.push(`${q} ${c.nome}${c.feita ? ' (feita)' : ''}`); }
+    else if (d.nome) partes.push(`${q} ${d.nome}${d.feito ? ' (feito)' : ''}`);
+  }
+  return partes.join(' · ');
+}
+// Cansaço como motivo nas marcas dos últimos 14 dias (musculação e corrida): { n, semana (nos últimos 7 dias),
+// maisDeUmaSemana (entre a primeira e a última, 7 dias ou mais) }. A regra que vale para o último caso está no começo.
+export function cansacoRecente(st, hoje) {
+  if (!diaOk(hoje)) return { n: 0, semana: 0, maisDeUmaSemana: false };
+  const ini = somaDias(hoje, -14), ini7 = somaDias(hoje, -7);
+  const datas = [...new Set((Array.isArray(st && st.perdidos) ? st.perdidos : []).filter((e) => e && e.motivo === 'cansaco' && diaOk(e.data) && e.data <= hoje && e.data > ini).map((e) => e.data))].sort();
+  const span = datas.length >= 2 ? Math.round((Date.parse(datas[datas.length - 1] + 'T12:00:00Z') - Date.parse(datas[0] + 'T12:00:00Z')) / DIA_MS) : 0;
+  return { n: datas.length, semana: datas.filter((d) => d > ini7).length, maisDeUmaSemana: span >= 7 };
 }
 
 // ---------- corrida ----------
@@ -369,7 +481,7 @@ export function podeMarcarCorrida(st, data, hoje) {
     return !!d && d.tipo !== 'descanso';
   } catch { return false; }
 }
-export const marcaCorrida = (data, em) => limparPerdido({ tipo: 'corrida', data, em });
+export const marcaCorrida = (data, em, motivo = '') => limparPerdido({ tipo: 'corrida', data, em, motivo });
 export const corridaPerdidaEm = (st, data) => (Array.isArray(st && st.perdidos) ? st.perdidos.find((e) => e && e.tipo === 'corrida' && e.data === data) || null : null);
 
 // ---------- desfazer ----------
@@ -418,11 +530,11 @@ export function semanaDoChat(st, data, hoje) {
     const mv = semC && Array.isArray(semC.movidas) && !semC.foraDoPlano ? semC.movidas[d.wd] : null;
     const corrida = c && c.tipo !== 'descanso' ? {
       nome: String(c.nome || 'Corrida'), chave: ehChave(c), feita: !!c.feito || runs.some((r) => r && r.data === d.data),
-      perdida: !!marca && !marca.para, movidaPara: marca && marca.para ? marca.para : '', movidaDe: c.movidaDe || '',
-    } : mv ? { nome: String(mv.nome || 'Corrida'), chave: false, feita: false, perdida: false, movidaPara: mv.para, movidaDe: '' } : null;
+      perdida: !!marca && !marca.para, movidaPara: marca && marca.para ? marca.para : '', movidaDe: c.movidaDe || '', motivo: (marca && marca.motivo) || '',
+    } : mv ? { nome: String(mv.nome || 'Corrida'), chave: false, feita: false, perdida: false, movidaPara: mv.para, movidaDe: '', motivo: (marca && marca.motivo) || '' } : null;
     return {
       data: d.data, wd: d.wd, diaId: d.diaId, nome: dia ? dia.nome : '', feito: sessoes.some((s) => diaLocal(s.inicio) === d.data),
-      perdido: perdidoDia ? { nome: perdidoDia.nome, para: d.perdido.para } : null, veioDe: d.veioDe, foiPara: d.foiPara, corrida,
+      perdido: perdidoDia ? { nome: perdidoDia.nome, para: d.perdido.para, motivo: d.perdido.entrada.motivo || '' } : null, veioDe: d.veioDe, foiPara: d.foiPara, corrida,
       // o nome do treino que saiu deste dia (está agora em foiPara)
       saiu: plan && d.foiPara ? ((plan.dias.find((x) => x.id === (sem.find((y) => y.data === d.foiPara) || {}).diaId) || {}).nome || '') : '',
       extra: !corrida && runs.some((r) => r && r.data === d.data),
@@ -446,7 +558,7 @@ function cargasDaSemana(st, plan, sem, seg) {
 }
 // Pode fazer em `para` (hoje ou depois, sem musculação) o treino que está em `de` (mais adiante, nesta semana)?
 // { pode, motivo: '' | 'sem_plano' | 'outra_semana' | 'passou' | 'sem_treino' | 'feito' | 'treinou' | 'ocupado' |
-//   'bloqueado' | 'sem_descanso' | 'corrida', diaId, nome }
+//   'bloqueado' | 'saude' | 'sem_descanso' | 'corrida', diaId, nome }
 export function avaliarTroca(st, de, para, hoje) {
   const plan = planoAtivo(st);
   const nao = (motivo, extra = {}) => ({ pode: false, motivo, diaId: '', nome: '', ...extra });
@@ -464,6 +576,7 @@ export function avaliarTroca(st, de, para, hoje) {
   if (sessoes.some((s) => diaLocal(s.inicio) === para) || (st.current && para === hoje)) return nao('treinou', base);
   if (sem[iPara].diaId || sem[iPara].perdido) return nao('ocupado', { ...base, ocupadoPor: (plan.dias.find((x) => x.id === sem[iPara].diaId) || {}).nome || '' });
   if (new Set(diasBloqueados(st)).has(sem[iPara].wd)) return nao('bloqueado', base);
+  if (diasDeSaude(st, hoje, 'musc').has(para)) return nao('saude', base);
   const carga = cargasDaSemana(st, plan, sem, seg);
   const cx = cargaDoTreino(dia);
   const depois = carga.slice(); depois[iDe + 1] = null; depois[iPara + 1] = cx;
@@ -485,8 +598,8 @@ export function marcaTroca(st, de, para, hoje, em) {
 // A corrida que mudou PARA `data` (a marca da corrida de origem), ou null
 export const corridaMovidaPara = (st, data) => (Array.isArray(st && st.perdidos) ? st.perdidos.find((e) => e && e.tipo === 'corrida' && e.para === data) || null : null);
 // Pode passar a corrida de `de` para `para` (hoje ou depois, nesta semana)? { pode, motivo, nome, chave } — motivo:
-// 'sem_plano' | 'outra_semana' | 'passou' | 'sem_corrida' | 'feita' | 'ocupado' | 'dor' | 'bloqueado' | 'forte_seguido' |
-// 'pernas' | 'sem_descanso'
+// 'sem_plano' | 'outra_semana' | 'passou' | 'sem_corrida' | 'feita' | 'ocupado' | 'dor' | 'bloqueado' | 'saude' |
+// 'forte_seguido' | 'pernas' | 'sem_descanso'. 'saude': um problema de saúde fora do treino muda a corrida nesse dia.
 export function avaliarMoverCorrida(st, de, para, hoje) {
   const nao = (motivo, extra = {}) => ({ pode: false, motivo, nome: '', chave: false, ...extra });
   if (!st || !diaOk(de) || !diaOk(para) || !diaOk(hoje)) return nao('sem_plano');
@@ -505,6 +618,7 @@ export function avaliarMoverCorrida(st, de, para, hoje) {
   if (alvo && alvo.tipo === 'descanso') return nao('dor', base);
   if ((alvo && !alvo.movidaPara) || corridaMovidaPara(st, para) || runs.some((r) => r && r.data === para)) return nao('ocupado', base);
   if (new Set(diasBloqueados(st)).has(diaDaSemana(para))) return nao('bloqueado', base);
+  if (diasDeSaude(st, hoje, 'corrida').has(para)) return nao('saude', base);
   // a semana com a corrida no dia novo
   const datas = Array.from({ length: 7 }, (_, k) => somaDias(seg, k));
   const doPlano = (k) => { const x = s.dias[diaDaSemana(k)]; return x && x.tipo !== 'descanso' && !x.movidaPara ? x : null; };
@@ -525,7 +639,34 @@ export function avaliarMoverCorrida(st, de, para, hoje) {
   if (livres(corre) < Math.min(pf.jovem ? 2 : 1, livres(corAntes))) return nao('sem_descanso', base);
   return { pode: true, motivo: '', ...base };
 }
-export function marcaMoverCorrida(st, de, para, hoje, em) {
+export function marcaMoverCorrida(st, de, para, hoje, em, motivo = '') {
   if (!avaliarMoverCorrida(st, de, para, hoje).pode) return null;
-  return limparPerdido({ tipo: 'corrida', data: de, para, em });
+  return limparPerdido({ tipo: 'corrida', data: de, para, em, motivo });
+}
+// Para que dias desta semana a corrida de `de` pode ir (de hoje a domingo, menos o próprio dia), com as regras de
+// avaliarMoverCorrida: [{ data, pode, motivo, nome, chave }]
+export function opcoesCorrida(st, de, hoje) {
+  if (!diaOk(de) || !diaOk(hoje)) return [];
+  const out = [];
+  for (let k = 0; k < 7; k++) {
+    const x = somaDias(segundaDe(hoje), k);
+    if (x < hoje || x === de) continue;
+    let a;
+    try { a = avaliarMoverCorrida(st, de, x, hoje); } catch { a = { pode: false, motivo: 'sem_plano', nome: '', chave: false }; }
+    out.push({ data: x, ...a });
+  }
+  return out;
+}
+// Por que a corrida não vai para um dia (frase curta, para a folha)
+export function porQueNaoCorrida(o, hoje) {
+  const q = capi(nomeDoDia(o.data, hoje));
+  return {
+    ocupado: `${q} já tem corrida. O app não junta duas: uma corrida bem maior que a mais longa do mês aumenta o risco de lesão.`,
+    dor: `${q} está sem corrida por causa da dor que você contou.`,
+    bloqueado: `${q} é um dia em que você não treina.`,
+    saude: `${q}, o problema de saúde que você contou ainda muda a corrida.`,
+    forte_seguido: `${q}, este treino forte (ou o longão) ficaria colado em outro treino forte.`,
+    pernas: `${q}, esta corrida ficaria perto do treino pesado de pernas.`,
+    sem_descanso: `${q}, a semana ficaria sem nenhum dia de descanso.`,
+  }[o.motivo] || `${q} não dá para esta corrida.`;
 }

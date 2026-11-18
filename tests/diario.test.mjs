@@ -8,7 +8,7 @@ import {
   REFEICOES, MAX_DIAS, MAX_ITENS_DIA, G_MAX, KCAL_MAX, PROT_MAX, NOME_MAX, AVISO_DO_REGISTRO, REFS_DO_DIARIO,
   diarioPadrao, limparDiario, limparItem, itensDoDia, gravarItem, apagarItem, copiarRefeicao, idDaRefeicao, refeicaoRegistrada, diasRegistrados,
   nutrientesDoItem, totaisDoDia, modoDoDiario, compararComMeta, resumoDaSemana, metaDoDia, resumoDeHoje, somarDias, hojeLocal,
-  perfilDoDiario, primeiroDiaDoDiario, refeicaoCopiada, lerCalorias, lerProteina, buscarAlimentos,
+  perfilDoDiario, primeiroDiaDoDiario, refeicaoCopiada, lerCalorias, lerProteina, buscarAlimentos, marcarDaSugestao, desmarcarRefeicao, estadoDaSugestao,
 } from '../www/js/logic/diario.js';
 
 const FOOD = new Map(ALIMENTOS.map((f) => [f.id, f]));
@@ -465,4 +465,123 @@ test('A11: busca sem acento nem pontuação, pelo começo das palavras', () => {
   assert.deepEqual(buscarAlimentos('zzqx'), []);
   // todo alimento é achado pelo próprio nome
   for (const f of ALIMENTOS) assert.ok(buscarAlimentos(f.nome, 200).some((x) => x.id === f.id), f.nome);
+});
+
+// ---------- o que conta é o que a pessoa comeu (marcado na sugestão + adicionado à mão), nada em dobro ----------
+const kcalDe = (al, g) => (FOOD.get(al).kcal * g) / 100;
+const lancheDe = (r) => cardapio(r, 0).refeicoes.find((x) => /^Lanche/.test(x.nome));
+const somaSug = (ref) => ref.itens.reduce((s, x) => s + kcalDe(x.id, x.g), 0);
+const BISCOITO = kcalDe('biscoito-cream-cracker', 30);   // 129,6 kcal (TACO, 432 kcal/100 g)
+
+test('B1: o defeito do dono — biscoito à mão no lanche não soma a sugestão inteira; só o que foi marcado conta', () => {
+  const r = calcular({ ...base, refeicoes: '4' });
+  const lanche = lancheDe(r);
+  const ref = idDaRefeicao(lanche.nome);
+  assert.ok(lanche.itens.length >= 2, 'o lanche sugerido tem mais de um alimento');
+  assert.ok(!lanche.itens.some((x) => x.id === 'biscoito-cream-cracker'), 'o biscoito não faz parte da sugestão');
+  const d = diarioPadrao();
+  // 1) o biscoito, à mão: o total do dia é só ele, e a sugestão continua toda desmarcada
+  gravarItem(d, HOJE, { ref, al: 'biscoito-cream-cracker', g: 30, m: true }, HOJE);
+  let t = totaisDoDia(d, HOJE);
+  assert.equal(Math.round(t.kcal), 130); assert.equal(t.n, 1);
+  let e = estadoDaSugestao(d, HOJE, lanche);
+  assert.equal(e.marcados, 0); assert.equal(e.toda, false); assert.equal(e.algum, true); assert.deepEqual(e.extras.map((x) => x.al), ['biscoito-cream-cracker']);
+  // 2) marca só o 1º alimento da sugestão: soma só ele
+  const [a1, a2] = lanche.itens;
+  assert.equal(marcarDaSugestao(d, HOJE, lanche, a1.id, true, HOJE), 'marcou');
+  t = totaisDoDia(d, HOJE);
+  assert.ok(Math.abs(t.kcal - (BISCOITO + kcalDe(a1.id, a1.g))) < 0.01, `biscoito + 1 item = ${Math.round(t.kcal)} kcal`);
+  // marcar o que já está não grava de novo; desmarcar tira
+  assert.equal(marcarDaSugestao(d, HOJE, lanche, a1.id, true, HOJE), 'ja-estava');
+  assert.equal(itensDoDia(d, HOJE).filter((x) => x.al === a1.id).length, 1);
+  assert.equal(marcarDaSugestao(d, HOJE, lanche, a1.id, false, HOJE), 'desmarcou');
+  assert.equal(Math.round(totaisDoDia(d, HOJE).kcal), 130, 'desmarcar tira: volta a ser só o biscoito');
+  assert.equal(marcarDaSugestao(d, HOJE, lanche, a1.id, false, HOJE), 'nada');
+  // 3) "Comi tudo isso": biscoito + a sugestão, cada alimento uma vez só (nunca a sugestão em dobro)
+  marcarDaSugestao(d, HOJE, lanche, a2.id, true, HOJE);
+  assert.equal(copiarRefeicao(d, HOJE, lanche, HOJE), lanche.itens.length - 1, 'só os que faltavam entram');
+  assert.equal(copiarRefeicao(d, HOJE, lanche, HOJE), 0, 'tocar de novo não soma nada');
+  t = totaisDoDia(d, HOJE);
+  assert.ok(Math.abs(t.kcal - (BISCOITO + somaSug(lanche))) < 0.01, `total = biscoito (130) + sugestão (${Math.round(somaSug(lanche))}) = ${Math.round(t.kcal)}`);
+  assert.equal(t.n, lanche.itens.length + 1);
+  e = estadoDaSugestao(d, HOJE, lanche);
+  assert.equal(e.toda, true); assert.equal(e.marcados, lanche.itens.length);
+  // 4) "Desmarcar tudo": tira a sugestão e deixa o que a pessoa adicionou à mão
+  assert.equal(desmarcarRefeicao(d, HOJE, lanche), lanche.itens.length);
+  assert.deepEqual(itensDoDia(d, HOJE).map((x) => x.al), ['biscoito-cream-cracker']);
+  assert.equal(Math.round(totaisDoDia(d, HOJE).kcal), 130);
+  assert.equal(desmarcarRefeicao(d, HOJE, lanche), 0);
+  // 5) adicionar à mão nunca marca a sugestão
+  gravarItem(d, HOJE, { ref, nome: 'Café com leite', kcal: 60 }, HOJE);
+  assert.equal(estadoDaSugestao(d, HOJE, lanche).marcados, 0); assert.equal(Math.round(totaisDoDia(d, HOJE).kcal), 190);
+});
+
+test('B2: um alimento da sugestão lançado à mão cobre o "Comi" dele (nada em dobro); a quantidade da pessoa vale', () => {
+  const r = calcular({ ...base, refeicoes: '4' });
+  const almoco = cardapio(r, 0).refeicoes.find((x) => x.nome === 'Almoço');
+  const jantar = cardapio(r, 0).refeicoes.find((y) => y.nome === 'Jantar');
+  const d = diarioPadrao();
+  const x = almoco.itens[0];
+  gravarItem(d, HOJE, { ref: 'almoco', al: x.id, g: 50 }, HOJE);
+  const e = estadoDaSugestao(d, HOJE, almoco);
+  assert.equal(e.itens[0].marcado, true); assert.equal(e.extras.length, 0);
+  assert.equal(marcarDaSugestao(d, HOJE, almoco, x.id, true, HOJE), 'ja-estava');
+  copiarRefeicao(d, HOJE, almoco, HOJE);
+  assert.equal(itensDoDia(d, HOJE).filter((y) => y.al === x.id).length, 1);
+  assert.equal(itensDoDia(d, HOJE).find((y) => y.al === x.id).g, 50);
+  const esperado = kcalDe(x.id, 50) + almoco.itens.slice(1).reduce((s, y) => s + kcalDe(y.id, y.g), 0);
+  assert.ok(Math.abs(totaisDoDia(d, HOJE).kcal - esperado) < 0.01);
+  // o mesmo alimento em outra refeição é outro registro (não cobre o jantar)
+  const comum = jantar.itens.find((y) => almoco.itens.some((z) => z.id === y.id));
+  if (comum) assert.equal(estadoDaSugestao(d, HOJE, jantar).itens.find((y) => y.al === comum.id).marcado, false);
+  // lixo e alimento que não está na sugestão: recusados sem gravar
+  const n = itensDoDia(d, HOJE).length;
+  for (const [ref, al] of [[null, x.id], [{}, x.id], [almoco, 'nao-existe'], [almoco, 'biscoito-cream-cracker'], [almoco, 7]]) assert.equal(marcarDaSugestao(d, HOJE, ref, al, true, HOJE), '');
+  assert.equal(marcarDaSugestao(d, somarDias(HOJE, 3), jantar, jantar.itens[0].id, true, HOJE), '', 'dia futuro não recebe registro');
+  assert.equal(itensDoDia(d, HOJE).length, n);
+});
+
+test('B3: trocar a sugestão depois de marcar não soma a refeição nova sozinho', () => {
+  const r = calcular({ ...base, refeicoes: '4' });
+  const almoco = cardapio(r, 0).refeicoes.find((x) => x.nome === 'Almoço');
+  const outro = cardapio(r, 7).refeicoes.find((x) => x.nome === 'Almoço');
+  const d = diarioPadrao();
+  copiarRefeicao(d, HOJE, almoco, HOJE);
+  const antes = totaisDoDia(d, HOJE).kcal;
+  // a sugestão nova aparece: o que já foi comido continua, e nada da nova é contado até a pessoa marcar
+  const e = estadoDaSugestao(d, HOJE, outro);
+  assert.equal(e.marcados, outro.itens.filter((x) => almoco.itens.some((y) => y.id === x.id)).length);
+  assert.equal(totaisDoDia(d, HOJE).kcal, antes);
+  // desmarcar a sugestão nova não apaga o que veio da antiga e não está nela
+  desmarcarRefeicao(d, HOJE, outro);
+  const ficou = itensDoDia(d, HOJE).map((x) => x.al);
+  for (const x of almoco.itens) assert.equal(ficou.includes(x.id), !outro.itens.some((y) => y.id === x.id), x.id);
+});
+
+test('B4: diário antigo (sem a marca de origem) abre igual, sem contagem dobrada; a origem `s` passa pela validação', () => {
+  const r = calcular({ ...base, refeicoes: '4' });
+  const lanche = lancheDe(r);
+  const ref = idDaRefeicao(lanche.nome);
+  // como a versão 1.8.0 gravava: biscoito à mão + "Comi isso" (a sugestão inteira copiada, sem `s`)
+  const antigo = { dias: [{ data: HOJE, itens: [{ id: 'i1', ref, al: 'biscoito-cream-cracker', g: 30, m: true }, ...lanche.itens.map((x, i) => ({ id: 'i' + (i + 2), ref, al: x.id, g: x.g, m: false }))] }] };
+  const d = limparDiario(J(antigo), HOJE);
+  assert.deepEqual(d, antigo, 'nada muda nos registros antigos');
+  const t = totaisDoDia(d, HOJE);
+  assert.equal(t.n, lanche.itens.length + 1, 'cada registro conta uma vez');
+  assert.ok(Math.abs(t.kcal - (BISCOITO + somaSug(lanche))) < 0.01);
+  // a tela reconhece a sugestão antiga como marcada: "Desmarcar tudo" e o total fica só com o biscoito
+  const e = estadoDaSugestao(d, HOJE, lanche);
+  assert.equal(e.toda, true); assert.deepEqual(e.extras.map((x) => x.al), ['biscoito-cream-cracker']);
+  assert.equal(copiarRefeicao(d, HOJE, lanche, HOJE), 0, '"Comi tudo isso" em dado antigo não duplica');
+  assert.equal(desmarcarRefeicao(d, HOJE, lanche), lanche.itens.length);
+  assert.equal(Math.round(totaisDoDia(d, HOJE).kcal), 130);
+  // `s` só vale true e só em alimento do catálogo; ida e volta estável
+  const bom = { id: 'a', ref: 'almoco', al: 'banana-prata', g: 100 };
+  assert.deepEqual(limparItem({ ...bom, s: true }), { ...bom, m: false, s: true });
+  for (const v of [false, 'true', 1, null]) assert.equal('s' in limparItem({ ...bom, s: v }), false, String(v));
+  assert.equal('s' in limparItem({ id: 'b', nome: 'Bolo', kcal: 100, s: true }), false, 'fora da lista não tem origem na sugestão');
+  const d2 = diarioPadrao();
+  marcarDaSugestao(d2, HOJE, lanche, lanche.itens[0].id, true, HOJE);
+  assert.equal(itensDoDia(d2, HOJE)[0].s, true);
+  assert.deepEqual(limparDiario(J(d2), HOJE), d2);
 });

@@ -149,6 +149,7 @@ const PORQUE_MOVER = {
   ocupado: (para) => `${cap(noDia(para.d, para.h))} já tem corrida. O app não junta duas: uma corrida bem maior que a mais longa do mês aumenta o risco de lesão.`,
   dor: (para) => `${cap(noDia(para.d, para.h))} está sem corrida por causa da dor que você contou.`,
   bloqueado: (para) => `${cap(noDia(para.d, para.h))} é um dos dias em que você não treina.`,
+  saude: (para) => `${cap(noDia(para.d, para.h))}, o problema de saúde que você contou ainda muda a corrida.`,
   forte_seguido: (para, a) => `Essa corrida (${a.nome.toLowerCase()}) é um treino forte ou o longão: ${noDia(para.d, para.h)} ela ficaria colada em outro treino forte, e eles nunca ficam em dias seguidos.`,
   pernas: (para, a) => `${cap(noDia(para.d, para.h))}, essa corrida (${a.nome.toLowerCase()}) ficaria perto do treino pesado de pernas: os dois ficam a 24 horas ou mais um do outro.`,
   sem_descanso: () => 'A semana ficaria sem nenhum dia de descanso.',
@@ -207,7 +208,9 @@ export function passoMover(ctx) {
     if (de <= hoje && P.podeMarcarCorrida(ctx.st, de, hoje)) op.push({ rotulo: 'Não vou correr', valor: '#nao' });
     return op;
   };
-  const seguir = (v, c) => (v === '#nao' ? passoNaoCorrer({ ...c, data: de }) : passoMover({ ...c, de, data: v, datas: [{ data: de }, { data: v }], texto: '' }));
+  // o motivo (P.MOTIVOS) segue a conversa e vai para a marca
+  const motivo = P.MOTIVOS[ctx.motivo] ? ctx.motivo : '';
+  const seguir = (v, c) => (v === '#nao' ? passoNaoCorrer({ ...c, data: de, motivo }) : passoMover({ ...c, de, data: v, datas: [{ data: de }, { data: v }], texto: '', motivo }));
   if (!para) {
     if (!outros.length) {
       return {
@@ -233,7 +236,7 @@ export function passoMover(ctx) {
         rotulo: `Passar para ${nomeDia(para, hoje)}`,
         confirmar: `A ${nome} vai para ${nomeDia(para, hoje)}. O resto da semana não muda.`,
         aplicar: (s, c) => {
-          const m = P.marcaMoverCorrida(s, de, para, c.hoje, emIso(c));
+          const m = P.marcaMoverCorrida(s, de, para, c.hoje, emIso(c), motivo);
           if (!m) return false;
           // a marca de esteira (logic/esteira.js) é do dia: se o dia antigo era na esteira, ela vai junto para o dia novo
           const naEst = temEsteira() && typeof EST.naEsteira === 'function' && EST.naEsteira(s, de);
@@ -305,6 +308,7 @@ export function passoEsteira(ctx) {
 }
 export function passoNaoCorrer(ctx, antes = []) {
   const data = diaDe(ctx), hoje = ctx.hoje;
+  const motivo = P.MOTIVOS[ctx.motivo] ? ctx.motivo : '';
   if (data > hoje) {
     const d = corridaNoDia(ctx, data);
     if (!d) return semCorridaNoDia(ctx, data);
@@ -321,7 +325,7 @@ export function passoNaoCorrer(ctx, antes = []) {
     texto: [...antes, 'Tudo bem. Corrida perdida não se repõe: siga o plano.'],
     detalhes: ['Juntar a corrida perdida a outra faz uma corrida maior. Uma corrida mais de 10% maior do que a mais longa dos últimos 30 dias aumenta o risco de lesão.', 'O volume das próximas semanas acompanha o que você de fato correu.'],
     refs: P.REFS_CORRIDA,
-    acoes: [acaoNaoCorrer('Marcar como não feita', data === hoje ? '' : data)],
+    acoes: [acaoNaoCorrer('Marcar como não feita', data === hoje ? '' : data, motivo)],
     data,
   };
 }
@@ -353,19 +357,23 @@ function passoCorridaPerdida(ctx) {
   if (data > hoje) return passoNaoCorrer(ctx);
   if (!corridaNoDia(ctx, data) || !P.podeMarcarCorrida(ctx.st, data, hoje)) return semCorridaNoDia(ctx, data);
   if (data < hoje) return passoNaoCorrer(ctx);
+  // o dia que a pessoa pediu na frase ("não vou correr hoje, dá para correr amanhã?")
+  const quer = (Array.isArray(ctx.datas) ? ctx.datas : []).filter((x) => x && !x.semana && diaValido(x.data) && x.data > data).map((x) => x.data).sort()[0] || '';
+  const mover = (c, motivo) => passoMover({ ...c, de: data, motivo, ...(quer ? { data: quer, datas: [{ data }, { data: quer }], texto: '' } : { data }) });
   return {
     texto: ['O que aconteceu?'],
-    opcoes: [{ rotulo: 'Chuva ou sem lugar', valor: 'chuva' }, { rotulo: 'Estou com dor', valor: 'dor' }, { rotulo: 'Estou doente', valor: 'doente' }, { rotulo: 'Quero correr outro dia', valor: 'mover' }, { rotulo: 'Outro motivo', valor: 'outro' }],
+    opcoes: [{ rotulo: 'Estou sem tempo', valor: 'tempo' }, { rotulo: 'Chuva ou sem lugar', valor: 'chuva' }, { rotulo: 'Estou com dor', valor: 'dor' }, { rotulo: 'Estou doente', valor: 'doente' }, { rotulo: quer ? `Quero correr ${nomeDia(quer, hoje)}` : 'Quero correr outro dia', valor: 'mover' }, { rotulo: 'Outro motivo', valor: 'outro' }],
     proximo: (v, c) => {
       if (v === 'chuva') return passoChuva(c);
       if (v === 'dor') return passoDor(c, 'corrida');
-      if (v === 'mover') return passoMover({ ...c, de: data });
+      if (v === 'tempo') return mover(c, 'tempo');
+      if (v === 'mover') return mover(c, 'outro');
       if (v === 'doente') {
         const f = faqDe(FAQ_CORRIDA, 'Posso correr gripado');
-        const p = passoNaoCorrer(c, ['Com febre, dor no corpo ou cansaço fora do normal, não corra hoje.']);
+        const p = passoNaoCorrer({ ...c, data, motivo: 'doente' }, ['Com febre, dor no corpo ou cansaço fora do normal, não corra hoje.']);
         return f ? { ...p, detalhes: [...f.a.slice(0, 2), ...(p.detalhes || [])], refs: [...f.refs, ...(p.refs || [])] } : p;
       }
-      return passoNaoCorrer(c);
+      return passoNaoCorrer({ ...c, data, motivo: 'outro' });
     },
     data,
   };
@@ -433,6 +441,7 @@ export const INTENCOES = [
   },
   {
     id: 'corrida-perdida', coach: 'corrida', titulo: 'Não vou correr hoje', resumo: 'faltar à corrida de hoje', resumoNoDia: 'faltar à corrida', data: true, prioridade: 1,
+    bonus: (i) => (i.datas.some((d) => d.data === i.hoje) && i.datas.some((d) => !d.semana && d.data > i.hoje) && /\b(nao|nem)\b/.test(i.texto) ? 1.5 : 0),
     palavras: ['nao vou correr', 'nao quero correr', 'sem vontade correr', 'nao consigo correr', 'nao posso correr', 'nao vou poder correr', 'nao corri', 'nao deu correr', 'perder correr', 'perdi correr', 'faltar correr', 'pular correr', 'faltar', 'sem tempo correr', 'nao vai dar correr', 'nao vou conseguir correr', 'doente', 'gripado', 'gripe'],
     disponivel: comPlano,
     inicio: passoCorridaPerdida,

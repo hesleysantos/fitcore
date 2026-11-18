@@ -289,7 +289,8 @@ function confereAcao(st, a, ctx, onde) {
     // marca válida (passa pela mesma limpeza do estado)
     assert.deepEqual(P.limparPerdidos(s.perdidos), s.perdidos, 'marca inválida: ' + onde);
     if (m.tipo === 'musculacao') {
-      const esperado = P.novaMarca(st, m.data, ctx.hoje, m.movs.length ? 'mover' : 'seguir', m.em, { futuro: m.data > ctx.hoje });
+      // o motivo e o dia escolhidos vão na marca; a regra (propor com o dia) tem de chegar à mesma mudança
+      const esperado = P.novaMarca(st, m.data, ctx.hoje, m.movs.length ? 'mover' : 'seguir', m.em, { futuro: m.data > ctx.hoje, motivo: m.motivo, para: m.movs.length ? m.movs[0].para : '' });
       assert.deepEqual(m, esperado, onde);
     } else if (m.tipo === 'troca') assert.ok(P.avaliarTroca(st, m.de, m.data, ctx.hoje).pode, 'troca contra a regra: ' + onde);
     else if (m.para) assert.ok(P.avaliarMoverCorrida(st, m.data, m.para, ctx.hoje).pode, 'corrida mudada contra a regra: ' + onde);

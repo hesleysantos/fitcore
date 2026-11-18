@@ -99,10 +99,11 @@ function semTreinoNoDia(motivo, data, hoje) {
 }
 const semTreinoHoje = (motivo, ctx) => semTreinoNoDia(motivo, ctx.hoje, ctx.hoje);
 // Ação que grava a marca "Não treinei" de `data` (a mesma da folha de views/perdido.js; para um dia que ainda não chegou,
-// a mesma regra com P.propor(..., { futuro: true }))
-function acaoMarcar(p, escolha, hoje, data = hoje) {
+// a mesma regra com P.propor(..., { futuro: true })). `motivo`: uma chave de P.MOTIVOS, guardada na marca.
+function acaoMarcar(p, escolha, hoje, data = hoje, motivo = '') {
   const para = p.movs.length ? P.nomeDoDia(p.movs[0].para, hoje) : '';
-  const futuro = { futuro: data > hoje };
+  // o dia da proposta vai junto: a marca grava a mesma mudança que a pessoa viu
+  const futuro = { futuro: data > hoje, motivo, para: escolha === 'mover' && p.movs.length ? p.movs[0].para : '' };
   const doDia = data === hoje ? '' : ` de ${nomeDia(data, hoje)}`;
   return {
     rotulo: escolha === 'mover' ? `Passar para ${para}` : 'Seguir a semana',
@@ -117,19 +118,50 @@ function acaoMarcar(p, escolha, hoje, data = hoje) {
     depois: escolha === 'mover' ? `Pronto: ${p.nome} passou para ${para}.` : `Pronto. O ${p.nome} volta ${P.naProxima(data)}.`,
   };
 }
-// A proposta do app para o treino do dia da conversa (hoje, ou outro desta semana), com as escolhas da folha "Não treinei"
+// A proposta do app para o treino do dia da conversa (hoje, ou outro desta semana), com as escolhas da folha "Não treinei".
+// `ctx.motivo` (P.MOTIVOS) vai para a marca; com cansaço ou doença, "seguir a semana" vem primeiro (logic/perdido.js).
+// `ctx.quer`: o dia que a pessoa pediu ("posso fazer amanhã?"): se as regras deixam, a proposta é ele; se não, o porquê.
 export function passoPerdido(ctx, antes = [], detalhes = [], refs = []) {
   const data = diaDe(ctx);
+  const motivo = P.MOTIVOS[ctx.motivo] ? ctx.motivo : '';
+  const futuro = { futuro: data > ctx.hoje };
   let p;
-  try { p = P.propor(ctx.st, data, ctx.hoje, { futuro: data > ctx.hoje }); } catch { p = { pode: false, motivo: '' }; }
+  try { p = P.propor(ctx.st, data, ctx.hoje, futuro); } catch { p = { pode: false, motivo: '' }; }
   if (!p.pode) return semTreinoNoDia(p.motivo, data, ctx.hoje);
+  const texto = [...antes];
+  if (diaValido(ctx.quer)) {
+    let o = null;
+    try { o = P.opcoesDeDia(ctx.st, data, ctx.hoje, futuro); } catch { o = null; }
+    const d = o && o.dias.find((x) => x.data === ctx.quer);
+    if (d && d.pode) p = { ...p, movs: d.movs, titulo: d.titulo, texto: d.texto, motivo: 'livre' };
+    else if (d) texto.push(P.porQueNaoDia(d, ctx.hoje, o.alternado));
+    else texto.push('Só dá para passar o treino para um dia depois dele, nesta semana.');
+  }
+  texto.push(p.titulo, p.texto);
+  if (p.movs.length) {
+    let linha = '';
+    try { linha = P.linhaDaSemana(P.comMarca(ctx.st, P.novaMarca(ctx.st, data, ctx.hoje, 'mover', emIso(ctx), { ...futuro, para: p.movs[0].para })), ctx.hoje, 'musc'); } catch { linha = ''; }
+    if (linha) texto.push(`Como fica: ${linha}.`);
+  }
   const foco = (() => { try { return comboAtual(ctx.st).foco; } catch { return ''; } })();
   const ajusta = foco === 'corrida' || foco === 'equilibrio';
+  const det = [...detalhes];
+  const rf = [...refs];
+  let aviso;
+  if (motivo === 'cansaco') {
+    const c = P.cansacoRecente(ctx.st, ctx.hoje);
+    if (c.maisDeUmaSemana) aviso = { tipo: 'warn', texto: 'O cansaço já passa de uma semana. Isso pede treinos mais leves ou descanso. Se passar de 4 semanas, procure um médico.' };
+    det.push('Cansaço alto por mais de uma semana pede treinos mais leves ou descanso; com queda de rendimento por mais de 4 semanas, um médico.');
+    rf.push(...P.REFS_CANSACO);
+  }
+  const mover = p.movs.length ? acaoMarcar(p, 'mover', ctx.hoje, data, motivo) : null;
+  const seguir = acaoMarcar(p, 'seguir', ctx.hoje, data, motivo);
+  const naoRepor = motivo === 'cansaco' || motivo === 'doente';
   return {
-    texto: [...antes, p.titulo, p.texto],
-    detalhes: [...detalhes, ...POR_QUE_PERDIDO, ...(ajusta ? ['Com a corrida, as pernas ficam a 24 horas ou mais da corrida forte e do longo.'] : [])],
-    refs: [...refs, ...P.REFS_MUSCULACAO, ...(ajusta ? P.REFS_COMBINADO : [])],
-    acoes: p.movs.length ? [acaoMarcar(p, 'mover', ctx.hoje, data), acaoMarcar(p, 'seguir', ctx.hoje, data)] : [acaoMarcar(p, 'seguir', ctx.hoje, data)],
+    texto, aviso,
+    detalhes: [...det, ...POR_QUE_PERDIDO, ...(ajusta ? ['Com a corrida, as pernas ficam a 24 horas ou mais da corrida forte e do longo.'] : [])],
+    refs: [...rf, ...P.REFS_MUSCULACAO, ...(ajusta ? P.REFS_COMBINADO : [])],
+    acoes: mover ? (naoRepor ? [seguir, mover] : [mover, seguir]) : [seguir],
     data,
   };
 }
@@ -287,14 +319,14 @@ export function passoJuntar(ctx, focoDito = '') {
   return { texto, aviso, detalhes: det, refs, ir };
 }
 // "Não corri" de hoje (a mesma marca da folha de views/perdido.js)
-export function acaoNaoCorrer(rotulo = 'Marcar como não feita', data = '') {
+export function acaoNaoCorrer(rotulo = 'Marcar como não feita', data = '', motivo = '') {
   return {
     rotulo,
     confirmar: `A corrida ${data ? 'desse dia' : 'de hoje'} fica marcada como não feita. Ela não se repõe: o plano segue.`,
     aplicar: (s, ctx) => {
       const dia = data || ctx.hoje;
       if (!P.podeMarcarCorrida(s, dia, ctx.hoje)) return false;
-      const m = P.marcaCorrida(dia, emIso(ctx));
+      const m = P.marcaCorrida(dia, emIso(ctx), motivo);
       if (!m) return false;
       s.perdidos = P.limparPerdidos([...(Array.isArray(s.perdidos) ? s.perdidos : []), m]);
       return true;
@@ -460,10 +492,11 @@ export function passoSemana(ctx, coach = 'treinador') {
     const partes = [];
     if (d.feito && !d.nome) partes.push('musculação feita');
     else if (d.nome) partes.push(d.nome + (d.feito ? ' (feito)' : d.veioDe ? ` (veio de ${nomeDia(d.veioDe, hoje)})` : ''));
-    if (d.perdido) partes.push(`${d.perdido.nome} não feito` + (d.perdido.para ? `, passou para ${nomeDia(d.perdido.para, hoje)}` : ''));
+    const porMotivo = (m) => (P.MOTIVO_CURTO[m] ? ` (${P.MOTIVO_CURTO[m]})` : '');
+    if (d.perdido) partes.push(`${d.perdido.nome} não feito${porMotivo(d.perdido.motivo)}` + (d.perdido.para ? `, passou para ${nomeDia(d.perdido.para, hoje)}` : ''));
     if (d.foiPara && d.saiu) partes.push(`${d.saiu} passou para ${nomeDia(d.foiPara, hoje)}`);
     const c = d.corrida;
-    if (c) partes.push(c.nome + (c.feita ? ' (feita)' : c.movidaPara ? ` (passou para ${nomeDia(c.movidaPara, hoje)})` : c.perdida ? ' (não feita)' : c.movidaDe ? ` (veio de ${nomeDia(c.movidaDe, hoje)})` : ''));
+    if (c) partes.push(c.nome + (c.feita ? ' (feita)' : c.movidaPara ? ` (passou para ${nomeDia(c.movidaPara, hoje)})` : c.perdida ? ` (não feita${P.MOTIVO_CURTO[c.motivo] ? ', ' + P.MOTIVO_CURTO[c.motivo] : ''})` : c.movidaDe ? ` (veio de ${nomeDia(c.movidaDe, hoje)})` : ''));
     if (d.extra) partes.push('corrida fora do plano');
     if (!partes.length) partes.push(livres.has(d.wd) ? 'sem treino (dia livre)' : 'descanso');
     return `• ${diaCurto(d.data)}${d.data === hoje ? ' (hoje)' : ''}: ${partes.join(' · ')}`;
@@ -475,8 +508,11 @@ export function passoSemana(ctx, coach = 'treinador') {
   if (temPlano) { detalhes.push(...POR_QUE_PERDIDO); refs.push(...P.REFS_MUSCULACAO); }
   if (sem.some((d) => d.corrida)) { detalhes.push('Corrida perdida não se repõe: juntar duas faz uma corrida maior, e o risco de lesão sobe.'); refs.push(...P.REFS_CORRIDA); }
   if (seg > segHoje) detalhes.push('As corridas da semana que vem ainda podem mudar com o que você registrar nesta.');
+  // cansaço como motivo por mais de uma semana: a regra que o app já usa (logic/perdido.js, cansacoRecente)
+  let aviso;
+  try { if (seg === segHoje && P.cansacoRecente(ctx.st, hoje).maisDeUmaSemana) { aviso = { tipo: 'warn', texto: 'O cansaço já tirou treinos por mais de uma semana. Isso pede treinos mais leves ou descanso. Se passar de 4 semanas, procure um médico.' }; refs.push(...P.REFS_CANSACO); } } catch { /* segue */ }
   const ir = coach === 'corrida' ? [{ rotulo: 'Abrir a corrida', rota: 'corrida' }] : [{ rotulo: 'Ver a semana', rota: 'treinos' }];
-  return { texto: [titulo, ...linhas], detalhes, refs, ir, data };
+  return { texto: [titulo, ...linhas], aviso, detalhes, refs, ir, data };
 }
 
 // ---------- o treino de um dia, quanto tempo dura, dois dias seguidos, adiantar ----------
@@ -599,6 +635,7 @@ export function passoAntecipar(ctx) {
     ocupado: `${cap(nomePara)} já tem o ${a.ocupadoPor || 'treino do dia'}: o app não junta dois treinos no mesmo dia.`,
     treinou: 'Você já treinou hoje: o app não junta dois treinos no mesmo dia.',
     bloqueado: `${cap(nomePara)} é um dos dias em que você não treina.`,
+    saude: `${cap(nomePara)}, o problema de saúde que você contou ainda muda o treino: não traga outro treino para esse dia.`,
     sem_descanso: `${cap(nomePara)}, o ${a.nome} ficaria sem as 48 horas de descanso para os mesmos músculos (ou a semana ficaria sem um dia livre).`,
     corrida: `${cap(nomePara)}, o treino de pernas ficaria perto da corrida forte ou do longão.`,
     feito: `O treino de ${nomeDe} já foi feito.`,
@@ -732,9 +769,20 @@ function passoPerdidoInicio(ctx) {
   const data = diaDe(ctx);
   let pode;
   try { pode = P.podeMarcar(ctx.st, data, ctx.hoje, { futuro: true }); } catch { pode = { pode: false, motivo: '' }; }
+  if (!pode.pode && pode.motivo === 'marcado') {
+    // já marcado: diz para onde o treino foi (e onde desfazer), em vez de só "já está marcado"
+    let ef = null;
+    try { ef = P.treinoDoDia(ctx.st, data); } catch { ef = null; }
+    const para = ef && ef.perdido ? ef.perdido.para : '';
+    const de = data === ctx.hoje ? 'de hoje' : `de ${nomeDia(data, ctx.hoje)}`;
+    return { texto: [para ? `O treino ${de} já passou para ${nomeDia(para, ctx.hoje)}.` : `O treino ${de} já está marcado como não feito: ele volta ${P.naProxima(data)}.`, 'Para mudar, toque em “Desfazer” no dia, na aba Treinos.'], ir: [{ rotulo: 'Ver a semana', rota: 'treinos' }], data };
+  }
   if (!pode.pode) return semTreinoNoDia(pode.motivo, data, ctx.hoje);
+  // o dia que a pessoa pediu na frase ("não vou treinar hoje, posso fazer amanhã?"): a data seguinte, nesta semana
+  const quer = (Array.isArray(ctx.datas) ? ctx.datas : []).filter((x) => x && !x.semana && diaValido(x.data) && x.data > data).map((x) => x.data).sort()[0] || '';
   // outro dia desta semana (ontem, sexta...): direto à proposta, sem perguntar o motivo
-  if (data !== ctx.hoje) return passoPerdido(ctx, ['Tudo bem.']);
+  if (data !== ctx.hoje) return passoPerdido({ ...ctx, quer }, ['Tudo bem.']);
+  const com = (c, motivo) => ({ ...c, data, motivo, quer });
   return {
     texto: ['Tudo bem. O que aconteceu?'],
     opcoes: [
@@ -743,15 +791,15 @@ function passoPerdidoInicio(ctx) {
       { rotulo: 'Viagem', valor: 'viagem' }, { rotulo: 'Outro motivo', valor: 'outro' },
     ],
     proximo: (v, c) => {
-      if (v === 'tempo') return { texto: ['Quer uma versão curta do treino de hoje?'], opcoes: [{ rotulo: 'Sim, versão curta', valor: 's' }, { rotulo: 'Não dá mesmo', valor: 'n' }], proximo: (x, cc) => (x === 's' ? passoTempo(cc) : passoPerdido(cc)) };
-      if (v === 'cansaco') return passoCansaco(c);
+      if (v === 'tempo') return { texto: ['Quer uma versão curta do treino de hoje?'], opcoes: [{ rotulo: 'Sim, versão curta', valor: 's' }, { rotulo: 'Não dá mesmo', valor: 'n' }], proximo: (x, cc) => (x === 's' ? passoTempo(cc) : passoPerdido(com(cc, 'tempo'))) };
+      if (v === 'cansaco') return passoCansaco(com(c, 'cansaco'));
       if (v === 'dor') return passoDor(c, 'treinador');
       if (v === 'doente') {
         const f = faqDe(FAQ_CORRIDA, 'Posso correr gripado');
-        return passoPerdido(c, ['Com febre, dor no corpo ou cansaço fora do normal, não treine hoje.'], f ? f.a.slice(0, 2) : [], f ? f.refs : []);
+        return passoPerdido(com(c, 'doente'), ['Com febre, dor no corpo ou cansaço fora do normal, não treine hoje.'], f ? f.a.slice(0, 2) : [], f ? f.refs : []);
       }
-      if (v === 'viagem') return passoPerdido(c, [], ['Para quem já treina, 1 a 2 treinos por semana mantêm a força.', 'Ficou 2 semanas ou mais sem treinar? O app aplica sozinho as regras da volta.'], ['acsm2009', 'caterisano2019']);
-      return passoPerdido(c);
+      if (v === 'viagem') return passoPerdido(com(c, 'viagem'), [], ['Para quem já treina, 1 a 2 treinos por semana mantêm a força.', 'Ficou 2 semanas ou mais sem treinar? O app aplica sozinho as regras da volta.'], ['acsm2009', 'caterisano2019']);
+      return passoPerdido(com(c, 'outro'));
     },
   };
 }
@@ -768,7 +816,7 @@ function passoCansaco(ctx) {
     detalhes: ['Cansaço fora do comum nas atividades de sempre, que não passa, é um dos sinais da triagem antes do exercício: nesse caso, procure um médico.'],
     refs,
     opcoes: [{ rotulo: 'Versão curta', valor: 'curta' }, { rotulo: 'Passar o treino', valor: 'passar' }],
-    proximo: (v, c) => (v === 'curta' ? passoTempo(c) : passoPerdido(c)),
+    proximo: (v, c) => (v === 'curta' ? passoTempo(c) : passoPerdido({ ...c, data: diaDe(ctx), motivo: 'cansaco', quer: ctx.quer })),
     ir: noite ? undefined : [{ rotulo: 'Registrar o sono', rota: 'sono' }],
   };
 }
@@ -786,8 +834,10 @@ const doisDias = (i) => i.datas.filter((d) => !d.semana).length >= 2 && /\b(faze
 export const INTENCOES = [
   {
     id: 'treino-perdido', coach: 'treinador', titulo: 'Não vou conseguir treinar hoje', resumo: 'faltar ao treino de hoje', resumoNoDia: 'faltar ao treino', data: true, prioridade: 1,
-    bonus: (i) => (faltaDe(i) ? 1.5 : 0),
+    // "hoje não dá, passa pra amanhã": negação, hoje e outro dia, e um verbo de mudar de dia
+    bonus: (i) => (temHojeEFutura(i) && /\b(nao|nem)\b/.test(i.texto) && /\b(passa\w*|troca\w*|muda\w*|deixa\w*|remarca\w*)\b/.test(i.texto) ? 2.5 : 0) + (faltaDe(i) ? 1.5 : 0),
     palavras: ['furar treino', 'vou furar', 'sem treino', '!viagem', 'so po', 'to morto', 'nao rola', 'nao to afim', 'nao estou afim', 'sem pique', 'nao vou dar conta', 'trabalhar ate tarde', 'trabalho ate tarde', 'nao vou treinar', 'nao vou conseguir treinar', 'nao consigo treinar', 'nao posso treinar', 'nao vou poder treinar', 'nao da treinar', 'nao deu treinar',
+      'trocar treino amanha', 'mudar treino amanha', 'treinar amanha lugar', 'trocar dia amanha',
       'nao vou academia', 'nao vou poder ir academia', 'nao posso ir academia', 'nao quero ir academia', 'nao quero treinar', 'sem vontade treinar', 'nao vou conseguir ir academia', 'nao consigo ir academia', 'faltar treino', 'faltar academia', 'perder treino', 'perdi treino', 'pular treino',
       'nao treinei', 'nao vou malhar', 'faltar', 'remarcar treino', 'adiar treino', 'deixar treino amanha', 'deixar treino outro dia', 'imprevisto', 'nao posso ir', 'nao vou poder ir', 'nao consigo ir', 'nao vou conseguir ir', 'nao vou ir', 'nao vai dar', 'nao vai dar ir', 'nao da ir', 'nao fui', 'vou faltar', 'compromisso', 'nao vai rolar',
       'viagem', 'vou viajar', 'estou viajando', 'cansado', 'estou cansado', 'to cansado', 'cansado treinar', 'dormir mal', 'dormir pouco', 'mal dormir', 'sem condicao treinar', 'sem animo', 'sem vontade treinar'],
@@ -823,7 +873,7 @@ export const INTENCOES = [
   {
     id: 'antecipar', coach: 'treinador', titulo: 'Fazer o treino de outro dia hoje', resumo: 'fazer hoje o treino de outro dia', resumoNoDia: 'fazer hoje o treino de {dia}', data: true,
     palavras: ['!adiantar', '!antecipar', 'adiantar treino', 'antecipar treino', 'fazer treino amanha', 'treinar treino amanha', 'trazer treino', 'puxar treino', 'inverter treino', 'inverter dia', 'trocar ordem dia', 'fazer antes'],
-    bonus: (i) => (temHojeEFutura(i) ? 2.5 : doisDias(i) ? 2.5 : 0),
+    bonus: (i) => (temHojeEFutura(i) && !faltaDe(i) ? 2.5 : doisDias(i) ? 2.5 : 0),
     disponivel: temPlano,
     inicio: passoAntecipar,
   },

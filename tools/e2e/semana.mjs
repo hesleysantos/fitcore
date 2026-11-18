@@ -61,8 +61,9 @@ export default async (page) => {
 
   console.log('2. Primeira tela (360 × 780): hoje, metas e o começo do cardápio');
   await page.eval(`window.scrollTo(0, 0); return true;`); await page.sleep(200);
-  const tela = await page.eval(`const nav = document.querySelector('nav.nav'); const fim = nav ? nav.getBoundingClientRect().top : innerHeight; const kv = document.querySelector('.card.refeicao .itens .kv'); const r = (s) => document.querySelector(s).getBoundingClientRect(); return { fim, hoje: r('#hoje-nutri').top, metas: r('#diario').bottom, prato: kv ? kv.getBoundingClientRect().bottom : 9999 };`);
-  ok(tela.hoje < tela.fim && tela.metas < tela.fim && tela.prato <= tela.fim + 1, `o primeiro alimento do cardápio aparece sem rolar (termina em ${Math.round(tela.prato)} px; a barra começa em ${Math.round(tela.fim)} px)`);
+  const tela = await page.eval(`const nav = document.querySelector('nav.nav'); const fim = nav ? nav.getBoundingClientRect().top : innerHeight; const kv = document.querySelector('.card.refeicao .ref-hd'); const ab = [...document.querySelectorAll('.card.refeicao .ref-hd')].find((e) => e.getAttribute('aria-expanded') === 'true'); const r = (s) => document.querySelector(s).getBoundingClientRect(); return { fim, hoje: r('#hoje-nutri').top, metas: r('#diario').bottom, prato: kv ? kv.getBoundingClientRect().bottom : 9999, aberto: ab ? ab.getBoundingClientRect().bottom : 9999 };`);
+  // as refeições recolhem (a do horário fica aberta): o começo do cardápio são os títulos das refeições
+  ok(tela.hoje < tela.fim && tela.metas < tela.fim && tela.prato <= tela.fim + 1 && tela.aberto <= tela.fim + 1, `o começo do cardápio aparece sem rolar: o primeiro título termina em ${Math.round(tela.prato)} px e o da refeição aberta em ${Math.round(tela.aberto)} px (a barra começa em ${Math.round(tela.fim)} px)`);
   await foto('1-primeira-tela');
   const hojeNaTela = await refeicoesDeHoje();
 
@@ -93,7 +94,7 @@ export default async (page) => {
   await fechar();
   // na tela do dia: o botão de troca do jantar
   const jantarAntes = (await refeicoesDeHoje()).find((x) => x.startsWith('jantar'));
-  await page.eval(`document.querySelector('.card.refeicao[data-ref="jantar"] .iconbtn').click(); return true;`); await page.sleep(600);
+  await page.eval(`document.querySelector('.card.refeicao[data-ref="jantar"] .trocar').click(); return true;`); await page.sleep(600);
   const jantarDepois = (await refeicoesDeHoje()).find((x) => x.startsWith('jantar'));
   ok(jantarDepois !== jantarAntes, 'o jantar de hoje mudou com "Trocar jantar"');
   await abrirSemana();
@@ -132,7 +133,7 @@ export default async (page) => {
     await page.reload(1500); await page.goto(B + '#/nutricao', 600);
     ok((await page.eval(`return document.documentElement.dataset.theme === 'light';`)) === (tema === 'claro'), `tema ${tema}`);
     ok(await page.eval(`return document.documentElement.scrollWidth <= 361 && [...document.querySelectorAll('#conteudo *')].filter((e) => e.getClientRects().length && !e.closest('svg')).every((e) => { const r = e.getBoundingClientRect(); return r.right <= 360.5 && r.left >= -0.5; });`), `a tela cabe em 360 px (${tema})`);
-    ok(await page.eval(`return [...document.querySelectorAll('#conteudo .card.refeicao .btn, #conteudo .card.refeicao .iconbtn, #hoje-nutri summary, #conteudo .par-de-botoes .btn, #diario-hoje .btn')].every((b) => b.getBoundingClientRect().height >= 43.5);`), `botões do dia e do cardápio com 44 px ou mais (${tema})`);
+    ok(await page.eval(`return [...document.querySelectorAll('#conteudo .card.refeicao .btn, #conteudo .card.refeicao .ref-hd, #hoje-nutri summary, #conteudo .par-de-botoes .btn, #diario-hoje .btn')].filter((b) => b.getClientRects().length).every((b) => b.getBoundingClientRect().height >= 43.5);`), `botões do dia e do cardápio com 44 px ou mais (${tema})`);
     await abrirSemana();
     ok(await page.eval(`const s = document.querySelector('.sheet'); return [...s.querySelectorAll('*')].filter((e) => e.getClientRects().length && !e.closest('svg')).every((e) => e.getBoundingClientRect().right <= 360.5) && [...s.querySelectorAll('.btn, .seg button, summary')].every((b) => b.getBoundingClientRect().height >= 43.5 || !b.getClientRects().length);`), `a semana cabe em 360 px e os botões têm 44 px (${tema})`);
     await foto('5-semana-' + tema);

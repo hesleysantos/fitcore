@@ -180,7 +180,7 @@ export default async (page) => {
   await page.click('Começar'); await page.sleep(500);
   await entrevista(perfil.nutri);
   t = await texto();
-  ok(/kcal/.test(t) && t.includes('Cardápio de hoje') && !!(await page.eval(`return document.getElementById('hoje-nutri');`)), 'Nutricionista mostrou o resultado: o dia de hoje e o cardápio');
+  ok(/kcal/.test(t) && (await page.eval(`return document.querySelectorAll('.card.refeicao').length;`)) >= 3 && !!(await page.eval(`return document.getElementById('hoje-nutri');`)), 'Nutricionista mostrou o resultado: o dia de hoje e as refeições do cardápio');
   const refeicoes = await page.eval(`return document.querySelectorAll('.card.refeicao').length;`);
   console.log('     refeições no cardápio de hoje: ' + refeicoes + ' · avisos: ' + (await page.eval(`return [...document.querySelectorAll('.note.warn, .note.danger')].map((n) => n.innerText.trim().slice(0, 90)).join(' | ');`) || 'nenhum'));
   ok(refeicoes === Number(perfil.nutri.refeições.slice(0, 1)), `o cardápio tem as ${perfil.nutri.refeições.slice(0, 1)} refeições pedidas`);
@@ -188,7 +188,7 @@ export default async (page) => {
   // o dia de hoje: com o treino aceito (3 dias por semana), é dia de treino ou de descanso, nunca os dois
   const hojeNutri = await page.eval(`const c = document.getElementById('hoje-nutri'); return { titulo: c.querySelector('h2').textContent, tipo: c.dataset.treino, antes: !!c.querySelector('#hoje-treino') };`);
   ok(hojeNutri.tipo === 'sim' ? hojeNutri.titulo.startsWith('Hoje: musculação') && hojeNutri.antes : hojeNutri.titulo === 'Hoje: descanso' && !hojeNutri.antes && !/antes do treino/i.test(await page.eval(`return document.getElementById('hoje-nutri').textContent;`)), `bloco do dia coerente: ${hojeNutri.titulo}`);
-  ok(await page.eval(`const pos = (s) => document.querySelector(s).getBoundingClientRect().top; return pos('#hoje-nutri') < pos('.card.refeicao') && pos('.card.refeicao') < pos('#metas') && pos('#metas') < pos('#diario-dias');`), 'ordem da tela: hoje → cardápio → metas em detalhe → diário dos outros dias');
+  ok(await page.eval(`const pos = (s) => document.querySelector(s).getBoundingClientRect().top; return pos('#hoje-nutri') < pos('.card.refeicao') && pos('.card.refeicao') < pos('#diario-dias') && pos('#diario-dias') < pos('#metas') && pos('#metas') < pos('#saiba-mais');`), 'ordem da tela: hoje → refeições → dias anteriores → metas → saiba mais');
 
   console.log('7. Ajustes e backup');
   await page.goto(B + '#ajustes', 900);

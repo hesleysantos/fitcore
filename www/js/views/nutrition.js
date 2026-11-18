@@ -1,8 +1,10 @@
 // Tela da Nutricionista virtual.
-// Ordem da tela: o dia de hoje (treinos, metas com quanto falta, o que comer em volta do treino) → cardápio de hoje, com o
-// que foi comido em cada refeição → metas em detalhe → diário dos outros dias → cuidados de saúde → orientações gerais.
-// Explicações e fontes ficam em seções que abrem ao toque. "Ver a semana" abre os 7 dias e a lista de compras.
-import { h, btn, iconBtn, chip, seg, sheet, icon, note, sectionTitle, toast, norm, fmtInt, dateKey, DIAS_LONGO } from '../ui.js';
+// Ordem da tela (opção A escolhida pelo dono): o dia de hoje (comido x meta, água, o que comer em volta do treino) →
+// [Semana e compras] [Tenho em casa] → um card por refeição, com a "Sugestão" em cima ("Comi" em cada alimento e
+// "Comi tudo isso") e o "Você comeu" embaixo (com o próprio "+ Adicionar outro alimento"); cada card recolhe ao toque
+// no título → fora das refeições (só se houver) → dias anteriores → suas metas e o total do cardápio → "Saiba mais"
+// (tudo o que é só leitura) → refazer a entrevista → o aviso educativo, uma linha.
+import { h, btn, chip, seg, sheet, icon, note, toast, norm, fmtInt, dateKey, DIAS_LONGO } from '../ui.js';
 import { state, update } from '../store.js';
 import { refresh, go } from '../router.js';
 import { FAQ_NUTRI, REFS } from '../data/knowledge.js';
@@ -13,10 +15,10 @@ import {
   cardapioDoDia, outraSugestaoDoDia, trocarRefeicaoDoDia, limparAjustes, limparAjuste, orientacaoDoDia, rotuloDoTreino, carboidratoNaCorrida, listaDeCompras, textoDaListaDeCompras,
 } from '../logic/nutrition.js';
 import { treinosDoDia, semanaDoCardapio } from '../logic/semana-nutricao.js';
-import { somarDias, idDaRefeicao, refeicaoCopiada } from '../logic/diario.js';
+import { somarDias, idDaRefeicao, estadoDaSugestao, modoDoDiario } from '../logic/diario.js';
 import { interview, faqBlock, notaObjetivo, conferirObjetivos, cartaoObjetivos } from './coach.js';
 import { nutriPara } from '../logic/objetivos.js';
-import { blocoDiario, acoesDaRefeicao, resumoDoDiario, comidoNaRefeicao, diarioDeHoje, historicoDoDiario } from './diario.js';
+import { blocoDiario, botaoComiDoItem, botaoDaSugestao, resumoDoDiario, resumoDaRefeicao, voceComeu, foraDasRefeicoes, macrosDeHoje, historicoDoDiario, fontesDoDiario, refeicaoDaHora, redesenharNoLugar } from './diario.js';
 import { botaoChat } from './chat.js';
 
 let modo = 'auto';
@@ -93,11 +95,12 @@ function resumoDaCorrida() {
 const fontesEm = (chaves) => { const box = h('div', { class: 'col gap-s' }); for (const k of chaves) if (REFS[k]) box.appendChild(h('p', { class: 'ref', text: '• ' + REFS[k] })); return box; };
 const secao = (titulo, intro, itens, extras) => [h('h3', { text: titulo }), intro ? h('p', { class: 'small', text: intro }) : null, itens && itens.length ? lista(itens) : null, ...(extras || []).map((t) => h('p', { class: 'small', text: t }))];
 
-// ---------- 1. o dia de hoje: treinos, metas com quanto falta e o que comer em volta do treino ----------
+// ---------- 1. o dia de hoje: treinos, comido x meta e o que comer em volta do treino ----------
+// Poucas linhas: o título do dia, "896 de 1.690 kcal · Proteína 52 de 105 g", a barra, quanto falta e a água. Quem não
+// recebe números (transtorno alimentar, menores de 18) não vê calorias aqui (views/diario.js, resumoDoDiario).
 function cartaoDeHoje(r, treinos) {
   const o = orientacaoDoDia(r, treinos);
   const card = h('div', { class: 'card col', id: 'hoje-nutri', dataset: { treino: o.treina ? 'sim' : o.semAgenda ? 'sem-agenda' : 'descanso' } }, h('h2', { text: o.titulo }));
-  // metas do dia, com o que já foi comido (views/diario.js); sem meta, nada de número
   const resumo = r.modo !== 'educativo' ? resumoDoDiario(r) : null;
   if (resumo) card.appendChild(resumo);
   if (r.agua) card.appendChild(h('p', { class: 'small muted', id: 'hoje-agua' }, icon('water', 's'), ` Água: ${dec(r.agua)} L no dia (${dec(r.aguaBebidas)} L em bebidas).`));
@@ -113,7 +116,8 @@ function cartaoDeHoje(r, treinos) {
     d.id = 'hoje-treino';
     card.appendChild(d);
   } else {
-    card.appendChild(h('p', { class: 'small', id: 'hoje-descanso', text: o.resumo }));
+    // dia de descanso: a frase que muda o que comer; sem treinos conhecidos, nada (a frase genérica saiu)
+    if (!o.semAgenda) card.appendChild(h('p', { class: 'small', id: 'hoje-descanso', text: o.resumo }));
     if (!r.agua) card.appendChild(h('p', { class: 'small muted', text: o.agua }));
   }
   // prova marcada: a semana e o dia da prova (fica aberta na última semana)
@@ -127,15 +131,17 @@ function cartaoDeHoje(r, treinos) {
   return card;
 }
 
-// ---------- 2. cardápio de hoje, com o que foi comido em cada refeição ----------
-// cada alimento: nome e medida caseira à esquerda, gramas à direita ("300 g (10 colheres de sopa cheias)" vira duas partes)
-function itensDaRefeicao(ref) {
+// ---------- 2. as refeições de hoje: "Sugestão" em cima, "Você comeu" embaixo, no mesmo card ----------
+// cada alimento: nome e medida caseira à esquerda, gramas à direita ("300 g (10 colheres de sopa cheias)" vira duas partes).
+// Com `marcar` (só no cardápio de hoje), cada alimento ganha o botão "Comi": um toque marca só aquele alimento.
+function itensDaRefeicao(ref, marcar = null) {
   const box = h('div', { class: 'itens' });
   for (const it of ref.itens) {
     const m = /^(\d+ g)(?: \((.*)\))?$/.exec(it.medida);
-    box.appendChild(h('div', { class: 'kv' },
+    const gramas = h('span', { text: m ? m[1] : it.medida });
+    box.appendChild(h('div', { class: 'kv', dataset: { al: it.id } },
       h('div', { class: 'grow' }, h('div', null, it.nome, cifroes(it.faixa)), m && m[2] ? h('div', { class: 'tiny muted', text: m[2] }) : null),
-      h('span', { text: m ? m[1] : it.medida })));
+      marcar ? h('div', { class: 'sug-dir' }, gramas, marcar(it)) : gramas));
   }
   return box;
 }
@@ -153,28 +159,116 @@ function gravarAjuste(data, ajuste) {
 function trocarRefeicao(r, data, ref, opcoes, depois) {
   const novo = trocarRefeicaoDoDia(r, data, limparAjustes(state.nutri.ajustes)[data] || null, ref.ordem, opcoes);
   if (!novo) { toast(opcoes.emCasa ? 'Com estes alimentos não há outra opção para esta refeição.' : 'Não há outra opção para esta refeição com as suas restrições.'); return; }
+  // o que a pessoa já marcou como comido continua no diário (a troca muda só a sugestão)
+  const jaComeu = data === dateKey() && estadoDaSugestao(state.diario, data, ref).algum;
   gravarAjuste(data, novo);
-  toast(`${ref.nome}: nova sugestão, com a mesma meta do dia.`);
-  refresh();
+  toast(`${ref.nome}: nova sugestão, com a mesma meta do dia.${jaComeu ? ' O que você já marcou continua em “Você comeu”.' : ''}`);
+  // na tela do dia, o card trocado fica onde estava
+  if (data === dateKey()) redesenharNoLugar(`#conteudo .refeicao[data-ref="${idDaRefeicao(ref.nome)}"]`); else refresh();
   if (depois) depois();
 }
-function cartaoDaRefeicao(r, ref, data, opcoes) {
+
+// Recolher e abrir cada refeição (toque no título). Padrão: a refeição do horário e as próximas abertas (tarde da noite,
+// a última do cardápio); as que já passaram e as já comidas inteiras, recolhidas. A escolha da pessoa vale para o dia, guardada só neste aparelho
+// (localStorage, fora do backup); uma refeição em que a pessoa acabou de mexer não se recolhe sozinha.
+const ORDEM_REF = ['cafe', 'lanche-manha', 'almoco', 'lanche-tarde', 'jantar', 'ceia', 'outro'];
+const CHAVE_CARDS = 'fitcore-nutri-cards';
+let escolhas = { data: '', refs: {} };
+const mexidas = new Set();   // 'dia|refeição' tocadas nesta abertura do app
+function escolhasDoDia(data) {
+  if (escolhas.data === data) return escolhas;
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(CHAVE_CARDS) || 'null'); } catch { v = null; }
+  const refs = {};
+  if (v && typeof v === 'object' && v.data === data && v.refs && typeof v.refs === 'object') for (const k of ORDEM_REF) if (typeof v.refs[k] === 'boolean') refs[k] = v.refs[k];
+  escolhas = { data, refs };
+  return escolhas;
+}
+function guardarEscolha(data, ref, aberta) {
+  const e = escolhasDoDia(data);
+  e.refs[ref] = aberta;
+  try { localStorage.setItem(CHAVE_CARDS, JSON.stringify(e)); } catch { /* sem armazenamento: vale só nesta abertura */ }
+}
+function cardAberto(data, id, est, desde) {
+  const e = escolhasDoDia(data);
+  if (typeof e.refs[id] === 'boolean') return e.refs[id];
+  if (mexidas.has(data + '|' + id)) return true;
+  if (est.toda) return false;
+  return ORDEM_REF.indexOf(id) >= ORDEM_REF.indexOf(desde);
+}
+function cartaoDaRefeicao(r, ref, data, opcoes, desde) {
   const id = idDaRefeicao(ref.nome);
-  const comido = comidoNaRefeicao(id, r);
-  const copiada = refeicaoCopiada(state.diario, data, ref);
-  const card = h('div', { class: 'card refeicao', dataset: { ref: id } },
-    h('div', { class: 'ref-hd' }, h('div', { class: 'grow' }, h('h3', { text: ref.nome }), h('div', { class: 'tiny muted', text: `Sugestão: ${fmtInt(ref.kcal)} kcal · ${Math.round(ref.p)} g de proteína` })),
-      iconBtn('swap', `Trocar ${ref.nome.toLowerCase()}`, () => trocarRefeicao(r, data, ref, opcoes))));
-  if (comido) {
-    // o que a pessoa comeu fica na refeição; a sugestão continua à mão (se não foi a que ela comeu)
-    card.appendChild(comido);
-    if (!copiada) card.appendChild(h('details', { class: 'sugestao' }, h('summary', { text: 'Ver a sugestão do cardápio' }), itensDaRefeicao(ref)));
-  } else card.appendChild(itensDaRefeicao(ref));
-  // "Comi isso" copia a refeição para o diário de hoje; "Comi outra coisa" abre a escolha de alimentos, já nesta refeição
-  card.appendChild(acoesDaRefeicao(ref));
+  const est = estadoDaSugestao(state.diario, data, ref);
+  const comKcal = r.modo !== 'educativo';
+  const aberto = cardAberto(data, id, est, desde);
+  const res = resumoDaRefeicao(ref, r);
+  // "Comi" em cada alimento da sugestão: marca ou desmarca só aquele alimento (views/diario.js)
+  const marcar = (it) => botaoComiDoItem(ref, it, (est.itens.find((x) => x.al === it.id) || {}).marcado === true);
+  const corpoId = 'ref-corpo-' + id;
+  const corpo = h('div', { class: 'col ref-corpo', id: corpoId, hidden: !aberto },
+    h('div', { class: 'row between ref-sug-hd' },
+      h('div', { class: 'comido-rot sug-rot', text: comKcal ? `Sugestão · ${fmtInt(ref.kcal)} kcal` : 'Sugestão' }),
+      h('button', { type: 'button', class: 'btn sm ghost trocar', 'aria-label': `Trocar ${ref.nome.toLowerCase()}`, title: 'Outra sugestão para esta refeição', onClick: () => trocarRefeicao(r, data, ref, opcoes) }, icon('swap'), 'Trocar')),
+    itensDaRefeicao(ref, marcar),
+    botaoDaSugestao(ref),
+    voceComeu(ref, r));
+  let seta = icon(aberto ? 'up' : 'down', 's');
+  const titulo = h('button', { type: 'button', class: 'ref-hd', 'aria-expanded': aberto ? 'true' : 'false', 'aria-controls': corpoId },
+    h('div', { class: 'grow' }, h('h3', { text: ref.nome }), h('div', { class: 'ref-resumo' + (res.feita ? ' feita' : ''), text: res.texto })), seta);
+  titulo.addEventListener('click', () => {
+    // só esconde ou mostra o corpo: nada acima do título muda, então o título fica onde está
+    const abrir = corpo.hidden;
+    corpo.hidden = !abrir;
+    titulo.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+    const nova = icon(abrir ? 'up' : 'down', 's'); seta.replaceWith(nova); seta = nova;
+    // o card recolhido tem menos margem: a rolagem compensa, e o título fica exatamente onde a pessoa tocou
+    const y0 = titulo.getBoundingClientRect().top;
+    const c = titulo.closest('.card'); if (c) c.classList.toggle('recolhida', !abrir);
+    const dy = titulo.getBoundingClientRect().top - y0; if (dy) window.scrollBy(0, dy);
+    guardarEscolha(data, id, abrir);
+  });
+  const card = h('div', { class: 'card refeicao' + (aberto ? '' : ' recolhida'), dataset: { ref: id } }, titulo, corpo);
+  // a pessoa mexeu nesta refeição (marcou, adicionou, trocou): ela não se recolhe sozinha depois do redesenho
+  corpo.addEventListener('click', () => mexidas.add(data + '|' + id), true);
   return card;
 }
-function blocoCardapio(r, treinos) {
+// "Tenho em casa": o que o cardápio usa (comida comum ou só o que há em casa), preferir os mais baratos e trocar o dia
+// todo. Junta numa folha os controles que ficavam soltos antes das refeições.
+function opcoesDoCardapio(r, c) {
+  const hoje = dateKey();
+  const emCasa = limparEmCasa(state.nutri.emCasa);
+  const soCasa = state.nutri.soCasa === true && emCasa.length > 0;
+  const opcoes = { emCasa: soCasa ? emCasa : null };
+  const ajuste = limparAjustes(state.nutri.ajustes)[hoje] || null;
+  const fecharE = (fn) => () => { sh.close(); fn(); };
+  const modoCasa = seg([['comum', 'Comida comum'], ['casa', 'Só o que tenho em casa']], soCasa ? 'casa' : 'comum', (v) => {
+    if (v === 'casa' && !emCasa.length) { sh.close(); escolherEmCasa(); return; }
+    update((s) => { s.nutri.soCasa = v === 'casa'; }); gravarAjuste(hoje, null); sh.close(); refresh();
+  });
+  modoCasa.classList.add('alvo');
+  const barato = r.preco === 'barato';
+  const chipBarato = chipPequeno('Preferir os mais baratos', barato, () => { update((s) => { s.nutri.answers.preco = barato ? 'tanto_faz' : 'barato'; }); sh.close(); refresh(); });
+  chipBarato.classList.add('alvo');
+  // "Outra sugestão" só muda o dia quando há alimentos diferentes; se não houver, avisa
+  const outra = () => {
+    const novo = outraSugestaoDoDia(r, hoje, ajuste, opcoes);
+    if (!novo) { toast(soCasa ? 'Com estes alimentos não há outra combinação. Marque mais itens em casa.' : 'Não há outra combinação com as suas restrições.'); return; }
+    gravarAjuste(hoje, limparAjuste(novo)); refresh();
+  };
+  const sh = sheet({
+    title: 'Tenho em casa',
+    body: h('div', { class: 'col', id: 'opcoes-cardapio' },
+      h('p', { class: 'small muted', text: 'Escolha com o que o cardápio de hoje é montado.' }),
+      modoCasa,
+      btn(emCasa.length ? `Editar o que tenho em casa (${emCasa.length})` : 'Marcar o que tenho em casa', fecharE(escolherEmCasa), 'block ghost alvo', 'edit'),
+      soCasa ? null : h('div', { class: 'col gap-s' }, chipBarato, h('p', { class: 'tiny muted', text: '$ barato · $$ médio · $$$ caro. O preço varia com a região e a época.' })),
+      btn('Outra sugestão para o dia todo', fecharE(outra), 'block ghost alvo', 'refresh'),
+      h('p', { class: 'tiny muted', text: 'Para trocar uma refeição só, use “Trocar” dentro dela.' })),
+    footer: [btn('Fechar', () => sh.close(), 'ghost grow')],
+  });
+  return sh;
+}
+function blocoCardapio(r) {
   const out = [];
   const hoje = dateKey();
   const emCasa = limparEmCasa(state.nutri.emCasa);
@@ -183,24 +277,11 @@ function blocoCardapio(r, treinos) {
   const ajuste = limparAjustes(state.nutri.ajustes)[hoje] || null;
   const c = cardapioDoDia(r, hoje, ajuste, opcoes);
   if (!c) return { out, c };
-  // "Outra sugestão" só muda o dia quando há alimentos diferentes; se não houver, avisa
-  const outra = () => {
-    const novo = outraSugestaoDoDia(r, hoje, ajuste, opcoes);
-    if (!novo) { toast(soCasa ? 'Com estes alimentos não há outra combinação. Marque mais itens em casa.' : 'Não há outra combinação com as suas restrições.'); return; }
-    gravarAjuste(hoje, limparAjuste(novo)); refresh();
-  };
-  out.push(sectionTitle('Cardápio de hoje'));
-  out.push(h('div', { class: 'row par-de-botoes' }, btn('Outra sugestão', outra, 'sm alvo grow', 'refresh'), btn('Semana e compras', () => abrirSemana(r), 'sm alvo grow', 'calendar')));
-  const modoCasa = seg([['comum', 'Comida comum'], ['casa', 'O que tenho em casa']], soCasa ? 'casa' : 'comum', (v) => {
-    if (v === 'casa' && !emCasa.length) { escolherEmCasa(); return; }
-    update((s) => { s.nutri.soCasa = v === 'casa'; }); gravarAjuste(hoje, null); refresh();
-  });
-  modoCasa.classList.add('alvo');
-  out.push(modoCasa);
+  out.push(h('div', { class: 'row par-de-botoes', id: 'ferramentas-cardapio' }, btn('Semana e compras', () => abrirSemana(r), 'sm alvo grow', 'calendar'), btn('Tenho em casa', () => opcoesDoCardapio(r, c), 'sm alvo grow', 'building')));
   if (soCasa) {
     out.push(h('div', { class: 'row between' },
-      h('span', { class: 'small muted grow', text: `Só com os ${emCasa.length} alimentos que você marcou.` }),
-      btn('Editar lista', escolherEmCasa, 'ghost sm alvo', 'edit')));
+      h('span', { class: 'small muted grow', text: `Só com os ${emCasa.length} alimentos que você tem em casa.` }),
+      btn('Mudar', () => opcoesDoCardapio(r, c), 'ghost sm alvo', 'edit')));
     // o que falta para o dia fechar, com a opção mais barata para completar
     if (c.faltas.length) {
       out.push(h('div', { class: 'note warn' }, icon('warn'), h('div', { class: 'col gap-s' },
@@ -209,29 +290,28 @@ function blocoCardapio(r, treinos) {
     }
   }
   if (!c.refeicoes.length) out.push(h('p', { class: 'small muted', text: 'Com o que está marcado não dá para montar uma refeição. Marque mais alimentos.' }));
-  for (const ref of c.refeicoes) out.push(cartaoDaRefeicao(r, ref, hoje, opcoes));
-  if (!soCasa) {
-    const barato = r.preco === 'barato';
-    const chipBarato = chipPequeno('Mais baratos', barato, () => { update((s) => { s.nutri.answers.preco = barato ? 'tanto_faz' : 'barato'; }); refresh(); });
-    chipBarato.classList.add('alvo');
-    out.push(h('div', { class: 'row between' }, h('span', { class: 'tiny muted grow', text: 'Exemplo, não dieta prescrita. $ barato · $$ médio · $$$ caro.' }), chipBarato));
-  }
-  // o que foi comido fora das refeições do cardápio e "Adicionar alimento"
-  out.push(diarioDeHoje(r, c.refeicoes.map((x) => idDaRefeicao(x.nome))));
-  if (c.refeicoes.length) {
-    const falta = faltaDeCarboidrato(r, c);
-    if (falta) out.push(h('p', { class: 'small', text: falta }));
-    const total = acc(`Total do cardápio: ${fmtInt(c.kcal)} kcal · ${Math.round(c.p)} g de proteína`, [
+  // a refeição do horário (ou a próxima); tarde da noite, depois da última do cardápio, a última fica aberta
+  const ids = c.refeicoes.map((x) => idDaRefeicao(x.nome));
+  const agora = ORDEM_REF.indexOf(refeicaoDaHora());
+  const desde = ids.find((x) => ORDEM_REF.indexOf(x) >= agora) || ids[ids.length - 1];
+  for (const ref of c.refeicoes) out.push(cartaoDaRefeicao(r, ref, hoje, opcoes, desde));
+  // o que foi comido em horário fora do cardápio (só se existir)
+  const fora = foraDasRefeicoes(r, c.refeicoes.map((x) => idDaRefeicao(x.nome)));
+  if (fora) out.push(fora);
+  return { out, c };
+}
+// o total do cardápio sugerido (vai para dentro de "Suas metas": é a soma da sugestão, não do que foi comido)
+function totalDoCardapio(r, c) {
+  if (!c || !c.refeicoes.length) return [];
+  const falta = faltaDeCarboidrato(r, c);
+  return [h('h3', { class: 'orient-t', text: 'Total do cardápio sugerido' }),
+    h('div', { id: 'cardapio-total' },
       h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Calorias' }), h('span', { text: `${fmtInt(c.kcal)} kcal (meta ${fmtInt(r.kcal)})` })),
       h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Proteína' }), h('span', { text: `${Math.round(c.p)} g (meta ${r.prot})` })),
       h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Carboidrato' }), h('span', { text: r.corrida ? `${Math.round(c.c)} g (meta ${r.carb})` : `${Math.round(c.c)} g` })),
       h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Gordura' }), h('span', { text: `${Math.round(c.g)} g` })),
-      h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Fibras' }), h('span', { text: `${Math.round(c.fibra)} g` })),
-      h('p', { class: 'tiny muted', text: 'Valores das tabelas TACO, TBCA e USDA. Medidas caseiras aproximadas. O preço varia com a região e a época.' })]);
-    total.id = 'cardapio-total';
-    out.push(total);
-  }
-  return { out, c };
+      h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Fibras' }), h('span', { text: `${Math.round(c.fibra)} g` }))),
+    falta ? h('p', { class: 'small', text: falta }) : null].filter(Boolean);
 }
 
 // ---------- 3. a semana: cardápio de cada dia e lista de compras ----------
@@ -360,20 +440,21 @@ function resultado() {
   const hoje = dateKey();
   let treinos = { musculacao: null, corrida: null, conhecido: false };
   try { treinos = treinosDoDia(state, hoje, hoje); } catch { /* sem treinos conhecidos */ }
-  // cabeçalho em uma linha: o dia de hoje e o cardápio aparecem logo na primeira tela
-  const topo = h('div', { class: 'nutri-topo' }, h('div', { class: 'avatar nutri' }, icon('apple', 's')), h('p', { class: 'tiny muted', text: 'Nutricionista virtual. Orientação educativa: não é prescrição de dieta nem substitui nutricionista.' }));
-  const body = [topo, cartaoObjetivos()].filter(Boolean);
-  // avisos que mudam o que a pessoa deve fazer ficam no alto; os demais cuidados, depois do cardápio
+  const body = [cartaoObjetivos()].filter(Boolean);
+  // avisos que mudam o que a pessoa deve fazer ficam no alto; os demais cuidados vão para "Saiba mais"
   for (const av of r.avisos) if (av.tipo !== 'info') body.push(note(av.tipo, av.texto));
 
-  // 1. hoje  2. cardápio (com o diário em cada refeição)
+  // 1. hoje  2. [Semana e compras] [Tenho em casa]  3. as refeições (sugestão + o que comeu)  4. fora das refeições
   body.push(cartaoDeHoje(r, treinos));
-  const { out: cardapioDeHoje, c } = blocoCardapio(r, treinos);
+  const { out: cardapioDeHoje, c } = blocoCardapio(r);
   body.push(...cardapioDeHoje);
   // sem cardápio (perfis sem números): o diário completo, como antes
   if (!c) body.push(...blocoDiario(r));
 
-  // 3. metas em detalhe e como foram calculadas (fechado)
+  // 5. dias anteriores e a semana (fechado)
+  if (c) body.push(...historicoDoDiario(r));
+
+  // 6. metas em detalhe, como foram calculadas e o total do cardápio sugerido (fechado)
   if (r.modo !== 'educativo') {
     const obj = r.objetivoCalc;
     const peso = textosDoPeso(r);   // perda ou ganho por semana e o que fazer se o peso não mudar
@@ -389,6 +470,8 @@ function resultado() {
         h('div', { class: 'row between' }, h('span', null, h('i', { class: 'dotc g' }), 'Gordura'), h('span', { class: 'bold', text: `${r.gord} g` })),
         h('div', { class: 'row between' }, h('span', { text: 'Fibras' }), h('span', { class: 'bold', text: `pelo menos ${r.fibra} g` })),
         h('div', { class: 'row between' }, h('span', { text: 'Proteína por refeição' }), h('span', { class: 'bold', text: `${r.protRefeicao[0]} a ${r.protRefeicao[1]} g` })))];
+    const macros = macrosDeHoje(r);
+    if (macros) linhas.push(macros);
     if (peso.ritmo) linhas.push(h('p', { class: 'small', text: peso.ritmo }));
     linhas.push(`Você gasta cerca de ${fmtInt(r.gasto)} kcal por dia (${fmtInt(r.tmb)} em repouso). A fórmula é uma estimativa e pode errar 10% ou mais: acompanhe o peso por 2 a 3 semanas e ajuste.`);
     // a corrida nas metas: de onde vêm as calorias e o carboidrato a mais (logic/nutrition.js, orientacaoCorrida)
@@ -400,44 +483,55 @@ function resultado() {
       ? 'A proteína é calculada pelo peso que você teria com IMC 25: o peso acima disso é quase todo gordura e não aumenta essa necessidade.'
       : 'Proteína: a meta por quilo depende do objetivo e de você treinar ou não. A partir dos 65 anos, nunca fica abaixo de 1,2 g por quilo.');
     linhas.push(`IMC: ${dec(r.imc)} (${imcFaixa(r.imc, r.idade)}). É só uma referência: não distingue músculo de gordura.`);
-    const metas = acc('Suas metas e como foram calculadas', linhas);
+    linhas.push(...totalDoCardapio(r, c));
+    const metas = acc(c ? 'Suas metas e o total do cardápio' : 'Suas metas e como foram calculadas', linhas);
     metas.id = 'metas';
     body.push(metas);
   } else {
     body.push(h('p', { class: 'small muted', text: `IMC: ${dec(r.imc)} (${imcFaixa(r.imc, r.idade)}) — só uma referência.` }));
   }
-  // 4. diário dos outros dias e da semana (fechado)
-  if (c) body.push(...historicoDoDiario(r));
 
-  // 5. cuidados de saúde (restrições, pressão alta, conferir as entrevistas)
+  // 7. "Saiba mais": tudo o que é só leitura, numa seção fechada
+  const mais = [];
   const info = r.avisos.filter((av) => av.tipo === 'info');
-  if (info.length) { body.push(sectionTitle('Cuidados para você')); for (const av of info) body.push(note(av.tipo, av.texto)); }
-
-  // 6. orientações gerais
-  body.push(sectionTitle('Como comer bem'));
-  body.push(acc('A base: comida de verdade', [lista([
-    'Faça de alimentos in natura ou minimamente processados a base da alimentação: arroz, feijão, carnes, ovos, leite, frutas, verduras e legumes.',
-    'Use óleos, sal e açúcar em pequenas quantidades ao cozinhar.',
-    'Limite alimentos processados (queijos, pães, conservas) e evite ultraprocessados (refrigerantes, biscoitos recheados, salgadinhos, embutidos, macarrão instantâneo).',
-    'Coma com regularidade e atenção, de preferência sentado à mesa e sem telas.',
-  ]), h('p', { class: 'ref', text: 'Fonte: Guia Alimentar para a População Brasileira (Ministério da Saúde, 2014).' })]));
-  body.push(acc('Monte o prato do almoço e do jantar', [lista([
-    'Metade do prato: salada e legumes variados.',
-    'Um quarto: arroz, macarrão, batata ou mandioca.',
-    'Um quarto: carne, frango, peixe ou ovos (ou tofu, soja e grão-de-bico).',
-    'Feijão, lentilha ou outra leguminosa todos os dias.',
-    'Uma fruta de sobremesa no lugar de doce.',
-  ])]));
-  if (r.modo !== 'educativo') {
-    body.push(acc('Como acompanhar o resultado', [lista([
+  if (info.length) mais.push(acc('Cuidados para você', info.map((av) => note(av.tipo, av.texto))));
+  mais.push(acc('Como comer bem', [
+    h('h3', { class: 'orient-t', text: 'A base: comida de verdade' }),
+    lista([
+      'Faça de alimentos in natura ou minimamente processados a base da alimentação: arroz, feijão, carnes, ovos, leite, frutas, verduras e legumes.',
+      'Use óleos, sal e açúcar em pequenas quantidades ao cozinhar.',
+      'Limite alimentos processados (queijos, pães, conservas) e evite ultraprocessados (refrigerantes, biscoitos recheados, salgadinhos, embutidos, macarrão instantâneo).',
+      'Coma com regularidade e atenção, de preferência sentado à mesa e sem telas.',
+    ]),
+    h('h3', { class: 'orient-t', text: 'O prato do almoço e do jantar' }),
+    lista([
+      'Metade do prato: salada e legumes variados.',
+      'Um quarto: arroz, macarrão, batata ou mandioca.',
+      'Um quarto: carne, frango, peixe ou ovos (ou tofu, soja e grão-de-bico).',
+      'Feijão, lentilha ou outra leguminosa todos os dias.',
+      'Uma fruta de sobremesa no lugar de doce.',
+    ]),
+    ...(r.modo !== 'educativo' ? [h('h3', { class: 'orient-t', text: 'Como acompanhar o resultado' }), lista([
       'Pese-se pelo menos uma vez por semana, de preferência ao acordar, e olhe a tendência: o peso oscila de um dia para o outro.',
-      'Mantenha a mesma meta por pelo menos 2 a 3 semanas antes de mudar.',
-      'Registre o peso na tela Evolução para ver a tendência.',
-    ])]));
-  }
-  body.push(blocoSuplementos(r));
-  body.push(faqBlock(FAQ_NUTRI, 'Pergunte à Nutricionista', 'Ex.: proteína, jejum, pré-treino, creatina'));
+      'Mantenha a mesma meta por pelo menos 2 a 3 semanas antes de mudar (o peso fica na tela Evolução).',
+    ])] : []),
+  ]));
+  if (c) mais.push(acc('Preços dos alimentos', ['$ barato · $$ médio · $$$ caro, ao lado de cada alimento do cardápio. O preço varia com a região e a época. Para o cardápio preferir os mais baratos, toque em “Tenho em casa”.']));
+  mais.push(blocoSuplementos(r));
+  // perguntas frequentes (sem o título próprio: o resumo da seção já diz o que é)
+  const faq = faqBlock(FAQ_NUTRI, 'Perguntas frequentes', 'Ex.: proteína, jejum, pré-treino, creatina');
+  if (faq.firstChild && faq.firstChild.tagName === 'H2') faq.removeChild(faq.firstChild);
+  const perguntas = acc('Perguntas frequentes', [faq]);
+  perguntas.id = 'perguntas-frequentes';
+  mais.push(perguntas);
+  const fontes = [h('p', { class: 'small', text: 'Valores dos alimentos: tabelas TACO, TBCA e USDA. Medidas caseiras aproximadas.' }), h('p', { class: 'ref', text: '• Guia Alimentar para a População Brasileira (Ministério da Saúde, 2014).' })];
+  if (c && modoDoDiario(r, state) !== 'alimentos') fontes.push(fontesDoDiario());
+  mais.push(acc('Fontes', fontes));
+  const saiba = h('details', { class: 'acc', id: 'saiba-mais' }, h('summary', { text: 'Saiba mais (como comer bem, preços, perguntas, fontes)' }), h('div', { class: 'col gap-s' }, ...mais));
+  body.push(saiba);
   body.push(btn('Refazer a entrevista', () => { modo = 'entrevista'; refresh(); window.scrollTo(0, 0); }, 'block ghost', 'edit'));
+  // o aviso educativo, uma vez só, no rodapé
+  body.push(h('p', { class: 'tiny muted center', id: 'aviso-educativo', text: 'Nutricionista virtual: orientação educativa. O cardápio é um exemplo, não dieta prescrita, e não substitui o nutricionista.' }));
   return body;
 }
 

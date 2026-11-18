@@ -159,6 +159,8 @@ export default async (page) => {
     ok(tem, `${caso.nome}: "Não treinei" no dia de hoje`);
     if (!tem) continue;
     ok(await espera('#folha-nao-treinei'), 'a folha abriu');
+    // a folha pergunta o motivo primeiro (views/perdido.js): "Outro" leva à proposta de sempre
+    await page.eval(`const b = document.querySelector('.sheet [data-motivo="outro"]'); if (b) b.click(); await new Promise((r) => setTimeout(r, 250)); return 1;`);
     const folha = await page.eval(`return document.querySelector('.sheet').innerText;`);
     const passar = await page.eval(`const b = [...document.querySelectorAll('.sheet button')].find((x) => /^Passar para/.test(x.textContent.trim())); return b ? b.textContent.trim() : '';`);
     ok(await semRolagem(), 'folha sem rolagem para o lado');

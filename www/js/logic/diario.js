@@ -4,9 +4,15 @@
 //
 // Formato de state.diario:
 //   { dias: [ { data: 'AAAA-MM-DD', itens: [ item, ... ] }, ... ] }        (dias em ordem de data, só os que têm item)
-//   item do catálogo:        { id, ref, al: id de ALIMENTOS, g: gramas (inteiro), m: true se a pessoa informou em medida caseira }
+//   item do catálogo:        { id, ref, al: id de ALIMENTOS, g: gramas (inteiro), m: true se a pessoa informou em medida caseira,
+//                              s: true (só presente quando verdadeiro) se veio de um toque na sugestão do cardápio }
 //   item fora da lista:      { id, ref, nome: texto curto, kcal: inteiro, p: gramas de proteína ou null }
 //   ref = id de REFEICOES (as refeições do cardápio de exemplo e "outro horário"); id = único dentro do dia.
+//
+// O que conta numa refeição é o que a pessoa REALMENTE comeu: os alimentos da sugestão que ela marcou (a refeição inteira
+// ou item por item) + os que ela adicionou à mão. Um alimento da sugestão está "marcado" quando aquele alimento já está
+// naquela refeição do diário — venha do toque na sugestão, de um registro antigo (sem `s`) ou da mão da pessoa —, e por
+// isso nunca entra duas vezes. Adicionar à mão não mexe na sugestão; desmarcar tira o alimento daquela refeição.
 //
 // Cuidados (refs em data/knowledge.js):
 //   - registro alimentar subestima o consumo: nos estudos com água duplamente marcada, o diário fica de 11% a 41% abaixo
@@ -69,7 +75,9 @@ export function limparItem(raw) {
     if (typeof raw.al !== 'string' || !FOOD.has(raw.al)) return null;
     const g = numero(raw.g);
     if (g == null || Math.round(g) < G_MIN || Math.round(g) > G_MAX) return null;
-    return { id, ref, al: raw.al, g: Math.round(g), m: tem(raw, 'm') && raw.m === true };
+    const it = { id, ref, al: raw.al, g: Math.round(g), m: tem(raw, 'm') && raw.m === true };
+    if (tem(raw, 's') && raw.s === true) it.s = true;
+    return it;
   }
   const nome = textoCurto(tem(raw, 'nome') ? raw.nome : '', NOME_MAX);
   const kcal = tem(raw, 'kcal') ? numero(raw.kcal) : null;
@@ -167,18 +175,65 @@ export function apagarItem(diario, data, id) {
   guardar(diario, data, resto);
   return true;
 }
-// "Comi isso": copia uma refeição do cardápio de exemplo ({ nome, itens: [{ id, g }] }) para o diário do dia.
+// "Comi a sugestão toda": copia uma refeição do cardápio de exemplo ({ nome, itens: [{ id, g }] }) para o diário do dia.
 // O alimento que já está naquela refeição do diário não entra de novo (tocar duas vezes não duplica; o que a pessoa
 // lançou à mão é respeitado). Devolve quantos alimentos entraram.
 export function copiarRefeicao(diario, data, refeicao, hoje) {
   if (!isObj(refeicao) || !Array.isArray(refeicao.itens)) return 0;
-  const ref = idDaRefeicao(refeicao.nome);
   let n = 0;
-  for (const x of refeicao.itens) {
-    if (!isObj(x) || itensDoDia(diario, data).some((y) => y.ref === ref && y.al === x.id)) continue;
-    if (gravarItem(diario, data, { ref, al: x.id, g: x.g }, hoje)) n++;
-  }
+  for (const x of refeicao.itens) if (isObj(x) && marcarDaSugestao(diario, data, refeicao, x.id, true, hoje) === 'marcou') n++;
   return n;
+}
+// Um alimento da sugestão, por toque: `comeu` true marca (grava com a quantidade sugerida, se ainda não está naquela
+// refeição), false desmarca (tira esse alimento daquela refeição). Devolve 'marcou', 'ja-estava', 'desmarcou',
+// 'nada' (desmarcar o que não estava) ou '' (inválido: alimento fora da sugestão, data não aceita, dia cheio).
+export function marcarDaSugestao(diario, data, refeicao, al, comeu, hoje) {
+  if (!isObj(diario) || !isObj(refeicao) || !Array.isArray(refeicao.itens) || typeof al !== 'string') return '';
+  const sug = refeicao.itens.find((x) => isObj(x) && x.id === al && FOOD.has(x.id));
+  if (!sug) return '';
+  const ref = idDaRefeicao(refeicao.nome);
+  const doDia = itensDoDia(diario, data);
+  const iguais = doDia.filter((y) => y.ref === ref && y.al === al);
+  if (comeu) {
+    if (iguais.length) return 'ja-estava';
+    return gravarItem(diario, data, { ref, al, g: sug.g, s: true }, hoje) ? 'marcou' : '';
+  }
+  if (!iguais.length) return 'nada';
+  const fora = new Set(iguais.map((y) => y.id));
+  guardar(diario, data, doDia.filter((y) => !fora.has(y.id)));
+  return 'desmarcou';
+}
+// Desmarca a sugestão inteira: tira daquela refeição os alimentos que estão na sugestão; o que foi adicionado à mão e
+// não faz parte da sugestão fica. Devolve quantos itens saíram.
+export function desmarcarRefeicao(diario, data, refeicao) {
+  if (!isObj(diario) || !isObj(refeicao) || !Array.isArray(refeicao.itens) || !dia(data)) return 0;
+  const ref = idDaRefeicao(refeicao.nome);
+  const als = new Set(refeicao.itens.filter((x) => isObj(x) && FOOD.has(x.id)).map((x) => x.id));
+  const doDia = itensDoDia(diario, data);
+  const resto = doDia.filter((y) => !(y.ref === ref && y.al && als.has(y.al)));
+  if (resto.length === doDia.length) return 0;
+  guardar(diario, data, resto);
+  return doDia.length - resto.length;
+}
+// Como está uma refeição sugerida no diário do dia: cada alimento da sugestão com `marcado` (já está naquela refeição) e
+// `itemId` (o registro que o cobre), os alimentos adicionados à mão (`extras`: tudo naquela refeição que não é alimento
+// da sugestão) e se a sugestão inteira foi marcada (`toda`). Só leitura.
+export function estadoDaSugestao(diario, data, refeicao) {
+  const out = { ref: 'outro', itens: [], marcados: 0, extras: [], toda: false, algum: false };
+  if (!isObj(refeicao) || !Array.isArray(refeicao.itens)) return out;
+  out.ref = idDaRefeicao(refeicao.nome);
+  const daRefeicao = itensDoDia(diario, data).filter((y) => y.ref === out.ref);
+  const sugeridos = refeicao.itens.filter((x) => isObj(x) && FOOD.has(x.id));
+  const als = new Set(sugeridos.map((x) => x.id));
+  for (const x of sugeridos) {
+    const reg = daRefeicao.find((y) => y.al === x.id);
+    out.itens.push({ al: x.id, g: x.g, marcado: !!reg, itemId: reg ? reg.id : '' });
+  }
+  out.marcados = out.itens.filter((x) => x.marcado).length;
+  out.extras = daRefeicao.filter((y) => !(y.al && als.has(y.al)));
+  out.toda = out.itens.length > 0 && out.marcados === out.itens.length;
+  out.algum = daRefeicao.length > 0;
+  return out;
 }
 
 // ---------- contas ----------

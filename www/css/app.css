@@ -474,8 +474,37 @@ details.acc > div > ul { margin: 0; }
 .refeicao .itens .kv > :last-child { font-weight: 500; color: var(--muted); font-size: 0.84rem; white-space: nowrap; }
 .refeicao .comido-rot { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ok); margin-top: 2px; }
 .refeicao .diario-item { min-height: 52px; padding: 8px 10px; }
-.refeicao details.sugestao > summary { min-height: 44px; display: flex; align-items: center; color: var(--accent); font-size: 0.88rem; font-weight: 650; cursor: pointer; list-style: none; }
-.refeicao details.sugestao > summary::-webkit-details-marker { display: none; }
+/* Opção A: card da refeição que recolhe ao toque no título; "Sugestão" em cima, "Você comeu" embaixo */
+.refeicao button.ref-hd { width: 100%; min-height: 48px; padding: 2px 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.refeicao button.ref-hd .grow { min-width: 0; }
+.refeicao .ref-resumo { font-size: 0.84rem; color: var(--muted); margin-top: 2px; }
+.refeicao .ref-resumo.feita { color: var(--ok); font-weight: 650; }
+.refeicao .ref-corpo { gap: 6px; }
+.refeicao .ref-corpo[hidden] { display: none; }
+.card.refeicao.recolhida { padding-top: 4px; padding-bottom: 4px; }
+.refeicao .ref-sug-hd { align-items: center; margin-top: 2px; }
+.refeicao .comido-rot.sug-rot { color: var(--muted); margin-top: 0; }
+.refeicao .btn.trocar { min-height: 44px; color: var(--accent); padding: 0 10px; }
+.refeicao .comido { margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--border); }
+#diario-hoje .comido-rot { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ok); }
+.btn.add-alimento { min-height: 44px; color: var(--accent); justify-content: flex-start; }
+details.comido-grupo { border-radius: var(--radius); background: var(--surface-2); }
+details.comido-grupo > summary { display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 8px 10px; cursor: pointer; list-style: none; font-weight: 650; }
+details.comido-grupo > summary::-webkit-details-marker { display: none; }
+details.comido-grupo > .list { padding: 0 6px 6px; }
+#diario.hoje-num .hoje-linha { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 2px 12px; }
+#diario .hoje-kcal { color: var(--muted); font-size: 0.95rem; }
+#diario .hoje-kcal b { color: var(--text); font-size: 1.6rem; font-weight: 800; margin-right: 2px; }
+#diario .hoje-prot { font-size: 0.9rem; color: var(--muted); }
+#aviso-educativo { margin-top: 4px; }
+/* "Comi" em cada alimento da sugestão: contorno quando não marcado; verde, com o visto, quando marcado */
+.refeicao .itens .kv > .sug-dir { display: flex; align-items: center; gap: 8px; flex: none; }
+.refeicao .sug-dir > span { font-weight: 500; color: var(--muted); font-size: 0.84rem; white-space: nowrap; }
+.sug-marca { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; min-width: 64px; padding: 0 10px; border-radius: 999px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 0.84rem; font-weight: 650; cursor: pointer; }
+.sug-marca .ic { opacity: 0.25; }
+.sug-marca.on { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+.sug-marca.on .ic { opacity: 1; }
+.diario-acoes-sug .btn { min-height: 44px; }
 .semana-dia { display: flex; flex-direction: column; gap: 8px; }
 .semana-dia .treino-dia { font-size: 0.86rem; }
 .semana-dia details.acc > summary { min-height: 48px; padding: 10px 12px; }

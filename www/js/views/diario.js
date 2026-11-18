@@ -9,7 +9,7 @@ import { REFS } from '../data/knowledge.js';
 import { medida } from '../logic/nutrition.js';
 import {
   REFEICOES, G_MIN, G_MAX, KCAL_MAX, PROT_MAX, NOME_MAX, MAX_ITENS_DIA, AVISO_DO_REGISTRO, REFS_DO_DIARIO,
-  itensDoDia, gravarItem, apagarItem, copiarRefeicao, idDaRefeicao, refeicaoCopiada, nutrientesDoItem, totaisDoDia,
+  itensDoDia, gravarItem, apagarItem, copiarRefeicao, marcarDaSugestao, desmarcarRefeicao, estadoDaSugestao, idDaRefeicao, nutrientesDoItem, totaisDoDia,
   modoDoDiario, compararComMeta, resumoDaSemana, metaDoDia, somarDias, primeiroDiaDoDiario, lerCalorias, lerProteina, buscarAlimentos,
 } from '../logic/diario.js';
 
@@ -18,7 +18,7 @@ const dec = (n) => String(Math.round(n * 10) / 10).replace('.', ',');
 const diaMes = (data) => `${Number(data.slice(8, 10))}/${data.slice(5, 7)}`;
 const nomeDoDia = (data, hoje) => (data === hoje ? 'Hoje' : data === somarDias(hoje, -1) ? 'Ontem' : fmtDate(data + 'T12:00:00'));
 // refeição mais provável pela hora do relógio (só para já vir marcada; a pessoa troca)
-const refeicaoDaHora = () => { const hr = new Date().getHours(); return hr < 10 ? 'cafe' : hr < 12 ? 'lanche-manha' : hr < 15 ? 'almoco' : hr < 18 ? 'lanche-tarde' : hr < 22 ? 'jantar' : 'ceia'; };
+export const refeicaoDaHora = () => { const hr = new Date().getHours(); return hr < 10 ? 'cafe' : hr < 12 ? 'lanche-manha' : hr < 15 ? 'almoco' : hr < 18 ? 'lanche-tarde' : hr < 22 ? 'jantar' : 'ceia'; };
 
 // dia mostrado no bloco: '' = hoje (acompanha a virada do dia)
 let diaAberto = '';
@@ -133,14 +133,16 @@ export function folhaAlimento({ data, ref, item = null }) {
       raw = { ref: st.ref, al: st.al, g: st.g, m: st.porMedida };
     }
     if (item) raw.id = item.id;
-    if (salvar(data, raw)) { f.close(); refresh(); }
+    // corrigir a quantidade de um alimento marcado na sugestão não muda de onde ele veio
+    if (item && item.s && raw.al === item.al) raw.s = true;
+    if (salvar(data, raw)) { f.close(); redesenharNoLugar(seletorDoCartao(st.ref)); }
   };
   const apagar = async () => {
     const x = nutrientesDoItem(item);
     const sim = await confirmSheet({ title: 'Apagar este alimento?', text: `${x.nome}${x.medida ? ', ' + x.medida : ''}. Não dá para desfazer.`, okLabel: 'Apagar', danger: true });
     if (!sim) return;
     update((s) => { apagarItem(s.diario, data, item.id); });
-    f.close(); refresh();
+    f.close(); redesenharNoLugar(seletorDoCartao(item.ref));
   };
   const f = sheet({
     title: item ? 'Corrigir alimento' : `Adicionar alimento · ${nomeDoDia(data, desenhadoEm).toLowerCase()}`, full: true, body: corpo,
@@ -150,87 +152,156 @@ export function folhaAlimento({ data, ref, item = null }) {
   return f;
 }
 
-// ---------- cardápio de exemplo: "Comi isso" e "Comi outra coisa" ----------
+// ---------- cardápio de exemplo: "Comi" em cada alimento, "Comi tudo isso" e "Comi outra coisa" ----------
 // `refeicao` é uma refeição do cardápio ({ nome, itens: [{ id, g }] }). Os botões valem para o dia de hoje.
-export function acoesDaRefeicao(refeicao) {
+// O que conta é o que a pessoa comeu: os alimentos da sugestão que ela marcou + os que adicionou à mão (logic/diario.js).
+// O botão que marca a sugestão inteira fica sempre junto da sugestão visível — nunca embaixo do que a pessoa já comeu,
+// onde o antigo "Comi isso" parecia confirmar o alimento digitado e somava a refeição sugerida inteira.
+// Redesenha a tela sem tirar do lugar o que a pessoa tocou: o elemento `sel` fica na mesma altura da tela depois do
+// redesenho (o "Você comeu" que cresce acima dele não o empurra para baixo). Sem o elemento, só redesenha.
+export function redesenharNoLugar(sel) {
+  const antes = document.querySelector(sel);
+  const y0 = antes ? antes.getBoundingClientRect().top : null;
+  refresh();
+  const depois = y0 == null ? null : document.querySelector(sel);
+  if (depois) window.scrollBy(0, depois.getBoundingClientRect().top - y0);
+}
+const seletorDoCartao = (ref) => `#conteudo .refeicao[data-ref="${ref}"]`;
+function comiTudo(refeicao, hoje) {
+  if (!mesmoDia(hoje)) return;
+  let n = 0;
+  update((s) => { n = copiarRefeicao(s.diario, hoje, refeicao, hoje); });
+  toast(n ? `Registrado no diário de hoje: ${refeicao.nome}${n < refeicao.itens.length ? ' (sem repetir o que já estava lá)' : ''}.` : 'Não consegui registrar esta refeição.');
+  redesenharNoLugar(seletorDoCartao(idDaRefeicao(refeicao.nome)));
+}
+// "Comi" de um alimento da sugestão (`it` = { id, nome } do cardápio): marca ou desmarca só ele
+export function botaoComiDoItem(refeicao, it, marcado) {
+  const hoje = dateKey();
+  const nome = String(it.nome || '').split(' (')[0];
+  return h('button', {
+    type: 'button', class: 'sug-marca' + (marcado ? ' on' : ''), 'aria-pressed': marcado ? 'true' : 'false',
+    'aria-label': marcado ? `Comi ${nome} (toque para desmarcar)` : `Comi ${nome}`, title: marcado ? 'Marcado como comido. Toque para desmarcar.' : 'Marcar como comido',
+    onClick: () => {
+      if (!mesmoDia(hoje)) return;
+      let r = '';
+      update((s) => { r = marcarDaSugestao(s.diario, hoje, refeicao, it.id, !marcado, hoje); });
+      toast(!r ? 'Não consegui registrar este alimento.' : r === 'desmarcou' ? `${nome}: desmarcado.` : r === 'ja-estava' ? `${nome} já estava em “Você comeu”.` : `${nome}: marcado como comido.`);
+      redesenharNoLugar(`${seletorDoCartao(idDaRefeicao(refeicao.nome))} .itens .kv[data-al="${it.id}"] .sug-marca`);
+    },
+  }, icon('check', 's'), 'Comi');
+}
+// Embaixo da sugestão: "Comi tudo isso" ou, com a sugestão toda marcada, "Desmarcar tudo"
+export function botaoDaSugestao(refeicao) {
   const hoje = dateKey();
   const ref = idDaRefeicao(refeicao.nome);
-  const outra = () => { if (mesmoDia(hoje)) folhaAlimento({ data: hoje, ref }); };
-  // some só quando a refeição SUGERIDA já está no diário; um alimento avulso no mesmo horário não tira o botão
-  if (refeicaoCopiada(state.diario, hoje, refeicao)) {
-    return h('div', { class: 'row between diario-acoes', dataset: { ref } },
-      h('span', { class: 'small muted grow', text: `Registrado no diário de hoje: ${refeicao.nome}.` }),
-      btn('Adicionar mais', outra, 'sm ghost', 'plus'));
+  if (estadoDaSugestao(state.diario, hoje, refeicao).toda) {
+    const desfazer = () => {
+      if (!mesmoDia(hoje)) return;
+      let n = 0;
+      update((s) => { n = desmarcarRefeicao(s.diario, hoje, refeicao); });
+      toast(n ? `${refeicao.nome}: sugestão desmarcada.` : 'Nada para desmarcar.');
+      redesenharNoLugar(seletorDoCartao(ref));
+    };
+    return h('div', { class: 'row diario-acoes-sug', dataset: { ref } }, btn('Desmarcar tudo', desfazer, 'sm ghost grow', 'close'));
   }
-  const comi = () => {
-    if (!mesmoDia(hoje)) return;
-    let n = 0;
-    update((s) => { n = copiarRefeicao(s.diario, hoje, refeicao, hoje); });
-    toast(n ? `Registrado no diário de hoje: ${refeicao.nome}${n < refeicao.itens.length ? ' (sem repetir o que já estava lá)' : ''}.` : 'Não consegui registrar esta refeição.');
-    refresh();
-  };
-  return h('div', { class: 'row par-de-botoes diario-acoes', dataset: { ref } },
-    btn('Comi isso', comi, 'sm grow', 'check'), btn('Comi outra coisa', outra, 'sm ghost grow', 'edit'));
+  return h('div', { class: 'row diario-acoes-sug', dataset: { ref } }, btn('Comi tudo isso', () => comiTudo(refeicao, hoje), 'sm grow', 'check'));
 }
 
 // ---------- diário dentro do cardápio (tela com metas e cardápio) ----------
-// O que foi comido aparece na refeição em que foi comido, junto da sugestão; o que não cabe em nenhuma refeição do
-// cardápio fica em "Outros alimentos de hoje", logo depois das refeições. Dias anteriores e a semana ficam no fim,
-// em seções que abrem ao toque.
+// Cada refeição do cardápio de hoje tem, embaixo da sugestão, o "Você comeu" dela e o próprio "+ Adicionar outro
+// alimento". O que foi comido num horário que não está no cardápio aparece em "Fora das refeições" (só se existir).
 
-// botão de um alimento registrado: tocar abre a correção (e o apagar)
-function botaoDoItem(x, data, hoje, comKcal) {
+// botão de um alimento registrado: tocar abre a correção (e o apagar). `daSugestao`: marcado na sugestão.
+function botaoDoItem(x, data, hoje, comKcal, daSugestao = false) {
   const rotulo = `Corrigir ${x.nome}`;
+  const sub = x.livre ? 'fora da lista' + (comKcal && x.p != null ? ` · ${dec(x.p)} g de proteína` : '') : (daSugestao ? 'da sugestão · ' : '') + x.medida;
   return h('button', { type: 'button', class: 'item diario-item', dataset: { id: x.id }, 'aria-label': rotulo, title: rotulo, onClick: () => { if (mesmoDia(hoje)) folhaAlimento({ data, item: x }); } },
-    h('div', { class: 'grow' }, h('div', { class: 't', text: x.nome }), h('div', { class: 's', text: x.livre ? 'fora da lista' + (comKcal && x.p != null ? ` · ${dec(x.p)} g de proteína` : '') : x.medida })),
+    h('div', { class: 'grow' }, h('div', { class: 't', text: x.nome }), h('div', { class: 's', text: sub })),
     comKcal ? h('span', { class: 'small bold nowrap', text: `${fmtInt(x.kcal)} kcal` }) : null, icon('edit', 's'));
 }
-// Números de hoje para o alto da tela: comido / meta de calorias e de proteína e quanto falta. `r` = calcular().
-// Devolve null quando o perfil não recebe a comparação com meta (a tela usa o blocoDiario completo).
+// Números de hoje para o alto da tela, em poucas linhas: "896 de 1.690 kcal", proteína, barra e quanto falta.
+// `r` = calcular(). Sem meta (modo 'soma'): só o total do dia. Devolve null para quem não recebe números
+// (transtorno alimentar, menores de 18) e para o modo educativo sem diário.
 export function resumoDoDiario(r) {
   const hoje = dateKey();
   const modo = modoDoDiario(r, state);
-  if (modo !== 'meta') return null;
+  if (modo === 'sem' || modo === 'alimentos') return null;
   const cmp = compararComMeta(totaisDoDia(state.diario, hoje), r, state);
+  if (modo === 'soma') return h('div', { class: 'col gap-s hoje-num', id: 'diario', dataset: { dia: hoje, modo } }, h('p', { class: 'small bold', id: 'diario-frase', text: cmp.frase || 'Nada registrado hoje.' }));
   const barra = h('i', { class: 'c' });
   barra.style.width = Math.min(100, Math.max(0, cmp.pct)) + '%';
-  return h('div', { class: 'col gap-s', id: 'diario', dataset: { dia: hoje, modo } },
-    h('div', { class: 'stats two' },
-      h('div', { class: 'stat' }, h('b', { text: `${fmtInt(cmp.kcal)} / ${fmtInt(cmp.metaKcal)}` }), h('span', { text: 'kcal: comido / meta' })),
-      h('div', { class: 'stat' }, h('b', { text: `${cmp.prot} / ${cmp.metaProt} g` }), h('span', { text: 'proteína: comido / meta' }))),
+  return h('div', { class: 'col gap-s hoje-num', id: 'diario', dataset: { dia: hoje, modo } },
+    h('div', { class: 'hoje-linha' },
+      h('div', { class: 'hoje-kcal', id: 'diario-kcal' }, h('b', { text: fmtInt(cmp.kcal) }), ` de ${fmtInt(cmp.metaKcal)} kcal`),
+      h('div', { class: 'hoje-prot', id: 'diario-prot', text: `Proteína ${cmp.prot} de ${cmp.metaProt} g` })),
     h('div', { class: 'macro', role: 'img', 'aria-label': `${cmp.pct}% da meta de calorias do dia` }, barra),
     h('p', { class: 'small' }, h('span', { class: 'bold', id: 'diario-frase', text: cmp.frase }), ' ', h('span', { id: 'diario-proteina', text: cmp.fraseProt })),
     cmp.equivale ? h('p', { class: 'tiny muted', id: 'diario-equivale', text: cmp.equivale }) : null);
 }
-// Alimentos registrados hoje numa refeição do diário (`ref`, ex.: 'almoco'): lista de botões, ou null se não há nenhum.
-export function comidoNaRefeicao(ref, r) {
+// Uma linha para o cabeçalho do card da refeição (aberto ou recolhido): "✓ comeu 289 kcal", "comeu 274 kcal · 1 de 3
+// da sugestão" ou "ainda não". Sem números para quem não recebe calorias.
+export function resumoDaRefeicao(refeicao, r) {
   const hoje = dateKey();
   const comKcal = modoDoDiario(r, state) !== 'alimentos';
-  const tot = totaisDoDia(state.diario, hoje).refeicoes.find((x) => x.ref === ref);
-  if (!tot || !tot.itens.length) return null;
-  const lista = h('div', { class: 'list diario-comido', dataset: { ref } });
-  for (const x of tot.itens) lista.appendChild(botaoDoItem(x, hoje, hoje, comKcal));
-  return h('div', { class: 'col gap-s' }, h('div', { class: 'comido-rot', text: comKcal ? `Você comeu · ${fmtInt(tot.kcal)} kcal` : 'Você comeu' }), lista);
+  const est = estadoDaSugestao(state.diario, hoje, refeicao);
+  if (!est.algum) return { texto: 'ainda não', feita: false };
+  const tot = totaisDoDia(state.diario, hoje).refeicoes.find((x) => x.ref === est.ref);
+  const comeu = comKcal && tot ? `comeu ${fmtInt(tot.kcal)} kcal` : 'comeu';
+  if (est.toda) return { texto: '✓ ' + comeu, feita: true };
+  return { texto: est.marcados ? `${comeu} · ${est.marcados} de ${est.itens.length} da sugestão` : comeu, feita: false };
 }
-// Depois das refeições: o que foi comido fora delas (`refsDoCardapio` = ids das refeições mostradas) e "Adicionar alimento".
-export function diarioDeHoje(r, refsDoCardapio) {
+// "Você comeu" de uma refeição do cardápio de hoje: os alimentos marcados na sugestão (identificados como "da sugestão";
+// a sugestão inteira vira uma linha só) e os adicionados à mão, com o subtotal e "+ Adicionar outro alimento".
+// Nada aparece como se fosse contado duas vezes: o mesmo alimento só tem uma linha aqui, e é ela que soma.
+export function voceComeu(refeicao, r) {
   const hoje = dateKey();
   const comKcal = modoDoDiario(r, state) !== 'alimentos';
-  const tot = totaisDoDia(state.diario, hoje);
-  const card = h('div', { class: 'card col', id: 'diario-hoje' });
-  const fora = tot.refeicoes.filter((x) => !refsDoCardapio.includes(x.ref));
+  const est = estadoDaSugestao(state.diario, hoje, refeicao);
+  const tot = totaisDoDia(state.diario, hoje).refeicoes.find((x) => x.ref === est.ref);
+  const itens = tot ? tot.itens : [];
+  const sugeridos = new Set(est.itens.map((x) => x.al));
+  const daSug = itens.filter((x) => !x.livre && sugeridos.has(x.al));
+  const aMao = itens.filter((x) => !daSug.includes(x));
+  const box = h('div', { class: 'col gap-s comido', dataset: { ref: est.ref } },
+    h('div', { class: 'comido-rot', text: comKcal && itens.length ? `Você comeu · ${fmtInt(tot.kcal)} kcal` : 'Você comeu' }));
+  if (!itens.length) box.appendChild(h('p', { class: 'small muted', text: 'Nada marcado ainda.' }));
+  else {
+    const lista = h('div', { class: 'list diario-comido', dataset: { ref: est.ref } });
+    if (est.toda && daSug.length > 1) {
+      // a sugestão inteira numa linha; tocar mostra os alimentos (para corrigir a quantidade de um deles)
+      const soma = daSug.reduce((s, x) => s + x.kcal, 0);
+      lista.appendChild(h('details', { class: 'comido-grupo' },
+        h('summary', null, h('span', { class: 'grow', text: `${refeicao.nome} da sugestão (${daSug.length} alimentos)` }), comKcal ? h('span', { class: 'small bold nowrap', text: `${fmtInt(soma)} kcal` }) : null),
+        h('div', { class: 'list' }, ...daSug.map((x) => botaoDoItem(x, hoje, hoje, comKcal, true)))));
+    } else for (const x of daSug) lista.appendChild(botaoDoItem(x, hoje, hoje, comKcal, true));
+    for (const x of aMao) lista.appendChild(botaoDoItem(x, hoje, hoje, comKcal));
+    box.appendChild(lista);
+  }
+  box.appendChild(btn('Adicionar outro alimento', () => { if (mesmoDia(hoje)) folhaAlimento({ data: hoje, ref: est.ref }); }, 'ghost block add-alimento', 'plus'));
+  return box;
+}
+// Depois das refeições: o que foi comido em horários que não estão no cardápio (`refsDoCardapio` = ids das refeições
+// mostradas). Só aparece se houver algo.
+export function foraDasRefeicoes(r, refsDoCardapio) {
+  const hoje = dateKey();
+  const comKcal = modoDoDiario(r, state) !== 'alimentos';
+  const fora = totaisDoDia(state.diario, hoje).refeicoes.filter((x) => !refsDoCardapio.includes(x.ref));
+  if (!fora.length) return null;
+  const card = h('div', { class: 'card col', id: 'diario-hoje' }, h('h3', { text: 'Fora das refeições' }));
   for (const ref of fora) {
-    card.appendChild(h('div', { class: 'row between', dataset: { ref: ref.ref } }, h('h3', { text: ref.nome }), comKcal ? h('span', { class: 'small muted nowrap', text: `${fmtInt(ref.kcal)} kcal` }) : null));
+    card.appendChild(h('div', { class: 'row between comido-rot', dataset: { ref: ref.ref } }, h('span', { text: ref.nome }), comKcal ? h('span', { class: 'nowrap', text: `${fmtInt(ref.kcal)} kcal` }) : null));
     const lista = h('div', { class: 'list' });
     for (const x of ref.itens) lista.appendChild(botaoDoItem(x, hoje, hoje, comKcal));
     card.appendChild(lista);
   }
-  if (!fora.length) card.appendChild(h('p', { class: 'small muted', text: tot.n ? 'Comeu algo fora destas refeições? Adicione aqui.' : 'Comeu algo fora do cardápio? Adicione aqui ou use “Comi outra coisa” na refeição.' }));
-  card.appendChild(btn('Adicionar alimento', () => { if (mesmoDia(hoje)) folhaAlimento({ data: hoje }); }, 'primary block', 'plus'));
-  if (comKcal && tot.n) {
-    card.appendChild(h('p', { class: 'tiny muted', id: 'diario-macros', text: `Hoje: carboidrato ${Math.round(tot.c)} g · gordura ${Math.round(tot.gd)} g · fibras ${Math.round(tot.fibra)} g` + (tot.livres ? ` (sem contar ${tot.livres === 1 ? '1 alimento' : tot.livres + ' alimentos'} fora da lista${tot.semProteina ? '; a proteína de ' + (tot.semProteina === 1 ? 'um deles' : tot.semProteina + ' deles') + ' não foi informada' : ''})` : '') + '.' }));
-  }
+  card.appendChild(btn('Adicionar outro alimento', () => { if (mesmoDia(hoje)) folhaAlimento({ data: hoje, ref: 'outro' }); }, 'ghost block add-alimento', 'plus'));
   return card;
+}
+// Carboidrato, gordura e fibras de hoje (vai para "Suas metas"), ou null sem registro / sem calorias.
+export function macrosDeHoje(r) {
+  const tot = totaisDoDia(state.diario, dateKey());
+  if (modoDoDiario(r, state) === 'alimentos' || !tot.n) return null;
+  return h('p', { class: 'small', id: 'diario-macros', text: `Hoje: carboidrato ${Math.round(tot.c)} g · gordura ${Math.round(tot.gd)} g · fibras ${Math.round(tot.fibra)} g` + (tot.livres ? ` (sem contar ${tot.livres === 1 ? '1 alimento' : tot.livres + ' alimentos'} fora da lista${tot.semProteina ? '; a proteína de ' + (tot.semProteina === 1 ? 'um deles' : tot.semProteina + ' deles') + ' não foi informada' : ''})` : '') + '.' });
 }
 // Fim da tela: dias anteriores (de ontem para trás), a semana e o cuidado com os números, em seções fechadas.
 let diaHistorico = ''; // '' = ontem
@@ -259,24 +330,27 @@ export function historicoDoDiario(r) {
     corpo.appendChild(lista);
   }
   corpo.appendChild(btn(`Adicionar alimento em ${diaMes(data)}`, () => { if (mesmoDia(hoje)) folhaAlimento({ data }); }, 'block alvo', 'plus'));
-  const dias = h('details', { class: 'acc', id: 'diario-dias', open: aberto }, h('summary', { text: 'Diário dos dias anteriores' }), corpo);
-  dias.addEventListener('toggle', () => { aberto = dias.open; });
+  // a semana fica dentro de "Dias anteriores" (uma seção fechada a menos no fim da tela)
   const sem = resumoDaSemana(state.diario, hoje, r, state);
   const linhas = h('div');
   for (const d of sem.dias) linhas.appendChild(h('div', { class: 'kv' }, h('span', { class: 'muted', text: nomeDoDia(d.data, hoje) }), h('span', { text: !d.n ? 'sem registro' : comKcal ? `${fmtInt(d.kcal)} kcal · ${d.p} g` : (d.n === 1 ? '1 alimento' : d.n + ' alimentos') })));
   const semana = h('details', { class: 'acc', id: 'diario-semana' }, h('summary', { text: `Últimos 7 dias · ${sem.registrados === 1 ? '1 dia registrado' : sem.registrados + ' dias registrados'}` }),
     h('div', null, sem.frase ? h('p', { class: 'small', text: sem.frase }) : null, linhas,
       comKcal ? h('p', { class: 'tiny muted', id: 'diario-aviso', text: AVISO_DO_REGISTRO }) : null));
-  return [dias, semana, comKcal ? fontes() : null].filter(Boolean);
+  const dias = h('details', { class: 'acc', id: 'diario-dias', open: aberto }, h('summary', { text: 'Dias anteriores' }), h('div', { class: 'col' }, corpo, semana));
+  dias.addEventListener('toggle', () => { aberto = dias.open; });
+  return [dias];
 }
 let aberto = false;
 
 // ---------- bloco "O que comi hoje" ----------
-function fontes() {
+// fontes do diário: soltas (para a seção "Fontes" de "Saiba mais") ou numa seção própria (tela sem cardápio)
+export function fontesDoDiario() {
   const box = h('div', { class: 'col gap-s' });
   for (const k of REFS_DO_DIARIO) if (REFS[k]) box.appendChild(h('p', { class: 'ref', text: '• ' + REFS[k] }));
-  return h('details', { class: 'acc' }, h('summary', { text: 'Fontes do diário' }), box);
+  return box;
 }
+const fontes = () => h('details', { class: 'acc' }, h('summary', { text: 'Fontes do diário' }), fontesDoDiario());
 // `r` = resultado de calcular() (ou null sem entrevista). `aoResponder` abre a entrevista (só aparece sem entrevista).
 export function blocoDiario(r, { aoResponder = null } = {}) {
   const hoje = dateKey();

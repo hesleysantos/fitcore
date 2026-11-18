@@ -21,6 +21,8 @@ import { cartaoCombinado, perguntarCombinado } from './combinado.js';
 import { LOCAIS_DOR, doresAtivas, limparDor, MAX_DORES } from '../logic/dor.js';
 import { botaoChat } from './chat.js';
 import { podeNaEsteira, versaoNaEsteira, naEsteira, marcarEsteira, etapasNaEsteira } from '../logic/esteira.js';
+import { podeMarcarCorrida, corridaPerdidaEm } from '../logic/perdido.js';
+import { botaoNaoCorri, linhaNaoCorrida } from './perdido.js';
 
 let modo = 'auto'; // 'auto' | 'entrevista' | 'proposta'
 const ORDEM = [1, 2, 3, 4, 5, 6, 0];
@@ -133,7 +135,7 @@ function linhaDia(d, data, hoje, feito) {
   return h('button', { class: 'item' + (data === hoje ? ' hoje' : ''), type: 'button', 'data-data': data, onClick: () => go('corrida/dia/' + data) },
     h('div', { class: 'dia-wd', text: DIAS_CURTO[d.wd] }),
     h('div', { class: 'grow' }, h('div', { class: 't', text: d.nome }), h('div', { class: 's', text: d.resumo + (naEsteira(state, data) ? ' · na esteira' : '') + (d.movidaDe ? ` · veio de ${DIAS_LONGO[new Date(d.movidaDe + 'T12:00:00').getDay()].toLowerCase().replace('-feira', '')}` : '') })),
-    feito ? badge('Feita', 'ok') : data === hoje ? badge('Hoje', 'acc') : icon('right', 's muted'));
+    feito ? badge('Feita', 'ok') : corridaPerdidaEm(state, data) ? badge('Não feita', 'warn') : data === hoje ? badge('Hoje', 'acc') : icon('right', 's muted'));
 }
 
 // ---------- proposta ----------
@@ -324,6 +326,9 @@ function painel() {
     const wdHoje = new Date(hoje + 'T12:00:00').getDay();
     const dHoje = sem.dias[wdHoje];
     const treinoHoje = dHoje && dHoje.tipo !== 'descanso';
+    // "Não corri" (views/perdido.js): a corrida de hoje marcada como não feita, ou que mudou de dia
+    const marcaHoje = corridaPerdidaEm(state, hoje);
+    const movidaHoje = !treinoHoje && sem.movidas && sem.movidas[wdHoje] ? sem.movidas[wdHoje] : null;
     // descanso: o próximo treino desta semana, ou da semana que vem
     let proxTxt = '';
     if (!treinoHoje) {
@@ -337,7 +342,9 @@ function painel() {
       h('div', { class: 'row between' }, h('h2', { text: treinoHoje ? `Hoje: ${dHoje.nome}` : 'Hoje: descanso' }), treinoHoje && dHoje.feito ? badge('Feita', 'ok') : null),
       treinoHoje ? h('p', { class: 'small muted', text: dHoje.resumo + (naEsteira(state, hoje) ? ' · na esteira' : '') }) : proxTxt ? h('p', { class: 'small muted', text: proxTxt }) : null,
       provaTxt,
-      treinoHoje ? btn(dHoje.feito ? 'Ver a corrida de hoje' : 'Iniciar', () => go('corrida/dia/' + hoje), (dHoje.feito ? 'ghost' : 'primary') + ' block alvo', dHoje.feito ? 'right' : 'play') : null));
+      marcaHoje && (treinoHoje || movidaHoje) ? linhaNaoCorrida(marcaHoje, String((treinoHoje ? dHoje.nome : movidaHoje.nome) || 'Corrida'), refresh) : null,
+      treinoHoje && !marcaHoje ? btn(dHoje.feito ? 'Ver a corrida de hoje' : 'Iniciar', () => go('corrida/dia/' + hoje), (dHoje.feito ? 'ghost' : 'primary') + ' block alvo', dHoje.feito ? 'right' : 'play') : null,
+      treinoHoje && !dHoje.feito && !marcaHoje && podeMarcarCorrida(state, hoje, hoje) ? h('div', { class: 'perdido-acoes' }, botaoNaoCorri(hoje, refresh)) : null));
   }
   // dúvida ou imprevisto (chuva, juntar com a musculação, dor): o chat do Treinador de corrida (views/chat.js)
   body.push(botaoChat('corrida', 'Perguntar ao treinador de corrida'));

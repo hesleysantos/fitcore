@@ -320,3 +320,121 @@ test('perdido: textos curtos e dia da semana certo', () => {
   assert.deepEqual(p.movs, []); assert.equal(p.motivo, 'sem_dia');
   assert.match(p.texto, /^Não há outro dia livre nesta semana\. O Treino A volta na próxima segunda/);
 });
+
+// ---------- o motivo e a troca de dia na própria folha (1.9) ----------
+test('perdido: o motivo fica na marca, só com as chaves conhecidas, e passa pelo backup', () => {
+  const boa = { tipo: 'musculacao', data: '2026-11-16', planId: 'p1', diaId: 'a', movs: [], em: '2026-11-16T10:00:00.000Z' };
+  for (const m of Object.keys(P.MOTIVOS)) assert.equal(P.limparPerdido({ ...boa, motivo: m }).motivo, m);
+  for (const ruim of ['febre', '<b>', '__proto__', 'constructor', 5, null, '']) assert.ok(!('motivo' in P.limparPerdido({ ...boa, motivo: ruim })), String(ruim));
+  assert.equal(P.limparPerdido({ tipo: 'corrida', data: '2026-11-17', em: '', para: '2026-11-18', motivo: 'chuva' }).motivo, 'chuva');
+  assert.ok(!('motivo' in P.limparPerdido({ tipo: 'troca', data: '2026-11-17', de: '2026-11-18', planId: 'p1', diaId: 'a', em: '', motivo: 'tempo' })), 'a troca não tem motivo');
+  const st = estado([dia('a', FULL)], { 1: 'a' });
+  const txt = JSON.stringify({ app: 'fitcore', v: 1, dados: { ...J(st), perdidos: [{ ...boa, motivo: 'cansaco' }, { tipo: 'corrida', data: '2026-11-17', em: '', motivo: 'xx' }] } });
+  const { dados } = store.readBackup(txt);
+  assert.equal(dados.perdidos[0].motivo, 'cansaco'); assert.ok(!('motivo' in dados.perdidos[1]));
+  assert.deepEqual(store.sanitize(J(dados)).perdidos, dados.perdidos);
+});
+
+test('perdido: as opções de dia — amanhã, outro dia livre e o porquê de cada dia que não dá', () => {
+  const st = estado([dia('a', FULL), dia('b', FULL)], { 1: 'a', 4: 'b' });
+  const o = P.opcoesDeDia(st, D(0), D(0));
+  assert.deepEqual(o.dias.map((d) => d.data), [D(1), D(2), D(3), D(4), D(5), D(6)], 'de amanhã a domingo');
+  const por = Object.fromEntries(o.dias.map((d) => [d.data, d]));
+  assert.ok(por[D(1)].pode && o.melhor === D(1), 'amanhã serve e é a proposta');
+  // quarta fica colada no B de quinta: só dá se o B andar junto
+  if (por[D(2)].pode) assert.ok(por[D(2)].movs.some((x) => x.diaId === 'b' && x.para > D(3)), JSON.stringify(por[D(2)].movs));
+  else assert.equal(por[D(2)].motivo, 'sem_descanso');
+  assert.equal(P.porQueNaoDia({ data: D(2), motivo: 'sem_descanso' }, D(0)), 'Quarta, os mesmos músculos ficariam sem 48 horas de descanso.');
+  assert.match(P.porQueNaoDia({ data: D(1), motivo: 'corrida' }, D(0)), /^Amanhã, o treino de pernas ficaria perto da corrida forte/);
+  // quinta já tem o B: o A vai para quinta só se o B andar (trocar a ordem), sem juntar os dois
+  if (por[D(3)].pode) assert.ok(por[D(3)].movs.length === 2 && por[D(3)].movs[1].diaId === 'b' && por[D(3)].movs[1].para > D(3), JSON.stringify(por[D(3)].movs));
+  else assert.match(P.porQueNaoDia(por[D(3)], D(0)), /já tem o Treino B/);
+  // cada dia possível vira uma marca válida, com o motivo, e a semana segue as regras
+  for (const d of o.dias.filter((x) => x.pode)) {
+    const m = P.novaMarca(st, D(0), D(0), 'mover', '2026-11-16T12:00:00.000Z', { para: d.data, motivo: 'tempo' });
+    assert.equal(m.movs[0].para, d.data); assert.equal(m.motivo, 'tempo');
+    confere({ ...st, perdidos: P.limparPerdidos([m]) }, D(0), 'para ' + d.data);
+  }
+  // a semana em uma linha, antes de confirmar
+  const m = P.novaMarca(st, D(0), D(0), 'mover', '2026-11-16T12:00:00.000Z', { para: D(1) });
+  assert.equal(P.linhaDaSemana(P.comMarca(st, m), D(0)), 'amanhã Treino A · quinta Treino B');
+  assert.equal(P.linhaDaSemana(st, D(0)), 'hoje Treino A · quinta Treino B', 'comMarca não muda o estado');
+});
+
+test('perdido: amanhã já tem treino — passar para amanhã troca a ordem, nunca junta', () => {
+  const st = estado([dia('a', FULL), dia('b', FULL)], { 1: 'a', 2: 'b' });
+  const d = P.opcoesDeDia(st, D(0), D(0)).dias.find((x) => x.data === D(1));
+  assert.ok(d.pode, 'amanhã serve, com o B andando');
+  assert.equal(d.movs.length, 2); assert.equal(d.movs[1].diaId, 'b'); assert.ok(d.movs[1].para >= D(3), 'o B fica a 48 horas do A');
+  assert.match(d.texto, /^Para manter o descanso entre os treinos, o Treino B vai para /);
+  const sem = confere(marcar({ ...st }, D(0), D(0)), D(0), 'troca de ordem');
+  assert.ok(sem.every((x) => !x.diaId || x.diaId === 'a' || x.diaId === 'b'));
+});
+
+test('perdido: dia sem treino e menor de 18 — o porquê de amanhã', () => {
+  const st = estado([dia('a', FULL), dia('b', FULL)], { 1: 'a', 4: 'b' }, { trainer: { answers: { semTreino: ['2'] } } });
+  const o = P.opcoesDeDia(st, D(0), D(0));
+  const ter = o.dias.find((x) => x.data === D(1));
+  assert.equal(ter.motivo, 'bloqueado');
+  assert.equal(P.porQueNaoDia(ter, D(0)), 'Amanhã é um dia em que você não treina.');
+  assert.ok(o.dias.some((x) => x.pode) && o.melhor !== D(1));
+  const jovem = estado([dia('a', SUP), dia('b', INF)], { 1: 'a', 3: 'b' }, { trainer: { answers: { idade: 16 } } });
+  const oj = P.opcoesDeDia(jovem, D(0), D(0));
+  assert.ok(oj.alternado, 'menor de 18: força em dias não seguidos');
+  // cada dia possível deixa o treino que mudou longe de outro treino
+  for (const x of oj.dias.filter((y) => y.pode)) {
+    const sj = P.semanaEfetiva(jovem.plans[0], P.limparPerdidos([P.novaMarca(jovem, D(0), D(0), 'mover', '', { para: x.data })]), SEG);
+    sj.forEach((d, k) => { if (d.veioDe) assert.ok(!(k > 0 && sj[k - 1].diaId) && !(k < 6 && sj[k + 1].diaId), 'colado em ' + d.data); });
+  }
+  assert.match(P.porQueNaoDia({ data: D(1), motivo: 'sem_descanso' }, D(0), true), /dias não seguidos/);
+});
+
+test('perdido: com um problema de saúde que muda o treino, nada é reposto nesses dias (musculação, troca e corrida)', async () => {
+  const { novoProblema } = await import('../www/js/logic/saude-fora.js');
+  const febre = novoProblema('sf1', D(0), { tipo: 'febre', urgente: false, atendimento: false });
+  assert.ok(febre, 'problema válido');
+  const st = estado([dia('a', FULL), dia('b', FULL)], { 1: 'a', 4: 'b' }, { saudeFora: [febre] });
+  assert.ok(P.diasDeSaude(st, D(0), 'musc').has(D(1)), 'a febre vale nos próximos dias');
+  const p = P.propor(st, D(0), D(0));
+  assert.deepEqual(p.movs, []); assert.equal(p.motivo, 'saude');
+  assert.match(p.texto, /problema de saúde/);
+  assert.ok(P.opcoesDeDia(st, D(0), D(0)).dias.every((x) => !x.pode && x.motivo === 'saude'));
+  assert.equal(P.avaliarTroca(st, D(3), D(1), D(1)).motivo, 'saude', 'não traz o treino de outro dia para um dia com febre');
+  // sem o problema, o mesmo estado repõe
+  assert.ok(P.propor({ ...st, saudeFora: [] }, D(0), D(0)).movs.length);
+});
+
+test('perdido: cansaço como motivo — conta na semana; mais de uma semana pede treino mais leve', () => {
+  const st = estado([dia('a', FULL)], { 1: 'a', 4: 'a' });
+  const m = (data, motivo) => ({ tipo: 'musculacao', data, planId: 'p1', diaId: 'a', movs: [], em: data + 'T12:00:00.000Z', motivo });
+  const c1 = P.cansacoRecente({ ...st, perdidos: P.limparPerdidos([m(D(0), 'cansaco'), m(D(3), 'cansaco')]) }, D(3));
+  assert.deepEqual(c1, { n: 2, semana: 2, maisDeUmaSemana: false });
+  const c2 = P.cansacoRecente({ ...st, perdidos: P.limparPerdidos([m(P.somaDias(SEG, -4), 'cansaco'), { tipo: 'corrida', data: D(3), em: '', motivo: 'cansaco' }]) }, D(3));
+  assert.equal(c2.maisDeUmaSemana, true, 'cansaço há 7 dias ou mais (musculação e corrida)');
+  const c3 = P.cansacoRecente({ ...st, perdidos: P.limparPerdidos([m(D(0), 'tempo'), m(D(3), 'viagem')]) }, D(3));
+  assert.equal(c3.n, 0, 'outros motivos não contam');
+});
+
+test('perdido: corrida — opções de dia, a marca com o motivo e o porquê', () => {
+  const corrida = { experiencia: 'iniciante', kmSemana: 15, longoAtual: 5, provas: 'nenhuma', pausa: 'treinando', objetivo: 'saude', dias: ['1', '4'], diaLongo: 'auto', tempo: '45', tempoLongo: '90', aparelho: 'gps', local: 'rua', idade: 31, peso: 78, altura: 176, lesao12m: 'nao', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'] };
+  for (const q of P_CORRIDA) if (!(q.k in corrida) && !(q.se && !q.se(corrida)) && !q.opcional) corrida[q.k] = q.tipo === 'numero' ? (q.padrao ?? q.min) : q.tipo === 'um' ? q.op[0][0] : [q.op[0][0]];
+  const st = estado([], {}, { run: { answers: corrida, aceitoEm: '2026-11-02T10:00:00.000Z', inicio: '2026-11-02', pausadoEm: '' } });
+  const sem = planoDaSemanaEm(st, D(0), SEG);
+  const k0 = [0, 1, 2, 3, 4, 5, 6].find((k) => { const d = sem.dias[(k + 1) % 7]; return d && d.tipo !== 'descanso'; });
+  assert.ok(k0 != null, 'há corrida na semana');
+  const ops = P.opcoesCorrida(st, D(k0), D(k0));
+  assert.ok(ops.every((o) => o.data > D(k0)), 'só para hoje em diante, sem o próprio dia');
+  const ocup = ops.find((o) => o.motivo === 'ocupado');
+  if (ocup) assert.match(P.porQueNaoCorrida(ocup, D(k0)), /já tem corrida\. O app não junta duas/);
+  const livre = ops.find((o) => o.pode);
+  assert.ok(livre, 'algum dia livre recebe a corrida');
+  const m = P.marcaMoverCorrida(st, D(k0), livre.data, D(k0), '2026-11-16T12:00:00.000Z', 'tempo');
+  assert.deepEqual({ para: m.para, motivo: m.motivo }, { para: livre.data, motivo: 'tempo' });
+  const st2 = P.comMarca(st, m);
+  assert.ok(P.linhaDaSemana(st2, D(k0), 'corrida').startsWith(P.nomeDoDia(livre.data, D(k0))), P.linhaDaSemana(st2, D(k0), 'corrida'));
+  assert.equal(P.marcaCorrida(D(k0), '', 'chuva').motivo, 'chuva');
+  // a semana do chat traz o motivo
+  const sc = P.semanaDoChat(P.comMarca(st, P.marcaCorrida(D(k0), '', 'chuva')), D(k0), D(k0));
+  assert.equal(sc[k0].corrida.motivo, 'chuva');
+});
+
