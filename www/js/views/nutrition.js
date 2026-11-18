@@ -1,9 +1,9 @@
 // Tela da Nutricionista virtual.
-// Ordem da tela (opção A escolhida pelo dono): o dia de hoje (comido x meta, água, o que comer em volta do treino) →
-// [Semana e compras] [Tenho em casa] → um card por refeição, com a "Sugestão" em cima ("Comi" em cada alimento e
-// "Comi tudo isso") e o "Você comeu" embaixo (com o próprio "+ Adicionar outro alimento"); cada card recolhe ao toque
-// no título → fora das refeições (só se houver) → dias anteriores → suas metas e o total do cardápio → "Saiba mais"
-// (tudo o que é só leitura) → refazer a entrevista → o aviso educativo, uma linha.
+// Ordem da tela: o dia de hoje (comido x meta, água, o que comer em volta do treino) → [Semana e compras] [Tenho em
+// casa] → um card por refeição, com o "Já comi" em cima (com o próprio "+ Adicionar outro alimento") e a "Sugestão"
+// embaixo, mais leve ("Comi" discreto em cada alimento e "Comi tudo isso"); cada card recolhe ao toque no título →
+// fora das refeições (só se houver) → a linha "Para consultar" → dias anteriores → suas metas e o total do cardápio →
+// "Saiba mais" (tudo o que é só leitura) → refazer a entrevista → o aviso educativo, uma linha.
 import { h, btn, chip, seg, sheet, icon, note, toast, norm, fmtInt, dateKey, DIAS_LONGO } from '../ui.js';
 import { state, update } from '../store.js';
 import { refresh, go } from '../router.js';
@@ -135,7 +135,7 @@ function cartaoDeHoje(r, treinos) {
   return card;
 }
 
-// ---------- 2. as refeições de hoje: "Sugestão" em cima, "Você comeu" embaixo, no mesmo card ----------
+// ---------- 2. as refeições de hoje: "Já comi" em cima, "Sugestão" embaixo, no mesmo card ----------
 // cada alimento: nome e medida caseira à esquerda, gramas à direita ("300 g (10 colheres de sopa cheias)" vira duas partes).
 // Com `marcar` (só no cardápio de hoje), cada alimento ganha o botão "Comi": um toque marca só aquele alimento.
 function itensDaRefeicao(ref, marcar = null) {
@@ -166,7 +166,7 @@ function trocarRefeicao(r, data, ref, opcoes, depois) {
   // o que a pessoa já marcou como comido continua no diário (a troca muda só a sugestão)
   const jaComeu = data === dateKey() && estadoDaSugestao(state.diario, data, ref).algum;
   gravarAjuste(data, novo);
-  toast(`${ref.nome}: nova sugestão, com a mesma meta do dia.${jaComeu ? ' O que você já marcou continua em “Você comeu”.' : ''}`);
+  toast(`${ref.nome}: nova sugestão, com a mesma meta do dia.${jaComeu ? ' O que você já marcou continua em “Já comi”.' : ''}`);
   // na tela do dia, o card trocado fica onde estava
   if (data === dateKey()) redesenharNoLugar(`#conteudo .refeicao[data-ref="${idDaRefeicao(ref.nome)}"]`); else refresh();
   if (depois) depois();
@@ -206,16 +206,19 @@ function cartaoDaRefeicao(r, ref, data, opcoes, desde) {
   const comKcal = r.modo !== 'educativo';
   const aberto = cardAberto(data, id, est, desde);
   const res = resumoDaRefeicao(ref, r);
-  // "Comi" em cada alimento da sugestão: marca ou desmarca só aquele alimento (views/diario.js)
-  const marcar = (it) => botaoComiDoItem(ref, it, (est.itens.find((x) => x.al === it.id) || {}).marcado === true);
+  // "Já comi" em cima (o que conta); a sugestão embaixo, num bloco mais leve. Cada alimento da sugestão tem um "Comi"
+  // discreto: o toque leva o alimento para "Já comi" (ele sai da sugestão) e um aviso rápido confirma (views/diario.js)
+  const restantes = { ...ref, itens: ref.itens.filter((it) => !(est.itens.find((x) => x.al === it.id) || {}).marcado) };
+  const marcar = (it) => botaoComiDoItem(ref, it);
   const corpoId = 'ref-corpo-' + id;
-  const corpo = h('div', { class: 'col ref-corpo', id: corpoId, hidden: !aberto },
+  const rotSug = est.marcados ? 'Resto da sugestão' : comKcal ? `Sugestão · ${fmtInt(ref.kcal)} kcal` : 'Sugestão';
+  const sugestao = h('div', { class: 'col sug-box' },
     h('div', { class: 'row between ref-sug-hd' },
-      h('div', { class: 'comido-rot sug-rot', text: comKcal ? `Sugestão · ${fmtInt(ref.kcal)} kcal` : 'Sugestão' }),
-      h('button', { type: 'button', class: 'btn sm ghost trocar', 'aria-label': `Trocar ${ref.nome.toLowerCase()}`, title: 'Outra sugestão para esta refeição', onClick: () => trocarRefeicao(r, data, ref, opcoes) }, icon('swap'), 'Trocar')),
-    itensDaRefeicao(ref, marcar),
-    botaoDaSugestao(ref),
-    voceComeu(ref, r));
+      h('div', { class: 'comido-rot sug-rot', text: est.toda ? 'Sugestão' : rotSug }),
+      h('button', { type: 'button', class: 'btn sm plain trocar', 'aria-label': `Trocar ${ref.nome.toLowerCase()}`, title: 'Outra sugestão para esta refeição', onClick: () => trocarRefeicao(r, data, ref, opcoes) }, icon('swap'), 'Trocar')),
+    est.toda ? h('p', { class: 'small muted sug-toda', text: 'Você comeu toda a sugestão.' }) : itensDaRefeicao(restantes, marcar),
+    botaoDaSugestao(ref));
+  const corpo = h('div', { class: 'col ref-corpo', id: corpoId, hidden: !aberto }, voceComeu(ref, r), sugestao);
   let seta = icon(aberto ? 'up' : 'down', 's');
   const titulo = h('button', { type: 'button', class: 'ref-hd', 'aria-expanded': aberto ? 'true' : 'false', 'aria-controls': corpoId },
     h('div', { class: 'grow' }, h('h3', { text: ref.nome }), h('div', { class: 'ref-resumo' + (res.feita ? ' feita' : ''), text: res.texto })), seta);
@@ -455,6 +458,8 @@ function resultado() {
   // sem cardápio (perfis sem números): o diário completo, como antes
   if (!c) body.push(...blocoDiario(r));
 
+  // daqui para baixo, só consulta: uma linha separa das refeições
+  body.push(h('div', { class: 'divisor', role: 'separator', id: 'divisor-consulta' }, h('span', { text: 'Para consultar' })));
   // 5. dias anteriores e a semana (fechado)
   if (c) body.push(...historicoDoDiario(r));
 

@@ -18,7 +18,7 @@ import { temCorrida } from '../combinado.js';
 import { doresAtivas } from '../dor.js';
 import { planoAtual, treinoDoDia as corridaDoDia, alertas, analiseRecente, fmtFaixa, textoBloco } from '../corrida.js';
 import { corridaDeHoje, corridaChave, treinoDeHoje, passoJuntar, passoDor, acaoNaoCorrer, passoSemana, diaDe, cap } from './treino.js';
-import { faqDe, nomeDia, noDia, diaValido, segundaDa, somaDia } from './comum.js';
+import { faqDe, nomeDia, noDia, diaValido, segundaDa, somaDia, impedimento } from './comum.js';
 import { FAQ_CORRIDA, TIPOS_TREINO } from '../../data/corrida.js';
 
 // a versão na esteira (logic/esteira.js) é de outro módulo: sem ele, o chat segue com a orientação geral
@@ -441,7 +441,7 @@ export const INTENCOES = [
   },
   {
     id: 'corrida-perdida', coach: 'corrida', titulo: 'Não vou correr hoje', resumo: 'faltar à corrida de hoje', resumoNoDia: 'faltar à corrida', data: true, prioridade: 1,
-    bonus: (i) => (i.datas.some((d) => d.data === i.hoje) && i.datas.some((d) => !d.semana && d.data > i.hoje) && /\b(nao|nem)\b/.test(i.texto) ? 1.5 : 0),
+    bonus: (i) => (i.datas.some((d) => d.data === i.hoje) && i.datas.some((d) => !d.semana && d.data > i.hoje) && /\b(nao|nem)\b/.test(i.texto) ? 1.5 : 0) + (impedimento(i.texto) ? 2.5 : 0),
     palavras: ['nao rola correr', 'nao rola', 'sem correr', 'nao vou correr', 'nao quero correr', 'sem vontade correr', 'nao consigo correr', 'nao posso correr', 'nao vou poder correr', 'nao corri', 'nao deu correr', 'perder correr', 'perdi correr', 'faltar correr', 'pular correr', 'faltar', 'sem tempo correr', 'nao vai dar correr', 'nao vou conseguir correr', 'doente', 'gripado', 'gripe'],
     disponivel: comPlano,
     inicio: passoCorridaPerdida,

@@ -299,13 +299,17 @@ function decisao(coach, texto) {
   if (p.assunto) return { tipo: 'direto', ids: [p.assunto] };
   if (/^Você quer falar sobre/.test(p.texto[0] || '') && r.melhor) return { tipo: 'confirma', ids: [r.melhor.intencao.id] };
   if (p.faqQ) return { tipo: 'faq', ids: [] };
+  // o assunto é do outro treinador: o chat leva até ele
+  if (p.ir && r.deOutro) return { tipo: 'pergunta', ids: [r.deOutro.intencao.id] };
   if (p.opcoes && /É sobre um destes|É isto que|É algum destes/.test(p.texto.join(' '))) return { tipo: 'pergunta', ids: p.opcoes.map((o) => o.valor) };
   return { tipo: 'nada', ids: [], seguranca: /\b(188|192)\b/.test(p.texto.join(' ')) };
 }
 test('frases novas de pessoas comuns (levas 6 e 7, escritas sem ver as palavras-chave): acerto mínimo e poucas respostas de outro assunto', () => {
-  const { leva6, leva7 } = JSON.parse(fs.readFileSync(new URL('./dados/frases-chat.json', import.meta.url), 'utf8'));
-  // leva 7: medida antes do ajuste em 68% (código antigo) e 77% (motor com exemplos); estes limites só protegem de piora
-  for (const [nome, lista, minimo] of [['leva 6', leva6, 0.88], ['leva 7', leva7, 0.80]]) {
+  const { leva6, leva7, leva8, leva9, leva10 } = JSON.parse(fs.readFileSync(new URL('./dados/frases-chat.json', import.meta.url), 'utf8'));
+  // leva 7: medida antes do ajuste em 68% (código antigo) e 77% (motor com exemplos); estes limites só protegem de piora.
+  // levas 8 a 10: só situações contadas, sem pergunta ("to preso no aeroporto"); a 10 não foi usada para ajustar (antes do
+  // ajuste: 53% com a pergunta de volta e 16 de outro assunto; depois: 66% e 13)
+  for (const [nome, lista, minimo, trocaMax] of [['leva 6', leva6, 0.88, 0.05], ['leva 7', leva7, 0.80, 0.05], ['leva 8', leva8, 0.84, 0.05], ['leva 9', leva9, 0.86, 0.05], ['leva 10', leva10, 0.62, 0.10]]) {
     let certo = 0, trocado = 0;
     for (const f of lista) {
       const d = decisao(f.coach, f.texto);
@@ -315,7 +319,7 @@ test('frases novas de pessoas comuns (levas 6 e 7, escritas sem ver as palavras-
       else if (d.tipo === 'direto') trocado++;
     }
     assert.ok(certo / lista.length >= minimo, `${nome}: ${(100 * certo / lista.length).toFixed(1)}% (mínimo ${minimo * 100}%)`);
-    assert.ok(trocado / lista.length <= 0.05, `${nome}: respondeu outro assunto em ${trocado}`);
+    assert.ok(trocado / lista.length <= trocaMax, `${nome}: respondeu outro assunto em ${trocado}`);
   }
 });
 test('exemplos e jeitos: só de assuntos que existem, botões curtos', () => {
@@ -379,4 +383,19 @@ test('sem entender: botões variados que levam aos assuntos (vários jeitos, o m
   const um = conversar('treinador', ['asdf qwer zxcv'])[0].opcoes.map((o) => o.rotulo).join();
   const dois = conversar('treinador', ['oi', 'asdf qwer zxcv'])[1].opcoes.map((o) => o.rotulo).join();
   assert.notEqual(um, dois);
+});
+
+import { doencaDeOutro, cansouDe, impedimento, tempoApertado } from '../www/js/logic/chat/comum.js';
+test('situações contadas: doença de outra pessoa, cansar de algo, o que impede o treino e o tempo apertado', () => {
+  const n = (t) => M.preparar(t);
+  assert.ok(doencaDeOutro(n('minha filha acordou com febre e vou ficar com ela')) && !doencaDeOutro(n('to com febre')) && !doencaDeOutro(n('meu filho e eu estamos com gripe, to com febre')));
+  assert.ok(cansouDe(n('ja faz 3 meses fazendo a msm coisa e to enjoado')) && !cansouDe(n('to enjoado e com dor de barriga')));
+  assert.ok(impedimento(n('peguei plantao hoje')) && impedimento(n('o voo atrasou')) && !impedimento(n('entro no trabalho daqui a 40 minutos')));
+  assert.ok(tempoApertado(n('entro no trabalho daqui a 40 minutos')) && !tempoApertado(n('peguei plantao hoje')));
+  // no chat: a febre da filha leva a faltar ao treino, não às perguntas de saúde de quem escreve
+  const [p] = conversar('treinador', ['minha filha ta com febre e vou ficar em casa com ela hoje']);
+  assert.equal(p.assunto, 'treino-perdido');
+  // "enjoado da mesma coisa" não abre a conversa de enjoo
+  const [q] = conversar('treinador', ['ja faz 3 meses fazendo a msm coisa e to enjoado']);
+  assert.notEqual(q.assunto, 'saude-fora-treino');
 });

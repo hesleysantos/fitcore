@@ -7,6 +7,7 @@
 import { REFS } from '../../data/knowledge.js';
 import { REFS_CORRIDA } from '../../data/corrida.js';
 import { LOCAIS_DOR } from '../dor.js';
+import { doencaDeOutro, cansouDe } from './comum.js';
 import { TIPOS_SAUDE, GRAUS_SAUDE, SINAIS, MAX_SAUDE, proximoPasso, novoProblema, efeitoDoProblema, efeitoDeHoje, sinaisDeEmergencia } from '../saude-fora.js';
 
 export { sinaisDeEmergencia };
@@ -39,6 +40,8 @@ const REGIOES = [
 const TIPO_NO_TEXTO = [
   ['cabeca', /\b(bati|bateu|batida|pancada|trauma|cai|caiu|queda)\b.*\bcabeca\b|\bcabeca\b.*\b(bati|bateu|batida|pancada)\b|\bconcussao\b/],
   ['dor-cabeca', /\b(dor|dores|doendo|doi|latej\w*) (de |na |da )?cabeca\b|\bcabeca (doendo|doi|latej\w*|explodindo)\b|\benxaqueca\b|\bcefaleia\b/],
+  // "enjoado da mesma coisa" é cansar de algo, não enjoo
+  ['', /\b(enjoad[oa]|enjoei|cansad[oa]) (d[aeo]s? )?(mesm[ao]|ficha|treino|rotina|cardapio|comida|frango|dieta)|\bmesma coisa\b.*\benjo/],
   ['estomago', /\bdiarreia\b|\bvomit\w*\b|\bdor (de |na )?barriga\b|\bdor (de |no )?estomago\b|\benjo(o|ado|ada)\b|\bintestino solto\b|\bdesarranjo\b/],
   ['febre', /\bfebre\b|\bfebril\b|\bgripe\b|\bgripad[oa]\b|\bcalafrio\w*\b|\bcovid\b|\bvirose\b|\bdor no corpo\b|\bcorpo doendo\b/],
   ['resfriado', /\bresfria\w*\b|\bcoriza\b|\bnariz (escorrendo|entupido)\b|\bespirr\w*\b|\bgarganta\b|\btosse\b|\btossindo\b/],
@@ -181,8 +184,8 @@ const PALAVRAS = [
 ];
 const titulo = 'Problema de saúde fora do treino';
 export const INTENCOES = [
-  { id: 'saude-fora-treino', coach: 'treinador', titulo, resumo: 'um problema de saúde que não veio do treino (febre, pancada, corte, dor de cabeça...)', palavras: PALAVRAS, prioridade: 3, bonus: (i) => (tipoDoTexto(i.texto) ? 3 : 0), inicio: inicio('treinador') },
-  { id: 'saude-fora-corrida', coach: 'corrida', titulo, resumo: 'um problema de saúde que não veio da corrida (febre, pancada, corte, dor de cabeça...)', palavras: PALAVRAS, prioridade: 3, bonus: (i) => (tipoDoTexto(i.texto) ? 3 : 0), inicio: inicio('corrida') },
+  { id: 'saude-fora-treino', coach: 'treinador', titulo, resumo: 'um problema de saúde que não veio do treino (febre, pancada, corte, dor de cabeça...)', palavras: PALAVRAS, prioridade: 3, bonus: (i) => (tipoDoTexto(i.texto) ? 3 : 0), anula: (i) => doencaDeOutro(i.texto) || cansouDe(i.texto), inicio: inicio('treinador') },
+  { id: 'saude-fora-corrida', coach: 'corrida', titulo, resumo: 'um problema de saúde que não veio da corrida (febre, pancada, corte, dor de cabeça...)', palavras: PALAVRAS, prioridade: 3, bonus: (i) => (tipoDoTexto(i.texto) ? 3 : 0), anula: (i) => doencaDeOutro(i.texto) || cansouDe(i.texto), inicio: inicio('corrida') },
 ];
 // (para testes e para o motor, se quiser mostrar a lista) — os sinais de emergência de cada tipo, em texto corrido
 export const resumoDosSinais = (tipo) => (SINAIS[tipo] && SINAIS[tipo].urgente ? juntar(SINAIS[tipo].urgente) : '');

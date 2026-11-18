@@ -32,6 +32,7 @@
 //   data?: true,                          // o assunto fala de um dia (ganha um pouco com uma data na frase)
 //   resumoNoDia?: 'faltar ao treino',     // resumo com a data: "faltar ao treino na sexta" ('{dia}' = "sexta")
 //   bonus?: ({ datas, hoje, texto, ctx }) => número, // pontos que as palavras não pegam (ex.: dois dias na frase)
+//   anula?: ({ datas, hoje, texto, ctx }) => boolean, // true: o assunto não vale para esta frase (ex.: a febre é da filha)
 //   prioridade?: 0..3,                    // numa frase com dois assuntos, o maior vem primeiro (dor = 3)
 //   exige?: 'exercicio',                  // o assunto fala de UM exercício: sem exercício no texto, vale menos da metade
 // }

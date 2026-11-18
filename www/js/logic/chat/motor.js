@@ -390,7 +390,7 @@ export function semelhancas(texto) {
   }
   return out;
 }
-export const SIM_MIN = 0.3;  // semelhança mínima para somar pontos
+export const SIM_MIN = 0.28; // semelhança mínima para somar pontos
 export const SIM_PESO = 4;   // pontos de uma frase igual a um exemplo
 // pontos extras do assunto (datas da frase e o que as palavras não pegam); erro no assunto não derruba o motor
 function bonus(i, info) {
@@ -443,6 +443,8 @@ export function entender(texto, coach, ctx) {
     const b = bonus(intencao, info);
     const sv = sims[intencao.id] || 0;
     const sp = sv >= SIM_MIN ? SIM_PESO * sv : 0;
+    // assunto que não vale para esta frase (ex.: a doença é de outra pessoa)
+    if (typeof intencao.anula === 'function') { try { if (intencao.anula(info)) return { intencao, sim: 0, pontos: 0 }; } catch { /* sem anulação */ } }
     // assunto que fala de UM exercício ("como faz o stiff?"): sem exercício no texto, vale menos da metade
     if (intencao.exige === 'exercicio' && !ent.exercicio && !(ctx && typeof ctx.ex === 'string' && ctx.ex)) p *= 0.4;
     const extra = p > 0 ? residuo(intencao, toks, usadas) + (toksP ? Math.min(1, 0.3 * pontuar(intencao, toksP)) : 0) : 0;
@@ -457,7 +459,8 @@ export function entender(texto, coach, ctx) {
   let deOutro = null;
   if (!confiante) {
     const outros = rank(Object.keys(COACHES).filter((c) => c !== coach).flatMap((c) => assuntos(c, ctx)));
-    if (claro(outros[0], outros[1]) && (!a || outros[0].pontos >= a.pontos + FOLGA)) deOutro = outros[0];
+    // (com um assunto razoável aqui, a pergunta de volta mostra este; o outro treinador só quando o daqui é fraco)
+    if (claro(outros[0], outros[1]) && (!a || a.pontos < 2 || outros[0].pontos >= a.pontos + 2 * FOLGA)) deOutro = outros[0];
   }
   return { alerta, ranking, melhor: a || null, confiante, direto, deOutro, datas, ent };
 }
@@ -974,7 +977,9 @@ function assuntosDaFrase(texto, coach, ctx) {
     const ok = r.confiante || (a.pontos >= 1 && toks.length <= 3 && toks.some((x) => MARCAS.has(x.c)) && (!b || a.pontos - b.pontos >= 1));
     if (ok && !achados.some((x) => x.intencao.id === a.intencao.id)) achados.push(a);
   }
-  return achados;
+  // o que a frase inteira anula vale para cada pedaço ("faço a mesma coisa há meses e tô enjoado" não é enjoo)
+  const inteira = { texto: preparar(texto), ctx: ctx || {}, datas: [], hoje: ctx && ctx.hoje };
+  return achados.filter((x) => { try { return !(typeof x.intencao.anula === 'function' && x.intencao.anula(inteira)); } catch { return true; } });
 }
 
 // ---------- frases que variam (o conteúdo é o mesmo; muda só o jeito de dizer) ----------

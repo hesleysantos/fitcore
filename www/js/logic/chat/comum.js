@@ -8,6 +8,19 @@ export const textoDaRef = (k) => (typeof k === 'string' && Object.prototype.hasO
 // só as chaves que existem, sem repetir
 export const refsValidas = (l) => [...new Set((Array.isArray(l) ? l : []).filter((k) => textoDaRef(k)))];
 
+// ---------- situações contadas, sem pergunta (texto já normalizado: sem acento, minúsculo) ----------
+// Quem está doente é outra pessoa ("minha filha está com febre"): não é um problema de saúde de quem escreve.
+const OUTRA_PESSOA = /\b(minha|meu|o|a|da|do|na|no) (filh[oa]s?|mae|pai|espos[oa]|marido|mulher|bebe|nenem|namorad[oa]|vo|avo|sogr[oa]|irm[ao]o?|cachorr[oa]|gat[oa]|cunhad[oa]|tia|tio|primo|prima|amig[oa]|crianca|criancas|menino|menina|neto|neta)\b/;
+export const doencaDeOutro = (t) => OUTRA_PESSOA.test(t) && /\b(febre|gripe|gripad[oa]|doente|passou mal|vomit\w*|diarreia|internad[oa]|hospital|virose|dodoi|chorando|machucou)\b/.test(t) && !/\b(eu|to|estou|tou) (tambem |meio |bem |muito )?(com|doente|gripad|febril|mal)\b/.test(t);
+// O que impede de treinar hoje, contado como situação ("peguei plantão", "o voo atrasou", "fiquei até 22h no escritório",
+// "minha filha está com febre e vou ficar com ela"). Não vale quando a pessoa diz quanto tempo tem (isso é pouco tempo).
+const IMPEDE = /\b(plantao|turno|hora extra|serao|preso|presa|atrasou|atrasado|atrasada|voo|aeroporto|rodoviaria|quebrou|pneu|transito|engarrafamento|mudanca|visita|velorio|enterro|casamento|formatura|cuidar|cuidando|fechando|escritorio|ate \d+ ?h?|ate tarde|virei a noite|nao dormi|dormi (\d|duas|tres|mal|pouco)|tenis (rasgou|furou|estragou)|sem tenis|ficar com (ele|ela|eles|elas|meu|minha|o|a))\b/;
+export const impedimento = (t) => (IMPEDE.test(t) || doencaDeOutro(t)) && !/\b(daqui|em) (a )?(\d+|meia|uma|dez|vinte|trinta|quarenta) ?(min|minuto|minutos|hora|horas|h)\b/.test(t);
+// Cansou de algo ("enjoado da mesma coisa", "enjoei do frango"): não é enjoo de estômago
+export const cansouDe = (t) => /\b(enjoad[oa]|enjoei|cansad[oa]|cansei|saturad[oa]) (d[aeo]s? |de ficar |de fazer )?(mesm[ao]|msm|ficha|treino|rotina|cardapio|comida|frango|dieta|isso|so isso)\b|\b(mesm[ao]|msm) coisa\b.*\benjo|\benjo\w* (d[aeo]s? )?(mesm[ao]|msm) coisa\b/.test(t);
+// Pouco tempo contado como situação: "entro no trabalho daqui a 40 min", "tenho que estar no serviço às 6h30"
+export const tempoApertado = (t) => /\b(daqui|em) (a )?(\d+|meia|uma|dez|vinte|trinta|quarenta) ?(min|minuto|minutos|hora|horas|h)\b/.test(t) || /\b(tenho|preciso) (que|de) (estar|ta|tar|chegar|entrar|sair)\b.*\b\d+ ?h/.test(t) || /\bfecha (daqui|em|as|logo)\b/.test(t);
+
 // Um item das perguntas frequentes no formato do Passo (resposta inteira, com as fontes): null se não achar a pergunta.
 export function faqDe(lista, comeco) {
   const it = (Array.isArray(lista) ? lista : []).find((x) => x && typeof x.q === 'string' && x.q.startsWith(comeco));

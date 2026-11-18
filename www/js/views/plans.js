@@ -222,6 +222,7 @@ export function plansView() {
   // ---------- a semana, um cartão por dia, com corrida e musculação em seções separadas ----------
   const hojeWd = semanaVista === 0 ? hojeD.getDay() : -1; // em outra semana nenhum dia é "hoje"
   const dataDe = (wd) => maisDias(segunda, (wd + 6) % 7);
+  const sessaoFeitaEm = (d, k) => state.sessions.find((s) => s.diaId === d.id && dateKey(new Date(s.inicio)) === k) || null;
   const feitoEm = (d, wd) => { const k = dateKey(dataDe(wd)); return state.sessions.some((s) => s.diaId === d.id && dateKey(new Date(s.inicio)) === k); };
   const rotulo = (ic, t, extra) => h('div', { class: 'sec-rot' }, icon(ic, 's'), h('span', { text: t }), extra || null);
   // botão que troca o treino de musculação de um dia (o rótulo diz o dia e o treino atual)
@@ -232,14 +233,15 @@ export function plansView() {
   const acoesPerdido = (b) => h('div', { class: 'perdido-acoes' }, b);
   // `ef` = o dia na semana com as marcas: treino que veio de outro dia mostra de onde veio (no lugar do "Trocar")
   // treino mudado só nesta semana (logic/ajuste-semana.js): a contagem é a da semana, com o selo e o "Desfazer"
-  const blocoTreino = (d0, wd = null, ef = null) => { const dataK = wd != null ? dateKey(dataDe(wd)) : ''; const d = dataK ? { ...d0, itens: itensDoDia(state, plan.id, d0.id, dataK) } : d0; return h('div', { class: 'treino col gap-s', 'data-treino': d.id, ...(ef && ef.veioDe ? { 'data-movido': ef.veioDe } : {}) },
+  const blocoTreino = (d0, wd = null, ef = null) => { const dataK = wd != null ? dateKey(dataDe(wd)) : ''; const d = dataK ? { ...d0, itens: itensDoDia(state, plan.id, d0.id, dataK) } : d0; const feita = dataK ? sessaoFeitaEm(d0, dataK) : null; return h('div', { class: 'treino col gap-s', 'data-treino': d.id, ...(ef && ef.veioDe ? { 'data-movido': ef.veioDe } : {}) },
     h('div', { class: 'row top' },
       h('div', { class: 'grow' }, h('h3', { text: d.nome }), h('div', { class: 'small muted', text: d.foco || 'Sem descrição' }),
         ef && ef.veioDe ? h('div', { class: 'small', text: `Veio de ${nomeDoDia(ef.veioDe, hojeK)}.` }) : null,
         h('div', { class: 'tiny muted mt', text: d.itens.length ? `${plural(d.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(d)} min` : 'Nenhum exercício ainda' })),
       ef && ef.veioDe ? badge('Movido', 'acc') : wd != null ? chipAgenda(wd, d) : h('button', { class: 'chip sm', type: 'button', onClick: () => diaSheet(plan, d) }, 'Definir dia')),
     dataK ? seloSemana(plan.id, d.id, dataK, refresh) : null,
-    h('div', { class: 'row' },
+    // treino já feito neste dia: só "Ver treino" (abre o registro no histórico)
+    feita ? btn('Ver treino', () => go('historico/' + feita.id), 'ghost block', 'right') : h('div', { class: 'row' },
       btn('Editar', () => go(`treino/${plan.id}/${d.id}`), 'ghost grow', 'edit'),
       semanaVista === 0 || wd == null ? btn('Iniciar', () => startSession(plan.id, d.id), 'primary grow', 'play') : null),
     ef && semanaVista === 0 && podeMarcar(state, ef.data, hojeK).pode ? acoesPerdido(botaoNaoTreinei(ef.data, refresh)) : null); };

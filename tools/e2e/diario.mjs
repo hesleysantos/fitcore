@@ -1,11 +1,11 @@
 // Teste de ponta a ponta do diário alimentar, clicando como um usuário: registrar sem entrevista (só o total),
-// cada refeição do cardápio com a sugestão ("Comi" em cada alimento, "Comi tudo isso") em cima e o "Você comeu" embaixo, recolher e abrir o card (o que conta é o que
+// cada refeição do cardápio com o "Já comi" em cima e a sugestão ("Comi" discreto em cada alimento, "Comi tudo isso") embaixo, recolher e abrir o card (o que conta é o que
 // foi marcado + o que foi adicionado à mão, nada em dobro: biscoito no lanche), adicionar pela busca (sem acento nem pontuação, medida
 // caseira e gramas), alimento fora da lista (calorias só em número inteiro), corrigir, apagar (com confirmação),
 // faltam / passou da meta, dias anteriores, semana, recarregar e ver que persistiu, quem não recebe contagem
 // (transtorno alimentar; menores, em qualquer entrevista), a virada do dia com a tela aberta e a tela em 360 px
 // (claro e escuro); "adicionar vários de uma vez" ("Acrescentar" e "Adicionar todos (N)"), a separação "Da sugestão" /
-// "Fora da sugestão" dentro do "Você comeu" e os suplementos e vitaminas do dia (whey com o rótulo, menores, transtorno).
+// "Fora da sugestão" dentro do "Já comi" e os suplementos e vitaminas do dia (whey com o rótulo, menores, transtorno).
 // Uso, com "npm start" rodando: node tools/e2e/navegador.mjs tools/e2e/diario.mjs
 // O relógio da página é fixado (não anda): o roteiro não depende da hora em que roda. HORA=12:30 escolhe a hora
 // simulada (padrão 09:00). Com FOTOS_DIARIO=1, grava fotos em .tools/shots/_diario_*.png.
@@ -58,11 +58,12 @@ export default async (page) => {
   const botoesDe = (ref) => page.eval(`const a = document.querySelector('.diario-acoes-sug[data-ref="${ref}"]'); return a ? [...a.querySelectorAll('.btn')].map((b) => b.textContent.trim()).join('|') : '';`);
   const resumoDe = (ref) => page.eval(`const e = document.querySelector('.refeicao[data-ref="${ref}"] .ref-resumo'); return e ? e.textContent : '';`);
   const abertoDe = (ref) => page.eval(`return document.querySelector('.refeicao[data-ref="${ref}"] .ref-hd').getAttribute('aria-expanded') === 'true' && !document.querySelector('.refeicao[data-ref="${ref}"] .ref-corpo').hidden;`);
-  // "Você comeu" de uma refeição não tem nenhum botão que some a sugestão inteira
+  // "Já comi" de uma refeição não tem nenhum botão que some a sugestão inteira
   const semComiTudoEmbaixo = (ref) => page.eval(`const c = document.querySelector('.refeicao[data-ref="${ref}"] .comido'); return !!c && ![...c.querySelectorAll('.btn')].some((b) => /Comi tudo|Comi isso/.test(b.textContent));`);
   // botões dentro de "Ver a sugestão do cardápio" (quando a refeição já tem algo comido) e o "Comi" de cada alimento da sugestão
   const tocarSug = async (ref, rotulo) => { const achou = await page.eval(`const b = [...document.querySelectorAll('.diario-acoes-sug[data-ref="${ref}"] .btn')].find((e) => e.textContent.trim() === ${JSON.stringify(rotulo)}); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true;`); await page.sleep(450); return achou; };
-  const comiItem = async (ref, al) => page.eval(`const b = document.querySelector('.refeicao[data-ref="${ref}"] .itens .kv[data-al="${al}"] .sug-marca'); if (!b) return null; b.scrollIntoView({ block: 'center' }); const y0 = b.getBoundingClientRect().top; b.click(); await new Promise((r) => setTimeout(r, 450)); const b2 = document.querySelector('.refeicao[data-ref="${ref}"] .itens .kv[data-al="${al}"] .sug-marca'); return { y0, y1: b2 ? b2.getBoundingClientRect().top : null, on: b2 ? b2.getAttribute('aria-pressed') : null };`);
+  // "Comi" de um alimento: ele sai da sugestão e sobe para "Já comi"; o título do card não sai do lugar
+  const comiItem = async (ref, al) => page.eval(`const b = document.querySelector('.refeicao[data-ref="${ref}"] .itens .kv[data-al="${al}"] .sug-marca'); if (!b) return null; b.scrollIntoView({ block: 'center' }); const hd = () => document.querySelector('.refeicao[data-ref="${ref}"] .ref-hd').getBoundingClientRect().top; const y0 = hd(); b.click(); await new Promise((r) => setTimeout(r, 650)); return { y0, y1: hd(), saiu: !document.querySelector('.refeicao[data-ref="${ref}"] .itens .kv[data-al="${al}"]'), toast: (document.querySelector('.toast') || {}).textContent || '' };`);
   const kcalExata = (al, g) => page.eval(`const f = (await import('/js/data/foods.js')).ALIMENTOS.find((x) => x.id === '${al}'); return f.kcal * ${g} / 100;`);
   const tocarEm = async (ref, rotulo) => { const achou = await page.eval(`const b = [...document.querySelectorAll('#conteudo .refeicao[data-ref="${ref}"] .btn')].find((e) => e.textContent.trim() === ${JSON.stringify(rotulo)}); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true;`); await page.sleep(450); return achou; };
   const kcalDe = (al, g) => page.eval(`const f = (await import('/js/data/foods.js')).ALIMENTOS.find((x) => x.id === '${al}'); return Math.round(f.kcal * ${g} / 100);`);
@@ -115,16 +116,19 @@ export default async (page) => {
   // o cardápio de hoje é o do dia (semente pela data), o mesmo que a tela mostra
   const sugerido = await page.eval(`const n = await import('/js/logic/nutrition.js'); const c = n.cardapioDoDia(n.calcular(${JSON.stringify(RESPOSTAS)}), '${hojeKey}'); return Object.fromEntries(c.refeicoes.map((r) => [r.nome, r.itens.map((x) => [x.id, x.g])]));`);
   const cafe = sugerido['Café da manhã'], almoco = sugerido['Almoço'];
-  ok((await botoesDe('cafe')) === 'Comi tudo isso' && (await botoesDe('almoco')) === 'Comi tudo isso' && (await page.eval(`return [...document.querySelectorAll('.refeicao')].every((c) => c.querySelector('.comido .add-alimento') && c.querySelector('.trocar') && c.querySelector('.ref-resumo').textContent === 'ainda não');`)), 'cada refeição tem a sugestão com "Comi tudo isso", "Trocar", o seu "Você comeu" com "+ Adicionar outro alimento" e o resumo "ainda não"');
-  ok(await page.eval(`return [...document.querySelectorAll('.refeicao')].every((c) => c.querySelectorAll('.itens .kv').length === c.querySelectorAll('.itens .sug-marca[aria-pressed="false"]').length);`), 'cada alimento da sugestão tem o seu "Comi", desmarcado');
+  ok((await botoesDe('cafe')) === 'Comi tudo isso' && (await botoesDe('almoco')) === 'Comi tudo isso' && (await page.eval(`return [...document.querySelectorAll('.refeicao')].every((c) => c.querySelector('.comido .add-alimento') && c.querySelector('.trocar') && c.querySelector('.ref-resumo').textContent === 'ainda não');`)), 'cada refeição tem a sugestão com "Comi tudo isso", "Trocar", o seu "Já comi" com "+ Adicionar outro alimento" e o resumo "ainda não"');
+  ok(await page.eval(`return [...document.querySelectorAll('.refeicao')].every((c) => c.querySelectorAll('.itens .kv').length === c.querySelectorAll('.itens .sug-marca').length);`), 'cada alimento da sugestão tem o seu "Comi"');
+  ok(await page.eval(`return [...document.querySelectorAll('.refeicao')].every((c) => c.querySelector('.comido').getBoundingClientRect().top < c.querySelector('.sug-box').getBoundingClientRect().top);`), 'em cada refeição, "Já comi" fica em cima e a sugestão embaixo');
+  ok(await page.eval(`const b = document.querySelector('.sug-marca'); const cs = getComputedStyle(b); return parseFloat(cs.borderTopWidth) === 0 && cs.backgroundColor === 'rgba(0, 0, 0, 0)';`), 'o "Comi" é discreto: sem contorno e sem fundo');
+  ok(await page.eval(`const d = document.getElementById('divisor-consulta'); const refs = [...document.querySelectorAll('.refeicao')]; return !!d && d.textContent === 'Para consultar' && refs.every((c) => c.compareDocumentPosition(d) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(d.compareDocumentPosition(document.getElementById('diario-dias')) & Node.DOCUMENT_POSITION_FOLLOWING) && getComputedStyle(document.getElementById('diario-dias')).backgroundColor !== getComputedStyle(refs[0]).backgroundColor;`), 'depois das refeições, a linha "Para consultar" separa os cards de informação (planos, sem o fundo do card de refeição)');
   await ver('.diario-acoes-sug[data-ref="cafe"]'); await foto('3-cardapio');
   await tocarEm('cafe', 'Comi tudo isso');
   itens = await hoje();
   const doCafe = itens.filter((x) => x.ref === 'cafe');
   ok(doCafe.length === cafe.length && doCafe.every((x, i) => x.al === cafe[i][0] && x.g === cafe[i][1]), `os ${cafe.length} alimentos do café da manhã sugerido foram para o diário`);
-  ok((await aviso()).includes('Registrado no diário de hoje: Café da manhã'), 'avisa que registrou: ' + (await aviso()));
-  ok((await botoesDe('cafe')) === 'Desmarcar tudo' && (await resumoDe('cafe')).startsWith('✓ comeu ') && (await abertoDe('cafe')), 'a refeição copiada oferece "Desmarcar tudo", o título diz "✓ comeu … kcal" e o card continua aberto (não some de baixo do dedo)');
-  ok((await naRefeicao('cafe')).length === cafe.length && (await page.eval(`const g = document.querySelector('.refeicao[data-ref="cafe"] .comido details.comido-grupo'); return !!g && g.querySelector('summary').textContent.includes('(${cafe.length} alimentos)');`)), 'em "Você comeu", a sugestão inteira aparece numa linha só ("Café da manhã da sugestão (N alimentos)"), sem repetir os alimentos um por um');
+  ok((await aviso()).includes('Café da manhã: adicionado em “Já comi”'), 'avisa que registrou: ' + (await aviso()));
+  ok((await botoesDe('cafe')) === 'Desmarcar tudo' && (await resumoDe('cafe')).startsWith('✓ comi ') && (await abertoDe('cafe')), 'a refeição copiada oferece "Desmarcar tudo", o título diz "✓ comi … kcal" e o card continua aberto (não some de baixo do dedo)');
+  ok((await naRefeicao('cafe')).length === cafe.length && (await page.eval(`const g = document.querySelector('.refeicao[data-ref="cafe"] .comido details.comido-grupo'); return !!g && g.querySelector('summary').textContent.includes('(${cafe.length} alimentos)');`)), 'em "Já comi", a sugestão inteira aparece numa linha só ("Café da manhã da sugestão (N alimentos)"), sem repetir os alimentos um por um');
   ok((await page.eval(`return [...document.querySelectorAll('#diario-hoje .diario-item')].map((e) => e.textContent.split(' ')[0] + ' ' + e.textContent.split(' ')[1]).join('|');`)).startsWith('Pão francês') && (await page.eval(`return document.querySelectorAll('#diario-hoje .diario-item').length;`)) === 1, 'em "Outros alimentos de hoje" fica só o pão do lanche da manhã (refeição que não está no cardápio de 4 refeições)');
 
   console.log('4. "+ Adicionar outro alimento" e um alimento avulso no horário do almoço');
@@ -140,11 +144,11 @@ export default async (page) => {
   ok(!!feijao && feijao.g === 200 && feijao.m === false, 'feijão gravado no almoço, 200 g');
   // o alimento adicionado no card aparece na própria refeição (não num bloco solto no alto), com a sugestão à mão
   const almocoNaTela = await naRefeicao('almoco');
-  ok(almocoNaTela.length === 1 && almocoNaTela[0].includes('Feijão carioca cozido'), 'o feijão aparece dentro do almoço, em "Você comeu"');
-  ok(await page.eval(`const c = document.querySelector('.refeicao[data-ref="almoco"]'); return c.querySelectorAll('.itens .sug-marca').length > 1 && c.textContent.includes('Você comeu') && ![...document.querySelectorAll('#diario-hoje .diario-item')].some((e) => e.textContent.includes('Feijão')) && !document.querySelector('#hoje-nutri .diario-item');`), 'o almoço mostra a sugestão (com "Comi") e "Você comeu"; nada vai para o alto nem para outro card');
+  ok(almocoNaTela.length === 1 && almocoNaTela[0].includes('Feijão carioca cozido'), 'o feijão aparece dentro do almoço, em "Já comi"');
+  ok(await page.eval(`const c = document.querySelector('.refeicao[data-ref="almoco"]'); return c.querySelectorAll('.itens .sug-marca').length > 1 && c.textContent.includes('Já comi') && ![...document.querySelectorAll('#diario-hoje .diario-item')].some((e) => e.textContent.includes('Feijão')) && !document.querySelector('#hoje-nutri .diario-item');`), 'o almoço mostra a sugestão (com "Comi") e "Já comi"; nada vai para o alto nem para outro card');
   await ver('.refeicao[data-ref="almoco"]'); await foto('4b-comi-outra-coisa');
   // o defeito do dono: o "Comi isso" ficava embaixo do que a pessoa comeu e somava a sugestão inteira
-  ok((await semComiTudoEmbaixo('almoco')) && (await botoesDe('almoco')) === 'Comi tudo isso', 'com um alimento avulso no almoço, "Comi tudo isso" fica só junto da sugestão; embaixo de "Você comeu" não há botão que some a sugestão');
+  ok((await semComiTudoEmbaixo('almoco')) && (await botoesDe('almoco')) === 'Comi tudo isso', 'com um alimento avulso no almoço, "Comi tudo isso" fica só junto da sugestão; em "Já comi" não há botão que some a sugestão');
   const antesDoAlmoco = (await hoje()).length;
   const novos = almoco.filter(([id]) => id !== 'feijao-carioca-cozido').length;
   ok(await tocarSug('almoco', 'Comi tudo isso'), '"Comi tudo isso" fica dentro da sugestão do cardápio');
@@ -161,17 +165,21 @@ export default async (page) => {
   await naFolha('Adicionar'); await comFolhas(0);
   const kB = await kcalExata('biscoito-cream-cracker', 30);
   ok(Math.abs((await totalDeHoje()) - (k0 + kB)) < 0.01, `o total sobe só o biscoito: +${Math.round(kB)} kcal (não a sugestão do lanche, ${Math.round(kLanche)} kcal)`);
-  ok((await semComiTudoEmbaixo('lanche-tarde')) && (await naRefeicao('lanche-tarde')).length === 1 && (await page.eval(`return document.querySelector('.sheet') === null;`)), 'o lanche mostra o biscoito em "Você comeu", sem botão que some a sugestão embaixo');
-  ok((await resumoDe('lanche-tarde')).startsWith('comeu ') && !(await resumoDe('lanche-tarde')).includes('da sugestão'), 'o título do lanche diz quanto comeu: ' + (await resumoDe('lanche-tarde')));
+  ok((await semComiTudoEmbaixo('lanche-tarde')) && (await naRefeicao('lanche-tarde')).length === 1 && (await page.eval(`return document.querySelector('.sheet') === null;`)), 'o lanche mostra o biscoito em "Já comi", sem botão que some a sugestão embaixo');
+  ok((await resumoDe('lanche-tarde')).startsWith('comi ') && !(await resumoDe('lanche-tarde')).includes('da sugestão'), 'o título do lanche diz quanto comeu: ' + (await resumoDe('lanche-tarde')));
   const [al1, g1] = lanche[0];
   const k1 = await kcalExata(al1, g1);
   const toque = await comiItem('lanche-tarde', al1);
-  ok(toque && toque.on === 'true' && Math.abs(toque.y1 - toque.y0) < 2, `"Comi" em um alimento marca só ele e o botão não sai do lugar (${toque && Math.round(toque.y0)} → ${toque && Math.round(toque.y1)} px)`);
-  ok(Math.abs((await totalDeHoje()) - (k0 + kB + k1)) < 0.01 && (await naRefeicao('lanche-tarde')).length === 2, `o total sobe só esse alimento (+${Math.round(k1)} kcal) e ele aparece em "Você comeu"`);
-  ok((await resumoDe('lanche-tarde')).includes(`1 de ${lanche.length} da sugestão`) && (await page.eval(`return document.querySelectorAll('.refeicao[data-ref="lanche-tarde"] .comido .comido-sec.da-sug .diario-item').length;`)) === 1, 'o título diz "1 de N da sugestão" e o alimento marcado aparece uma vez em "Você comeu", em "Da sugestão"');
+  ok(toque && toque.saiu && Math.abs(toque.y1 - toque.y0) < 2, `"Comi" em um alimento: ele sai da sugestão e o título do card não sai do lugar (${toque && Math.round(toque.y0)} → ${toque && Math.round(toque.y1)} px)`);
+  ok(toque && /: adicionado em “Já comi”\.$/.test(toque.toast), 'aparece o aviso rápido: ' + (toque && toque.toast));
+  ok(Math.abs((await totalDeHoje()) - (k0 + kB + k1)) < 0.01 && (await naRefeicao('lanche-tarde')).length === 2, `o total sobe só esse alimento (+${Math.round(k1)} kcal) e ele aparece em "Já comi"`);
+  ok((await resumoDe('lanche-tarde')).includes(`1 de ${lanche.length} da sugestão`) && (await page.eval(`return document.querySelectorAll('.refeicao[data-ref="lanche-tarde"] .comido .comido-sec.da-sug .diario-item').length;`)) === 1, 'o título diz "1 de N da sugestão" e o alimento marcado aparece uma vez em "Já comi", em "Da sugestão"');
   await ver('.refeicao[data-ref="lanche-tarde"]'); await foto('4c-biscoito-e-um-item');
-  const toque2 = await comiItem('lanche-tarde', al1);
-  ok(toque2 && toque2.on === 'false' && Math.abs((await totalDeHoje()) - (k0 + kB)) < 0.01, 'tocar de novo desmarca: o total volta a ser só o biscoito');
+  // desfazer: tocar no alimento em "Já comi" e apagar; ele volta para a sugestão
+  const nomeAl1 = await page.eval(`return (await import('/js/data/foods.js')).ALIMENTOS.find((x) => x.id === '${al1}').nome;`);
+  ok(await tocarItem(nomeAl1), 'tocar no alimento em "Já comi" abre a correção');
+  await naFolha('Apagar'); await comFolhas(2); await naFolha('Apagar'); await comFolhas(0);
+  ok(Math.abs((await totalDeHoje()) - (k0 + kB)) < 0.01 && (await page.eval(`return !!document.querySelector('.refeicao[data-ref="lanche-tarde"] .itens .kv[data-al="${al1}"]');`)), 'apagado em "Já comi": o total volta a ser só o biscoito e o alimento volta para a sugestão');
   // corrigir a quantidade do biscoito e apagar
   ok(await tocarItem('Biscoito cream cracker'), 'tocar no biscoito abre a correção');
   ok((await passo(1)) === '1,5' && (await conta()).startsWith('45 g'), 'passa para 1,5 porção (45 g)');
@@ -338,7 +346,7 @@ export default async (page) => {
   await relogio(hojeKey, '16:00'); await limparEscolhas();
   await page.reload(1500); await page.goto(B + '#/nutricao', 700);
   ok(!(await abertoDe('cafe')) && !(await abertoDe('almoco')) && (await abertoDe('lanche-tarde')) && (await abertoDe('jantar')), 'às 16:00: café e almoço recolhidos; lanche da tarde e jantar abertos');
-  ok((await resumoDe('cafe')).startsWith('✓ comeu ') && /kcal/.test(await resumoDe('cafe')) && (await resumoDe('lanche-tarde')).startsWith('comeu '), 'recolhido, o título resume: café "' + (await resumoDe('cafe')) + '", lanche "' + (await resumoDe('lanche-tarde')) + '"');
+  ok((await resumoDe('cafe')).startsWith('✓ comi ') && /kcal/.test(await resumoDe('cafe')) && (await resumoDe('lanche-tarde')).startsWith('comi '), 'recolhido, o título resume: café "' + (await resumoDe('cafe')) + '", lanche "' + (await resumoDe('lanche-tarde')) + '"');
   ok(await page.eval(`return [...document.querySelectorAll('.refeicao .ref-hd')].every((b) => b.tagName === 'BUTTON' && b.hasAttribute('aria-expanded') && document.getElementById(b.getAttribute('aria-controls')) && b.getBoundingClientRect().height >= 44);`), 'o título é um botão com aria-expanded, aria-controls e 44 px ou mais de altura');
   const tocarTitulo = (ref) => page.eval(`const b = document.querySelector('.refeicao[data-ref="${ref}"] .ref-hd'); b.scrollIntoView({ block: 'center' }); const y0 = b.getBoundingClientRect().top; b.click(); await new Promise((r) => setTimeout(r, 250)); return Math.abs(document.querySelector('.refeicao[data-ref="${ref}"] .ref-hd').getBoundingClientRect().top - y0) < 1;`);
   ok((await tocarTitulo('almoco')) && (await abertoDe('almoco')), 'tocar no título abre o almoço, e o título não sai do lugar');
@@ -350,7 +358,7 @@ export default async (page) => {
   await tocarEm('cafe', 'Desmarcar tudo');
   ok((await abertoDe('cafe')) && (await resumoDe('cafe')) === 'ainda não', '"Desmarcar tudo" num card aberto: ele continua aberto e diz "ainda não"');
   await tocarEm('cafe', 'Comi tudo isso');
-  ok((await abertoDe('cafe')) && (await resumoDe('cafe')).startsWith('✓ comeu '), '"Comi tudo isso": o card continua aberto (não se recolhe sozinho debaixo do dedo)');
+  ok((await abertoDe('cafe')) && (await resumoDe('cafe')).startsWith('✓ comi '), '"Comi tudo isso": o card continua aberto (não se recolhe sozinho debaixo do dedo)');
   await ver('.refeicao[data-ref="cafe"]'); await foto('11b-recolher');
   await limparEscolhas(); await relogio(hojeKey, HORA); await page.reload(1500); await page.goto(B + '#/nutricao', 700);
 
@@ -423,8 +431,8 @@ export default async (page) => {
   const vis = await page.eval(`const c = document.querySelector('.refeicao[data-ref="almoco"]'); const cs = (e) => getComputedStyle(e); const comido = c.querySelector('.comido');
     const secs = [...comido.querySelectorAll('.comido-sec')].map((e) => [e.classList.contains('da-sug') ? 'da' : 'fora', e.querySelector('.comido-sub').textContent, e.querySelectorAll('.diario-item').length]);
     return { fundo: cs(comido).backgroundColor !== cs(c).backgroundColor, peso: Number(cs(comido.querySelector('.comido-tit')).fontWeight), sugPeso: Number(cs(c.querySelector('.sug-rot')).fontWeight), tamSug: parseFloat(cs(c.querySelector('.sug-rot')).fontSize), tamTit: parseFloat(cs(comido.querySelector('.comido-tit')).fontSize),
-      linha: parseFloat(cs(comido.querySelector('.comido-sec.fora-sug')).borderTopWidth), ordem: c.querySelector('.itens').getBoundingClientRect().top < comido.getBoundingClientRect().top, secs, kcal: comido.querySelector('.comido-kcal') ? comido.querySelector('.comido-kcal').textContent : '' };`);
-  ok(vis.fundo && vis.peso >= 700 && vis.tamTit > vis.tamSug && vis.ordem, '"Você comeu" tem fundo próprio e título maior e em negrito, abaixo da sugestão (mais leve)');
+      linha: parseFloat(cs(comido.querySelector('.comido-sec.fora-sug')).borderTopWidth), ordem: c.querySelector('.sug-box').getBoundingClientRect().top > comido.getBoundingClientRect().top, secs, kcal: comido.querySelector('.comido-kcal') ? comido.querySelector('.comido-kcal').textContent : '' };`);
+  ok(vis.fundo && vis.peso >= 700 && vis.tamTit > vis.tamSug && vis.ordem, '"Já comi" tem fundo próprio e título maior e em negrito, acima da sugestão (mais leve)');
   ok(vis.secs.length === 2 && vis.secs[0][0] === 'da' && vis.secs[0][1].startsWith('Da sugestão') && vis.secs[0][2] === 1 && vis.secs[1][0] === 'fora' && vis.secs[1][1].startsWith('Fora da sugestão') && vis.secs[1][2] === 3 && vis.linha >= 1, 'dentro dele: "Da sugestão" (1) e "Fora da sugestão" (3), com linha entre os dois: ' + JSON.stringify(vis.secs));
   await foto('13-separacao');
 

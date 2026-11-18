@@ -225,7 +225,7 @@ export function folhaAlimento({ data, ref, item = null }) {
 // O botão que marca a sugestão inteira fica sempre junto da sugestão visível — nunca embaixo do que a pessoa já comeu,
 // onde o antigo "Comi isso" parecia confirmar o alimento digitado e somava a refeição sugerida inteira.
 // Redesenha a tela sem tirar do lugar o que a pessoa tocou: o elemento `sel` fica na mesma altura da tela depois do
-// redesenho (o "Você comeu" que cresce acima dele não o empurra para baixo). Sem o elemento, só redesenha.
+// redesenho (o "Já comi" que cresce acima dele não o empurra para baixo). Sem o elemento, só redesenha.
 export function redesenharNoLugar(sel) {
   const antes = document.querySelector(sel);
   const y0 = antes ? antes.getBoundingClientRect().top : null;
@@ -238,24 +238,36 @@ function comiTudo(refeicao, hoje) {
   if (!mesmoDia(hoje)) return;
   let n = 0;
   update((s) => { n = copiarRefeicao(s.diario, hoje, refeicao, hoje); });
-  toast(n ? `Registrado no diário de hoje: ${refeicao.nome}${n < refeicao.itens.length ? ' (sem repetir o que já estava lá)' : ''}.` : 'Não consegui registrar esta refeição.');
+  toast(n ? `${refeicao.nome}: adicionado em “Já comi”${n < refeicao.itens.length ? ' (sem repetir o que já estava lá)' : ''}.` : 'Não consegui registrar esta refeição.');
   redesenharNoLugar(seletorDoCartao(idDaRefeicao(refeicao.nome)));
 }
-// "Comi" de um alimento da sugestão (`it` = { id, nome } do cardápio): marca ou desmarca só ele
-export function botaoComiDoItem(refeicao, it, marcado) {
+// "Comi" de um alimento da sugestão (`it` = { id, nome } do cardápio): o alimento sai da sugestão e sobe para "Já comi",
+// onde pisca de leve; um aviso rápido confirma. Para desfazer, toca-se nele em "Já comi" (corrigir ou apagar).
+const semMovimento = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
+export function botaoComiDoItem(refeicao, it) {
   const hoje = dateKey();
   const nome = String(it.nome || '').split(' (')[0];
-  return h('button', {
-    type: 'button', class: 'sug-marca' + (marcado ? ' on' : ''), 'aria-pressed': marcado ? 'true' : 'false',
-    'aria-label': marcado ? `Comi ${nome} (toque para desmarcar)` : `Comi ${nome}`, title: marcado ? 'Marcado como comido. Toque para desmarcar.' : 'Marcar como comido',
+  const ref = idDaRefeicao(refeicao.nome);
+  let feito = false;
+  const b = h('button', {
+    type: 'button', class: 'sug-marca', 'aria-label': `Comi ${nome}`, title: 'Marcar como comido',
     onClick: () => {
-      if (!mesmoDia(hoje)) return;
-      let r = '';
-      update((s) => { r = marcarDaSugestao(s.diario, hoje, refeicao, it.id, !marcado, hoje); });
-      toast(!r ? 'Não consegui registrar este alimento.' : r === 'desmarcou' ? `${nome}: desmarcado.` : r === 'ja-estava' ? `${nome} já estava em “Você comeu”.` : `${nome}: marcado como comido.`);
-      redesenharNoLugar(`${seletorDoCartao(idDaRefeicao(refeicao.nome))} .itens .kv[data-al="${it.id}"] .sug-marca`);
+      if (feito || !mesmoDia(hoje)) return;
+      feito = true;
+      const linha = b.closest('.kv');
+      const gravar = () => {
+        let r = '';
+        update((s) => { r = marcarDaSugestao(s.diario, hoje, refeicao, it.id, true, hoje); });
+        toast(!r ? 'Não consegui registrar este alimento.' : r === 'ja-estava' ? `${nome} já estava em “Já comi”.` : `${nome}: adicionado em “Já comi”.`);
+        // o título do card fica parado; o alimento aparece em "Já comi", logo abaixo dele
+        redesenharNoLugar(seletorDoCartao(ref));
+        const novo = [...document.querySelectorAll(`${seletorDoCartao(ref)} .comido .diario-item`)].find((e) => e.textContent.includes(nome));
+        if (novo && !semMovimento()) { novo.classList.add('chegou'); setTimeout(() => novo.classList.remove('chegou'), 1400); }
+      };
+      if (linha && !semMovimento()) { linha.classList.add('subindo'); setTimeout(gravar, 220); } else gravar();
     },
   }, icon('check', 's'), 'Comi');
+  return b;
 }
 // Embaixo da sugestão: "Comi tudo isso" ou, com a sugestão toda marcada, "Desmarcar tudo"
 export function botaoDaSugestao(refeicao) {
@@ -269,13 +281,13 @@ export function botaoDaSugestao(refeicao) {
       toast(n ? `${refeicao.nome}: sugestão desmarcada.` : 'Nada para desmarcar.');
       redesenharNoLugar(seletorDoCartao(ref));
     };
-    return h('div', { class: 'row diario-acoes-sug', dataset: { ref } }, btn('Desmarcar tudo', desfazer, 'sm ghost grow', 'close'));
+    return h('div', { class: 'row diario-acoes-sug', dataset: { ref } }, btn('Desmarcar tudo', desfazer, 'sm plain', 'close'));
   }
-  return h('div', { class: 'row diario-acoes-sug', dataset: { ref } }, btn('Comi tudo isso', () => comiTudo(refeicao, hoje), 'sm grow', 'check'));
+  return h('div', { class: 'row diario-acoes-sug', dataset: { ref } }, btn('Comi tudo isso', () => comiTudo(refeicao, hoje), 'sm plain', 'check'));
 }
 
 // ---------- diário dentro do cardápio (tela com metas e cardápio) ----------
-// Cada refeição do cardápio de hoje tem, embaixo da sugestão, o "Você comeu" dela e o próprio "+ Adicionar outro
+// Cada refeição do cardápio de hoje tem, acima da sugestão, o "Já comi" dela e o próprio "+ Adicionar outro
 // alimento". O que foi comido num horário que não está no cardápio aparece em "Fora das refeições" (só se existir).
 
 // botão de um alimento registrado: tocar abre a correção (e o apagar). `daSugestao`: marcado na sugestão.
@@ -313,11 +325,11 @@ export function resumoDaRefeicao(refeicao, r) {
   const est = estadoDaSugestao(state.diario, hoje, refeicao);
   if (!est.algum) return { texto: 'ainda não', feita: false };
   const tot = totaisDoDia(state.diario, hoje).refeicoes.find((x) => x.ref === est.ref);
-  const comeu = comKcal && tot ? `comeu ${fmtInt(tot.kcal)} kcal` : 'comeu';
+  const comeu = comKcal && tot ? `comi ${fmtInt(tot.kcal)} kcal` : 'comi';
   if (est.toda) return { texto: '✓ ' + comeu, feita: true };
   return { texto: est.marcados ? `${comeu} · ${est.marcados} de ${est.itens.length} da sugestão` : comeu, feita: false };
 }
-// "Você comeu" de uma refeição do cardápio de hoje: os alimentos marcados na sugestão (identificados como "da sugestão";
+// "Já comi" de uma refeição do cardápio de hoje: os alimentos marcados na sugestão (identificados como "da sugestão";
 // a sugestão inteira vira uma linha só) e os adicionados à mão, com o subtotal e "+ Adicionar outro alimento".
 // Nada aparece como se fosse contado duas vezes: o mesmo alimento só tem uma linha aqui, e é ela que soma.
 export function voceComeu(refeicao, r) {
@@ -329,13 +341,12 @@ export function voceComeu(refeicao, r) {
   const sugeridos = new Set(est.itens.map((x) => x.al));
   const daSug = itens.filter((x) => !x.livre && sugeridos.has(x.al));
   const aMao = itens.filter((x) => !daSug.includes(x));
-  // "Você comeu" é o bloco de destaque do card (fundo próprio, título e calorias em negrito); a sugestão, acima, fica
+  // "Já comi" é o bloco de destaque do card (fundo próprio, título e calorias em negrito); a sugestão, abaixo, fica
   // mais leve. Dentro dele, "Da sugestão" e "Fora da sugestão" (o que a pessoa adicionou à mão) têm cada um o seu rótulo.
   const box = h('div', { class: 'col comido', dataset: { ref: est.ref } },
-    h('div', { class: 'row between comido-hd' }, h('span', { class: 'comido-tit', text: 'Você comeu' }),
-      comKcal && itens.length ? h('span', { class: 'comido-kcal nowrap', text: `${fmtInt(tot.kcal)} kcal` }) : null));
-  if (!itens.length) box.appendChild(h('p', { class: 'small muted', text: 'Nada marcado ainda.' }));
-  else {
+    h('div', { class: 'row between comido-hd' }, h('span', { class: 'comido-tit', text: 'Já comi' }),
+      comKcal && itens.length ? h('span', { class: 'comido-kcal nowrap', text: `${fmtInt(tot.kcal)} kcal` }) : !itens.length ? h('span', { class: 'small muted', text: 'nada ainda' }) : null));
+  if (itens.length) {
     const secoes = h('div', { class: 'col diario-comido', dataset: { ref: est.ref } });
     const secao = (cls, rotulo, kcal, ...filhos) => h('div', { class: 'col gap-s comido-sec ' + cls },
       h('div', { class: 'row between comido-sub' }, h('span', { text: rotulo }), comKcal ? h('span', { class: 'nowrap', text: `${fmtInt(kcal)} kcal` }) : null), ...filhos);

@@ -30,7 +30,7 @@ import { exercicioDoTexto, numerosDoTexto } from './entidades.js';
 import { passoAjustesDor } from './exercicio.js';
 import { FAQ_TREINO } from '../../data/knowledge.js';
 import { FAQ_CORRIDA } from '../../data/corrida.js';
-import { faqDe, plural, fmtDescanso, juntar, diaValido, nomeDia, noDia, diaCurto, segundaDa } from './comum.js';
+import { faqDe, plural, fmtDescanso, juntar, diaValido, nomeDia, noDia, diaCurto, segundaDa, impedimento, tempoApertado } from './comum.js';
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const emIso = (ctx) => new Date(Number.isFinite(ctx && ctx.agora) ? ctx.agora : Date.now()).toISOString();
@@ -860,7 +860,7 @@ export const INTENCOES = [
   {
     id: 'treino-perdido', coach: 'treinador', titulo: 'Não vou conseguir treinar hoje', resumo: 'faltar ao treino de hoje', resumoNoDia: 'faltar ao treino', data: true, prioridade: 1,
     // "hoje não dá, passa pra amanhã": negação, hoje e outro dia, e um verbo de mudar de dia
-    bonus: (i) => (temHojeEFutura(i) && /\b(nao|nem)\b/.test(i.texto) && /\b(passa\w*|troca\w*|muda\w*|deixa\w*|remarca\w*)\b/.test(i.texto) ? 2.5 : 0) + (faltaDe(i) ? 1.5 : 0),
+    bonus: (i) => (temHojeEFutura(i) && /\b(nao|nem)\b/.test(i.texto) && /\b(passa\w*|troca\w*|muda\w*|deixa\w*|remarca\w*)\b/.test(i.texto) ? 2.5 : 0) + (faltaDe(i) ? 1.5 : 0) + (impedimento(i.texto) ? 2.5 : 0),
     palavras: ['furei treino', 'furei academia', 'nao tem como treinar', 'nao tem como ir', 'nao tem como+treinar', 'furar treino', 'vou furar', 'sem treino', '!viagem', 'so po', 'to morto', 'nao rola', 'nao to afim', 'nao estou afim', 'sem pique', 'nao vou dar conta', 'trabalhar ate tarde', 'trabalho ate tarde', 'nao vou treinar', 'nao vou conseguir treinar', 'nao consigo treinar', 'nao posso treinar', 'nao vou poder treinar', 'nao da treinar', 'nao deu treinar',
       'trocar treino amanha', 'mudar treino amanha', 'treinar amanha lugar', 'trocar dia amanha',
       'nao vou academia', 'nao vou poder ir academia', 'nao posso ir academia', 'nao quero ir academia', 'nao quero treinar', 'sem vontade treinar', 'nao vou conseguir ir academia', 'nao consigo ir academia', 'faltar treino', 'faltar academia', 'perder treino', 'perdi treino', 'pular treino',
@@ -871,6 +871,7 @@ export const INTENCOES = [
   },
   {
     id: 'pouco-tempo', coach: 'treinador', titulo: 'Tenho pouco tempo hoje', resumo: 'um treino mais curto hoje',
+    bonus: (i) => (tempoApertado(i.texto) ? 2.5 : 0),
     palavras: ['!relampago', 'treino relampago', 'versao enxuta', '!enxuta', 'contra relogio', 'agenda apertada', '!rapidinho', 'algo rapido', 'treino rapidinho', 'pouco tempo treino', 'chego tarde', 'tempo curto treino', 'pouco tempo', 'sem tempo', 'nao tenho tempo', 'tempo curto', '!pressa', '!correria', 'treino curto', 'treino rapido', 'versao curta', 'minuto', 'meia hora',
       'so tenho minuto', 'so minuto', 'tenho minuto', 'encurtar treino', 'reduzir treino', 'diminuir treino', 'treino menor', 'tempo apertado', 'dia corrido', 'curto', 'treino mais curto', 'tempo contado'],
     disponivel: (ctx) => !!treinoDeHoje(ctx),
