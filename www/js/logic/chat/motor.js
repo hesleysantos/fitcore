@@ -44,6 +44,7 @@ import { FAQ_CORRIDA } from '../../data/corrida.js';
 import { expandir, conceitos, radical, idfDe, oracoes } from './nlu.js';
 import { exercicioDoTexto, corpoDoTexto, musculosDoTexto, numerosDoTexto } from './entidades.js';
 import { planoAtivo } from '../perdido.js';
+import { EXEMPLOS as FRASES_EX, JEITOS } from './exemplos.js';
 
 // Problemas de saúde fora do treino (pancada, corte, febre...): outro módulo, usado se existir
 let SAUDE = null;
@@ -109,7 +110,7 @@ const GRUPOS = {
   cansado: 'cansado cansada cansaco cansei exausto exausta exaustao esgotado esgotada moido moida acabado acabada quebrado_x fadiga indisposto indisposta desanimado desanimada preguica morto morta destruido destruida',
   dormir: 'dormir dormi dormiu durmo sono insonia acordei',
   peito: 'peito peitoral peitorais',
-  dor: 'dor dores doendo doi doeu doer dolorido dolorida doloridos doloridas latejando lateja latejou machuquei machucado machucada machucou lesao lesionei lesionado lesionada incomodo incomodando incomoda',
+  dor: 'dor dores doendo doi doem doiam doia doeu doer dolorido dolorida doloridos doloridas latejando lateja latejou machuquei machucado machucada machucou lesao lesionei lesionado lesionada incomodo incomodando incomoda',
   // torção e contusão são lesões agudas (pancada, queda): assunto de saúde fora do treino (logic/chat/saude.js)
   torci: 'torci torceu torcao entorse contusao contundi',
   doente: 'doente gripe gripado gripada resfriado resfriada febre virose covid enjoado enjoada',
@@ -198,6 +199,7 @@ function vocabulario() {
   // palavras comuns que não podem virar outra por "erro de digitação" (quinta → quanta)
   for (const w of CONHECIDAS) s.add(w);
   for (const i of intencoes()) for (const p of i.palavras) for (const parte of String(p).split('+')) addFrase(parte);
+  for (const l of Object.values(FRASES_EX)) for (const f of l) addFrase(f);
   vocab = [...s];
   return vocab;
 }
@@ -350,6 +352,46 @@ function residuo(intencao, toks, usadas) {
   });
   return Math.min(1, 0.5 * s);
 }
+// ---------- semelhança com as frases de exemplo (logic/chat/exemplos.js) ----------
+// Cada frase vira o conjunto das formas das palavras (sinônimo → forma de referência → radical), sem as palavras de
+// pergunta e os verbos genéricos; a negação fica ("não vou treinar" ≠ "vou treinar"). Semelhança = cosseno com o peso
+// (idf) de cada forma; a do assunto é a do exemplo mais parecido. Palavra que nenhum exemplo usa pesa metade do máximo.
+// (os dias da semana e "amanhã" ficam de fora: a data já é lida à parte e não diz o assunto)
+const VAGAS_S = new Set([...[...VAGAS_A].filter((w) => !NEGA.has(w) && w !== 'so' && w !== 'mais' && w !== 'menos'), 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo', 'amanha', 'ontem', 'anteontem', 'depois']);
+const formasSim = (texto) => [...new Set(lerTexto(texto).filter((t) => !VAGAS_S.has(t.c)).map((t) => (NEGA.has(t.w) ? 'nao' : t.c.length >= 5 ? radical(t.c) : t.c)))];
+let baseSim = null;
+function baseDeExemplos() {
+  if (baseSim) return baseSim;
+  const docs = [];
+  for (const [id, lista] of Object.entries(FRASES_EX)) for (const f of lista) docs.push({ id, w: formasSim(f) });
+  const idf = idfDe(docs.map((d) => new Set(d.w)));
+  const max = Math.max(1, ...idf.values());
+  const peso = (w) => idf.get(w) || max * 0.5;
+  for (const d of docs) d.n = Math.sqrt(d.w.reduce((a, w) => a + peso(w) ** 2, 0)) || 1;
+  baseSim = { docs, peso };
+  return baseSim;
+}
+// { assunto: semelhança de 0 a 1 } para o texto
+export function semelhancas(texto) {
+  const { docs, peso } = baseDeExemplos();
+  const ws = formasSim(texto);
+  const out = {};
+  if (!ws.length) return out;
+  const set = new Set(ws);
+  const n = Math.sqrt(ws.reduce((a, w) => a + peso(w) ** 2, 0)) || 1;
+  for (const d of docs) {
+    let dot = 0, k = 0;
+    for (const w of d.w) if (set.has(w) && w !== 'nao') { dot += peso(w) ** 2; k++; }
+    if (!dot) continue;
+    for (const w of d.w) if (w === 'nao' && set.has(w)) dot += peso(w) ** 2;
+    // uma palavra só em comum não diz o assunto ("passar no enem" não é "passar a corrida")
+    const c = (dot / (n * d.n)) * (k >= 2 ? 1 : 0.4);
+    if (!(out[d.id] >= c)) out[d.id] = c;
+  }
+  return out;
+}
+export const SIM_MIN = 0.3;  // semelhança mínima para somar pontos
+export const SIM_PESO = 4;   // pontos de uma frase igual a um exemplo
 // pontos extras do assunto (datas da frase e o que as palavras não pegam); erro no assunto não derruba o motor
 function bonus(i, info) {
   let b = 0;
@@ -395,13 +437,16 @@ export function entender(texto, coach, ctx) {
   const pergunta = ors.length >= 2 ? [...ors].reverse().find((o) => o.pergunta) : null;
   const toksP = pergunta ? lerTexto(pergunta.t) : null;
   // o bônus soma aos pontos das palavras; sozinho, só conta quando é forte (2,5 ou mais)
+  const sims = semelhancas(texto);
   const rank = (lista) => lista.map((intencao) => {
     let { pts: p, usadas } = pontuarCom(intencao, toks);
     const b = bonus(intencao, info);
+    const sv = sims[intencao.id] || 0;
+    const sp = sv >= SIM_MIN ? SIM_PESO * sv : 0;
     // assunto que fala de UM exercício ("como faz o stiff?"): sem exercício no texto, vale menos da metade
     if (intencao.exige === 'exercicio' && !ent.exercicio && !(ctx && typeof ctx.ex === 'string' && ctx.ex)) p *= 0.4;
     const extra = p > 0 ? residuo(intencao, toks, usadas) + (toksP ? Math.min(1, 0.3 * pontuar(intencao, toksP)) : 0) : 0;
-    return { intencao, pontos: Math.round((p > 0 ? p + b + extra : b >= LIMIAR ? b : 0) * 100) / 100 };
+    return { intencao, sim: sv, pontos: Math.round(((p > 0 ? p + b + extra : b >= LIMIAR ? b : 0) + sp) * 100) / 100 };
   }).filter((x) => x.pontos > 0).sort((a, b) => b.pontos - a.pontos);
   const ranking = rank(assuntos(coach, ctx));
   const [a, b] = ranking;
@@ -799,7 +844,7 @@ export function respostaAberta(texto, passo, novoAssunto = false) {
     return null;
   }
   if (NAO.test(t)) {
-    const n = ops.find((o) => pol(o) === -1);
+    const n = ops.find((o) => pol(o) === -1 || o.valor === 'nao');
     if (n) return { valor: n.valor };
     if (ops.length && pergSimNao(passo)) { const o = [...ops].reverse().find((x) => !String(x.valor).startsWith('#')); if (o && ops.length === 2) return { valor: o.valor }; }
     return acoes.length || ops.length ? { nao: true } : null;
@@ -816,7 +861,16 @@ export function respostaAberta(texto, passo, novoAssunto = false) {
   }
   if (!ops.length) return null;
   // um assunto novo e bem claro não é resposta a um botão (a não ser o texto do próprio botão)
-  if (novoAssunto) { const o = ops.find((x) => normalizar(x.rotulo) === t0); return o ? { valor: o.valor } : null; }
+  const numDe = (s) => { const m = normalizar(s).match(/\b(\d+)\b/); return m ? Number(m[1]) : null; };
+  // ("30 minutos" para o botão "30 min": o número curto também responde, mesmo parecendo um assunto novo)
+  if (novoAssunto) { const n0 = lerTexto(texto).length <= 3 ? numDe(t0) : null; const o = ops.find((x) => normalizar(x.rotulo) === t0) || (n0 != null ? ops.find((x) => numDe(x.rotulo) === n0) : null); return o ? { valor: o.valor } : null; }
+  // "a primeira", "a segunda opção", "a última": a posição do botão (só com botões sem números, onde "2" seria um valor)
+  const comNumero = ops.filter((o) => numDe(o.rotulo) != null && !String(o.valor).startsWith('#'));
+  const ord = t0.match(/^(?:(?:a|o|e|quero|prefiro|escolho|vou de|fico com)\s+)?(primeir[ao]|segund[ao]|terceir[ao]|quart[ao]|ultim[ao]|penultim[ao])(?:\s+(?:opcao|opcoes|alternativa|botao|ai|mesmo|mesma|pfv|por favor))?$/);
+  if (ord && !ops.some((o) => normalizar(o.rotulo).includes(ord[1].slice(0, -1)))) {
+    const pos = { primeir: 0, segund: 1, terceir: 2, quart: 3, ultim: ops.length - 1, penultim: ops.length - 2 }[ord[1].slice(0, -1)];
+    if (pos != null && ops[pos]) return { valor: ops[pos].valor };
+  }
   // o texto de um botão: palavras em comum (com sinônimos e erro de digitação), números ("30" → "30 min") e dias
   const conteudo = (s) => lerTexto(s).map((x) => x.c).filter((w) => !GENERICAS_OP.has(w));
   const tw = conteudo(texto);
@@ -827,8 +881,16 @@ export function respostaAberta(texto, passo, novoAssunto = false) {
     return { o, n, de: ow.size };
   }).sort((a, b) => b.n - a.n || a.de - b.de);
   const [a, b] = notas;
-  if (!a || a.n < 1 || (b && b.n === a.n) || (tw.length > 2 && a.n / tw.length < 0.75)) return null;
-  return { valor: a.o.valor };
+  if (a && a.n >= 1 && !(b && b.n === a.n) && !(tw.length > 2 && a.n / tw.length < 0.75)) return { valor: a.o.valor };
+  // um número que não é de nenhum botão ("uns 25", "tenho 35 min") com botões de números (20, 30, 45 min): o maior que
+  // cabe no número dito (com menos tempo do que o botão, o treino não caberia); abaixo de todos, o menor
+  const n = numDe(t0);
+  if (n != null && comNumero.length >= 2 && tw.length <= 4 && !ops.some((o) => numDe(o.rotulo) === n)) {
+    const cabem = comNumero.filter((o) => numDe(o.rotulo) <= n).sort((x, y) => numDe(y.rotulo) - numDe(x.rotulo));
+    const o = cabem[0] || [...comNumero].sort((x, y) => numDe(x.rotulo) - numDe(y.rotulo))[0];
+    return { valor: o.valor };
+  }
+  return null;
 }
 
 // ---------- continuação ("e amanhã?", "e a corrida?", "e no agachamento?") ----------
@@ -896,6 +958,8 @@ function continuar(texto, coach, ctx, mem, datas, ent) {
 // ---------- mensagem com dois assuntos ----------
 const SEPARA = /\s*(?:[,;.!?]+|\b(?:e|mas|porem|so que|alem disso|tambem|porque|pois|aí|ai)\b)\s*/;
 const MARCAS = new Set(['chuva', 'dor', 'doente', 'cansado', 'esteira', 'viagem', 'dormir']);
+// assuntos que só dizem o que tem no dia ou na semana
+const SO_O_DIA = new Set(['qual-treino', 'semana', 'duracao', 'corrida-dia', 'semana-corrida', 'nutri-cardapio']);
 const prioridade = (i) => (Number.isFinite(i.prioridade) ? i.prioridade : /(^|-)dor($|-)|saude/.test(i.id) ? 3 : 0);
 function assuntosDaFrase(texto, coach, ctx) {
   const partes = normalizar(texto).replace(/\s+(e|mas|porem|tambem|porque|pois)\s+/g, ' , ').split(SEPARA).map((x) => x.trim()).filter((x) => x && lerTexto(x).length >= 1);
@@ -920,10 +984,12 @@ const EXEMPLOS = {
   corrida: ['“choveu, e agora?”', '“qual o meu pace hoje?”', '“posso passar a corrida para amanhã?”', '“estou com dor na canela”'],
   nutri: ['“o que eu como hoje?”', '“quanta água devo beber?”', '“banana engorda?”', '“exagerei no fim de semana”'],
 };
-function passoReformular(coach, mem) {
+function passoReformular(coach, mem, ctx = null) {
   const ex = EXEMPLOS[coach] || EXEMPLOS.treinador;
   const k = (mem && mem.n ? mem.n : 0) % ex.length;
-  return { texto: ['Escreva em poucas palavras, do seu jeito. Por exemplo:', `${ex[k]} ou ${ex[(k + 1) % ex.length]}`] };
+  const p = { texto: ['Escreva em poucas palavras, do seu jeito. Por exemplo:', `${ex[k]} ou ${ex[(k + 1) % ex.length]}`] };
+  if (ctx) { p.opcoes = [{ rotulo: 'Ver todos os assuntos', valor: 'v' }]; p.proximo = (v, cc) => saudacao(coach, cc); }
+  return p;
 }
 const NAO_ENTENDI = ['Não entendi bem.', 'Hum, não peguei.', 'Não consegui entender.'];
 
@@ -968,9 +1034,13 @@ export function responder(texto, coach, ctx) {
   const varios = assuntosDaFrase(texto, coach, cData);
   if (varios.length >= 2 && (!r.confiante || varios.some((x) => x.intencao.id === r.melhor.intencao.id))) {
     const ordem = varios.map((x, k) => ({ ...x, k })).sort((a, b) => prioridade(b.intencao) - prioridade(a.intencao) || a.k - b.k);
-    const [um, ...outros] = ordem;
+    const [um, ...todos] = ordem;
+    // "estou com dor de cabeça, como fica o treino de hoje?": a dor (ou o problema de saúde) já diz como fica o treino
+    // do dia; perguntar do treino ou da semana logo depois não é um segundo assunto
+    const outros = prioridade(um.intencao) >= 3 ? todos.filter((x) => !SO_O_DIA.has(x.intencao.id)) : todos;
     const p = iniciar(um.intencao.id, cData);
-    const lead = `Vamos por partes. Primeiro, ${um.intencao.resumo}; depois, ${outros[0].intencao.resumo}.`;
+    if (!outros.length) return lembrar(p, memNova, coach, c);
+    const lead = `Primeiro, ${um.intencao.resumo}. Depois, ${outros[0].intencao.resumo}.`;
     const novaMem = { ...memNova, pendente: outros.map((x) => x.intencao.id) };
     return lembrar({ ...p, texto: [lead, ...p.texto] }, novaMem, coach, c);
   }
@@ -996,10 +1066,14 @@ export function responder(texto, coach, ctx) {
     if (r.direto) return lembrar(iniciar(i.id, cData), memNova, coach, c);
     const rd = i.resumoNoDia || i.resumo;
     const resumo = !dataTxt ? i.resumo : rd.includes('{dia}') ? rd.replace('{dia}', nomeDia(datas.find((d) => !d.semana && d.data !== c.hoje).data, c.hoje)) : `${rd} ${dataTxt}`;
+    // "Sim" e, ao lado, os outros assuntos próximos (com o jeito de dizer mais parecido com a frase): quem quis dizer outra
+    // coisa já acha o caminho sem voltar à lista
+    const outros = r.ranking.slice(1).filter((x) => x.pontos >= 1).slice(0, 2).map((x) => ({ rotulo: jeitoPara(x.intencao, texto, mem), valor: x.intencao.id }));
+    const comTx = (cc) => ({ ...cc, datas, texto: c.texto, ...(cData.data ? { data: cData.data } : {}) });
     return fim({
-      texto: [`Entendi que você quer falar sobre ${resumo}. É isso?`],
-      opcoes: [{ rotulo: 'Sim', valor: 'sim' }, { rotulo: 'Não, outro assunto', valor: 'nao' }],
-      proximo: (v, cc) => (v === 'sim' ? iniciar(i.id, { ...cc, datas, texto: c.texto, ...(cData.data ? { data: cData.data } : {}) }) : menu(noMenu(coach, cc), 'Qual destes?', [], coach)),
+      texto: [`Você quer falar sobre ${resumo}?`],
+      opcoes: [{ rotulo: 'Sim', valor: 'sim' }, ...outros, { rotulo: outros.length ? 'Outra coisa' : 'Não, outro assunto', valor: 'nao' }],
+      proximo: (v, cc) => (v === 'sim' ? iniciar(i.id, comTx(cc)) : v === 'nao' ? menu(noMenu(coach, cc), 'Qual destes?', [], coach) : iniciar(v, comTx(cc))),
     });
   }
   // 7. uma pergunta frequente que casa bem: a resposta direto, como do treinador
@@ -1012,17 +1086,63 @@ export function responder(texto, coach, ctx) {
   // 8. não ficou claro: pergunta de volta com os assuntos mais próximos ("Você quer saber sobre X ou sobre Y?")
   const faq = faqPara(texto, coach, 2).filter((f) => faqSegura(f, c));
   const comTexto = (cc) => ({ ...cc, datas, texto: c.texto, ...(cData.data ? { data: cData.data } : {}) });
-  if (perto.length) {
-    const dois = perto.slice(0, 2);
-    const pergunta = dois.length === 1 ? `Você quer saber sobre ${dois[0].resumo}?` : `Você quer saber sobre ${dois[0].resumo} ou sobre ${dois[1].resumo}?`;
-    const opcoes = [...perto.slice(0, 3).map((i) => ({ rotulo: i.titulo, valor: i.id })), { rotulo: 'Outra coisa', valor: '#reformular' }];
-    return fim({ texto: [pergunta.length <= 250 ? pergunta : 'Você quer saber sobre um destes?'], faq: faq.length ? faq : undefined, opcoes, proximo: (v, cc) => (v === '#reformular' ? passoReformular(coach, mem) : iniciar(v, comTexto(cc))) });
+  // a pergunta em aberto continua de pé: o que não foi entendido não muda de assunto (a mesma pergunta, com os botões)
+  const aberto = isObj(c0.aberto) && Array.isArray(c0.aberto.opcoes) && c0.aberto.opcoes.length && typeof c0.aberto.proximo === 'function' ? c0.aberto : null;
+  if (aberto && !perto.length) {
+    return lembrar({ texto: ['Não peguei. Escolha uma opção ou escreva de outro jeito.'], opcoes: aberto.opcoes, proximo: aberto.proximo, ...(aberto.assunto ? { assunto: aberto.assunto } : {}) }, mem, coach);
   }
-  const todos = assuntos(coach, c);
-  const ops = todos.length ? { opcoes: [{ rotulo: 'Ver os assuntos', valor: 'v' }, { rotulo: 'Perguntas frequentes', valor: 'f' }], proximo: (v, cc) => (v === 'v' ? saudacao(coach, cc) : passoFaq(coach, '')) } : {};
-  if (faq.length) return fim({ texto: [varia(NAO_ENTENDI, mem) + ' Veja se uma destas perguntas ajuda:'], faq, ...ops });
-  const ref = passoReformular(coach, mem);
-  return fim({ texto: [varia(NAO_ENTENDI, mem) + ' Só respondo o que tem apoio nas pesquisas do app.', ...ref.texto], ...ops });
+  if (perto.length) {
+    // os assuntos próximos, cada um com o jeito de dizer mais parecido com a frase; com só um, dois jeitos dele (os dois
+    // levam ao mesmo lugar: quem não sabe bem como pedir reconhece o próprio pedido)
+    const opcoes = opcoesDeAssuntos(perto.slice(0, 3), texto, mem);
+    opcoes.push({ rotulo: 'Outra coisa', valor: '#reformular' });
+    return fim({ texto: [perto.length === 1 ? 'É isto que você quer?' : 'É sobre um destes?'], faq: faq.length ? faq : undefined, opcoes, proximo: (v, cc) => (v === '#reformular' ? passoReformular(coach, mem, cc) : iniciar(v, comTexto(cc))) });
+  }
+  if (faq.length) {
+    const opcoes = [{ rotulo: 'Ver os assuntos', valor: 'v' }, { rotulo: 'Escrever de outro jeito', valor: 'r' }];
+    return fim({ texto: [varia(NAO_ENTENDI, mem) + ' Veja se uma destas perguntas ajuda:'], faq, opcoes, proximo: (v, cc) => (v === 'v' ? saudacao(coach, cc) : passoReformular(coach, mem, cc)) });
+  }
+  return fim(passoNaoEntendi(coach, mem, c));
+}
+// Botões de assuntos com o jeito de dizer mais parecido com a frase (logic/chat/exemplos.js, JEITOS)
+function opcoesDeAssuntos(lista, texto, mem) {
+  const out = lista.map((i) => ({ rotulo: jeitoPara(i, texto, mem), valor: i.id }));
+  if (lista.length === 1) {
+    const outro = (JEITOS[lista[0].id] || []).find((j) => j !== out[0].rotulo);
+    if (outro) out.push({ rotulo: outro, valor: lista[0].id });
+  }
+  return out;
+}
+// O jeito de dizer o assunto mais parecido com o texto (pelas palavras em comum); sem nenhum em comum, varia de uma vez
+// para outra (memória da conversa). Rótulo curto: até 40 letras.
+function jeitoPara(i, texto, mem) {
+  const lista = [...(JEITOS[i.id] || []), i.titulo].filter((j, k, a) => j && j.length <= 40 && a.indexOf(j) === k);
+  if (!lista.length) return i.titulo;
+  const tw = new Set(formasSim(texto || ''));
+  const nota = (j) => formasSim(j).filter((w) => tw.has(w)).length;
+  const melhor = Math.max(...lista.map(nota));
+  if (melhor > 0) return lista.find((j) => nota(j) === melhor);
+  return lista[(mem && mem.n ? mem.n : 0) % lista.length];
+}
+// Os assuntos mais procurados de cada treinador, para quando nada da frase foi entendido
+const COMUNS = {
+  treinador: ['qual-treino', 'treino-perdido', 'pouco-tempo', 'dor-treino', 'ex-como', 'carga', 'mudar-plano'],
+  corrida: ['corrida-dia', 'chuva', 'corrida-perdida', 'ritmo', 'dor-corrida', 'mover-corrida', 'esteira'],
+  nutri: ['nutri-cardapio', 'nutri-exagerei', 'nutri-metas', 'nutri-alimento', 'nutri-treino', 'nutri-suplementos'],
+};
+// "Não entendi": alguns assuntos comuns, cada vez com outro jeito de dizer, e o caminho para escrever de outro jeito
+function passoNaoEntendi(coach, mem, ctx) {
+  const ids = (COMUNS[coach] || []).map(intencaoPorId).filter((i) => i && disponivel(i, ctx));
+  const n = mem && mem.n ? mem.n : 0;
+  const k = ids.length ? n % ids.length : 0;
+  const quatro = [...ids.slice(k), ...ids.slice(0, k)].slice(0, 4);
+  const opcoes = quatro.map((i) => ({ rotulo: (JEITOS[i.id] || [i.titulo])[n % (JEITOS[i.id] || [i.titulo]).length], valor: i.id }));
+  opcoes.push({ rotulo: 'Ver todos os assuntos', valor: '#todos' });
+  return {
+    texto: [varia(NAO_ENTENDI, mem) + ' É algum destes? Ou escreva de outro jeito.'],
+    opcoes,
+    proximo: (v, cc) => (v === '#todos' ? saudacao(coach, cc) : iniciar(v, cc)),
+  };
 }
 
 // Depois de contar uma dor na folha: o que o treino muda (só hoje, só nesta semana ou sempre)
@@ -1048,8 +1168,12 @@ export function depoisDaAcao(a, coach, ctx) {
 export function limparPasso(p) {
   if (!isObj(p)) return null;
   const txt = (l) => (Array.isArray(l) ? l.filter((t) => typeof t === 'string' && t.trim()).map((t) => t.trim()) : []);
-  const out = { texto: txt(p.texto) };
-  const det = txt(p.detalhes);
+  const temBotoes = typeof p.proximo === 'function' && Array.isArray(p.opcoes) && p.opcoes.length > 0;
+  // (falas de segurança, com 192 ou 188, ficam inteiras: cada linha delas importa)
+  const seguranca = (isObj(p.aviso) && p.aviso.tipo === 'danger') || txt(p.texto).some((t) => /\b(192|188)\b/.test(t));
+  const curto = seguranca ? { texto: txt(p.texto), resto: [] } : enxugar(txt(p.texto), temBotoes);
+  const out = { texto: curto.texto };
+  const det = [...curto.resto, ...txt(p.detalhes)];
   if (det.length) out.detalhes = det;
   const refs = refsValidas(p.refs);
   if (refs.length) out.refs = refs;
@@ -1075,6 +1199,20 @@ export function limparPasso(p) {
   if (sug.length) out.sugestoes = sug;
   if (!out.texto.length && !out.aviso && !out.faq) return null;
   return out;
+}
+// Resposta curta: no balão, até 2 parágrafos de texto corrido (o que a pessoa precisa saber); o resto vai para o
+// "Saiba mais" fechado, antes das explicações. Ficam sempre: as listas (•), os passos numerados ("1. ..."), a linha que
+// abre uma lista ("Sua semana:") e a pergunta do fim quando há botões para respondê-la.
+export const MAX_PARAGRAFOS = 2;
+function enxugar(texto, temBotoes) {
+  const fixo = (t, k) => /^(•|\d+\.\s)/.test(t) || (/:$/.test(t) && /^(•|\d+\.\s)/.test(texto[k + 1] || '')) || (temBotoes && k === texto.length - 1);
+  const fica = [], resto = [];
+  let prosa = 0;
+  texto.forEach((t, k) => {
+    if (fixo(t, k)) fica.push(t);
+    else if (prosa < MAX_PARAGRAFOS) { fica.push(t); prosa++; } else resto.push(t);
+  });
+  return { texto: fica, resto };
 }
 // Segue para o próximo passo depois de um botão (com proteção). Com ctx.memoria, o passo volta com a memória nova.
 export function seguir(passo, valor, ctx) {

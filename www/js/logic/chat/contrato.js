@@ -3,7 +3,12 @@
 // O chat é uma conversa com botões E com texto livre, o mais perto possível de uma conversa normal, sem IA. Cada assunto
 // ("intenção") faz perguntas curtas com botões e responde só com as regras e as fontes que o app já tem. O texto livre é
 // lido por palavras (sem acento, com sinônimos e tolerando erro de digitação; logic/chat/motor.js): com o assunto bem
-// claro, o treinador responde direto; com folga pequena, confirma antes ("Entendi que você quer… É isso?"). O motor
+// claro, o treinador responde direto; com folga pequena, confirma antes ("Você quer falar sobre…?", com "Sim", os outros
+// assuntos próximos e "Outra coisa"). Além das palavras, o motor compara a frase com as FRASES DE EXEMPLO de cada
+// assunto (logic/chat/exemplos.js) e, quando não tem certeza, mostra botões com JEITOS diferentes de dizer cada assunto
+// (vários podem levar ao mesmo lugar). Respostas curtas: até 2 parágrafos no balão; o resto vai para o "Saiba mais"
+// (motor.js, enxugar; falas de segurança ficam inteiras). O que não é entendido numa pergunta em aberto repete a pergunta
+// com os botões; "a primeira", "a última" e números ("uns 25") escolhem o botão. O motor
 // entende DATAS ("amanhã", "sexta", "semana que vem": ctx.data), lembra o assunto e o dia da conversa ("e amanhã?", "e a
 // corrida?"), aceita "sim", "pode", "não" e o texto de um botão como resposta à pergunta em aberto, e trata primeiro o
 // assunto mais importante de uma frase com dois. O que não reconhece não é inventado: uma pergunta frequente que casa bem

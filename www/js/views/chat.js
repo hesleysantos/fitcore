@@ -42,7 +42,7 @@ const euDisse = (coach, texto) => conversa(coach).msgs.push({ de: 'eu', texto })
 function porQue(detalhes, refs) {
   const ks = (refs || []).filter((k) => textoDaRef(k));
   if (!detalhes.length && !ks.length) return null;
-  return h('details', { class: 'pq' }, h('summary', { text: 'Por quê?' }),
+  return h('details', { class: 'pq' }, h('summary', { text: 'Saiba mais' }),
     ...detalhes.map((t) => h('p', { class: 'small muted', text: t })),
     ks.length ? h('div', { class: 'col gap-s mt' }, h('div', { class: 'tiny bold muted', text: 'FONTES' }), ...ks.map((k) => h('p', { class: 'ref', text: '• ' + textoDaRef(k) }))) : null);
 }

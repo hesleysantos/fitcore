@@ -229,7 +229,7 @@ export function passoMover(ctx) {
     let naEst = false;
     try { naEst = temEsteira() && typeof EST.naEsteira === 'function' && EST.naEsteira(ctx.st, de); } catch { naEst = false; }
     return {
-      texto: [`Pode: a ${nome} vai para ${nomeDia(para, hoje)}.`, ...(naEst ? ['Ela estava marcada na esteira: a esteira vai junto, se der no dia novo.'] : []), 'Assim fica a semana:', ...semana],
+      texto: [`Pode: a ${nome} vai para ${nomeDia(para, hoje)}.`, ...(naEst ? ['Ela estava marcada na esteira: a esteira vai junto, se der no dia novo.'] : []), 'Assim fica a semana:', ...(semana.some((l) => /passou para|veio de/.test(l)) ? semana.filter((l) => /passou para|veio de/.test(l)) : semana)],
       detalhes: ['Conferi as regras do plano: uma corrida por dia, treino forte e longão nunca em dias seguidos, os dias em que você não treina, o treino de pernas e pelo menos um dia de descanso.'],
       refs: [...REFS_MOVER, ...(a.chave ? ['blagrove2018'] : [])],
       acoes: [{
@@ -386,13 +386,13 @@ const comDataFutura = (i) => i.datas.some((d) => !d.semana && d.data !== i.hoje)
 export const INTENCOES = [
   {
     id: 'chuva', coach: 'corrida', titulo: 'Choveu ou não dá para correr na rua', resumo: 'chuva ou não poder correr na rua', data: true,
-    palavras: ['!alagado', '!alagada', 'rua alagada', '!chuva', 'correr+chuva', 'chuva nao correr', 'esta chuva', 'ta chuva', 'chuva forte', 'correr rua', 'nao da correr rua', 'sem lugar correr', 'escuro', 'tempo ruim', 'tempo ruim correr', 'clima', 'frio demais', 'muito frio', 'frio correr', 'frio rua', 'alagado', 'rua molhada', 'calor demais', 'muito calor', 'perigoso rua', 'raio', 'trovao'],
+    palavras: ['caindo mundo', 'caindo agua', 'tempo fechado', 'nao da pra sair', 'nao da sair', 'nao consigo sair', '!alagado', '!alagada', 'rua alagada', '!chuva', 'correr+chuva', 'chuva nao correr', 'esta chuva', 'ta chuva', 'chuva forte', 'correr rua', 'nao da correr rua', 'sem lugar correr', 'escuro', 'tempo ruim', 'tempo ruim correr', 'clima', 'frio demais', 'muito frio', 'frio correr', 'frio rua', 'alagado', 'rua molhada', 'calor demais', 'muito calor', 'perigoso rua', 'raio', 'trovao'],
     disponivel: comPlano,
     inicio: passoChuva,
   },
   {
     id: 'esteira', coach: 'corrida', titulo: 'Correr na esteira', resumo: 'correr na esteira', resumoNoDia: 'correr na esteira', data: true,
-    palavras: ['!esteira', 'correr esteira', 'inclinacao', 'inclinacao esteira', 'esteira inclinacao', 'esteira igual rua', 'esteira vale', 'velocidade esteira', 'na academia correr', 'correr academia', 'treadmill'],
+    palavras: ['!esteira', 'correr esteira', 'inclinacao', 'inclinacao esteira', 'esteira inclinacao', 'esteira igual rua', 'esteira vale', 'velocidade esteira', 'esteira+velocidade', 'adaptar+esteira', 'adapto+esteira', 'esteira casa', 'tenho esteira', '!correr parado', 'correr no lugar', 'correr dentro casa', 'na academia correr', 'correr academia', 'treadmill'],
     disponivel: comPlano,
     inicio: passoEsteira,
   },
@@ -404,7 +404,7 @@ export const INTENCOES = [
   },
   {
     id: 'ritmo', coach: 'corrida', titulo: 'Qual o meu ritmo (pace)', resumo: 'o ritmo da corrida de hoje', resumoNoDia: 'o ritmo da corrida', data: true,
-    palavras: ['!pace', '!ritmo', '!velocidade', '!km hora', '!por hora', 'qual ritmo', 'que ritmo', 'velocidade', 'minuto por km', 'min km', 'por km', 'quao rapido', 'que velocidade', 'kmh', 'ritmo certo', 'frequencia cardiaca', 'batimento', 'zona', 'em que ritmo', 'quanto por km', 'qual pace', 'meu pace'],
+    palavras: ['!pace', '!ritmo', '!velocidade', '!km hora', 'km por hora', 'qual ritmo', 'que ritmo', 'velocidade', 'minuto por km', 'min km', 'por km', 'quao rapido', 'que velocidade', 'kmh', 'ritmo certo', 'frequencia cardiaca', 'batimento', 'zona', 'em que ritmo', 'quanto por km', 'qual pace', 'meu pace'],
     disponivel: comPlano,
     inicio: passoRitmo,
   },
@@ -422,20 +422,20 @@ export const INTENCOES = [
   },
   {
     id: 'mover-corrida', coach: 'corrida', titulo: 'Mudar a corrida de dia', resumo: 'mudar a corrida de dia', data: true,
-    palavras: ['dia longao', 'trocar dia longao', 'mudar dia longao', 'mudar longao', 'mudar correr amanha', 'passar correr amanha', 'correr outro dia', 'adiar correr', 'deixar correr amanha', 'remarcar correr', 'mudar para amanha', 'passar para amanha', 'adiar', 'antecipar', 'adiantar', 'correr lugar', 'em vez de', 'no lugar de', 'outro dia', 'passar para', 'jogar correr', 'jogar para', 'empurrar correr', 'mudar correr', 'passar correr', 'mudar correr dia', 'mudar correr outro dia', 'correr de dia', 'fizer', 'fazer correr'],
+    palavras: ['trocar dia', 'dia longao', 'trocar dia longao', 'mudar dia longao', 'mudar longao', 'mudar correr amanha', 'passar correr amanha', 'correr outro dia', 'adiar correr', 'deixar correr amanha', 'remarcar correr', 'mudar para amanha', 'passar para amanha', 'adiar', 'antecipar', 'adiantar', 'correr lugar', 'em vez de', 'no lugar de', 'outro dia', 'passar para', 'jogar correr', 'jogar para', 'empurrar correr', 'mudar correr', 'passar correr', 'mudar correr dia', 'mudar correr outro dia', 'correr de dia', 'fizer', 'fazer correr'],
     bonus: (i) => (comDuasDatas(i) ? 3 : comDataFutura(i) ? 1.5 : 0),
     disponivel: comPlano,
     inicio: passoMover,
   },
   {
     id: 'semana-corrida', coach: 'corrida', titulo: 'Como fica a minha semana', resumo: 'a sua semana de treinos', data: true,
-    palavras: ['como fica semana', 'minha semana', 'semana', '!agenda', 'agenda semana', 'programacao', 'treinos semana', '!calendario', '!cronograma', 'tenho semana', 'tem semana', 'ver semana', 'semana treino', 'semana treinos', 'semana correr', 'como ta', 'como esta', 'resto semana', 'proximos dia', 'proximos treinos', 'como ficou semana', 'quais dia correr', 'que dia correr', 'dias correr', 'como fica', 'como ficou'],
+    palavras: ['!quilometragem', 'km semanal', '!semanal', 'semana toda', 'km semana', 'quantos km semana', 'total semana', 'como fica semana', 'minha semana', 'semana', '!agenda', 'agenda semana', 'programacao', 'treinos semana', '!calendario', '!cronograma', 'tenho semana', 'tem semana', 'ver semana', 'semana treino', 'semana treinos', 'semana correr', 'como ta', 'como esta', 'resto semana', 'proximos dia', 'proximos treinos', 'como ficou semana', 'quais dia correr', 'que dia correr', 'dias correr', 'como fica', 'como ficou'],
     disponivel: (ctx) => temCorrida(ctx.st),
     inicio: (ctx) => passoSemana(ctx, 'corrida'),
   },
   {
     id: 'juntar-corrida', coach: 'corrida', titulo: 'Corrida e musculação no mesmo dia', resumo: 'fazer corrida e musculação no mesmo dia',
-    palavras: ['correr+musculacao', 'correr+treino+juntar', 'correr+academia+mesmo dia', 'mesmo dia', 'juntar', 'juntar outro', 'correr depois', 'correr antes', 'depois musculacao', 'antes musculacao', 'qual primeiro', 'ordem', 'prioridade'],
+    palavras: ['!leg day', 'perna+longao', 'treino perna+longao', 'esteira+depois treino', 'esteira+logo depois', 'correr+musculacao', 'correr+exercicio', 'correr+treino', 'correr+academia', '!em que ordem', 'correr+treino+juntar', 'correr+academia+mesmo dia', '!intervalo entre', 'correr+intervalo', 'correr+horas entre', 'correr+seguida', 'correr+colado', 'correr+logo depois', 'mesmo dia', 'juntar', 'juntar outro', 'correr depois', 'correr antes', 'depois musculacao', 'antes musculacao', 'qual primeiro', 'ordem', 'prioridade'],
     disponivel: (ctx) => { try { return temCorrida(ctx.st) && !!P.planoAtivo(ctx.st); } catch { return false; } },
     inicio: (ctx) => passoJuntar(ctx),
   },
@@ -453,7 +453,9 @@ export const INTENCOES = [
   },
   {
     id: 'mudar-corrida', coach: 'corrida', titulo: 'Mudar o plano de corrida', resumo: 'mudar o plano de corrida',
-    palavras: ['vezes semana', 'correr vezes', 'mais dias', 'menos dias', 'mudar plano', 'mudar dia', 'mudar dias', 'mudar dia correr', 'trocar dia', 'refazer plano', 'refazer entrevista', 'outro plano', 'plano novo', 'nova prova', 'mudar prova', 'mudar objetivo', 'mudar', 'pausar plano', 'parar plano', 'mudar dias semana', 'dias da semana'],
+    // "mudar os dias da corrida" (os dias do plano) não é "mudar o dia da corrida" (uma corrida para outro dia)
+    bonus: (i) => (/\bdias\b/.test(i.texto) && /\b(mud\w*|troc\w*|alter\w*|quantidade|quantos|outros)\b/.test(i.texto) ? 5 : 0),
+    palavras: ['reiniciar plano', 'recomecar plano', 'plano do comeco', 'meu alvo', '!planilha', 'refazer planilha', 'quantidade dias', 'quantidade de dias', 'quantos dias correr', 'treinar pra prova', '10k', '21k', '!maratona', 'meia maratona', 'vezes semana', 'correr vezes', 'mais dias', 'menos dias', 'mudar plano', 'mudar dias', 'refazer plano', 'refazer entrevista', 'outro plano', 'plano novo', 'nova prova', 'mudar prova', 'mudar objetivo', 'mudar', 'pausar plano', 'parar plano', 'mudar dias semana', 'dias da semana'],
     disponivel: (ctx) => temCorrida(ctx.st),
     inicio: () => ({
       texto: ['Os dias, a prova e o tempo mudam nas respostas da entrevista.', 'Ao terminar, o plano novo começa da semana 1. As corridas registradas continuam.'],

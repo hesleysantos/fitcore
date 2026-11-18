@@ -294,7 +294,7 @@ export function efeitoDoProblema(raw, hoje) {
         : { nivel: 'leve', musc: 'leve', corrida: 'leve', titulo: 'Hoje só treino leve', texto: 'Só nariz ou garganta: dá para treinar leve, 10 a 20 minutos em 60 a 70% do normal. Se piorar, pare.' };
       break;
     case 'estomago':
-      o = { nivel: 'sem', musc: 'sem', corrida: 'sem', titulo: 'Hoje sem treino', texto: 'Sem treino até a diarreia e o vômito passarem. Beba água e soro de reidratação.' };
+      o = { nivel: 'sem', musc: 'sem', corrida: 'sem', titulo: 'Hoje sem treino', texto: 'Espere a diarreia e o vômito passarem. Beba água e soro de reidratação.' };
       if (dias >= 2) o.aviso = 'Sem melhora em 2 dias: procure atendimento.';
       break;
     case 'pancada':
@@ -328,7 +328,7 @@ export function efeitoDoProblema(raw, hoje) {
     case 'dor-cabeca':
       if (p.detalhe === 'esforco' && !p.avaliado) o = { nivel: 'atendimento', musc: 'sem', corrida: 'sem', titulo: 'Procure atendimento', texto: 'Dor de cabeça que começa com o esforço precisa de avaliação hoje. Sem treino até lá.' };
       else if (p.piora || p.grau === 'forte') o = { nivel: 'sem', musc: 'sem', corrida: 'sem', titulo: 'Hoje sem treino', texto: 'Dor forte ou que piora ao se mexer: descanse hoje, de preferência num lugar escuro e calmo.' };
-      else o = { nivel: 'leve', musc: 'leve', corrida: 'leve', titulo: 'Hoje só treino leve', texto: 'Pode treinar leve. Se a dor piorar com o esforço, pare.' };
+      else o = { nivel: 'leve', musc: 'leve', corrida: 'leve', titulo: 'Hoje só treino leve', texto: 'Se a dor piorar com o esforço, pare.' };
       break;
     case 'colica':
       o = p.grau === 'leve' || !p.grau

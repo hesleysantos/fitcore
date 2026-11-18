@@ -239,7 +239,7 @@ function perguntaMotivo(P, ref) {
 }
 const TROCAR = {
   id: 'nutri-trocar', coach: 'nutri', titulo: 'Trocar uma refeição do cardápio', resumo: 'trocar uma refeição do cardápio',
-  palavras: ['nao gosto de', 'tem como mudar', 'trocar alimento', 'trocar refeicao', 'trocar cardapio', 'troca cardapio', 'trocar almoco', 'trocar jantar', 'trocar lanche', 'trocar cafe da manha', 'trocar ceia', 'mudar almoco', 'mudar jantar',
+  palavras: ['nao gosto de', 'tem como mudar', 'trocar alimento', 'trocar refeicao', 'trocar cardapio', 'troca cardapio', 'trocar almoco', 'trocar jantar', 'trocar lanche', 'trocar+lanche', 'trocar+almoco', 'trocar+jantar', 'trocar+cafe', 'trocar+refeicao', 'trocar cafe da manha', 'trocar ceia', 'mudar almoco', 'mudar jantar',
     'substituir', 'substituto', 'substituicao', 'outra opcao', 'nao gosto', 'nao gostei', 'odeio', 'nao tenho em casa', 'acabou', 'faltou', 'alergia', 'alergico', 'alergica', 'nao posso comer', 'intolerancia',
     'acabou+casa', 'nao tem+casa', 'trocar janta', 'mudar janta', 'outra coisa almoco', 'outra coisa jantar', 'nao curto', 'detesto', 'enjoei', 'nao tem em casa', 'trocar refeicao hoje'],
   // quem não tem cardápio (modo educativo) não troca refeição; sem entrevista, o assunto convida a responder
@@ -635,7 +635,7 @@ function passoPratico(P, qual) {
 }
 const PRATICO = {
   id: 'nutri-pratico', coach: 'nutri', titulo: 'Sem fome, sem tempo ou comendo fora', resumo: 'falta de fome, de tempo ou comer fora de casa',
-  palavras: ['trabalho o dia todo', 'fora o dia todo', 'comer direito', 'dia todo fora', 'sem fome', 'nao tenho fome', 'sem apetite', 'falta de apetite', 'sem tempo', 'nao tenho tempo', 'correria', 'sem tempo para cozinhar', 'nao sei cozinhar', 'cozinhar', 'marmita',
+  palavras: ['!churrasco', 'como me organizo', 'trabalho o dia todo', 'fora o dia todo', 'comer direito', 'dia todo fora', 'sem fome', 'nao tenho fome', 'sem apetite', 'falta de apetite', 'sem tempo', 'nao tenho tempo', 'correria', 'sem tempo para cozinhar', 'nao sei cozinhar', 'cozinhar', 'marmita',
     'comer fora', 'vou comer fora', 'restaurante', 'lanchonete', 'almoco fora', 'comida a quilo', 'self service', 'fast food', 'delivery', 'pedir comida', 'viagem', 'viajar', '!restaurante', '!lanchonete', 'almocar fora', 'jantar fora', 'almocar restaurante', 'comer restaurante',
     'fome nenhuma', 'nao consigo comer muito', 'trabalho fora', 'marmita trabalho', 'ifood', 'lanche rua', 'sem tempo comer'],
   inicio: (ctx) => {
@@ -706,7 +706,8 @@ const R = {
   remedio: /\b((remedio|remedios|comprimido\w*|capsula\w*|pilula\w*) (\w+ ){0,2}(para|pra) emagrecer|inibidor\w* de apetite|moderador\w* de apetite|sibutramina)\b/,
   jejum: /\b(jejum (de|por) (\d+|dois|duas|tres|quatro|cinco|seis|sete|varios|alguns|uns) dias|jejum prolongado|(\d+|dois|duas|tres|quatro|cinco|varios|alguns|uns) dias (sem comer|de jejum|so (com|de|tomando|bebendo) agua)|(fiquei|ficar|fico|vou ficar|passar|passei|passo|ficando) (\w+ ){0,2}dias sem comer|sem comer (ha|faz|por) (\d+ |dois |tres |varios |alguns |uns )?dias|nao como (ha|faz) (\d+ |dois |tres |varios |alguns |uns )?dias)\b/,
   restricao: /\b((como|comendo|comer|comi|comia) quase nada|nao (estou|to|tou|ando) comendo (nada|quase nada)|nao como nada|medo de comer|parei de comer( (de vez|por completo|direito|(para|pra) emagrecer)\b|$))/,
-  vida: /\b(quero morrer|vontade de morrer|me matar|suicid\w*|tirar (a )?minha (propria )?vida|nao quero mais viver|acabar com a minha vida)\b/,
+  // (vontade de se punir ou de se machucar também é risco à vida: o mesmo acolhimento, com o CVV e o CAPS)
+  vida: /\b(quero morrer|vontade de morrer|me matar|suicid\w*|tirar (a )?minha (propria )?vida|nao quero mais viver|acabar com a minha vida|(queria|quero|vontade de|preciso|tenho que|devia|deveria) me (punir|castigar|machucar|ferir|cortar)|me punir|me castigar|punir (o )?meu corpo|autolesao|automutila\w*)\b/,
   vidaNao: /\bmorrer de (rir|fome|vergonha|calor|frio|saudade|sono|cansaco|tedio)\b/,
 };
 // Sinais de comportamento de risco alimentar (ou de risco à vida) num texto. Recebe o texto (o motor já manda
@@ -748,7 +749,7 @@ export function passoDeRisco(sinais = [], _ctx = null) {
 }
 const APOIO = {
   id: 'nutri-apoio', coach: 'nutri', titulo: 'Preocupação com a comida', resumo: 'a sua relação com a comida',
-  palavras: ['vomitar', 'vomito', 'provocar vomito', 'laxante', 'diuretico', 'remedio para emagrecer', 'jejum de dias', 'ficar sem comer', 'comer quase nada', 'parei de comer', 'medo de comer', 'medo de engordar',
+  palavras: ['pensar em comida', 'penso em comida', 'parar de pensar comida', '!culpa', '!culpado', '!culpada', 'como escondido', 'comer escondido', 'escondido', 'nervoso+comer', 'como nervoso', 'ansioso+comer', 'sinto culpa', 'fico mal', 'me sinto mal', 'ansiedade comida', 'ansiedade+comida', 'vomitar', 'vomito', 'provocar vomito', 'laxante', 'diuretico', 'remedio para emagrecer', 'jejum de dias', 'ficar sem comer', 'comer quase nada', 'parei de comer', 'medo de comer', 'medo de engordar',
     'transtorno alimentar', 'anorexia', 'bulimia', 'compulsao', 'compulsao alimentar', 'relacao com a comida', 'perdi o controle'],
   inicio: (ctx) => passoDeRisco(['geral'], ctx),
 };

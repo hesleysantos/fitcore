@@ -182,9 +182,13 @@ test('reconhecimento: assunto bem claro responde direto; com folga pequena confi
   assert.equal(d.texto[0], 'Tudo bem. O que aconteceu?');
   assert.equal(d.assunto, 'treino-perdido');
   const cc = ctxDe(ADULTO, TER, 'corrida');
-  const p = M.limparPasso(M.responder('queria aumentar a distancia', 'corrida', cc));
-  assert.match(p.texto[0], /^Entendi que você quer falar sobre correr mais rápido ou mais longe\. É isso\?$/);
-  assert.deepEqual(p.opcoes.map((o) => o.rotulo), ['Sim', 'Não, outro assunto']);
+  const p = M.limparPasso(M.responder('posso acelerar o ritmo hoje?', 'corrida', cc));
+  assert.match(p.texto[0], /^Você quer falar sobre correr mais rápido ou mais longe\?$/);
+  // "Sim", os outros assuntos próximos (outro caminho sem voltar à lista) e "Outra coisa"
+  assert.equal(p.opcoes[0].rotulo, 'Sim');
+  assert.equal(p.opcoes[p.opcoes.length - 1].valor, 'nao');
+  assert.ok(p.opcoes.some((o) => o.valor === 'ritmo'), JSON.stringify(p.opcoes));
+  assert.equal(M.seguir(p, 'ritmo', cc).assunto, 'ritmo');
   assert.equal(M.seguir(p, 'sim', cc).assunto, 'mais-rapido');
   const nao = M.seguir(p, 'nao', cc);
   assert.ok(nao.opcoes.length >= 2 && nao.opcoes.length <= 6);
@@ -347,15 +351,27 @@ test('juntar corrida e musculação: o exemplo do dono, pela prioridade e pelo p
   // terça: corrida leve (regenerativo) e treino de pernas
   assert.ok(corridaDeHoje(ctx) && treinoDeHoje(ctx));
   const conf = M.limparPasso(M.responder('hoje de manhã eu tinha corrida no plano mas choveu; tenho musculação hoje também — posso fazer um seguido do outro e qual a recomendação de acordo com minhas prioridades e meu perfil?', 'treinador', ctx));
-  const p = /^Entendi/.test(conf.texto[0]) ? M.seguir(conf, 'sim', ctx) : conf;
+  const p = /^Você quer falar/.test(conf.texto[0]) ? M.seguir(conf, 'sim', ctx) : conf;
   const txt = p.texto.join(' ');
-  assert.match(txt, /Sua prioridade: os dois por igual\./);
-  assert.match(txt, /O ideal é 6 horas entre os dois; no mínimo 3\./);
-  assert.ok(p.detalhes.some((d) => /logo depois do outro/.test(d)));
+  // "um seguido do outro": responde sobre o intervalo curto (Schumann 2022; Petré 2021), em duas frases
+  assert.match(txt, /^Pode\. A ordem tanto faz/);
+  assert.match(txt, /menos de 3 horas entre os dois, o segundo treino rende um pouco menos/);
+  assert.ok(p.texto.length <= 2);
+  assert.ok(p.detalhes.some((d) => /20 minutos/.test(d)) && p.detalhes.some((d) => /Massa muscular e força máxima/.test(d)));
+  // sem intervalo dito: a ordem e de 3 a 6 horas entre os dois; a prioridade vai para "Por quê?"
+  const sem = M.limparPasso(M.responder('posso fazer corrida e musculação no mesmo dia?', 'treinador', ctx));
+  assert.match(sem.texto.join(' '), /de 3 a 6 horas entre os dois/);
+  assert.ok(sem.detalhes.some((d) => /Sua prioridade: os dois por igual\./.test(d)));
+  // a pergunta do dono: menos de 1 hora entre os dois, nos dois treinadores
+  for (const coach of ['treinador', 'corrida']) {
+    const q = M.limparPasso(M.responder('posso correr e fazer os exercícios de hoje com o intervalor menor que 1 hora?', coach, ctxDe(ADULTO, TER, coach)));
+    assert.equal(q.assunto, coach === 'corrida' ? 'juntar-corrida' : 'juntar-treino', coach);
+    assert.match(q.texto.join(' '), /menos de 3 horas/);
+  }
   for (const k of ['eddens2018', 'petre2021', 'methenitis2018']) assert.ok(p.refs.includes(k), k);
   // prioridade na musculação: musculação primeiro
   const m = M.iniciar('juntar-treino', ctxDe(PERFIS.focoMusculacao(), TER, 'treinador'));
-  assert.match(m.texto.join(' '), /Faça primeiro a musculação e depois a corrida\./);
+  assert.match(m.texto.join(' '), /Comece pela musculação\./);
   // sem prioridade escolhida: pergunta e oferece guardar
   const sf = M.iniciar('juntar-treino', ctxDe(PERFIS.semFoco(), TER, 'treinador'));
   assert.equal(sf.texto[0], 'O que vem primeiro para você?');
@@ -363,7 +379,7 @@ test('juntar corrida e musculação: o exemplo do dono, pela prioridade e pelo p
   assert.ok(c.ir.some((x) => x.abrir === 'combinado'));
   // segunda: corrida forte (fartlek) e treino de superiores: corra primeiro
   const seg = M.iniciar('juntar-treino', ctxDe(ADULTO, '2026-11-16', 'treinador'));
-  assert.match(seg.texto.join(' '), /Corra primeiro/);
+  assert.match(seg.texto.join(' '), /Comece pela corrida/);
   // novato com pernas no dia da corrida: aviso das 48 horas
   const nov = M.iniciar('juntar-treino', ctxDe(PERFIS.novato(), TER, 'treinador'));
   assert.ok(nov.aviso && /48 horas/.test(nov.aviso.texto) && nov.refs.includes('doma2017'));
@@ -702,9 +718,9 @@ test('respostas digitadas: "sim", "pode", "não", "deixa" e o texto de um botão
   assert.equal(sim.executar, 0);
   for (const s of ['sim', 'isso', 'claro', 'pode ser', 'bora', 'ok', 'beleza']) assert.equal(conversar('treinador', ['não vou poder ir na sexta', s])[1].executar, 0, s);
   // "não" numa confirmação "É isso?" mostra a lista
-  const [, n] = conversar('corrida', ['queria aumentar a distancia', 'não']);
+  const [, n] = conversar('corrida', ['posso acelerar o ritmo hoje?', 'não']);
   assert.match(n.texto[0], /Qual destes/);
-  for (const s of ['nao quero', 'deixa', 'agora não', 'melhor nao']) assert.ok(!conversar('corrida', ['queria aumentar a distancia', s])[1].assunto, s);
+  for (const s of ['nao quero', 'deixa', 'agora não', 'melhor nao']) assert.ok(!conversar('corrida', ['posso acelerar o ritmo hoje?', s])[1].assunto, s);
   // o texto de um botão, com sinônimo ou só uma parte
   const [, e] = conversar('corrida', ['choveu', 'na esteira']);
   assert.equal(e.assunto, 'esteira');
@@ -713,13 +729,13 @@ test('respostas digitadas: "sim", "pode", "não", "deixa" e o texto de um botão
   const [, dor] = conversar('corrida', ['estou com dor na canela', 'na articulação']);
   assert.match(dor.texto[0], /menos carga|Em geral/);
   // "sim" numa confirmação abre o assunto
-  const [, ok] = conversar('corrida', ['queria aumentar a distancia', 'sim']);
+  const [, ok] = conversar('corrida', ['posso acelerar o ritmo hoje?', 'sim']);
   assert.equal(ok.assunto, 'mais-rapido');
 });
 test('dois assuntos na mesma frase: a dor (segurança) primeiro, o outro oferecido em seguida', () => {
   const [p, q, r] = conversar('corrida', ['choveu e estou com dor no joelho', 'músculo dolorido', 'Agora: Choveu ou não dá para correr na rua']);
   assert.equal(p.assunto, 'dor-corrida');
-  assert.match(p.texto[0], /^Vamos por partes\. Primeiro, uma dor; depois, chuva/);
+  assert.match(p.texto[0], /^Primeiro, uma dor\. Depois, chuva/);
   assert.deepEqual(p.memoria.pendente, ['chuva']);
   assert.ok(q.opcoes.some((o) => o.valor === '#pend'), 'o assunto pendente vira botão');
   assert.equal(r.assunto, 'chuva');
@@ -729,7 +745,7 @@ test('dois assuntos na mesma frase: a dor (segurança) primeiro, o outro ofereci
   // uma frase de um assunto só não vira dois
   for (const t of ['quantas séries e repetições?', 'posso fazer corrida e musculação no mesmo dia?', 'não vou treinar hoje porque estou cansado']) {
     const x = M.responder(t, 'treinador', ctxDe(ADULTO, TER, 'treinador'));
-    assert.ok(!/^Vamos por partes/.test(x.texto[0]), t);
+    assert.ok(!/^Primeiro, .+\. Depois, /.test(x.texto[0]), t);
   }
   // alerta sempre antes, mesmo com outro assunto junto
   const a = M.responder('choveu e senti falta de ar', 'corrida', ctxDe(ADULTO, TER, 'corrida'));

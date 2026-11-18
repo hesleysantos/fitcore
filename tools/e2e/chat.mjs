@@ -91,10 +91,10 @@ export default async (page) => {
   console.log('2. O exemplo do dono, por texto livre');
   await escrever('hoje de manhã eu tinha corrida no plano mas choveu; tenho musculação hoje também — posso fazer um seguido do outro e qual a recomendação de acordo com minhas prioridades e meu perfil?');
   // assunto bem claro: o treinador responde direto; com folga pequena, confirma antes
-  if (/Entendi que você quer falar sobre fazer corrida e musculação no mesmo dia\. É isso\?/.test(await ultima())) { ok(await botao('Sim'), 'confirmou a intenção'); await page.sleep(300); }
+  if (/Você quer falar sobre fazer corrida e musculação no mesmo dia\?/.test(await ultima())) { ok(await botao('Sim'), 'confirmou a intenção'); await page.sleep(300); }
   const resp = await ultima();
-  ok(/Sua prioridade/.test(resp) && /6 horas entre os dois; no mínimo 3/.test(resp), 'resposta pela prioridade, com o intervalo: ' + resp.slice(0, 160));
-  ok(await page.eval(`const d = [...document.querySelectorAll('.chat-msg.ativo details.pq')].pop(); if (!d) return false; d.open = true; return /FONTES/.test(d.innerText) && /Eddens|Methenitis|Petré/.test(d.innerText);`), '"Por quê?" fechado, com as fontes');
+  ok(/^COACH: Pode\. /.test(resp) && /menos de 3 horas entre os dois/.test(resp) && !/Sua prioridade/.test(resp), 'resposta curta sobre o intervalo (a prioridade fica no Saiba mais): ' + resp.slice(0, 160));
+  ok(await page.eval(`const d = [...document.querySelectorAll('.chat-msg.ativo details.pq')].pop(); if (!d) return false; d.open = true; return /FONTES/.test(d.innerText) && /Sua prioridade/.test(d.innerText) && /Eddens|Methenitis|Petré/.test(d.innerText);`), '"Saiba mais" fechado, com a prioridade e as fontes');
   ok(await semRolagem(), 'sem rolagem para o lado');
   await foto('chat/exemplo-chuva');
 
@@ -331,7 +331,7 @@ export default async (page) => {
   await escrever('pq o treino de hoje ta mais leve?');
   ok(/O .+ de hoje (segue o plano|muda por isto)/.test(await ultima()), '"por quê": explica com o que o app guarda');
   await escrever('como faço pra passar no enem');
-  ok(/Você quer saber sobre .+\?/.test(await ultima()), 'sem entender: pergunta de volta com os assuntos mais próximos');
+  ok(/É sobre um destes\?|É isto que você quer\?/.test(await ultima()), 'sem entender: pergunta de volta com os assuntos mais próximos');
   ok(await botao('Outra coisa'), '"Outra coisa"');
   await page.sleep(250);
   ok(/poucas palavras/.test(await ultima()), 'pede para reformular, com exemplos');

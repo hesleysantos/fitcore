@@ -109,7 +109,7 @@ export function corpoDoTexto(texto) {
 }
 // grupo muscular (data/muscles.js, GRUPOS) citado: "glúteo", "peito", "braço" → ['biceps', 'triceps']...
 const MUSC = [
-  [['glute', 'bunda'], ['gluteos']], [['peit'], ['peito']], [['costa', 'dorsal', 'dorsai'], ['costas']], [['ombr', 'deltoid'], ['ombros']], [['bicep'], ['biceps']], [['tricep'], ['triceps']],
+  [['glute', 'bunda', 'bumbum'], ['gluteos']], [['peit'], ['peito']], [['costa', 'dorsal', 'dorsai'], ['costas']], [['ombr', 'deltoid'], ['ombros']], [['bicep'], ['biceps']], [['tricep'], ['triceps']],
   [['brac'], ['biceps', 'triceps']], [['antebrac'], ['antebraco']], [['abdom', 'barrig', 'abdominal', 'core', 'tanquinh'], ['abdomen']], [['quadricep'], ['quadriceps']],
   [['posterior'], ['posteriores']], [['panturrilh'], ['panturrilhas']], [['pern', 'coxa'], ['quadriceps', 'posteriores']], [['adutor', 'abdutor'], ['adutores']],
 ];

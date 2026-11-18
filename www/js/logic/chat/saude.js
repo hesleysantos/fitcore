@@ -34,6 +34,28 @@ const REGIOES = [
   { rotulo: 'Tornozelo ou pé', valor: 'r-pe', locais: ['tornozelo', 'pe', 'aquiles'] },
 ];
 
+// O tipo de problema dito na frase ("estou com dor de cabeça", "to com diarreia"): a conversa começa dele, sem perguntar
+// de novo o que aconteceu. Texto normalizado (sem acento). '' quando a frase não diz.
+const TIPO_NO_TEXTO = [
+  ['cabeca', /\b(bati|bateu|batida|pancada|trauma|cai|caiu|queda)\b.*\bcabeca\b|\bcabeca\b.*\b(bati|bateu|batida|pancada)\b|\bconcussao\b/],
+  ['dor-cabeca', /\b(dor|dores|doendo|doi|latej\w*) (de |na |da )?cabeca\b|\bcabeca (doendo|doi|latej\w*|explodindo)\b|\benxaqueca\b|\bcefaleia\b/],
+  ['estomago', /\bdiarreia\b|\bvomit\w*\b|\bdor (de |na )?barriga\b|\bdor (de |no )?estomago\b|\benjo(o|ado|ada)\b|\bintestino solto\b|\bdesarranjo\b/],
+  ['febre', /\bfebre\b|\bfebril\b|\bgripe\b|\bgripad[oa]\b|\bcalafrio\w*\b|\bcovid\b|\bvirose\b|\bdor no corpo\b|\bcorpo doendo\b/],
+  ['resfriado', /\bresfria\w*\b|\bcoriza\b|\bnariz (escorrendo|entupido)\b|\bespirr\w*\b|\bgarganta\b|\btosse\b|\btossindo\b/],
+  // ("furei o treino" é faltar, não se ferir)
+  ['corte', /\bcortei\b|\bcorte\b|\bcortad[oa]\b|\bfurei\b(?! (o |a )?(treino|corrida|academia|dieta|aula|plano))|\bfurad[oa]\b|\bprego\b|\bcaco\b/],
+  ['pancada', /\bbati\b|\bbatida\b|\bpancada\b|\bcai\b|\bqueda\b|\btombo\b|\btorci\b|\btorceu\b|\btorcao\b|\bentorse\b|\bcontusao\b|\bvirei o pe\b/],
+  ['colica', /\bcolica\b|\bmenstrua\w*\b/],
+  ['dente', /\bdente\b|\bdentes\b|\bsiso\b/],
+];
+export function tipoDoTexto(t) {
+  const x = String(t || '');
+  for (const [tipo, re] of TIPO_NO_TEXTO) if (re.test(x)) return tipo;
+  return '';
+}
+// grau dito na frase ("dor de cabeça leve", "febre forte"): só quando é claro
+const grauDoTexto = (t) => (/\b(leve|fraca|fraquinha|pouca|pouquinho)\b/.test(t) ? 'leve' : /\b(muito forte|forte|insuportavel|demais)\b/.test(t) ? 'forte' : '');
+
 // Passo da próxima pergunta para as respostas `r` (cópia nova a cada resposta: voltar na conversa não estraga nada)
 function perguntar(r, coach) {
   const passo = proximoPasso(r);
@@ -67,13 +89,22 @@ function perguntar(r, coach) {
       },
     };
   }
-  if (passo === 'urgente') return simNao('urgente', 'Tem algum destes sinais?', s.urgente, 'Sim, tenho');
+  if (passo === 'urgente') return simNao('urgente', `${TIPOS_SAUDE[tp] ? TIPOS_SAUDE[tp].nome : 'Entendi'}. Antes, tem algum destes sinais?`, s.urgente, 'Sim, tenho');
   if (passo === 'vira') return simNao('vira', 'Junto com isso, tem algum destes?', s.vira);
   if (passo === 'atendimento') return simNao('atendimento', 'E algum destes?', s.atendimento);
   if (passo === 'detalhe') return simNao('detalhe', s.detalhe.pergunta, s.detalhe.itens);
+  if (passo === 'grau' && tp === 'dor-cabeca') {
+    // grau e "piora ao se mexer" numa pergunta só (a resposta que não é "piora" quer dizer que não piora)
+    return {
+      texto: ['Como está a dor?'],
+      opcoes: [{ rotulo: 'Leve: dá para fazer tudo', valor: 'leve' }, { rotulo: 'Moderada: atrapalha um pouco', valor: 'moderada' }, { rotulo: 'Forte', valor: 'forte' }, { rotulo: 'Piora quando me mexo', valor: 'piora' }],
+      proximo: (v) => perguntar(v === 'piora' ? { ...r, grau: 'moderada', piora: true } : { ...r, grau: GRAUS_SAUDE[v] ? v : 'forte', piora: false }, coach),
+    };
+  }
   if (passo === 'grau') {
     return { texto: ['Quanto incomoda?'], opcoes: Object.entries(GRAUS_SAUDE).map(([k, [nome, sub]]) => ({ rotulo: `${nome}: ${sub.toLowerCase()}`, valor: k })), proximo: (v) => perguntar(com('grau', GRAUS_SAUDE[v] ? v : 'forte'), coach) };
   }
+  if (passo === 'piora' && r.grau === 'forte') return perguntar({ ...r, piora: false }, coach); // forte já tira o treino da região
   if (passo === 'piora') return simNao('piora', tp === 'dor-cabeca' ? 'Piora ao se mexer, andar ou subir escada?' : 'Dói mais quando você mexe essa região?', []);
   return montarDecisao(r, coach);
 }
@@ -89,12 +120,14 @@ function montarDecisao(r, coach) {
   const doCoach = coach === 'corrida'
     ? (ef.corrida === 'sem' ? 'Corrida: nenhuma por enquanto.' : ef.corrida === 'metade' ? 'Corrida: só leve e pela metade.' : ef.corrida === 'leve' ? 'Corrida: só leve.' : 'Corrida: segue o plano.')
     : (ef.musc === 'sem' ? 'Musculação: nenhuma por enquanto.' : ef.musc === 'leve' ? 'Musculação: só leve.' : ef.regiao ? (ef.regiao.modo === 'bloqueia' ? 'Musculação: o resto do corpo treina; a região fica de fora.' : 'Musculação: normal, com menos carga na região.') : 'Musculação: segue o plano.');
+  const muda = ef.musc !== 'normal' || ef.corrida !== 'normal' || !!ef.regiao;
+  // uma fala só: o que fazer hoje. A linha do treino deste treinador entra só quando diz algo a mais (a região)
   const passo = {
-    texto: [ef.titulo + '.', ef.texto, doCoach],
+    texto: [`${ef.titulo}. ${ef.texto}`, ...(ef.regiao && ef.nivel !== 'urgente' && ef.nivel !== 'atendimento' ? [doCoach] : [])],
     detalhes: ef.porque,
     refs: refsOk(ef.refs),
     acoes: [{
-      rotulo: 'Anotar para o treino',
+      rotulo: muda ? 'Ajustar o treino de hoje' : 'Anotar',
       confirmar: `Vou anotar ${nome}. ${ef.titulo}.`,
       aplicar: (s, ctx) => {
         const hoje = ctx && typeof ctx.hoje === 'string' ? ctx.hoje : '';
@@ -121,14 +154,17 @@ function inicio(coach) {
     let e = null;
     try { e = efeitoDeHoje(ctx.st, ctx.hoje); } catch { e = null; }
     const ativos = e ? e.itens.filter((x) => x.ef.fase === 'ativo') : [];
-    if (!ativos.length) return perguntar({}, coach);
+    const t = ctx && typeof ctx.texto === 'string' ? ctx.texto : '';
+    const tipo = tipoDoTexto(t);
+    const r0 = tipo ? { tipo, ...(grauDoTexto(t) && tipo !== 'pancada' && tipo !== 'corte' ? { grau: grauDoTexto(t) } : {}) } : {};
+    if (!ativos.length) return perguntar(r0, coach);
     const { p, ef } = ativos[0];
     return {
       texto: [`Você já contou ${TIPOS_SAUDE[p.tipo].curto}${p.onde ? ' (' + LOCAIS_DOR[p.onde].toLowerCase() + ')' : ''}. ${ef.titulo}.`, 'Quando melhorar, toque em “Melhorou” no cartão do Início.'],
       detalhes: ef.porque,
       refs: refsOk(ef.refs),
       opcoes: [{ rotulo: 'Contar outro problema', valor: 'novo' }, { rotulo: 'Está tudo certo', valor: 'ok' }],
-      proximo: (v) => (v === 'novo' ? perguntar({}, coach) : { texto: ['Combinado. Melhoras!'] }),
+      proximo: (v) => (v === 'novo' ? perguntar(r0, coach) : { texto: ['Combinado. Melhoras!'] }),
     };
   };
 }
@@ -138,15 +174,15 @@ const PALAVRAS = [
   '!febre', 'febre alta', 'com febre', 'temperatura', 'termometro', 'febril', 'estou febre', '!gripe', '!gripado', '!gripada', 'resfriado', 'resfriada', 'resfriei', 'nariz escorrendo', 'coriza', 'espirrando', 'dor garganta', 'garganta inflamada', 'tosse', 'tossindo', 'covid', 'dor corpo', 'corpo doendo', 'calafrio', 'doente', 'estou doente', 'fiquei doente', 'passando mal', 'mal estar', 'virose', 'infeccao',
   '!diarreia', '!vomito', 'vomitei', 'vomitando', 'enjoo', 'enjoado', 'enjoada', 'dor barriga', 'intestino solto', 'dor estomago',
   '!pancada', 'batida', '!bati', 'bati perna', 'bati joelho', 'bati braco', 'bati cabeca', 'bati com', '!cai', 'cai bicicleta', 'cai moto', 'cai escada', 'levei queda', '!queda', '!tombo', 'levei tombo', '!torci', 'torceu pe', 'torci+tornozelo', 'torci pe', 'torci tornozelo', 'virei pe', 'roxo', 'hematoma', 'contusao', 'inchado', 'trombei', 'acidente',
-  '!cortei', 'corte', 'cortado', 'cortei pe', 'cortei mao', 'cortei dedo', '!furei', 'furada', 'furou', 'pisei prego', '!prego', 'vidro', 'caco vidro', 'faca', 'ferimento', 'machucado aberto', 'pontos', 'tetano', 'antitetanica',
-  '!dor cabeca', 'cabeca', 'cabeca doendo', '!enxaqueca', 'cefaleia', 'pancada cabeca', 'concussao',
+  '!cortei', 'corte', 'cortado', 'cortei pe', 'cortei mao', 'cortei dedo', 'furei', 'furei pe', 'furei mao', 'furei dedo', 'furada', 'furou pe', 'pisei prego', '!prego', 'vidro', 'caco vidro', 'faca', 'ferimento', 'machucado aberto', 'pontos', 'tetano', 'antitetanica',
+  '!dor cabeca', 'cabeca doendo', '!enxaqueca', 'cefaleia', 'pancada cabeca', 'concussao',
   '!colica', 'colica menstrual', 'menstruacao', 'menstruada', 'periodo menstrual',
   '!dente', 'dor dente', 'dente doendo', 'dentista', 'siso',
 ];
 const titulo = 'Problema de saúde fora do treino';
 export const INTENCOES = [
-  { id: 'saude-fora-treino', coach: 'treinador', titulo, resumo: 'um problema de saúde que não veio do treino (febre, pancada, corte, dor de cabeça...)', palavras: PALAVRAS, inicio: inicio('treinador') },
-  { id: 'saude-fora-corrida', coach: 'corrida', titulo, resumo: 'um problema de saúde que não veio da corrida (febre, pancada, corte, dor de cabeça...)', palavras: PALAVRAS, inicio: inicio('corrida') },
+  { id: 'saude-fora-treino', coach: 'treinador', titulo, resumo: 'um problema de saúde que não veio do treino (febre, pancada, corte, dor de cabeça...)', palavras: PALAVRAS, prioridade: 3, bonus: (i) => (tipoDoTexto(i.texto) ? 3 : 0), inicio: inicio('treinador') },
+  { id: 'saude-fora-corrida', coach: 'corrida', titulo, resumo: 'um problema de saúde que não veio da corrida (febre, pancada, corte, dor de cabeça...)', palavras: PALAVRAS, prioridade: 3, bonus: (i) => (tipoDoTexto(i.texto) ? 3 : 0), inicio: inicio('corrida') },
 ];
 // (para testes e para o motor, se quiser mostrar a lista) — os sinais de emergência de cada tipo, em texto corrido
 export const resumoDosSinais = (tipo) => (SINAIS[tipo] && SINAIS[tipo].urgente ? juntar(SINAIS[tipo].urgente) : '');

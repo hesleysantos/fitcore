@@ -271,7 +271,7 @@ test('chat: intenções do Treinador e do Treinador de corrida, percorridas até
     assert.ok(prof < 12, 'conversa longa demais: ' + rot);
     if (p.opcoes) { for (const o of p.opcoes) andar(p.proximo(o.valor, ctx), ctx, rot + ' > ' + o.rotulo, prof + 1); return; }
     fins++;
-    passos.add(p.texto[0]);
+    passos.add(p.texto[0].split('. ')[0] + '.');
     for (const a of p.acoes || []) {
       assert.ok(a.rotulo && a.confirmar && a.depois && typeof a.aplicar === 'function', rot);
       const s = JSON.parse(JSON.stringify(ctx.st));
@@ -282,7 +282,7 @@ test('chat: intenções do Treinador e do Treinador de corrida, percorridas até
       assert.equal(novo.data, ctx.hoje);
       // a decisão mostrada é a mesma que o app aplica depois de anotar
       const e = S.efeitoDoProblema(novo, ctx.hoje);
-      assert.ok(e && p.texto[0] === e.titulo + '.', rot);
+      assert.ok(e && p.texto[0].startsWith(e.titulo + '.'), rot);
       anotados++;
     }
   };

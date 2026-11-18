@@ -462,13 +462,13 @@ export const INTENCOES = [
   {
     id: 'ex-trocar', coach: 'treinador', titulo: 'Trocar um exercício por outro', resumo: 'trocar um exercício por outro', exige: 'exercicio',
     palavras: ['!substituir', 'substituto', 'posso trocar', 'quero trocar', 'da pra trocar', 'tem como trocar', 'trocar outro', 'trocar por', 'troca por', 'no lugar', 'outro lugar', 'outro exercicio', 'nao gosto', 'odeio', 'detesto', 'alternativa', 'equivalente', 'parecido', 'semelhante', 'outra opcao', 'tirar', 'trocar'],
-    bonus: (i) => (comEx(i) && /\b(troc\w*|substitu\w*|lugar|alternativ\w*|nao gosto|odeio|detesto|equivalente|tirar|tira)\b/.test(i.texto) ? 3 : 0),
+    bonus: (i) => (comEx(i) && /\b(troc\w*|substitu\w*|lugar|alternativ\w*|nao gosto|odeio|detesto|equivalente|tirar|tira|muda|mudar|chato|enjoei)\b/.test(i.texto) ? 3 : 0),
     disponivel: temPlano,
     inicio: comExercicio(passoTrocar, 'Qual exercício do plano você quer trocar?'),
   },
   {
     id: 'ex-seguro', coach: 'treinador', titulo: 'Um exercício é seguro para mim?', resumo: 'se um exercício é seguro para você', exige: 'exercicio', prioridade: 2,
-    palavras: ['seguro', 'e seguro', 'perigoso', 'faz mal', 'machuca', 'prejudica', 'ruim pra', 'arriscado', 'risco', 'posso fazer', 'pode fazer', 'faz mal joelho', 'faz mal coluna', 'faz mal costas', 'quem tem dor', 'com dor'],
+    palavras: ['seguro', 'e seguro', 'perigoso', 'faz mal', 'machuca', 'prejudica', 'ruim pra', 'arriscado', '!risco', 'risco lesao', 'risco machucar', 'posso fazer', 'pode fazer', 'faz mal joelho', 'faz mal coluna', 'faz mal costas', 'quem tem dor', 'com dor'],
     bonus: (i) => (comEx(i) && /\b(segur\w*|perigos\w*|faz mal|machuca\w*|prejudic\w*|arriscad\w*|risco|com dor|tem dor|problema)\b/.test(i.texto) ? 2.5 : 0),
     disponivel: temPlano,
     inicio: comExercicio(passoSeguro, 'Qual exercício?'),
@@ -484,7 +484,7 @@ export const INTENCOES = [
     id: 'recomendar', coach: 'treinador', titulo: 'O que você recomenda?', resumo: 'uma recomendação para o seu treino',
     palavras: ['recomenda+treino', 'recomendacao+treino', 'sugere+treino', 'sugestao+treino', 'voce acha treino', 'treino bom', 'treino esta bom', 'treino ta bom', 'treino certo', 'treino equilibrado', 'treino completo', 'treino fraco', 'falta treino', 'falta algo treino', 'melhorar treino', 'avaliar treino', 'avalia treino', 'avaliacao treino', 'dica treino', 'conselho treino', 'plano bom', 'plano ta bom'],
     // um músculo e um pedido de melhora ("o que você recomenda para melhorar o glúteo?")
-    bonus: (i) => ((i.ent && i.ent.musculos.length && /\b(melhor\w*|cresc\w*|desenvolv\w*|aument\w*|ganhar|definir|evolu\w*|focar|recomend\w*|suger\w*|dica)\b/.test(i.texto) && !/\b(dor|doi|doendo|machuc\w*)\b/.test(i.texto)) ? 2.5 : 0),
+    bonus: (i) => ((i.ent && i.ent.musculos.length && /\b(melhor\w*|cresc\w*|desenvolv\w*|aument\w*|ganhar|definir|evolu\w*|focar|recomend\w*|suger\w*|dica|forte|fortalec\w*|indic\w*|deixar|durinh\w*|empinad\w*|maior|afinar|tonific\w*)\b/.test(i.texto) && !/\b(dor|doi|doendo|machuc\w*)\b/.test(i.texto)) ? 2.5 : 0),
     disponivel: temPlano,
     inicio: passoRecomendar,
   },

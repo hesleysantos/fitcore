@@ -167,12 +167,13 @@ test('dor contada: o chat propõe o ajuste do treino e aplica ali mesmo', () => 
 // ---------- conversa ----------
 test('sem entender: pergunta de volta com os assuntos mais próximos e "Outra coisa" pede para reformular com exemplos', () => {
   const [p, q] = conversar('treinador', ['como faço pra passar no enem', '#Outra coisa']);
-  assert.match(p.texto[0], /^Você quer saber sobre .+\?$/);
-  assert.ok(p.opcoes.length >= 2 && p.opcoes.length <= 4 && !p.assunto);
+  assert.match(p.texto[0], /^(É sobre um destes|É isto que você quer)\?$/);
+  assert.ok(p.opcoes.length >= 2 && p.opcoes.length <= 5 && !p.assunto);
   assert.match(q.texto.join(' '), /poucas palavras/);
   const [n] = conversar('treinador', ['asdf qwer zxcv']);
   assert.match(n.texto.join(' '), /Não entendi|Hum|Não consegui/);
-  assert.ok(n.texto.some((t) => /“/.test(t)), 'mostra exemplos');
+  // sem nada entendido: assuntos comuns em botões (com jeitos diferentes de dizer) e "Ver todos os assuntos"
+  assert.ok(n.opcoes.length >= 3 && n.opcoes.some((o) => o.rotulo === 'Ver todos os assuntos'), JSON.stringify(n.opcoes));
 });
 test('perguntas relacionadas: até 3, só nas falas que terminam, nunca num alerta, e o toque responde como se fosse escrito', () => {
   const [a] = conversar('treinador', ['qual o peso do stiff']);
@@ -284,4 +285,98 @@ test('perguntas frequentes no chat: só as que existem, com fontes, e as relacio
     assert.ok(p.faqQ && todas.includes(p.faqQ), t);
     assert.ok(p.refs && p.refs.every((k) => textoDaRef(k)), t);
   }
+});
+
+// ---------- leva 6 e 7: frases de exemplo, jeitos de dizer, respostas curtas e conversa ----------
+import fs from 'node:fs';
+import { JEITOS, EXEMPLOS } from '../www/js/logic/chat/exemplos.js';
+import { tipoDoTexto } from '../www/js/logic/chat/saude.js';
+// O que o chat fez com a frase: 'direto' | 'confirma' | 'pergunta' | 'faq' | 'nada', e o assunto (ou os dos botões)
+function decisao(coach, texto) {
+  const ctx = ctxDe(ADULTO, coach);
+  const r = M.entender(texto, coach, ctx);
+  const [p] = conversar(coach, [texto]);
+  if (p.assunto) return { tipo: 'direto', ids: [p.assunto] };
+  if (/^Você quer falar sobre/.test(p.texto[0] || '') && r.melhor) return { tipo: 'confirma', ids: [r.melhor.intencao.id] };
+  if (p.faqQ) return { tipo: 'faq', ids: [] };
+  if (p.opcoes && /É sobre um destes|É isto que|É algum destes/.test(p.texto.join(' '))) return { tipo: 'pergunta', ids: p.opcoes.map((o) => o.valor) };
+  return { tipo: 'nada', ids: [], seguranca: /\b(188|192)\b/.test(p.texto.join(' ')) };
+}
+test('frases novas de pessoas comuns (levas 6 e 7, escritas sem ver as palavras-chave): acerto mínimo e poucas respostas de outro assunto', () => {
+  const { leva6, leva7 } = JSON.parse(fs.readFileSync(new URL('./dados/frases-chat.json', import.meta.url), 'utf8'));
+  // leva 7: medida antes do ajuste em 68% (código antigo) e 77% (motor com exemplos); estes limites só protegem de piora
+  for (const [nome, lista, minimo] of [['leva 6', leva6, 0.88], ['leva 7', leva7, 0.80]]) {
+    let certo = 0, trocado = 0;
+    for (const f of lista) {
+      const d = decisao(f.coach, f.texto);
+      const ok = f.esperado === 'nenhum' ? d.tipo === 'nada' || d.tipo === 'pergunta' || d.tipo === 'faq'
+        : d.tipo === 'faq' || d.seguranca || ((d.tipo === 'direto' || d.tipo === 'confirma' || d.tipo === 'pergunta') && d.ids.includes(f.esperado));
+      if (ok) certo++;
+      else if (d.tipo === 'direto') trocado++;
+    }
+    assert.ok(certo / lista.length >= minimo, `${nome}: ${(100 * certo / lista.length).toFixed(1)}% (mínimo ${minimo * 100}%)`);
+    assert.ok(trocado / lista.length <= 0.05, `${nome}: respondeu outro assunto em ${trocado}`);
+  }
+});
+test('exemplos e jeitos: só de assuntos que existem, botões curtos', () => {
+  for (const id of [...Object.keys(EXEMPLOS), ...Object.keys(JEITOS)]) assert.ok(M.intencaoPorId(id), id);
+  for (const l of Object.values(JEITOS)) for (const j of l) assert.ok(j.length <= 40, j);
+});
+test('as duas perguntas do dono: intervalo menor que 1 hora e dor de cabeça (direto, sem pergunta de dois assuntos)', () => {
+  for (const coach of ['treinador', 'corrida']) {
+    const [p] = conversar(coach, ['posso correr e fazer os exercícios de hoje com o intervalor menor que 1 hora?']);
+    assert.match(p.assunto, /^juntar-/);
+    assert.ok(p.texto.length <= 2 && /menos de 3 horas/.test(p.texto.join(' ')));
+    const [a, b, c, d] = conversar(coach, ['estou com dor de cabeça, como fica os treinos de hoje?', '#Não', '#Não', '#Leve']);
+    assert.equal(a.assunto, 'saude-fora-' + (coach === 'corrida' ? 'corrida' : 'treino'));
+    assert.match(a.texto[0], /^Dor de cabeça\. Antes, tem algum destes sinais\?/); // já sabe o que é: não pergunta "O que aconteceu?"
+    assert.match(b.texto[0], /esforço forte/);
+    assert.ok(c.opcoes.some((o) => o.rotulo === 'Piora quando me mexo'), 'grau e "piora" numa pergunta só');
+    assert.equal(d.texto.length, 1);
+    assert.match(d.texto[0], /^Hoje só treino leve\./);
+    assert.equal(d.acoes[0].rotulo, 'Ajustar o treino de hoje');
+  }
+  assert.equal(tipoDoTexto('to com diarreia'), 'estomago');
+  assert.equal(tipoDoTexto('furei o treino de ontem'), '');
+  assert.equal(tipoDoTexto('furei o pe num prego'), 'corte');
+  assert.equal(tipoDoTexto('bati a cabeca na porta'), 'cabeca');
+});
+test('respostas curtas: no máximo 2 parágrafos corridos no balão; o resto no "Saiba mais"; segurança inteira', () => {
+  const ctx = ctxDe(ADULTO, 'treinador');
+  for (const i of M.intencoes()) {
+    const p = M.limparPasso(M.iniciar(i.id, ctxDe(ADULTO, i.coach)));
+    const prosa = p.texto.filter((t, k) => !/^(•|\d+\.\s)/.test(t) && !/:$/.test(t) && !(p.opcoes && k === p.texto.length - 1));
+    assert.ok(prosa.length <= M.MAX_PARAGRAFOS || p.texto.some((t) => /\b(192|188)\b/.test(t)), i.id + ': ' + p.texto.join(' | '));
+  }
+  // "Saiba mais" leva o que saiu do balão (nada se perde)
+  const p = M.limparPasso({ texto: ['um', 'dois', 'três'], detalhes: ['porquê'] });
+  assert.deepEqual(p.texto, ['um', 'dois']);
+  assert.deepEqual(p.detalhes, ['três', 'porquê']);
+  // risco: a fala inteira, com o 188 à vista
+  const [r] = conversar('nutri', ['depois que como me sinto horrivel e queria me punir']);
+  assert.ok(r.texto.some((t) => /188/.test(t)) && r.aviso && r.aviso.tipo === 'danger');
+  assert.ok(ctx);
+});
+test('respostas digitadas: posição do botão, número aproximado e pergunta repetida quando não entende', () => {
+  const [, a] = conversar('treinador', ['tenho pouco tempo hoje', 'a segunda']);
+  assert.match(a.texto[0], /cerca de 30 min/);
+  const [, b] = conversar('treinador', ['tenho pouco tempo hoje', 'uns 25']);
+  assert.match(b.texto[0], /cerca de 20 min/); // o maior que cabe nos 25 minutos
+  const [q, c] = conversar('treinador', ['tenho pouco tempo hoje', 'xablau bla']);
+  assert.match(c.texto[0], /^Não peguei/);
+  assert.deepEqual(c.opcoes.map((o) => o.rotulo), q.opcoes.map((o) => o.rotulo));
+  // dia da semana como botão continua sendo o dia, não "a segunda opção"
+  const [m, d] = conversar('corrida', ['quero mudar a corrida de hoje de dia', 'sexta']);
+  assert.ok(m.opcoes.some((o) => /Sexta/.test(o.rotulo)));
+  assert.match(d.texto[0], /sexta/);
+});
+test('sem entender: botões variados que levam aos assuntos (vários jeitos, o mesmo lugar)', () => {
+  const [n] = conversar('treinador', ['asdf qwer zxcv']);
+  assert.ok(n.opcoes.length >= 4 && n.opcoes[n.opcoes.length - 1].rotulo === 'Ver todos os assuntos');
+  const [p] = conversar('corrida', ['posso acelerar o ritmo hoje?']);
+  assert.ok(p.opcoes.length >= 3 && p.opcoes.some((o) => o.valor === 'ritmo'));
+  // a mesma pergunta em outra conversa varia os jeitos de dizer
+  const um = conversar('treinador', ['asdf qwer zxcv'])[0].opcoes.map((o) => o.rotulo).join();
+  const dois = conversar('treinador', ['oi', 'asdf qwer zxcv'])[1].opcoes.map((o) => o.rotulo).join();
+  assert.notEqual(um, dois);
 });
