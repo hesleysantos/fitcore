@@ -26,7 +26,7 @@ import { doresForaDaCorrida } from './saude-fora.js';
 import { comboAtual } from './combinado.js';
 import { diasBloqueados } from './dias-livres.js';
 import { EX_POR_ID } from '../data/exercises.js';
-import { TIPOS_TREINO, DOR_CORRIDA } from '../data/corrida.js';
+import { TIPOS_TREINO, DOR_CORRIDA, MOTIVOS_CARGA } from '../data/corrida.js';
 import { perguntaCondicoes, perguntaTriagem, perguntaRemedios, perguntaLiberado, condicoesDe, sinaisDe, remediosDe, soComSupervisao, respostasProtegidas } from './saude.js';
 
 // ---------- datas (dia = 'AAAA-MM-DD'; contas feitas ao meio-dia UTC para não depender de fuso nem de horário de verão) ----------
@@ -1130,15 +1130,33 @@ function limparPausas(v) {
   }
   return out.sort((a, b) => (a.de < b.de ? -1 : a.de > b.de ? 1 : 0)).slice(-MAX_PAUSAS);
 }
+// Ajustes da carga da semana que a pessoa aplicou (logic/carga-corrida.js): [{ data, acao, corte, para, motivo, em }].
+// acao 'leve' (treino forte vira rodagem leve; longo com final em ritmo de prova vira longo simples), 'curto' (o mesmo e a
+// corrida encurtada em `corte`, de 5 a 50%) ou 'mover' (a corrida mudou de dia: a mudança em si é a marca de state.perdidos,
+// logic/perdido.js; aqui fica só o registro, para o "Desfazer"). `motivo` = chave de MOTIVOS_CARGA (data/corrida.js).
+export const MAX_CARGA = 30;
+const ACOES_CARGA = new Set(['leve', 'curto', 'mover']);
+export function limparCarga(v) {
+  const out = [];
+  for (const x of Array.isArray(v) ? v.slice(0, MAX_CARGA * 5) : []) {
+    if (!isObj(x) || !diaValido(x.data) || !ACOES_CARGA.has(x.acao) || typeof x.motivo !== 'string' || !Object.prototype.hasOwnProperty.call(MOTIVOS_CARGA, x.motivo)) continue;
+    if (out.some((y) => y.data === x.data)) continue; // um ajuste por dia
+    const o = { data: x.data, acao: x.acao, motivo: x.motivo, em: isoOk(x.em) };
+    if (x.acao === 'curto') { if (!(typeof x.corte === 'number' && Number.isFinite(x.corte))) continue; o.corte = Math.round(entre(x.corte, 0.05, 0.5) * 100) / 100; }
+    if (x.acao === 'mover') { if (!diaValido(x.para) || x.para === x.data || segundaDe(x.para) !== segundaDe(x.data)) continue; o.para = x.para; }
+    out.push(o);
+  }
+  return out.sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0)).slice(-MAX_CARGA);
+}
 // Estado do Treinador de corrida: { answers, aceitoEm (ISO ou ''), inicio (segunda-feira da semana 1 ou ''), pausadoEm (ISO ou ''),
-// cron (ou null), pausas }
+// cron (ou null), pausas, mostrados, degrau, carga }
 export function limparCorrida(raw) {
   const r = isObj(raw) ? raw : {};
   const aceitoEm = isoOk(r.aceitoEm);
   const inicio = aceitoEm && diaValido(r.inicio) ? segundaDe(r.inicio) : '';
   return { answers: limparRespostas(r.answers), aceitoEm: inicio ? aceitoEm : '', inicio, pausadoEm: inicio ? isoOk(r.pausadoEm) : '', cron: inicio ? limparCron(r.cron) : null, pausas: inicio ? limparPausas(r.pausas) : [],
     // o treino mostrado em cada dia e o degrau de ritmo já concedido (ver guardarDoDia)
-    mostrados: inicio ? limparMostrados(r.mostrados) : [], degrau: inicio ? limparDegrau(r.degrau) : null };
+    mostrados: inicio ? limparMostrados(r.mostrados) : [], degrau: inicio ? limparDegrau(r.degrau) : null, carga: inicio ? limparCarga(r.carga) : [] };
 }
 
 const ehCorrida = (r) => r.tipo !== 'caminhada';
@@ -1584,7 +1602,7 @@ function opcoesLimpas(o) {
     .sort((a, b) => (a.de < b.de ? -1 : a.de > b.de ? 1 : 0));
   return {
     hoje, inicio, desde: diaValido(op.desde) ? op.desde : '', registros: limparRegistros(op.registros), adiado: op.adiado === true, paradas,
-    mostrados: limparMostrados(op.mostrados), degrau: limparDegrau(op.degrau),
+    mostrados: limparMostrados(op.mostrados), degrau: limparDegrau(op.degrau), carga: limparCarga(op.carga),
     foco: FOCOS_CORRIDA.includes(op.foco) ? op.foco : '', // prioridade entre corrida e musculação ('' = sem escolha: o plano não muda)
     diasForca: dias(op.diasForca), diasPernas: dias(op.diasPernas), bloqueados: dias(op.bloqueados).slice(0, 5),
     // (problemas fora do treino podem não ter região: valem pelo efeito pronto em `fora`)
@@ -2073,6 +2091,23 @@ export function gerarPlano(respostas, opcoes) {
     }
   } else if (!acompanha && pior.nivel > 0) for (const s of semanas.slice(0, 1)) s.dias = ordenarLongo(s.dias.map((d) => aplicarDor(d, pior, c)), c, () => true);
 
+  // ----- carga da semana: ajustes que a pessoa aplicou (logic/carga-corrida.js), só de hoje em diante. O dia já mudado
+  // pela dor não muda de novo (o efeito da dor é igual ou mais forte) -----
+  if (acompanha) for (const aj of op.carga) {
+    if (aj.acao === 'mover' || aj.data < op.hoje) continue;
+    const s = semanas.find((x) => { const ini = iniSemana(x.n); return aj.data >= ini && aj.data <= somaDias(ini, 6); });
+    const j = s ? s.dias.findIndex((d) => d.wd === diaDaSemana(aj.data)) : -1;
+    if (j < 0) continue;
+    const d = s.dias[j];
+    if (!ehCorridaDia(d) || ehEventoDia(d) || d.tipo === 'corrida_caminhada' || d.ajustado) continue;
+    const m = MOTIVOS_CARGA[aj.motivo];
+    const curto = aj.acao === 'curto';
+    const novo = aplicarDor(d, { nivel: curto ? 2 : 1, corte: curto ? aj.corte : 0, ajuste: `Semana puxada (${m.curto}). Se as pernas pesarem, caminhe um pouco.` }, c);
+    // o longão encurtado continua sendo o longão da semana (o nome e as regras do encaixe com a musculação não mudam)
+    s.dias[j] = { ...novo, nome: d.nome, carga: aj.motivo };
+    ajustes.push({ texto: `${d.nome} de ${fmtDia(aj.data)} ${curto ? 'mais curto' : 'mais leve'}: ${m.curto}.`, motivo: m.motivo, refs: m.refs, carga: true });
+  }
+
   // ----- a prova (ou o desafio) só fica no plano se o maior treino dos 30 dias anteriores chega à metade da distância
   // (frandsen2025) e se ela não cai dentro da volta de uma pausa (feely2023, warden2021) -----
   const ultima = semanas[semanas.length - 1];
@@ -2279,7 +2314,7 @@ function opcoesDoEstado(st, hoje) {
     // + problemas de saúde que não vêm do treino (logic/saude-fora.js), já com o efeito na corrida pronto em `fora`
     inicio: run.inicio, hoje, registros: Array.isArray(st.runs) ? st.runs : [], diasForca: forca, diasPernas: pernas, dores: [...doresAtivas(st, hoje), ...(() => { try { return doresForaDaCorrida(st, hoje); } catch { return []; } })()], desde,
     bloqueados: diasBloqueados(st), // dias em que a pessoa não treina (logic/dias-livres.js)
-    foco: comboAtual(st).foco, mostrados: run.mostrados, degrau: run.degrau,
+    foco: comboAtual(st).foco, mostrados: run.mostrados, degrau: run.degrau, carga: run.carga,
     // o plano começou na segunda-feira seguinte ao aceite? (as pausas adiam o início guardado: desconta)
     adiado: !!desde && segundaDe(desde) < somaDias(run.inicio, -7 * pausas.reduce((s, p) => s + (p && Number.isInteger(p.semanas) ? p.semanas : 0), 0)),
     encerradas: dores.filter((d) => isObj(d) && d.fim), paradas: [...pausas.map((p) => ({ ...p, motivo: 'pausa' })), ...suspensoes(dores, hoje, (() => { try { return perfil(run.answers); } catch { return null; } })())],

@@ -23,6 +23,8 @@ import { semanaEfetiva, segundaDe, podeMarcar, podeMarcarCorrida, corridaPerdida
 import { botaoNaoTreinei, botaoNaoCorri, linhaNaoTreinado, linhaNaoCorrida } from './perdido.js';
 import { cartaoSaude, avisoDoTreino, contarProblema } from './saude-fora.js';
 import { semTreinoHoje } from '../logic/saude-fora.js';
+import { itensDoDia } from '../logic/ajuste-semana.js';
+import { linhaCargaInicio } from './corrida.js';
 
 function saudacao() {
   const hora = new Date().getHours();
@@ -76,6 +78,8 @@ export function homeView() {
       btn(corridaHoje.feito ? 'Ver corrida' : 'Abrir corrida', () => go('corrida/dia/' + corridaHoje.data), (corridaHoje.feito ? '' : 'primary ') + 'lg block', 'run'),
       !corridaHoje.feito && podeMarcarCorrida(state, corridaHoje.data, hojeK) ? h('div', { class: 'perdido-acoes' }, botaoNaoCorri(corridaHoje.data, refresh)) : null));
   }
+  // semana puxada (logic/carga-corrida.js): a corrida de hoje ou de amanhã fica mais leve ou muda de dia
+  if (corridaSem) { const lc = linhaCargaInicio(hojeK); if (lc) body.push(lc); }
 
   // corrida + musculação: enquanto falta dizer o que priorizar (ou se quer fortalecimento), a pergunta aparece aqui
   try { const f = faltaPerguntar(state); if (f.foco || f.fortalecimento) { const cc = cartaoCombinado({ aoMudar: () => refresh() }); if (cc) body.push(cc); } } catch { /* segue sem o cartão */ }
@@ -109,7 +113,9 @@ export function homeView() {
     // o treino de hoje já com as marcas da semana ("Não treinei" e treinos que mudaram de dia: logic/perdido.js)
     const semEf = semanaEfetiva(plan, state.perdidos, segundaDe(hojeK));
     const efHoje = semEf[(wd + 6) % 7];
-    const dia = plan.dias.find((d) => d.id === efHoje.diaId);
+    const diaPlano = plan.dias.find((d) => d.id === efHoje.diaId);
+    // mudado só nesta semana (logic/ajuste-semana.js): mostra a versão da semana
+    const dia = diaPlano ? { ...diaPlano, itens: itensDoDia(state, plan.id, diaPlano.id, hojeK) } : null;
     const perdidoHoje = efHoje.perdido ? plan.dias.find((d) => d.id === efHoje.perdido.diaId) : null;
     if (perdidoHoje) {
       const prox = proximoTreino(plan, wd, semEf);

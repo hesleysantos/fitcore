@@ -8,6 +8,8 @@
 //                              s: true (só presente quando verdadeiro) se veio de um toque na sugestão do cardápio }
 //   item fora da lista:      { id, ref, nome: texto curto, kcal: inteiro, p: gramas de proteína ou null }
 //   ref = id de REFEICOES (as refeições do cardápio de exemplo e "outro horário"); id = único dentro do dia.
+//   O dia também pode ter `sup`: os suplementos e vitaminas tomados (só registro; formato em "suplementos", abaixo).
+//   Um dia fica guardado se tiver alimento ou suplemento.
 //
 // O que conta numa refeição é o que a pessoa REALMENTE comeu: os alimentos da sugestão que ela marcou (a refeição inteira
 // ou item por item) + os que ela adicionou à mão. Um alimento da sugestão está "marcado" quando aquele alimento já está
@@ -113,7 +115,8 @@ export function limparDiario(raw, hoje, { semCorteDeFuturo = false } = {}) {
     const data = dataAceita(x.data, ref, semCorteDeFuturo === true);
     if (!data || mapa.has(data)) continue;          // dia repetido: vale o primeiro
     const itens = limparItens(tem(x, 'itens') ? x.itens : null);
-    if (itens.length) mapa.set(data, { data, itens });
+    const sup = limparSups(tem(x, 'sup') ? x.sup : null);
+    if (itens.length || sup.length) mapa.set(data, sup.length ? { data, itens, sup } : { data, itens });
   }
   // ordena antes de cortar, para ficar com os dias mais recentes
   d.dias = [...mapa.values()].sort(porData).slice(-MAX_DIAS);
@@ -140,9 +143,10 @@ export function refeicaoCopiada(diario, data, refeicao) {
 export const diasRegistrados = (diario) => diasDe(diario).filter((x) => isObj(x) && dia(x.data) && Array.isArray(x.itens) && x.itens.length).map((x) => x.data).sort();
 
 // ---------- escrita (mudam o objeto `diario`, que é state.diario) ----------
-function guardar(diario, data, itens) {
+// `sup` ausente: os suplementos do dia ficam como estão
+function guardar(diario, data, itens, sup = supDoDia(diario, data)) {
   const outros = diasDe(diario).filter((x) => isObj(x) && dia(x.data) && x.data !== data);
-  if (itens.length) outros.push({ data, itens });
+  if (itens.length || sup.length) outros.push(sup.length ? { data, itens, sup } : { data, itens });
   diario.dias = outros.sort(porData).slice(-MAX_DIAS);
 }
 const novoId = (itens) => 'i' + (itens.reduce((mx, x) => { const m = /^i(\d+)$/.exec(x.id); return m ? Math.max(mx, Number(m[1])) : mx; }, 0) + 1);
@@ -166,6 +170,27 @@ export function gravarItem(diario, data, raw, hoje) {
   // conferência: se o limite de dias cortou justamente este dia, desfaz e recusa (não há perda em silêncio)
   if (!itensDoDia(diario, d).some((x) => x.id === it.id)) { diario.dias = antes; return null; }
   return it;
+}
+// Vários alimentos de uma vez ("Adicionar todos"): ou entram todos, ou nenhum. `lista` = itens sem `id`. Devolve
+// quantos entraram (0 se algum for inválido, se a data não for aceita ou se o dia não tiver lugar para todos).
+export function gravarVarios(diario, data, lista, hoje) {
+  if (!isObj(diario) || !Array.isArray(lista) || !lista.length || lista.some((x) => !isObj(x) || tem(x, 'id'))) return 0;
+  const ref = dia(hoje) || hojeLocal();
+  const d = dataAceita(data, ref);
+  if (!d || d > ref || d < primeiroDiaDoDiario(ref)) return 0;
+  const itens = itensDoDia(diario, d);
+  if (itens.length + lista.length > MAX_ITENS_DIA) return 0;
+  const novos = [];
+  for (const raw of lista) {
+    const it = limparItem({ ...raw, id: novoId([...itens, ...novos]) });
+    if (!it) return 0;
+    novos.push(it);
+  }
+  const antes = diasDe(diario);
+  guardar(diario, d, [...itens, ...novos]);
+  const guardados = itensDoDia(diario, d);
+  if (!novos.every((it) => guardados.some((x) => x.id === it.id))) { diario.dias = antes; return 0; }
+  return novos.length;
 }
 export function apagarItem(diario, data, id) {
   if (!isObj(diario) || !dia(data)) return false;
@@ -236,6 +261,108 @@ export function estadoDaSugestao(diario, data, refeicao) {
   return out;
 }
 
+// ---------- suplementos e vitaminas do dia (só registro) ----------
+// O aplicativo não recomenda dose aqui: guarda o que a pessoa tomou, como ela informou. Formato de cada um:
+//   { id: 's1', tipo: id de SUPLEMENTOS, qtd: número > 0, un: uma das unidades do tipo, nome: texto curto (só "outro"),
+//     pDose e kcalDose: proteína (g) e calorias de UMA dose, do rótulo (só whey; null se não informado) }
+// A proteína do whey entra no dia só com o valor do rótulo: nem a TACO nem a POF 2008-2009 têm proteína em pó (os PDFs
+// foram lidos em texto completo em nov/2026), e cada marca tem a sua. Sem o rótulo, o whey fica registrado sem números.
+export const SUPLEMENTOS = {
+  creatina: { nome: 'Creatina', un: ['g'] },
+  whey: { nome: 'Whey (proteína em pó)', un: ['dose'], rotulo: true },
+  cafeina: { nome: 'Cafeína', un: ['mg', 'cápsula'] },
+  multi: { nome: 'Multivitamínico', un: ['comprimido', 'cápsula'] },
+  vitd: { nome: 'Vitamina D', un: ['gota', 'cápsula', 'UI'] },
+  omega3: { nome: 'Ômega 3', un: ['cápsula'] },
+  ferro: { nome: 'Ferro', un: ['comprimido', 'mg'] },
+  outro: { nome: 'Outro', un: ['dose', 'cápsula', 'comprimido', 'g', 'mg', 'gota', 'mL'] },
+};
+// teto de cada unidade (só para recusar erro de digitação; não é dose máxima nem recomendação)
+const TETO_UN = { g: 200, mg: 20000, UI: 100000, gota: 100, mL: 500, dose: 20, 'cápsula': 20, comprimido: 20 };
+export const MAX_SUP_DIA = 20, SUP_NOME_MAX = 30, SUP_P_MAX = 100, SUP_KCAL_MAX = 1000;
+const SUP_ID = /^s\d{1,4}$/;
+export function limparSup(raw) {
+  if (!isObj(raw) || !tem(raw, 'id') || typeof raw.id !== 'string' || !SUP_ID.test(raw.id)) return null;
+  const tipo = tem(raw, 'tipo') && tem(SUPLEMENTOS, raw.tipo) ? raw.tipo : '';
+  if (!tipo) return null;
+  const S = SUPLEMENTOS[tipo];
+  const un = tem(raw, 'un') && S.un.includes(raw.un) ? raw.un : '';
+  const qtd = tem(raw, 'qtd') ? numero(raw.qtd) : null;
+  if (!un || qtd == null || qtd <= 0 || qtd > TETO_UN[un]) return null;
+  const it = { id: raw.id, tipo, qtd: Math.round(qtd * 100) / 100, un };
+  if (!(it.qtd > 0)) return null;
+  if (tipo === 'outro') {
+    it.nome = textoCurto(tem(raw, 'nome') ? raw.nome : '', SUP_NOME_MAX);
+    if (!it.nome) return null;
+  }
+  if (S.rotulo) {
+    const pd = tem(raw, 'pDose') ? numero(raw.pDose) : null, kd = tem(raw, 'kcalDose') ? numero(raw.kcalDose) : null;
+    it.pDose = pd != null && pd >= 0 && pd <= SUP_P_MAX ? Math.round(pd * 10) / 10 : null;
+    it.kcalDose = kd != null && kd >= 0 && kd <= SUP_KCAL_MAX ? Math.round(kd) : null;
+  }
+  return it;
+}
+function limparSups(raw) {
+  const out = [], vistos = new Set();
+  if (!Array.isArray(raw)) return out;
+  for (const x of raw) {
+    const it = limparSup(x);
+    if (!it || vistos.has(it.id)) continue;
+    vistos.add(it.id); out.push(it);
+    if (out.length >= MAX_SUP_DIA) break;
+  }
+  return out;
+}
+export function supDoDia(diario, data) {
+  const d = diasDe(diario).find((x) => isObj(x) && x.data === data);
+  return d && tem(d, 'sup') ? limparSups(d.sup) : [];
+}
+// Grava um suplemento (sem `id`: novo; com `id`: troca). Devolve o registro, ou null (inválido, dia cheio, data fora).
+export function gravarSup(diario, data, raw, hoje) {
+  const ref = dia(hoje) || hojeLocal();
+  const d = dataAceita(data, ref);
+  if (!isObj(diario) || !d || d > ref || d < primeiroDiaDoDiario(ref) || !isObj(raw)) return null;
+  const sup = supDoDia(diario, d);
+  const idAtual = tem(raw, 'id') && typeof raw.id === 'string' ? raw.id : '';
+  const i = idAtual ? sup.findIndex((x) => x.id === idAtual) : -1;
+  if (idAtual && i < 0) return null;
+  if (i < 0 && sup.length >= MAX_SUP_DIA) return null;
+  const novo = 's' + (sup.reduce((mx, x) => Math.max(mx, Number(x.id.slice(1))), 0) + 1);
+  const it = limparSup({ ...raw, id: i >= 0 ? idAtual : novo });
+  if (!it) return null;
+  if (i >= 0) sup[i] = it; else sup.push(it);
+  const antes = diasDe(diario);
+  guardar(diario, d, itensDoDia(diario, d), sup);
+  if (!supDoDia(diario, d).some((x) => x.id === it.id)) { diario.dias = antes; return null; }
+  return it;
+}
+export function apagarSup(diario, data, id) {
+  if (!isObj(diario) || !dia(data)) return false;
+  const sup = supDoDia(diario, data);
+  const resto = sup.filter((x) => x.id !== id);
+  if (resto.length === sup.length) return false;
+  guardar(diario, data, itensDoDia(diario, data), resto);
+  return true;
+}
+// O último registro de um tipo (o mais recente, até `data`): a tela repete a dose que a PESSOA usou da última vez.
+export function ultimoSup(diario, tipo, data) {
+  const dias = diasDe(diario).filter((x) => isObj(x) && dia(x.data) && (!data || x.data <= data)).sort(porData).reverse();
+  for (const d of dias) { const s = supDoDia(diario, d.data).filter((x) => x.tipo === tipo); if (s.length) return s[s.length - 1]; }
+  return null;
+}
+// proteína e calorias de um suplemento (só o whey com o valor do rótulo; o resto: 0)
+export const nutrientesDoSup = (s) => ({ p: s && s.pDose != null ? s.qtd * s.pDose : 0, kcal: s && s.kcalDose != null ? s.qtd * s.kcalDose : 0 });
+const UN_PLURAL = { dose: 'doses', 'cápsula': 'cápsulas', comprimido: 'comprimidos', gota: 'gotas' };
+const qtdBR = (n) => String(n).replace('.', ',');
+// { nome: 'Creatina', dose: '5 g' } ou { nome: 'Whey (proteína em pó)', dose: '1 dose · 24 g de proteína' }.
+// `comNumeros` false (menores de 18): sem a proteína.
+export function textoDoSup(s, comNumeros = true) {
+  const nome = s.tipo === 'outro' ? s.nome : SUPLEMENTOS[s.tipo].nome;
+  const un = s.qtd > 1 && UN_PLURAL[s.un] ? UN_PLURAL[s.un] : s.un;
+  const extra = comNumeros && s.pDose != null ? ` · ${qtdBR(Math.round(nutrientesDoSup(s).p * 10) / 10)} g de proteína` : '';
+  return { nome, dose: `${qtdBR(s.qtd)} ${un}${extra}` };
+}
+
 // ---------- contas ----------
 // Nutrientes de um item. Alimento do catálogo: valores da tabela pela quantidade. Fora da lista: só o que a pessoa
 // digitou (carboidrato, gordura e fibra ficam desconhecidos: null).
@@ -252,7 +379,7 @@ export function nutrientesDoItem(item) {
 // `semProteina` conta os itens fora da lista sem proteína informada; `livres`, todos os fora da lista (sem carboidrato,
 // gordura e fibra): a tela avisa que esses totais ficam incompletos.
 export function totaisDoDia(diario, data) {
-  const out = { data: dia(data) || '', kcal: 0, p: 0, c: 0, gd: 0, fibra: 0, n: 0, livres: 0, semProteina: 0, refeicoes: [] };
+  const out = { data: dia(data) || '', kcal: 0, p: 0, c: 0, gd: 0, fibra: 0, n: 0, livres: 0, semProteina: 0, refeicoes: [], sup: [], supP: 0, supKcal: 0 };
   const porRef = new Map();
   for (const it of itensDoDia(diario, data)) {
     const x = nutrientesDoItem(it);
@@ -263,6 +390,10 @@ export function totaisDoDia(diario, data) {
     r.kcal += x.kcal; r.p += x.p || 0; r.itens.push(x);
   }
   out.refeicoes = ORDEM.filter((k) => porRef.has(k)).map((k) => porRef.get(k));
+  // suplementos: a proteína (e as calorias) do whey, com o valor do rótulo, entram no total do dia
+  out.sup = supDoDia(diario, data);
+  for (const s of out.sup) { const x = nutrientesDoSup(s); out.supP += x.p; out.supKcal += x.kcal; }
+  out.kcal += out.supKcal; out.p += out.supP;
   return out;
 }
 

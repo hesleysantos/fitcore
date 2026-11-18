@@ -4,7 +4,8 @@
 // caseira e gramas), alimento fora da lista (calorias só em número inteiro), corrigir, apagar (com confirmação),
 // faltam / passou da meta, dias anteriores, semana, recarregar e ver que persistiu, quem não recebe contagem
 // (transtorno alimentar; menores, em qualquer entrevista), a virada do dia com a tela aberta e a tela em 360 px
-// (claro e escuro).
+// (claro e escuro); "adicionar vários de uma vez" ("Acrescentar" e "Adicionar todos (N)"), a separação "Da sugestão" /
+// "Fora da sugestão" dentro do "Você comeu" e os suplementos e vitaminas do dia (whey com o rótulo, menores, transtorno).
 // Uso, com "npm start" rodando: node tools/e2e/navegador.mjs tools/e2e/diario.mjs
 // O relógio da página é fixado (não anda): o roteiro não depende da hora em que roda. HORA=12:30 escolhe a hora
 // simulada (padrão 09:00). Com FOTOS_DIARIO=1, grava fotos em .tools/shots/_diario_*.png.
@@ -167,7 +168,7 @@ export default async (page) => {
   const toque = await comiItem('lanche-tarde', al1);
   ok(toque && toque.on === 'true' && Math.abs(toque.y1 - toque.y0) < 2, `"Comi" em um alimento marca só ele e o botão não sai do lugar (${toque && Math.round(toque.y0)} → ${toque && Math.round(toque.y1)} px)`);
   ok(Math.abs((await totalDeHoje()) - (k0 + kB + k1)) < 0.01 && (await naRefeicao('lanche-tarde')).length === 2, `o total sobe só esse alimento (+${Math.round(k1)} kcal) e ele aparece em "Você comeu"`);
-  ok((await resumoDe('lanche-tarde')).includes(`1 de ${lanche.length} da sugestão`) && (await page.eval(`return [...document.querySelectorAll('.refeicao[data-ref="lanche-tarde"] .comido .diario-item')].filter((e) => e.textContent.includes('da sugestão')).length;`)) === 1, 'o título diz "1 de N da sugestão" e o alimento marcado aparece uma vez em "Você comeu", identificado "da sugestão"');
+  ok((await resumoDe('lanche-tarde')).includes(`1 de ${lanche.length} da sugestão`) && (await page.eval(`return document.querySelectorAll('.refeicao[data-ref="lanche-tarde"] .comido .comido-sec.da-sug .diario-item').length;`)) === 1, 'o título diz "1 de N da sugestão" e o alimento marcado aparece uma vez em "Você comeu", em "Da sugestão"');
   await ver('.refeicao[data-ref="lanche-tarde"]'); await foto('4c-biscoito-e-um-item');
   const toque2 = await comiItem('lanche-tarde', al1);
   ok(toque2 && toque2.on === 'false' && Math.abs((await totalDeHoje()) - (k0 + kB)) < 0.01, 'tocar de novo desmarca: o total volta a ser só o biscoito');
@@ -371,8 +372,111 @@ export default async (page) => {
     await escolher('frango-assado-sem-pele');
     ok(await page.eval(`const s = document.querySelector('.sheet'); return !!document.getElementById('diario-conta') && [...s.querySelectorAll('*')].filter((e) => e.getClientRects().length).every((e) => e.getBoundingClientRect().right <= 360.5);`), `a folha de quantidade cabe em 360 px (${tema})`);
     await foto(`12-360-${tema}-quantidade`);
-    await naFolha('Cancelar'); await comFolhas(0);
+    await page.eval(`document.querySelector('.sheet .iconbtn[aria-label="Fechar"]').click(); return true;`); await comFolhas(0);
   }
+
+  console.log('13. Adicionar vários de uma vez, a separação "Da sugestão" / "Fora da sugestão" (360 px)');
+  await page.eval(`const st = await import('/js/store.js'); st.update((s) => { s.diario = { dias: [] }; s.settings.tema = 'claro'; }); try { localStorage.removeItem('fitcore-nutri-cards'); } catch {} return true;`);
+  await page.goto(B + '#/nutricao', 900); await page.reload(1500); await page.goto(B + '#/nutricao', 700); await redesenhar();
+  const rodape = () => page.eval(`const f = [...document.querySelectorAll('.sheet')].pop(); return [...f.querySelectorAll('.sheet-ft .btn')].map((b) => b.textContent.trim()).join('|');`);
+  const naFila = () => page.eval(`return [...document.querySelectorAll('.sheet #diario-fila .fila-item')].map((e) => e.dataset.al);`);
+  const tocarNaFolha = async (sel) => { const r = await page.eval(`const b = document.querySelector('.sheet ' + ${JSON.stringify(sel)}); if (!b) return false; b.click(); return true;`); await page.sleep(250); return r; };
+  ok(await tocarEm('almoco', 'Adicionar outro alimento'), 'abre "+ Adicionar outro alimento" do almoço');
+  await comFolhas(1);
+  ok((await rodape()) === 'Cancelar|Adicionar', 'sem nada escolhido: Cancelar e Adicionar');
+  ok((await buscar('x-salada')).includes('hamburguer-sanduiche') && (await escolher('hamburguer-sanduiche')), 'a busca acha "x-salada" (hambúrguer, sanduíche)');
+  ok((await rodape()) === 'Acrescentar|Adicionar', 'com um alimento escolhido: "Acrescentar" e "Adicionar" (adicionar só um continua com um toque)');
+  await naFolha('Acrescentar'); await page.sleep(250);
+  ok((await naFila()).join() === 'hamburguer-sanduiche' && !!(await page.eval(`return document.querySelector('.sheet input[aria-label="Buscar alimento"]');`)), 'acrescentou: vai para "Para adicionar" e a busca volta');
+  ok((await buscar('batata frita')).includes('batata-inglesa-frita') && (await escolher('batata-inglesa-frita')), 'busca e escolhe a batata frita');
+  await page.eval(`[...document.querySelectorAll('.sheet .seg button')].find((b) => b.textContent.trim() === 'Gramas').click(); return true;`); await page.sleep(250);
+  await page.eval(`const i = document.querySelector('.sheet .stepper input'); i.value = '100'; i.dispatchEvent(new Event('change', { bubbles: true })); return true;`); await page.sleep(150);
+  ok((await rodape()) === 'Acrescentar|Adicionar todos (2)', 'o rodapé conta o que está escolhido: ' + (await rodape()));
+  await naFolha('Acrescentar'); await page.sleep(250);
+  const kHamb = await kcalExata('hamburguer-sanduiche', 125), kBat = await kcalExata('batata-inglesa-frita', 100), kCerv = await kcalExata('cerveja', 350);
+  ok((await page.eval(`return document.getElementById('diario-fila-total').textContent;`)) === `Total ${mil(kHamb + kBat)} kcal`, `"Para adicionar" com o total: ${mil(kHamb + kBat)} kcal (334 + 267)`);
+  ok((await buscar('cerveja')).includes('cerveja') && (await escolher('cerveja')) && (await rodape()) === 'Acrescentar|Adicionar todos (3)', 'escolhe o terceiro: "Adicionar todos (3)"');
+  await foto('13-varios');
+  ok(await tocarNaFolha('#diario-fila .fila-item[data-al="batata-inglesa-frita"] .iconbtn'), 'tira a batata da lista (×)');
+  ok((await naFila()).join() === 'hamburguer-sanduiche' && (await rodape()) === 'Acrescentar|Adicionar todos (2)', 'a lista e o rodapé se atualizam');
+  ok(await tocarNaFolha('#diario-fila .fila-item[data-al="hamburguer-sanduiche"] .fila-mudar'), 'toca no hambúrguer para mudar');
+  ok((await naFila()).join() === 'cerveja' && (await conta()).startsWith('125 g (1 unidade média)'), 'o hambúrguer volta para a quantidade, com a medida que tinha; a cerveja escolhida foi para a lista');
+  await passo(2);
+  ok((await conta()).startsWith('250 g (2 unidades médias)'), 'agora 2 unidades: ' + (await conta()));
+  await naFolha('Acrescentar'); await page.sleep(250);
+  ok((await rodape()) === 'Cancelar|Adicionar todos (2)', 'de volta à busca, com a cerveja e o hambúrguer: ' + (await rodape()));
+  ok((await naFila()).sort().join() === 'cerveja,hamburguer-sanduiche', 'a lista tem os dois');
+  const antesVarios = await totalDeHoje();
+  await naFolha('Adicionar todos (2)'); await comFolhas(0);
+  itens = await hoje();
+  ok(itens.length === 2 && itens.every((x) => x.ref === 'almoco') && itens.find((x) => x.al === 'hamburguer-sanduiche').g === 250 && itens.find((x) => x.al === 'cerveja').g === 350, '"Adicionar todos" gravou os dois no almoço, com as quantidades certas');
+  ok(Math.abs((await totalDeHoje()) - antesVarios - (2 * kHamb + kCerv)) < 0.01, `as calorias somam certo: +${mil(2 * kHamb + kCerv)} kcal (2 × 334 + 144)`);
+  ok((await aviso()).includes('2 alimentos adicionados em Almoço'), 'avisa: ' + (await aviso()));
+  // um só continua simples: escolher e "Adicionar"
+  await tocarEm('almoco', 'Adicionar outro alimento'); await comFolhas(1);
+  await buscar('coxinha'); await escolher('coxinha-de-frango'); await naFolha('Adicionar'); await comFolhas(0);
+  ok((await hoje()).length === 3, 'adicionar um só: buscar, escolher, "Adicionar"');
+  // a separação visual dentro do card
+  const sug = await page.eval(`const d = await import('/js/logic/diario.js'); const n = await import('/js/logic/nutrition.js'); const st = (await import('/js/store.js')).state; const c = n.cardapioDoDia(n.calcular(st.nutri.answers), '${hojeKey}'); return c.refeicoes.find((r) => r.nome === 'Almoço').itens[0].id;`);
+  await comiItem('almoco', sug);
+  await ver('.refeicao[data-ref="almoco"] .comido');
+  const vis = await page.eval(`const c = document.querySelector('.refeicao[data-ref="almoco"]'); const cs = (e) => getComputedStyle(e); const comido = c.querySelector('.comido');
+    const secs = [...comido.querySelectorAll('.comido-sec')].map((e) => [e.classList.contains('da-sug') ? 'da' : 'fora', e.querySelector('.comido-sub').textContent, e.querySelectorAll('.diario-item').length]);
+    return { fundo: cs(comido).backgroundColor !== cs(c).backgroundColor, peso: Number(cs(comido.querySelector('.comido-tit')).fontWeight), sugPeso: Number(cs(c.querySelector('.sug-rot')).fontWeight), tamSug: parseFloat(cs(c.querySelector('.sug-rot')).fontSize), tamTit: parseFloat(cs(comido.querySelector('.comido-tit')).fontSize),
+      linha: parseFloat(cs(comido.querySelector('.comido-sec.fora-sug')).borderTopWidth), ordem: c.querySelector('.itens').getBoundingClientRect().top < comido.getBoundingClientRect().top, secs, kcal: comido.querySelector('.comido-kcal') ? comido.querySelector('.comido-kcal').textContent : '' };`);
+  ok(vis.fundo && vis.peso >= 700 && vis.tamTit > vis.tamSug && vis.ordem, '"Você comeu" tem fundo próprio e título maior e em negrito, abaixo da sugestão (mais leve)');
+  ok(vis.secs.length === 2 && vis.secs[0][0] === 'da' && vis.secs[0][1].startsWith('Da sugestão') && vis.secs[0][2] === 1 && vis.secs[1][0] === 'fora' && vis.secs[1][1].startsWith('Fora da sugestão') && vis.secs[1][2] === 3 && vis.linha >= 1, 'dentro dele: "Da sugestão" (1) e "Fora da sugestão" (3), com linha entre os dois: ' + JSON.stringify(vis.secs));
+  await foto('13-separacao');
+
+  console.log('14. Suplementos e vitaminas do dia');
+  await page.eval(`window.scrollTo(0, 0); return true;`);
+  ok(await page.eval(`const b = document.querySelector('#hoje-nutri .sup-dia'); if (!b) return false; return b.textContent.includes('nenhum hoje');`), 'a linha "Suplementos e vitaminas · nenhum hoje" fica no card de hoje');
+  await page.eval(`document.querySelector('#hoje-nutri .sup-dia').click(); return true;`); await comFolhas(1);
+  ok((await texto()).includes('Nada marcado hoje.') && (await rodape()) === 'Fechar', 'a folha abre com a lista vazia e os tipos para marcar');
+  await tocarNaFolha('#sup-tipos [data-tipo="creatina"]');
+  ok((await page.eval(`return document.querySelector('.sheet input[aria-label="Quantidade"]').value;`)) === '' && (await rodape()) === 'Voltar|Salvar', 'creatina: a quantidade vem vazia (o app não sugere dose)');
+  await campo('Quantidade', 'cinco'); await naFolha('Salvar'); await page.sleep(200);
+  ok((await aviso()).includes('Digite a quantidade em número') && (await estado(`(s.diario.dias.find((d) => d.data === '${hojeKey}') || {}).sup`)) == null, 'quantidade em texto é recusada, com aviso');
+  await campo('Quantidade', '5'); await naFolha('Salvar'); await page.sleep(250);
+  ok((await page.eval(`return [...document.querySelectorAll('.sheet .sup-item')].map((e) => e.textContent).join('|');`)) === 'Creatina5 g', 'creatina 5 g marcada');
+  const p0 = await page.eval(`const d = await import('/js/logic/diario.js'); const s = (await import('/js/store.js')).state; return d.totaisDoDia(s.diario, '${hojeKey}').p;`);
+  const k0w = await totalDeHoje();
+  await tocarNaFolha('#sup-tipos [data-tipo="whey"]');
+  ok((await page.eval(`return document.querySelector('.sheet input[aria-label="Quantidade"]').value;`)) === '1' && !!(await page.eval(`return document.querySelector('.sheet input[aria-label="Proteína por dose"]');`)), 'whey: pede a proteína por dose do rótulo');
+  await campo('Quantidade', '1,5'); await campo('Proteína por dose', '24'); await campo('Calorias por dose', '120');
+  await foto('14-whey');
+  await naFolha('Salvar'); await page.sleep(250);
+  const p1 = await page.eval(`const d = await import('/js/logic/diario.js'); const s = (await import('/js/store.js')).state; return d.totaisDoDia(s.diario, '${hojeKey}').p;`);
+  ok(Math.abs(p1 - p0 - 36) < 1e-9 && Math.abs((await totalDeHoje()) - k0w - 180) < 1e-9, 'a proteína do whey entra no dia: 1,5 × 24 = 36 g e 1,5 × 120 = 180 kcal');
+  ok((await page.eval(`return document.querySelector('.sheet #sup-tipos [data-tipo="whey"]').getAttribute('aria-pressed');`)) === 'true', 'o tipo já marcado aparece ligado (tocar abre o registro dele)');
+  await foto('14-sup');
+  await page.eval(`document.querySelector('.sheet .iconbtn[aria-label="Fechar"]').click(); return true;`); await comFolhas(0);
+  ok(await page.eval(`return document.querySelector('#hoje-nutri .sup-dia .sup-dia-r').textContent === 'Creatina, Whey';`), 'a linha do card mostra "Creatina, Whey"');
+  await page.reload(1500); await page.goto(B + '#/nutricao', 700);
+  ok((await estado(`(s.diario.dias.find((d) => d.data === '${hojeKey}') || {}).sup.length`)) === 2, 'recarregar: os suplementos continuam');
+  // dias anteriores também têm a linha; tirar pelo ×
+  ok(await page.eval(`return !!document.querySelector('#diario-passado .sup-dia[data-dia="${diaMenos(1)}"]');`), '"Dias anteriores" mostra os suplementos daquele dia');
+  await page.eval(`document.querySelector('#hoje-nutri .sup-dia').click(); return true;`); await comFolhas(1);
+  await tocarNaFolha('.sup-item[data-tipo="creatina"] .iconbtn');
+  ok((await estado(`s.diario.dias.find((d) => d.data === '${hojeKey}').sup.map((x) => x.tipo).join()`)) === 'whey', 'tirar a creatina (×)');
+  await page.eval(`document.querySelector('.sheet .iconbtn[aria-label="Fechar"]').click(); return true;`); await comFolhas(0);
+  // menor de 18 anos (em qualquer entrevista): aviso curto da cafeína e o whey sem números
+  const idadeSono = await estado(`s.sono.idade`);
+  await page.eval(`const st = await import('/js/store.js'); st.update((s) => { s.sono.idade = 16; }); return true;`); await redesenhar();
+  ok(!!(await page.eval(`return document.querySelector('.sup-dia');`)), 'menor de 18: a linha continua (registro sem números)');
+  await page.eval(`document.querySelector('.sup-dia').click(); return true;`); await comFolhas(1);
+  ok(!(await page.eval(`return document.querySelector('.sheet').textContent;`)).includes('g de proteína'), 'menor: a lista não mostra a proteína do whey');
+  await tocarNaFolha('#sup-tipos [data-tipo="cafeina"]');
+  ok((await page.eval(`return document.querySelector('.sheet .note').textContent;`)).includes('A Anvisa não permite suplemento de cafeína para menores de 18 anos'), 'menor: aviso curto ao marcar cafeína');
+  await naFolha('Voltar'); await page.sleep(200);
+  await tocarNaFolha('#sup-tipos [data-tipo="whey"]');
+  ok(!(await page.eval(`return document.querySelector('.sheet input[aria-label="Proteína por dose"]');`)) && (await page.eval(`return document.querySelector('.sheet .note').textContent;`)).includes('orientação do médico'), 'menor: o whey não pede números e tem o aviso');
+  await page.eval(`document.querySelector('.sheet .iconbtn[aria-label="Fechar"]').click(); return true;`); await comFolhas(0);
+  await page.eval(`const st = await import('/js/store.js'); st.update((s) => { s.sono.idade = ${JSON.stringify(idadeSono)}; const c = s.nutri.answers.condicoes; s.nutri.answers.condicoes = ['transtorno']; s.__c = c; }); return true;`); await redesenhar();
+  ok(!(await page.eval(`return document.querySelector('.sup-dia');`)), 'transtorno alimentar: sem a linha de suplementos (o diário não é oferecido)');
+  await page.eval(`const st = await import('/js/store.js'); st.update((s) => { s.nutri.answers.condicoes = ['nenhuma']; delete s.__c; }); return true;`); await redesenhar();
+  const csv = await page.eval(`const e = await import('/js/logic/exportar.js'); const s = (await import('/js/store.js')).state; return e.planilha(s, 'diario', '${hojeKey}').texto;`);
+  ok(csv.includes('"Suplemento ou vitamina";"Whey (proteína em pó)";"";"1,5 doses";"180";"36"'), 'a exportação do diário traz o suplemento, com a dose e os números do rótulo');
 
   const erros = page.erros.filter((e) => !/favicon|SWv:/.test(e));
   ok(erros.length === 0, 'nenhum erro no console' + (erros.length ? ': ' + erros.join(' || ').slice(0, 500) : ''));

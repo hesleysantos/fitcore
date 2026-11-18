@@ -160,7 +160,7 @@ export const MODELOS = [
     desc: 'Sem aparelhos: para casa, parque ou viagem. Use uma cadeira ou degrau firme. As costas entram com a puxada de bruços; se tiver uma barra, acrescente remadas.',
     agenda: [0, 1, 0], dias: [
       dia('Treino A', 'Pernas, peito, costas e abdômen', [
-        ['agachamento-peso-corporal', 3, '12-20', 60], ['flexao-de-bracos-joelhos', 3, '8-15', 60], ['ponte-gluteos-solo', 2, '12-20', 60],
+        ['agachamento-peso-corporal', 3, '12-20', 60], ['flexao-de-bracos-joelhos', 3, '8-15', 60], ['bom-dia-peso-corporal', 2, '10-12', 60],
         ['puxada-de-brucos', 3, '10-15', 60], ['prancha-frontal', 2, '30', 45], ['abdominal-supra-solo', 2, '12-20', 45],
       ]),
       dia('Treino B', 'Pernas, peito, lombar e condicionamento', [

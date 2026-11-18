@@ -23,6 +23,7 @@ import { botaoChat } from './chat.js';
 import { podeNaEsteira, versaoNaEsteira, naEsteira, marcarEsteira, etapasNaEsteira } from '../logic/esteira.js';
 import { podeMarcarCorrida, corridaPerdidaEm } from '../logic/perdido.js';
 import { botaoNaoCorri, linhaNaoCorrida } from './perdido.js';
+import { cargaDaSemana, cargaDoDia, aplicarCarga, desfazerCarga } from '../logic/carga-corrida.js';
 
 let modo = 'auto'; // 'auto' | 'entrevista' | 'proposta'
 const ORDEM = [1, 2, 3, 4, 5, 6, 0];
@@ -210,7 +211,7 @@ function proposta() {
   let ciente = !pf.confirmar;
   const aceitar = btn('Aceitar e usar este plano', () => {
     if (!ciente) return;
-    update((s) => { s.run.aceitoEm = new Date().toISOString(); s.run.inicio = inicioPara(s.run.answers, hojeKey(), diasBloqueados(s)); s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; });
+    update((s) => { s.run.aceitoEm = new Date().toISOString(); s.run.inicio = inicioPara(s.run.answers, hojeKey(), diasBloqueados(s)); s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; s.run.carga = []; });
     modo = 'auto';
     toast('Plano ativado! Os treinos de corrida já aparecem na aba Treinos.');
     refresh(); window.scrollTo(0, 0);
@@ -261,6 +262,45 @@ function evolucaoCard(hoje) {
   card.appendChild(porQue('Volume, regularidade e o esforço que você anota são os sinais que melhor acompanham a resposta ao treino. A carga soma esforço × minutos de cada corrida.', ev.refs, 'Como ler'));
   return caixa(`Sua evolução · ${plural(ev.totalCorridas, 'corrida', 'corridas')}`);
 }
+// ---------- sua semana: a carga da semana (logic/carga-corrida.js) ----------
+function aplicarSemana(r) {
+  return async () => {
+    if (!(await confirmSheet({ title: 'Ajustar a sua semana?', text: r.ajustes.map((a) => a.texto).join(' ') + ' Dá para desfazer depois.', okLabel: 'Ajustar' }))) return;
+    const g = aplicarCarga(state, hojeKey());
+    if (!g) { toast('Nada para ajustar agora.'); refresh(); return; }
+    update((s) => { s.run.carga = g.carga; s.perdidos = g.perdidos; });
+    toast('Semana ajustada.'); refresh();
+  };
+}
+function desfazerSemana() {
+  const g = desfazerCarga(state, hojeKey());
+  update((s) => { s.run.carga = g.carga; s.perdidos = g.perdidos; });
+  toast('Ajuste desfeito: a semana voltou ao plano.'); refresh();
+}
+function cartaoSemana(hoje) {
+  let r;
+  try { r = cargaDaSemana(state, hoje); } catch { return null; }
+  if (r.nivel === 'sem_plano') return r.temAplicado ? h('div', { class: 'card row', id: 'corrida-sua-semana', dataset: { nivel: 'sem_plano' } }, h('div', { class: 'grow small', text: 'Sua semana tem um ajuste que não vale mais.' }), btn('Desfazer', desfazerSemana, 'sm ghost')) : null;
+  const outros = r.fatores.filter((f) => f.id !== r.principal).slice(0, 2);
+  const motivos = [...new Set(r.ajustes.map((a) => a.porque))].join(' ');
+  return h('div', { class: 'card col gap-s', id: 'corrida-sua-semana', dataset: { nivel: r.nivel, aplicado: r.aplicado ? 'sim' : 'nao' } },
+    h('div', { class: 'tiny muted bold', text: 'SUA SEMANA' }),
+    h('div', { class: 'small bold', text: r.resumo }),
+    ...r.ajustes.map((a) => h('div', { class: 'row top' }, icon(a.aplicado ? 'check' : 'swap', 's ' + (a.aplicado ? 'accent' : 'muted')), h('div', { class: 'grow small', text: a.texto }), a.aplicado ? badge('Feito', 'ok') : null)),
+    ...outros.map((f) => h('div', { class: 'small muted', text: f.texto })),
+    r.ajustes.length && !r.aplicado ? btn('Ajustar a semana', aplicarSemana(r), 'primary block alvo', 'check') : null,
+    r.temAplicado ? btn('Desfazer', desfazerSemana, 'ghost block alvo', 'refresh') : null,
+    r.refs.length ? porQue(motivos || (r.nivel === 'atencao' ? 'Só para informar: o plano não muda por isso.' : ''), r.refs) : null);
+}
+// Início (views/home.js): a corrida de hoje ou de amanhã que a carga da semana muda, em uma linha. null se nada muda.
+export function linhaCargaInicio(hoje) {
+  let a = null;
+  try { const r = cargaDaSemana(state, hoje); a = cargaDoDia(state, hoje, hoje, r) || cargaDoDia(state, hoje, somaDias(hoje, 1), r); } catch { a = null; }
+  if (!a) return null;
+  return h('div', { class: 'card row', id: 'inicio-carga', dataset: { aplicado: a.aplicado ? 'sim' : 'nao' } }, icon(a.aplicado ? 'check' : 'swap', 'accent'),
+    h('div', { class: 'grow' }, h('div', { class: 'small bold', text: a.aplicado ? a.texto : 'Semana puxada' }), h('div', { class: 'small muted', text: a.aplicado ? 'Semana puxada: já ajustado.' : a.texto })),
+    btn(a.aplicado ? 'Ver' : 'Ver ajuste', () => go('corrida'), 'sm'));
+}
 // análise de uma corrida contra o treino do dia
 const seloAnalise = (a) => badge(a.titulo, a.selo === 'dentro' ? 'ok' : a.selo === 'acima' ? 'warn' : a.selo === 'abaixo' ? 'acc' : '');
 function analiseBox(a) {
@@ -282,7 +322,7 @@ function painel() {
     }, 'block ghost', 'edit'),
     btn('Encerrar o plano', async () => {
       if (!(await confirmSheet({ title: 'Encerrar o plano de corrida?', text: 'Os treinos de corrida saem da sua semana. As corridas registradas e as suas respostas continuam guardadas.', okLabel: 'Encerrar', danger: true }))) return;
-      update((s) => { s.run.aceitoEm = ''; s.run.inicio = ''; s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; });
+      update((s) => { s.run.aceitoEm = ''; s.run.inicio = ''; s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; s.run.carga = []; });
       modo = 'auto'; toast('Plano encerrado.'); refresh(); window.scrollTo(0, 0);
     }, 'block ghost danger', 'close'));
   if (run.pausadoEm) {
@@ -346,6 +386,8 @@ function painel() {
       treinoHoje && !marcaHoje ? btn(dHoje.feito ? 'Ver a corrida de hoje' : 'Iniciar', () => go('corrida/dia/' + hoje), (dHoje.feito ? 'ghost' : 'primary') + ' block alvo', dHoje.feito ? 'right' : 'play') : null,
       treinoHoje && !dHoje.feito && !marcaHoje && podeMarcarCorrida(state, hoje, hoje) ? h('div', { class: 'perdido-acoes' }, botaoNaoCorri(hoje, refresh)) : null));
   }
+  // a carga da semana: segue, fica mais leve ou muda de dia (logic/carga-corrida.js)
+  if (!sem.antesDoInicio && !sem.concluido) { const cs = cartaoSemana(hoje); if (cs) body.push(cs); }
   // dúvida ou imprevisto (chuva, juntar com a musculação, dor): o chat do Treinador de corrida (views/chat.js)
   body.push(botaoChat('corrida', 'Perguntar ao treinador de corrida'));
   // 2. o que muda o treino: avisos graves (meta que não coube, prova retirada), alertas dos registros, dores e ajustes
@@ -360,9 +402,11 @@ function painel() {
   const comOrientacao = comDor.filter((d) => orientacaoDor(d.onde));
   if (comOrientacao.length) body.push(acc('O que fazer com essa dor na corrida', ...comOrientacao.flatMap((d) => { const o = orientacaoDor(d.onde); return [h('div', { class: 'bold', text: o.nome }), ...o.itens.map(([t, txt]) => h('p', { class: 'small' }, h('b', { text: t + ': ' }), txt)), porQue('', o.refs, 'Fontes')]; })));
   // ajustes feitos: o que mudou, em uma linha cada; o porquê abre ao toque
-  if (p.ajustes.length) {
-    body.push(h('div', { class: 'card col gap-s', 'data-ajustes': String(p.ajustes.length) }, h('h3', { text: 'O que ajustei no plano' }),
-      ...p.ajustes.map((x) => h('div', { class: 'dica plana atencao' }, h('div', { class: 'dica-ic' }, icon('swap')), h('div', { class: 'grow' }, h('div', { class: 'small bold', text: x.texto }), porQue(x.motivo, x.refs))))));
+  // (os ajustes da carga da semana já estão no cartão "Sua semana")
+  const ajustesPlano = p.ajustes.filter((x) => !x.carga);
+  if (ajustesPlano.length) {
+    body.push(h('div', { class: 'card col gap-s', 'data-ajustes': String(ajustesPlano.length) }, h('h3', { text: 'O que ajustei no plano' }),
+      ...ajustesPlano.map((x) => h('div', { class: 'dica plana atencao' }, h('div', { class: 'dica-ic' }, icon('swap')), h('div', { class: 'grow' }, h('div', { class: 'small bold', text: x.texto }), porQue(x.motivo, x.refs))))));
   }
   // 3. a semana
   if (!sem.antesDoInicio && !sem.concluido) {
@@ -465,7 +509,7 @@ export function corridaView() {
     return {
       title: 'Treinador', body: [interview({
         perguntas: semBloq.perguntas, respostas: pre, base: a, avatar: 'run', notas: semBloq.nota ? { dias: semBloq.nota } : null,
-        onDone: (r) => { update((s) => { s.run.answers = r; s.run.aceitoEm = ''; s.run.inicio = ''; s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); },
+        onDone: (r) => { update((s) => { s.run.answers = r; s.run.aceitoEm = ''; s.run.inicio = ''; s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; s.run.carga = []; }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); },
         onCancel: () => { modo = 'auto'; refresh(); },
       })],
     };
@@ -804,7 +848,7 @@ export function corridaDiaView(data) {
         ves ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Inclinação' }), h('span', { text: ves.inclinacao })) : null,
         h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Duração' }), h('span', { text: `cerca de ${planejado.durMin} min` + (planejado.distKm && planejado.tipo !== 'caminhada' ? ` · ${fmtKm(planejado.distKm)}` : '') }))));
       if (t && t.paraQue) card.appendChild(porQue(t.paraQue + (t.sentir ? ' Como sentir: ' + t.sentir : ''), t.f, 'Para que serve este treino'));
-      if (planejado.ajustado) card.appendChild(note('info', 'Este treino foi ajustado por causa de uma dor que você contou.'));
+      if (planejado.ajustado) card.appendChild(note('info', planejado.carga ? 'Este treino ficou mais leve por causa da sua semana puxada. Para voltar ao plano, use “Desfazer” em “Sua semana”.' : 'Este treino foi ajustado por causa de uma dor que você contou.'));
       if (planejado.guardado) card.appendChild(h('p', { class: 'tiny muted', text: 'É o treino que o plano mostrava neste dia.' }));
       if (planejado.estimado) card.appendChild(note('info', 'O que o plano mostrava neste dia não ficou guardado. Este é o treino previsto pelo plano de hoje, que pode ser diferente.'));
     }

@@ -17,6 +17,9 @@
 .chat-opcoes .btn { white-space: normal; line-height: 1.25; padding-top: 8px; padding-bottom: 8px; }
 .chat-opcoes .btn.chat-op { justify-content: flex-start; text-align: left; border-color: var(--accent); color: var(--accent); background: var(--surface); }
 .chat-faq summary { overflow-wrap: break-word; }
+/* perguntas relacionadas: pequenas, em linha, quebram para a linha de baixo */
+.chat-sugestoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.chat-sugestoes .btn.chat-sug { white-space: normal; text-align: left; line-height: 1.2; min-height: 36px; padding: 6px 12px; border-radius: 18px; border: 1px solid var(--border); color: var(--accent); background: var(--surface); font-weight: 600; max-width: 100%; }
 /* o campo acompanha o fim da tela enquanto se lê a conversa; com o teclado aberto, o navegador o traz para a parte visível */
 .chat-campo {
   position: sticky; bottom: 0; z-index: 2; display: flex; gap: 8px; align-items: stretch;

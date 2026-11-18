@@ -8,6 +8,8 @@ const J = JSON.stringify;
 const PRE = `
 const S = await import('/js/store.js');
 if (!window.__semAlerta) { window.__semAlerta = true; window.alert = () => { window.__alerta = true; }; }
+// a pergunta "Só nesta semana / Sempre" (views/ajuste-semana.js; testada em tools/e2e/avaliacao.mjs): aqui, sempre "Sempre"
+if (!window.__autoSempre) { window.__autoSempre = new MutationObserver(() => { const s = [...document.querySelectorAll('.sheet')].find((x) => x.getAttribute('aria-label') === 'Esta mudança vale para'); const b = s && [...s.querySelectorAll('.sheet-ft .btn')].find((x) => x.textContent.trim() === 'Sempre'); if (b) b.click(); }); window.__autoSempre.observe(document.body, { childList: true }); }
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 const vis = (e) => !!(e.offsetParent !== null || e.getClientRects().length);
 const topo = () => { const b = [...document.querySelectorAll('.backdrop')]; return b.length ? b[b.length - 1] : document; };

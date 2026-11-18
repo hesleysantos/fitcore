@@ -18,7 +18,7 @@ import { treinosDoDia, semanaDoCardapio } from '../logic/semana-nutricao.js';
 import { somarDias, idDaRefeicao, estadoDaSugestao, modoDoDiario } from '../logic/diario.js';
 import { interview, faqBlock, notaObjetivo, conferirObjetivos, cartaoObjetivos } from './coach.js';
 import { nutriPara } from '../logic/objetivos.js';
-import { blocoDiario, botaoComiDoItem, botaoDaSugestao, resumoDoDiario, resumoDaRefeicao, voceComeu, foraDasRefeicoes, macrosDeHoje, historicoDoDiario, fontesDoDiario, refeicaoDaHora, redesenharNoLugar } from './diario.js';
+import { blocoDiario, botaoComiDoItem, botaoDaSugestao, resumoDoDiario, resumoDaRefeicao, voceComeu, foraDasRefeicoes, macrosDeHoje, historicoDoDiario, fontesDoDiario, refeicaoDaHora, redesenharNoLugar, linhaDeSuplementos } from './diario.js';
 import { botaoChat } from './chat.js';
 
 let modo = 'auto';
@@ -54,7 +54,8 @@ function escolherEmCasa() {
     while (grupos.firstChild) grupos.removeChild(grupos.firstChild);
     const t = norm(termo).trim();
     for (const [cat, nomeCat] of Object.entries(CATEGORIAS_ALIMENTO)) {
-      const itens = ALIMENTOS.filter((f) => f.cat === cat && (!t || norm(f.nome).includes(t)));
+      // (os alimentos só para registrar — frituras, salgados, lanches — não têm preço e não entram aqui)
+      const itens = ALIMENTOS.filter((f) => f.preco && f.cat === cat && (!t || norm(f.nome).includes(t)));
       if (!itens.length) continue;
       const resumo = h('summary');
       const titulo = () => { resumo.textContent = nomeCat + ' · ' + itens.filter((f) => marcados.has(f.id)).length + ' de ' + itens.length; };
@@ -104,6 +105,9 @@ function cartaoDeHoje(r, treinos) {
   const resumo = r.modo !== 'educativo' ? resumoDoDiario(r) : null;
   if (resumo) card.appendChild(resumo);
   if (r.agua) card.appendChild(h('p', { class: 'small muted', id: 'hoje-agua' }, icon('water', 's'), ` Água: ${dec(r.agua)} L no dia (${dec(r.aguaBebidas)} L em bebidas).`));
+  // suplementos e vitaminas do dia: uma linha; o toque abre a folha de marcar (views/diario.js)
+  const sup = linhaDeSuplementos(r);
+  if (sup) card.appendChild(sup);
   if (o.antes) {
     // o que comer e beber em volta do treino: fecha ao toque, para o cardápio aparecer logo
     const corpo = [h('p', { class: 'small', text: o.resumo }),
@@ -524,7 +528,7 @@ function resultado() {
   const perguntas = acc('Perguntas frequentes', [faq]);
   perguntas.id = 'perguntas-frequentes';
   mais.push(perguntas);
-  const fontes = [h('p', { class: 'small', text: 'Valores dos alimentos: tabelas TACO, TBCA e USDA. Medidas caseiras aproximadas.' }), h('p', { class: 'ref', text: '• Guia Alimentar para a População Brasileira (Ministério da Saúde, 2014).' })];
+  const fontes = [h('p', { class: 'small', text: 'Valores dos alimentos: tabelas TACO, TBCA, USDA e IBGE (POF 2008-2009). Medidas caseiras do IBGE ou aproximadas.' }), h('p', { class: 'ref', text: '• Guia Alimentar para a População Brasileira (Ministério da Saúde, 2014).' })];
   if (c && modoDoDiario(r, state) !== 'alimentos') fontes.push(fontesDoDiario());
   mais.push(acc('Fontes', fontes));
   const saiba = h('details', { class: 'acc', id: 'saiba-mais' }, h('summary', { text: 'Saiba mais (como comer bem, preços, perguntas, fontes)' }), h('div', { class: 'col gap-s' }, ...mais));

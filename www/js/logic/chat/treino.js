@@ -26,6 +26,8 @@ import { EQUIPAMENTOS } from '../../data/equipment.js';
 import { recomendacao, contextoDoEstado } from '../carga.js';
 import { EX_POR_ID } from '../../data/exercises.js';
 import { MUSCULOS } from '../../data/muscles.js';
+import { exercicioDoTexto } from './entidades.js';
+import { passoAjustesDor } from './exercicio.js';
 import { FAQ_TREINO } from '../../data/knowledge.js';
 import { FAQ_CORRIDA } from '../../data/corrida.js';
 import { faqDe, plural, fmtDescanso, juntar, diaValido, nomeDia, noDia, diaCurto, segundaDa } from './comum.js';
@@ -353,13 +355,16 @@ export function passoDor(ctx, coach = 'treinador') {
     if (o && o.texto) { (antes.length ? depois : antes).push(`${nomeDor(d)}: ${o.texto}`); refs.push(...(o.refs || [])); }
   }
   const tipos = [{ rotulo: 'Músculo dolorido do treino', valor: 'muscular' }, { rotulo: 'Na articulação ou no tendão', valor: 'articular' }, { rotulo: 'Forte, repentina ou em repouso', valor: 'aguda' }];
+  // com dor já contada: o que o treino muda por ela, aplicável ali mesmo (logic/chat/exercicio.js, passoAjustesDor)
+  if (coach === 'treinador' && ativas.length && P.planoAtivo(ctx.st)) tipos.push({ rotulo: 'Ajustar o treino pela dor', valor: 'ajustar' });
   const contar = { rotulo: ativas.length ? 'Contar outra dor' : 'Contar a dor ao Treinador', abrir: 'contar-dor' };
   return {
     texto: [...antes, 'Como é a dor?'],
     detalhes: depois,
     refs,
     opcoes: tipos,
-    proximo: (v) => {
+    proximo: (v, c) => {
+      if (v === 'ajustar') return passoAjustesDor(c || ctx);
       if (v === 'muscular') {
         const f = faqDe(FAQ, coach === 'corrida' ? 'Senti dor' : 'Estou com dor muscular');
         return { texto: ['É a dor comum do treino: some em até 7 dias.', 'Enquanto doer, treine esse músculo mais leve ou treine outras partes.'], detalhes: f ? f.a.slice(0, 2) : [], refs: f ? f.refs : [], ir: [contar] };
@@ -425,6 +430,17 @@ function passoCarga(ctx) {
   const t = treinoDeHoje(ctx);
   // o treino de hoje primeiro
   const ordem = t ? [t.dia, ...dias.filter((d) => d.id !== t.dia.id)] : dias;
+  // o exercício citado ("quantas séries de agachamento?", "posso aumentar o peso no supino?"): direto nele; com mais de
+  // um do plano com esse nome, a pessoa escolhe (logic/chat/entidades.js)
+  const doItem = (id) => { for (const d of ordem) { const it = d.itens.find((x) => x && x.ex === id); if (it) return { d, it }; } return null; };
+  let achou = null;
+  if (typeof ctx.ex === 'string' && EX_POR_ID.has(ctx.ex)) achou = { ex: EX_POR_ID.get(ctx.ex), candidatos: [] };
+  else if (typeof ctx.texto === 'string' && ctx.texto) { try { achou = exercicioDoTexto(ctx.texto, plan); } catch { achou = null; } }
+  if (achou && achou.ex && doItem(achou.ex.id)) { const x = doItem(achou.ex.id); return { ...passoDose(ctx, plan, x.d, x.it), ex: achou.ex.id }; }
+  const cands = achou && !achou.ex ? achou.candidatos.filter((e) => doItem(e.id)) : [];
+  if (cands.length > 1) return { texto: ['Qual deles?'], opcoes: cands.slice(0, 6).map((e) => ({ rotulo: e.nome, valor: e.id })), proximo: (v, c) => { const x = doItem(v); return x ? { ...passoDose(c, plan, x.d, x.it), ex: v } : { texto: ['Não achei esse exercício no plano.'] }; } };
+  const fora = achou && achou.ex && !achou.noPlano ? `${achou.ex.nome} não está no seu plano. ` : '';
+  if (fora) return { ...escolherExercicio(ctx, plan, ordem[0]), aviso: { tipo: 'info', texto: fora + 'Veja os do plano.' } };
   if (ordem.length === 1) return escolherExercicio(ctx, plan, ordem[0]);
   return {
     texto: ['De qual treino?'],
@@ -846,7 +862,7 @@ export const INTENCOES = [
   },
   {
     id: 'pouco-tempo', coach: 'treinador', titulo: 'Tenho pouco tempo hoje', resumo: 'um treino mais curto hoje',
-    palavras: ['pouco tempo', 'sem tempo', 'nao tenho tempo', 'tempo curto', '!pressa', '!correria', 'treino curto', 'treino rapido', 'versao curta', 'minuto', 'meia hora',
+    palavras: ['pouco tempo treino', 'chego tarde', 'tempo curto treino', 'pouco tempo', 'sem tempo', 'nao tenho tempo', 'tempo curto', '!pressa', '!correria', 'treino curto', 'treino rapido', 'versao curta', 'minuto', 'meia hora',
       'so tenho minuto', 'so minuto', 'tenho minuto', 'encurtar treino', 'reduzir treino', 'diminuir treino', 'treino menor', 'tempo apertado', 'dia corrido', 'curto', 'treino mais curto', 'tempo contado'],
     disponivel: (ctx) => !!treinoDeHoje(ctx),
     inicio: passoTempo,
@@ -854,13 +870,13 @@ export const INTENCOES = [
   {
     id: 'qual-treino', coach: 'treinador', titulo: 'Qual é o meu treino', resumo: 'o treino de hoje', resumoNoDia: 'o treino', data: true,
     bonus: (i) => (perguntaDoDia(i) ? 2 : 0),
-    palavras: ['qual treino', 'qual ficha', 'ir treino', 'tenho treino', 'tem treino', 'treino amanha', 'treino perna', 'treino peito', 'treino costas', 'treino braco', 'treino superior', 'treino superiores', 'treino inferior', 'treino inferiores', 'treino ombro', 'dia perna', 'dia peito', 'qual exercicio', 'quais exercicio', 'que exercicio', 'qual e treino', 'treino de amanha', 'me fala treino', 'fala treino', 'qual musculo', 'que musculo', 'vou fazer', 'o que faco', 'programado'],
+    palavras: ['passa ficha', 'manda ficha', 'mostra ficha', 'quais aparelho', 'aparelho vou usar', 'toca hoje', 'dia de que', 'qual treino', 'qual ficha', 'ir treino', 'tenho treino', 'tem treino', 'treino amanha', 'treino perna', 'treino peito', 'treino costas', 'treino braco', 'treino superior', 'treino superiores', 'treino inferior', 'treino inferiores', 'treino ombro', 'dia perna', 'dia peito', 'qual exercicio', 'quais exercicio', 'que exercicio', 'qual e treino', 'treino de amanha', 'me fala treino', 'fala treino', 'qual musculo', 'que musculo', 'vou fazer', 'o que faco', 'programado'],
     disponivel: temPlano,
     inicio: passoDoDia,
   },
   {
     id: 'duracao', coach: 'treinador', titulo: 'Quanto tempo dura o treino', resumo: 'quanto tempo dura o treino', resumoNoDia: 'quanto tempo dura o treino', data: true,
-    palavras: ['quanto tempo dura', 'quanto tempo leva', 'quanto dura', 'quanto demora', 'demora quanto', 'dura quanto', '!duracao', '!demora', '!demorar', 'quanto tempo treino', 'quantos minuto', 'tempo de treino', 'leva quanto tempo', 'vai demorar', 'termina que horas', 'quantos minuto treino', 'minuto treino', 'quanto tempo vou ficar'],
+    palavras: ['treino longo', 'longo', 'demorado', 'gastar academia', 'quanto tempo gastar', 'quanto tempo dura', 'quanto tempo leva', 'quanto dura', 'quanto demora', 'demora quanto', 'dura quanto', '!duracao', '!demora', '!demorar', 'quanto tempo treino', 'quantos minuto', 'tempo de treino', 'leva quanto tempo', 'vai demorar', 'termina que horas', 'quantos minuto treino', 'minuto treino', 'quanto tempo vou ficar'],
     disponivel: temPlano,
     inicio: passoDuracao,
   },
@@ -909,13 +925,13 @@ export const INTENCOES = [
   },
   {
     id: 'mudar-plano', coach: 'treinador', titulo: 'Mudar ou refazer o treino', resumo: 'mudar ou refazer o seu treino',
-    palavras: ['nao tenho halteres', 'sem halteres', 'treinar sem aparelho', 'treino sem aparelho', 'mudar plano', 'mudar treino', 'mudar dia', 'mudar dias', 'trocar dia', 'outro treino', 'treino novo', 'novo treino', 'refazer treino', 'refazer entrevista', 'refazer plano',
+    palavras: ['vezes semana', 'treinar vezes', 'mais dias', 'menos dias', 'mudei academia', 'nao tenho halteres', 'sem halteres', 'treinar sem aparelho', 'treino sem aparelho', 'mudar plano', 'mudar treino', 'mudar dia', 'mudar dias', 'trocar dia', 'outro treino', 'treino novo', 'novo treino', 'refazer treino', 'refazer entrevista', 'refazer plano',
       'treinar casa', 'treino casa', 'trocar exercicio', 'mudar exercicio', 'enjoei treino', 'cansei treino', 'treino chato', 'treino diferente', 'algo diferente', 'mudar academia', 'mudar horario', 'plano novo', 'mudar', 'novo plano', 'posso mudar', 'mudar algo', 'alterar treino', 'mudar ordem', 'trocar ordem', 'ordem exercicio', '!enjoei', 'enjoei plano', 'treino enjoativo', 'cansei plano'],
     inicio: passoMudar,
   },
   {
     id: 'dor-treino', coach: 'treinador', titulo: 'Estou com dor', resumo: 'uma dor', prioridade: 3,
-    palavras: ['dor', 'dor depois treino', 'dor muscular', 'machucar', 'lesao', 'tendinite', 'inflamado', 'inchado', 'inchaco', 'joelho dor', 'ombro dor', 'costas dor', 'dor joelho', 'dor ombro', 'dor costas', 'dor lombar', 'dor punho', 'dor cotovelo', 'dor tornozelo', 'dor quadril', 'lombar', 'torcer', 'dor articulacao', 'dor tendao', 'estou dor', 'to dor', 'tou dor', 'sinto dor', 'senti dor', '!travou', 'travado', 'lombar travou', 'costas travou', '!fisgada', 'estou dolorido', 'todo dolorido', 'todo dor', 'joelho dor', 'dor joelho', 'ombro dor', 'dor ombro', 'costas dor', 'dor costas', 'lombar dor', 'dor lombar', 'punho dor', 'dor punho', 'cotovelo dor', 'dor cotovelo', 'tornozelo dor', 'dor tornozelo', 'quadril dor', 'dor quadril', 'panturrilha dor', 'dor panturrilha', 'canela dor', 'dor canela', 'pe dor', 'dor pe', 'coxa dor', 'dor coxa', 'perna dor', 'dor perna', 'pescoco dor', 'dor pescoco', 'braco dor', 'dor braco', 'gluteo dor', 'dor gluteo', 'virilha dor', 'dor virilha'],
+    palavras: ['estalou', 'estalando', 'estalo', 'latejando', 'pontada', 'corpo dolorido', 'corpo moido', 'moido treino', 'dor', 'dor depois treino', 'dor muscular', 'machucar', 'lesao', 'tendinite', 'inflamado', 'inchado', 'inchaco', 'joelho dor', 'ombro dor', 'costas dor', 'dor joelho', 'dor ombro', 'dor costas', 'dor lombar', 'dor punho', 'dor cotovelo', 'dor tornozelo', 'dor quadril', 'lombar', 'torcer', 'dor articulacao', 'dor tendao', 'estou dor', 'to dor', 'tou dor', 'sinto dor', 'senti dor', '!travou', 'travado', 'lombar travou', 'costas travou', '!fisgada', 'estou dolorido', 'todo dolorido', 'todo dor', 'joelho dor', 'dor joelho', 'ombro dor', 'dor ombro', 'costas dor', 'dor costas', 'lombar dor', 'dor lombar', 'punho dor', 'dor punho', 'cotovelo dor', 'dor cotovelo', 'tornozelo dor', 'dor tornozelo', 'quadril dor', 'dor quadril', 'panturrilha dor', 'dor panturrilha', 'canela dor', 'dor canela', 'pe dor', 'dor pe', 'coxa dor', 'dor coxa', 'perna dor', 'dor perna', 'pescoco dor', 'dor pescoco', 'braco dor', 'dor braco', 'gluteo dor', 'dor gluteo', 'virilha dor', 'dor virilha'],
     inicio: (ctx) => passoDor(ctx, 'treinador'),
   },
   {

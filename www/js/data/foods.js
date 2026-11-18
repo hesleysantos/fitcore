@@ -354,7 +354,58 @@ export const ALIMENTOS = [
   { id: 'pizza-de-calabresa', nome: 'Pizza de calabresa', cat: 'outros', kcal: 284.72, p: 13.74, c: 29.51, g: 12.21, fibra: 1.75, porcao: { g: 100, desc: '1 fatia' }, nova: 4, tags: [], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8500914
   { id: 'acai-na-tigela', nome: 'Açaí na tigela (com xarope de guaraná)', cat: 'frutas', kcal: 110, p: 0.7, c: 21.5, g: 3.7, fibra: 1.7, porcao: { g: 300, desc: '1 copo (300 mL)' }, nova: 4, tags: ['vegano', 'vegetariano', 'sem_lactose', 'sem_gluten'], papel: 'carbo', fonte: 'TACO', soDiario: true }, // TACO 167, "Açaí, polpa, com xarope de guaraná e glucose"
   { id: 'picole', nome: 'Picolé industrializado', cat: 'outros', kcal: 79, p: 0, c: 19.23, g: 0.24, fibra: 0, porcao: { g: 60, desc: '1 unidade' }, nova: 4, tags: ['vegetariano'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 6900502 (picolé de qualquer sabor industrializado)
+
+  // ---- Só para registrar: frituras, salgados, lanches, doces e bebidas (nov/2026) ----
+  // Não são recomendados: servem para a pessoa saber as calorias do que comeu fora da sugestão. `soDiario` em todos (o
+  // cardápio, as trocas e a lista "O que eu tenho em casa" nunca os usam) e sem faixa de preço (não entram em compra).
+  // Composição por 100 g: TACO 4ª ed. (Tabela 1, número da linha) ou POF 2008-2009, "Tabelas de composição nutricional
+  // dos alimentos consumidos no Brasil", Tabela 1 (código do alimento e, quando há, da preparação). Porção caseira: POF
+  // 2008-2009, "Tabela de medidas referidas para os alimentos consumidos no Brasil" (código do IBGE no comentário).
+  // Ambos os PDFs lidos em texto completo em 18/11/2026. "-" (não há) e Tr gravados como 0. Ficaram de fora por não haver
+  // valor oficial: bolo recheado ou confeitado, lasanha comum (a POF só tem a "pronta light"), suco de caixinha (néctar).
+  { id: 'frango-frito', nome: 'Frango frito (pedaços, com pele)', cat: 'carnes', kcal: 261.66, p: 27.3, c: 0, g: 16.16, fibra: 0, porcao: { g: 55, desc: '1 pedaço' }, nova: 1, tags: ['sem_lactose', 'sem_gluten'], papel: 'proteina', fonte: 'IBGE', soDiario: true }, // 7800302, prep. 5 frito; medida 7800302 frito, pedaço
+  { id: 'frango-frito-empanado', nome: 'Frango frito empanado (pedaços)', cat: 'carnes', kcal: 277.84, p: 27.76, c: 3.39, g: 16.21, fibra: 0.14, porcao: { g: 55, desc: '1 pedaço' }, nova: 3, tags: ['sem_lactose'], papel: 'proteina', fonte: 'IBGE', soDiario: true }, // 7800302, prep. 6 empanado; medida 7800302 empanado, pedaço
+  { id: 'asa-de-frango-frita', nome: 'Asa de frango frita', cat: 'carnes', kcal: 312.66, p: 26.86, c: 0, g: 22.02, fibra: 0, porcao: { g: 40, desc: '1 unidade' }, nova: 1, tags: ['sem_lactose', 'sem_gluten'], papel: 'proteina', fonte: 'IBGE', soDiario: true }, // 7800701, prep. 5 frito; medida 7800701, unidade (asa média)
+  { id: 'peito-de-frango-assado-com-pele', nome: 'Peito de frango assado (com pele)', cat: 'carnes', kcal: 212, p: 33.4, c: 0, g: 7.6, fibra: 0, porcao: { g: 180, desc: '1 peito médio' }, nova: 1, tags: ['sem_lactose', 'sem_gluten'], papel: 'proteina', fonte: 'TACO', soDiario: true }, // TACO 406; medida 7800401, peito médio
+  { id: 'nuggets-de-frango', nome: 'Nuggets de frango', cat: 'carnes', kcal: 273.02, p: 16.24, c: 15.91, g: 15.63, fibra: 0.64, porcao: { g: 23, desc: '1 unidade' }, nova: 4, tags: [], papel: 'proteina', fonte: 'IBGE', soDiario: true }, // 7802901, prep. 5 frito; medida 7802901, unidade
+  { id: 'empada-de-frango', nome: 'Empada de frango', cat: 'outros', kcal: 358, p: 6.9, c: 47.5, g: 15.6, fibra: 2.2, porcao: { g: 55, desc: '1 unidade' }, nova: 3, tags: [], papel: 'carbo', fonte: 'TACO', soDiario: true }, // TACO 389 (pré-cozida, assada); medida 8500206, unidade
+  { id: 'pastel-de-queijo-frito', nome: 'Pastel de queijo frito', cat: 'outros', kcal: 422, p: 8.7, c: 48.1, g: 22.7, fibra: 0.9, porcao: { g: 32, desc: '1 unidade média' }, nova: 3, tags: ['vegetariano'], papel: 'carbo', fonte: 'TACO', soDiario: true }, // TACO 58; medida 8500202, unidade média
+  { id: 'croquete-de-carne-frito', nome: 'Croquete de carne frito', cat: 'outros', kcal: 347, p: 16.9, c: 18.1, g: 22.7, fibra: 0, porcao: { g: 55, desc: '1 unidade grande' }, nova: 3, tags: [], papel: 'proteina', fonte: 'TACO', soDiario: true }, // TACO 388 (fibra em branco: não analisada); medida 8500203, unidade grande
+  { id: 'esfiha-de-carne', nome: 'Esfiha de carne', cat: 'outros', kcal: 346.45, p: 11.9, c: 26.2, g: 21.38, fibra: 1.08, porcao: { g: 80, desc: '1 unidade média' }, nova: 3, tags: [], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8500223; medida 8500223, unidade
+  { id: 'esfiha-de-queijo', nome: 'Esfiha de queijo', cat: 'outros', kcal: 359.42, p: 9.76, c: 37.51, g: 18.88, fibra: 1.46, porcao: { g: 80, desc: '1 unidade média' }, nova: 3, tags: ['vegetariano'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8500224; medida 8500224, unidade
+  { id: 'esfiha-de-frango', nome: 'Esfiha de frango', cat: 'outros', kcal: 222.39, p: 9.47, c: 17.32, g: 12.71, fibra: 0.78, porcao: { g: 80, desc: '1 unidade média' }, nova: 3, tags: [], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8500226; medida 8500226, unidade
+  { id: 'enroladinho', nome: 'Enroladinho (salgado)', cat: 'outros', kcal: 274.6, p: 13.41, c: 16.54, g: 16.88, fibra: 0.88, porcao: { g: 27, desc: '1 unidade média' }, nova: 4, tags: [], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8500227; medida 8500227, unidade
+  { id: 'risoles', nome: 'Risoles (carne, queijo, camarão)', cat: 'outros', kcal: 274.6, p: 13.41, c: 16.54, g: 16.88, fibra: 0.88, porcao: { g: 35, desc: '1 unidade média' }, nova: 3, tags: [], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8500207; medida 8500207, unidade
+  { id: 'salgadinho-de-festa', nome: 'Salgadinho de festa (sortido, frito)', cat: 'outros', kcal: 274.6, p: 13.41, c: 16.54, g: 16.88, fibra: 0.88, porcao: { g: 10, desc: '1 unidade pequena' }, nova: 3, tags: [], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8500201; medida 8500201, unidade pequena
+  { id: 'bolo-simples', nome: 'Bolo simples (sem recheio)', cat: 'cereais', kcal: 286.6, p: 6.91, c: 55.27, g: 4.24, fibra: 0.65, porcao: { g: 60, desc: '1 fatia média' }, nova: 3, tags: ['vegetariano'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8004601 "bolo de trigo"; medida 8004601, fatia (bolo branco simples)
+  { id: 'bolo-de-cenoura', nome: 'Bolo de cenoura', cat: 'cereais', kcal: 344.86, p: 4.17, c: 44.27, g: 17.26, fibra: 1.61, porcao: { g: 60, desc: '1 fatia média' }, nova: 3, tags: ['vegetariano'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8004201; medida 8004201, fatia
+  { id: 'bolo-de-laranja', nome: 'Bolo de laranja', cat: 'cereais', kcal: 360.83, p: 4.8, c: 58.32, g: 13.15, fibra: 2.36, porcao: { g: 60, desc: '1 fatia média' }, nova: 3, tags: ['vegetariano'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8004001; medida 8004001, fatia
+  { id: 'bolo-de-coco', nome: 'Bolo de coco', cat: 'cereais', kcal: 333, p: 5.7, c: 52.3, g: 11.3, fibra: 1.1, porcao: { g: 60, desc: '1 fatia média' }, nova: 3, tags: ['vegetariano'], papel: 'carbo', fonte: 'TACO', soDiario: true }, // TACO 17; medida 8004101, fatia
+  { id: 'bolo-de-banana', nome: 'Bolo de banana', cat: 'cereais', kcal: 300.05, p: 3.93, c: 52.14, g: 9.07, fibra: 1.66, porcao: { g: 70, desc: '1 fatia média' }, nova: 3, tags: ['vegetariano'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8010601; medida 8010601, fatia
+  { id: 'bolo-de-mandioca', nome: 'Bolo de mandioca (aipim)', cat: 'cereais', kcal: 324, p: 4.4, c: 47.9, g: 12.7, fibra: 0.7, porcao: { g: 80, desc: '1 fatia média' }, nova: 3, tags: ['vegetariano', 'sem_gluten'], papel: 'carbo', fonte: 'TACO', soDiario: true }, // TACO 15; medida 8002701, fatia
+  { id: 'torta-salgada', nome: 'Torta salgada', cat: 'outros', kcal: 249.55, p: 3.87, c: 38.4, g: 9.86, fibra: 1.49, porcao: { g: 110, desc: '1 pedaço' }, nova: 3, tags: [], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8003601; medida 8003601, pedaço
+  { id: 'empadao', nome: 'Empadão (frango, palmito, queijo)', cat: 'outros', kcal: 153.96, p: 7.89, c: 12.47, g: 7.91, fibra: 1.03, porcao: { g: 110, desc: '1 fatia média' }, nova: 3, tags: [], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8505901; medida 8505901, fatia
+  { id: 'quiche', nome: 'Quiche', cat: 'outros', kcal: 282.73, p: 10.34, c: 13.85, g: 20.44, fibra: 0.56, porcao: { g: 113, desc: '1 fatia média' }, nova: 3, tags: ['vegetariano'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8506801; medida 8506801, fatia
+  { id: 'torta-doce', nome: 'Torta doce', cat: 'outros', kcal: 119.67, p: 2.28, c: 15.56, g: 5.38, fibra: 0.48, porcao: { g: 85, desc: '1 fatia média' }, nova: 4, tags: ['vegetariano'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8003501; medida 8003501, fatia
+  { id: 'pizza-portuguesa', nome: 'Pizza portuguesa', cat: 'outros', kcal: 247.49, p: 11.75, c: 22.4, g: 12.23, fibra: 1.56, porcao: { g: 125, desc: '1 fatia média' }, nova: 4, tags: [], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8500917; medida 8500917, fatia
+  { id: 'hamburguer-sanduiche', nome: 'Hambúrguer (sanduíche)', cat: 'outros', kcal: 267.16, p: 13.08, c: 32.36, g: 9.22, fibra: 1.68, porcao: { g: 125, desc: '1 unidade média' }, nova: 4, tags: [], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8500303; medida 8500303, unidade
+  { id: 'cachorro-quente', nome: 'Cachorro-quente', cat: 'outros', kcal: 272.47, p: 8.73, c: 24.8, g: 15.22, fibra: 1.09, porcao: { g: 125, desc: '1 unidade' }, nova: 4, tags: [], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8500302; medida 8500302, unidade
+  { id: 'salgadinho-de-pacote', nome: 'Salgadinho de pacote (milho, trigo)', cat: 'outros', kcal: 558.86, p: 5.08, c: 55.41, g: 35.25, fibra: 2.76, porcao: { g: 84, desc: '1 pacote médio' }, nova: 4, tags: ['vegetariano'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8002227 "chips (salgadinhos)"; medida 8002227, pacote médio
+  { id: 'biscoito-recheado-morango', nome: 'Biscoito recheado de morango', cat: 'cereais', kcal: 471, p: 5.7, c: 71, g: 19.6, fibra: 1.5, porcao: { g: 13, desc: '1 unidade' }, nova: 4, tags: ['vegetariano'], papel: 'carbo', fonte: 'TACO', soDiario: true }, // TACO 10; medida 8004801, unidade
+  { id: 'biscoito-wafer', nome: 'Biscoito wafer de chocolate', cat: 'cereais', kcal: 502, p: 5.6, c: 67.5, g: 24.7, fibra: 1.8, porcao: { g: 7.5, desc: '1 unidade' }, nova: 4, tags: ['vegetariano'], papel: 'carbo', fonte: 'TACO', soDiario: true }, // TACO 11; medida 8004807, unidade
+  { id: 'sorvete', nome: 'Sorvete de massa (industrializado)', cat: 'outros', kcal: 206, p: 3.6, c: 25.13, g: 11, fibra: 0.87, porcao: { g: 80, desc: '1 bola média' }, nova: 4, tags: ['vegetariano'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 6900501; medida 6900501, bola
+  { id: 'brigadeiro', nome: 'Brigadeiro', cat: 'outros', kcal: 334.48, p: 7.52, c: 54.86, g: 10.14, fibra: 0.23, porcao: { g: 15, desc: '1 unidade média' }, nova: 3, tags: ['vegetariano', 'sem_gluten'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 6903601; medida 6903601, unidade média
+  { id: 'pudim', nome: 'Pudim de leite', cat: 'outros', kcal: 131.15, p: 5.58, c: 15.44, g: 5.07, fibra: 0, porcao: { g: 130, desc: '1 fatia média' }, nova: 3, tags: ['vegetariano', 'sem_gluten'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 6902601 (pudim de qualquer sabor); medida 6902601, fatia
+  { id: 'acai-com-granola', nome: 'Açaí com granola', cat: 'frutas', kcal: 110, p: 0.7, c: 21.5, g: 3.7, fibra: 1.7, porcao: { g: 273, desc: '1 copo médio' }, nova: 4, tags: ['vegetariano', 'sem_lactose'], papel: 'carbo', fonte: 'IBGE', soDiario: true }, // 8507801; medida 8507801, copo médio
+  { id: 'milk-shake', nome: 'Milk-shake', cat: 'bebidas', kcal: 161.09, p: 3.11, c: 23.49, g: 6.43, fibra: 0.76, porcao: { g: 240, desc: '1 copo médio (240 mL)' }, nova: 4, tags: ['vegetariano'], papel: 'bebida', fonte: 'IBGE', soDiario: true }, // 6907501; medida 6907501, copo médio
+  // cerveja: a energia da TACO inclui o álcool (3,6 g por 100 g, nota da tabela), que não está nos macronutrientes
+  { id: 'cerveja', nome: 'Cerveja (pilsen)', cat: 'bebidas', kcal: 41, p: 0.6, c: 3.3, g: 0, fibra: 0, porcao: { g: 350, desc: '1 lata (350 mL)' }, nova: 4, tags: ['vegano', 'vegetariano', 'sem_lactose'], papel: 'bebida', fonte: 'TACO', soDiario: true }, // TACO 474; medida 8300101, lata de 350 mL
 ];
+// ids da lista acima (só para registrar; sem preço): o teste confere que nenhum entra no cardápio
+export const SO_REGISTRO = Object.freeze(['frango-frito', 'frango-frito-empanado', 'asa-de-frango-frita', 'peito-de-frango-assado-com-pele', 'nuggets-de-frango', 'empada-de-frango',
+  'pastel-de-queijo-frito', 'croquete-de-carne-frito', 'esfiha-de-carne', 'esfiha-de-queijo', 'esfiha-de-frango', 'enroladinho', 'risoles', 'salgadinho-de-festa', 'bolo-simples', 'bolo-de-cenoura',
+  'bolo-de-laranja', 'bolo-de-coco', 'bolo-de-banana', 'bolo-de-mandioca', 'torta-salgada', 'empadao', 'quiche', 'torta-doce', 'pizza-portuguesa', 'hamburguer-sanduiche', 'cachorro-quente',
+  'salgadinho-de-pacote', 'biscoito-recheado-morango', 'biscoito-wafer', 'sorvete', 'brigadeiro', 'pudim', 'acai-com-granola', 'milk-shake', 'cerveja']);
 
 // ---- Medidas caseiras do cardápio de exemplo ----
 // Peso de cada medida caseira, da "Tabela de Medidas Referidas para os Alimentos Consumidos no Brasil" (IBGE, POF
@@ -431,6 +482,16 @@ const APELIDOS = {
   'refrigerante-de-cola-zero': 'refri coca diet light', 'refrigerante-de-guarana-zero': 'refri diet light', 'refrigerante-de-laranja': 'refri', 'refrigerante-de-limao': 'refri soda',
   'bebida-isotonica': 'isotonico', 'vitamina-de-banana': 'batida', 'pao-com-manteiga': 'pao na chapa', 'misto-quente': 'misto frio sanduiche de queijo e presunto',
   'acai-na-tigela': 'acai', 'picole': 'sorvete de palito', 'suco-de-uva-integral': 'sem acucar', 'suco-de-caju-com-acucar': 'cajuada refresco',
+  // frituras, salgados e lanches: "salgado", "fritura", "lanche" e os nomes do dia a dia ("x-salada", "à passarinho")
+  'frango-frito': 'fritura passarinho a passarinho torrado galinha', 'frango-frito-empanado': 'fritura crocante milanesa galinha', 'asa-de-frango-frita': 'fritura asinha galinha',
+  'peito-de-frango-assado-com-pele': 'galinha', 'nuggets-de-frango': 'fritura empanado', 'coxinha-de-frango': 'salgado fritura', 'pastel-de-carne-frito': 'salgado fritura feira',
+  'pastel-de-queijo-frito': 'salgado fritura feira', 'quibe-frito': 'kibe salgado fritura', 'quibe-assado': 'kibe salgado', 'croquete-de-carne-frito': 'salgado fritura',
+  'empada-de-frango': 'salgado', 'esfiha-de-carne': 'esfirra salgado', 'esfiha-de-queijo': 'esfirra salgado', 'esfiha-de-frango': 'esfirra salgado',
+  enroladinho: 'salgado salsicha fritura', risoles: 'rissole salgado fritura', 'salgadinho-de-festa': 'salgado fritura coquetel', 'batata-inglesa-frita': 'fritas palito fritura',
+  'mandioca-frita': 'fritura', 'batata-chips': 'salgadinho', 'salgadinho-de-pacote': 'chips', 'hamburguer-sanduiche': 'hamburger lanche x-burguer x-salada xis sanduiche',
+  'cachorro-quente': 'hot dog lanche sanduiche', 'misto-quente': 'lanche', 'pizza-portuguesa': 'lanche', 'pizza-de-mucarela': 'mussarela lanche', 'pizza-de-calabresa': 'lanche',
+  'biscoito-recheado': 'bolacha', 'biscoito-recheado-morango': 'bolacha', 'biscoito-wafer': 'bolacha', 'bolo-simples': 'trigo caseiro branco', 'empadao': 'torta salgada',
+  'torta-doce': 'sobremesa', 'pudim': 'sobremesa', 'sorvete': 'sobremesa', 'brigadeiro': 'doce docinho', 'acai-com-granola': 'tigela', 'cerveja': 'chope chopp',
 };
 for (const f of ALIMENTOS) if (APELIDOS[f.id]) f.apelidos = APELIDOS[f.id];
 // Industrializados e doces que já estavam na tabela: também só para o diário
@@ -865,16 +926,21 @@ export const ALERGIAS = ['amendoim', 'castanhas', 'peixe', 'ovo', 'leite', 'soja
 export const NOME_ALERGIA = { amendoim: 'amendoim', castanhas: 'castanhas e nozes', peixe: 'peixes e frutos do mar', ovo: 'ovo', leite: 'leite', soja: 'soja' };
 const LISTA_ALERGENICOS = {
   // granola: costuma levar castanhas e pode conter amendoim
-  amendoim: ['pasta-de-amendoim', 'amendoim-torrado-salgado', 'amendoim-cru', 'pacoca', 'pe-de-moleque', 'granola'],
-  castanhas: ['castanha-do-para', 'castanha-de-caju', 'amendoa', 'nozes', 'granola'],
+  amendoim: ['pasta-de-amendoim', 'amendoim-torrado-salgado', 'amendoim-cru', 'pacoca', 'pe-de-moleque', 'granola', 'acai-com-granola'],
+  castanhas: ['castanha-do-para', 'castanha-de-caju', 'amendoa', 'nozes', 'granola', 'acai-com-granola'],
   // massas e pães com ovo na receita usual; empanados e salgados (a massa ou o empanado levam ovo)
   ovo: ['ovo-cozido', 'clara-de-ovo-cozida', 'ovo-frito', 'omelete-de-queijo', 'ovo-de-codorna', 'maionese', 'pao-de-queijo-assado', 'bolo-de-milho', 'bolo-de-chocolate',
     'lasanha-massa-cozida', 'nhoque-de-batata-cozido', 'file-de-frango-a-milanesa', 'almondegas-fritas', 'coxinha-de-frango', 'pastel-de-carne-frito', 'pao-de-forma', 'pao-de-forma-integral',
-    'biscoito-maisena', 'biscoito-recheado', 'macarrao-instantaneo', 'pao-com-ovo', 'misto-quente'],
+    'biscoito-maisena', 'biscoito-recheado', 'macarrao-instantaneo', 'pao-com-ovo', 'misto-quente',
+    // os só para registrar: massas de salgado, bolos, tortas, pudim, empanados e o pão dos lanches
+    'frango-frito-empanado', 'nuggets-de-frango', 'empada-de-frango', 'pastel-de-queijo-frito', 'croquete-de-carne-frito', 'esfiha-de-carne', 'esfiha-de-queijo', 'esfiha-de-frango', 'enroladinho',
+    'risoles', 'salgadinho-de-festa', 'bolo-simples', 'bolo-de-cenoura', 'bolo-de-laranja', 'bolo-de-coco', 'bolo-de-banana', 'bolo-de-mandioca', 'torta-salgada', 'empadao', 'quiche', 'torta-doce',
+    'pizza-portuguesa', 'hamburguer-sanduiche', 'cachorro-quente', 'biscoito-recheado-morango', 'biscoito-wafer', 'pudim', 'sorvete'],
   // grão, bebida, tofu e proteína de soja; óleo de soja; e os industriais em que soja (proteína ou lecitina) é comum
   soja: ['soja-cozida', 'tofu', 'proteina-de-soja-texturizada', 'leite-de-soja', 'oleo-de-soja', 'margarina-com-sal', 'chocolate-ao-leite', 'chocolate-meio-amargo', 'chocolate-amargo-70',
     'achocolatado-em-po', 'biscoito-recheado', 'biscoito-maisena', 'biscoito-cream-cracker', 'pao-de-forma', 'pao-de-forma-integral', 'salsicha', 'mortadela', 'hamburguer-bovino-grelhado',
-    'macarrao-instantaneo', 'whey-protein', 'proteina-de-soja-preparada', 'misto-quente', 'pizza-de-mucarela', 'pizza-de-calabresa'],
+    'macarrao-instantaneo', 'whey-protein', 'proteina-de-soja-preparada', 'misto-quente', 'pizza-de-mucarela', 'pizza-de-calabresa',
+    'nuggets-de-frango', 'pizza-portuguesa', 'hamburguer-sanduiche', 'cachorro-quente', 'enroladinho', 'salgadinho-de-pacote', 'biscoito-recheado-morango', 'biscoito-wafer', 'sorvete', 'brigadeiro', 'milk-shake'],
 };
 const OLEOS = new Set(['oleo-de-soja', 'oleo-de-girassol', 'oleo-de-milho', 'oleo-de-canola', 'azeite-de-oliva']);
 const ALERG = new Map(ALIMENTOS.map((f) => [f.id, new Set()]));

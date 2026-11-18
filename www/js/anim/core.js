@@ -488,23 +488,75 @@ export function rower() {
   };
 }
 
+// Simulador de escada (stepmill): os degraus giram como uma escada rolante que desce, e a pessoa sobe sem sair do lugar.
+// Em cada passada (um ciclo da animação) a escada desce dois degraus. O pé apoia inteiro num degrau e desce junto com
+// ele enquanto a perna estende; depois sobe e pousa dois degraus acima, sem encostar no degrau do meio. Pernas alternadas.
+export const ESCADA = {
+  O: [X + 11, 22.5],   // quina (bocel) do degrau em que o pé de cá pousa no início do ciclo
+  D: [16, 10],         // de um degrau ao seguinte: profundidade do piso e altura do espelho
+  pe: [4, AK],         // tornozelo em relação à quina do degrau: o pé inteiro cabe no piso
+  apoio: 5 / 8,        // parte da passada em que o pé fica no degrau
+  x0: X - 11, x1: X + 46, // trecho à vista dos degraus (entre a plataforma de baixo e a cobertura de cima)
+};
+// quina do degrau k (0 = onde o pé de cá pousa em t = 0) no instante t: a escada desce dois degraus por ciclo
+export const quinaEscada = (k, t) => add(ESCADA.O, ESCADA.D, k - 2 * t);
 export function stairs() {
-  const hi = { foot: [X + 9, 16 + AK] };
-  const lo = { foot: [X - 5, 6 + AK] };
-  const arm = { hand: [X + 22, 70] };
+  const { O, D, pe, apoio } = ESCADA;
+  const pouso = add(O, pe);
+  // pé ao longo da passada (f = 0 no pouso): no degrau, desce com ele; no ar, sobe primeiro (o degrau de cima vem
+  // vindo na direção da ponta do pé) e depois avança por cima da quina do degrau do meio até pousar dois degraus acima
+  // (no ar, as posições são dadas em relação ao degrau de onde o pé saiu, que segue descendo: [x, y, ângulo do pé])
+  const noAr = { 6: [1, 12, 16], 7: [25, 26, 8] };
+  const peEm = (f) => {
+    if (f <= apoio + 1e-9) return { foot: add(pouso, D, -2 * f), footAng: 0 };
+    const [dx, dy, fa] = noAr[Math.round(f * 8)];
+    return { foot: add(add(pouso, [dx, dy]), D, -2 * f), footAng: fa };
+  };
+  const hip0 = add(pouso, [-15, 31]);
+  const sh = shOf(hip0, 7);
+  const arm = { hand: [sh[0] + 15.5, sh[1] - 13.2] };
+  const frames = [];
+  for (let i = 0; i < 8; i++) {
+    const f = i / 8;
+    // o quadril sobe um pouco no meio do apoio simples e desce no apoio duplo
+    const dy = 0.45 * Math.cos(4 * Math.PI * (f - 0.3125));
+    frames.push({ hip: [hip0[0], hip0[1] + dy], torso: 7, head: -6, legN: peEm(f), legF: peEm((f + 0.5) % 1), arm });
+  }
+  const { x0, x1 } = ESCADA;
+  const rail = [[X + 57, 75.5], [arm.hand[0] - 6, arm.hand[1] - 0.6], [X - 18, 48], [X - 18, 12]];
   return {
-    view: 'side', loop: true,
-    frames: [{ hip: [X + 1, H + 5], torso: 6, legN: hi, legF: lo, arm }, { hip: [X + 1, H + 4], torso: 6, legN: lo, legF: hi, arm }],
-    pisos: [{ x0: X - 16, x1: X + 2, y: 6 }, { x0: X + 2, x1: X + 18, y: 16 }],
-    // simulador de escada: base, carenagem lateral em degraus com os pisos, coluna alta com o painel e o corrimão comprido
-    equip: [{ k: 'fn', z: 'back', f: (o) => {
-      o.line([X - 22, CHAO], [X + 50, CHAO], 'fg-eq', 1.7);
-      o.poly([[X - 17, 1.8], [X - 17, 6], [X + 2, 6], [X + 2, 16], [X + 18, 16], [X + 18, 26], [X + 37, 26], [X + 46, 1.8]], 'fg-shroud');
-      for (const [x0, h] of [[X - 16, 6], [X + 2, 16], [X + 18, 26]]) o.line([x0, h - 0.6], [x0 + 16, h - 0.6], 'fg-eq', 1.3);
-      P.tubo(o, [[X + 41, 14], [X + 34.5, 93]], 2.4);
-      P.tubo(o, [[X + 36.2, 72.5], [X + 12, 70], [X - 13, 50], [X - 13, 5]], 1.6);
-      o.line([X + 14, 70.2], [X + 27, 71.6], 'fg-grip', 2.3);
-      painel(o, [X + 33, 97], 6, 4.2, -0.2);
+    view: 'side', loop: true, fast: true, frames,
+    // simulador de escada: base, plataforma de baixo, degraus que descem girando (o piso de cada um com a quina clara),
+    // carenagem lateral, cobertura de cima, coluna com o painel e o corrimão que acompanha a escada
+    equip: [{ k: 'fn', z: 'back', f: (o, J, t) => {
+      o.line([X - 30, CHAO], [X + 66, CHAO], 'fg-eq', 1.7);
+      // perfil dos degraus à vista: dente a dente, recortado no trecho entre x0 e x1
+      const k0 = Math.floor((x0 - O[0]) / D[0] + 2 * t) - 1, k1 = Math.ceil((x1 - O[0]) / D[0] + 2 * t) + 1;
+      const pts = [];
+      for (let k = k0; k <= k1; k++) { const q = quinaEscada(k, t); pts.push(q, add(q, [D[0], 0])); }
+      const yEm = (x) => { // altura do perfil em x (onde há espelho, a de cima)
+        for (let i = 0; i < pts.length - 1; i++) if (x >= pts[i][0] && x < pts[i + 1][0]) return pts[i][1];
+        return pts[pts.length - 1][1];
+      };
+      const perfil = [[x0, yEm(x0)], ...pts.filter((p) => p[0] > x0 && p[0] < x1), [x1, yEm(x1)]];
+      // fundo dos dentes: uma linha por baixo das quinas internas, que encontra o chão perto da plataforma
+      const base = (x) => O[1] + ((x - O[0]) * D[1]) / D[0] - D[1] - 4;
+      const FUNDO = 8; // abaixo disso os degraus somem na carenagem
+      const xChao = (sobe) => O[0] + ((CHAO - sobe - O[1] + D[1] + 4) * D[0]) / D[1];
+      o.poly([...perfil, [x1, base(x1)], [xChao(0), CHAO], [x0, CHAO]], 'fg-col');
+      for (let i = 0; i < perfil.length - 1; i++) if (perfil[i][1] === perfil[i + 1][1]) o.line(perfil[i], perfil[i + 1], 'fg-eq', 1.2); // pisos
+      for (let k = k0; k <= k1; k++) { const q = quinaEscada(k, t); if (q[0] > x0 + 0.6 && q[0] < x1 - 0.6) o.line(q, add(q, [2.2, 0]), 'fg-eqhi', 1.2); }
+      // carenagem lateral, por baixo dos dentes; perto do chão ela esconde os degraus que vão dar a volta por baixo
+      o.poly([[x0, CHAO], [x0, FUNDO], [xChao(CHAO - FUNDO + 1.5), FUNDO], [x1, base(x1) + 1.5], [x1, CHAO]], 'fg-shroud');
+      // plataforma de baixo (onde se sobe no aparelho) e cobertura de cima, onde os degraus dão a volta
+      o.poly([[X - 28, CHAO], [X - 28, 11.6], [x0 + 1.5, 11.6], [x0 + 1.5, CHAO]], 'fg-shroud');
+      o.line([X - 27.5, 11.4], [x0 + 1, 11.4], 'fg-eq', 1.2);
+      o.poly([[x1 - 1.5, base(x1) + 1.5], [x1 - 1.5, 54], [x1 + 3, 56.5], [X + 62, 56.5], [X + 64, 51], [X + 64, CHAO], [x1, CHAO]], 'fg-shroud');
+      // coluna com o painel e o corrimão (desce acompanhando a escada até a plataforma)
+      P.tubo(o, [[X + 59, 56], [X + 55, 96]], 2.4);
+      P.tubo(o, rail, 1.6);
+      o.line(add(arm.hand, [-6.5, -0.7]), add(arm.hand, [6, 0.6]), 'fg-grip', 2.3);
+      painel(o, [X + 54, 100], 6, 4.2, -0.2);
     } }],
   };
 }

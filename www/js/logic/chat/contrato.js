@@ -28,7 +28,11 @@
 //   resumoNoDia?: 'faltar ao treino',     // resumo com a data: "faltar ao treino na sexta" ('{dia}' = "sexta")
 //   bonus?: ({ datas, hoje, texto, ctx }) => número, // pontos que as palavras não pegam (ex.: dois dias na frase)
 //   prioridade?: 0..3,                    // numa frase com dois assuntos, o maior vem primeiro (dor = 3)
+//   exige?: 'exercicio',                  // o assunto fala de UM exercício: sem exercício no texto, vale menos da metade
 // }
+// O texto passa antes por logic/chat/nlu.js (abreviações e gírias, "por que" → "porque", conceitos, radicais, peso das
+// palavras) e logic/chat/entidades.js (exercício do catálogo e do plano, parte do corpo, músculo, números): `bonus`
+// recebe { datas, hoje, texto, ctx, ent: { exercicio, corpo, musculos, numeros } }; ctx.ex = o exercício da conversa.
 //
 // Passo = {
 //   texto: ['parágrafo curto', ...],      // o que o treinador diz (frases curtas, sem jargão)
@@ -44,6 +48,10 @@
 //        //      'treinador-trocas' | 'corrida-entrevista' | 'nutri-entrevista' }: folhas e modos de tela que não têm endereço próprio
 //   faq?: [{ q, a: ['...'], refs: ['...'] }], // perguntas frequentes mostradas fechadas (resposta e fontes ao tocar)
 //   data?: 'AAAA-MM-DD',                  // o dia de que o passo fala (vai para a memória da conversa)
+//   ex?: 'id do exercício',               // o exercício de que o passo fala ("e no stiff?" continua com outro)
+//   sugestoes?: [{ rotulo, valor }],      // o motor acrescenta: até 3 perguntas relacionadas (só em falas que terminam,
+//                                         // nunca num alerta); valor 'i:assunto|texto', 'x:assunto:exercício' ou 'f:pergunta'
+//                                         // (motor.sugestao(valor, coach, ctx) responde como se fosse escrito)
 //   (o motor acrescenta: assunto (id), memoria { assunto, data, de, pendente } e, quando o texto aceita uma ação em
 //    aberto, executar (índice da ação: a tela abre a mesma confirmação do botão))
 // }

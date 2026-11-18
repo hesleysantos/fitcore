@@ -1,7 +1,9 @@
 // Testes da Nutricionista: cálculos, travas de segurança e cardápio para muitos perfis.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ALIMENTOS, LIMITES_PRECO, NOME_FAIXA, calcularPreco, fonteDeProteina } from '../www/js/data/foods.js';
+import { ALIMENTOS, LIMITES_PRECO, NOME_FAIXA, calcularPreco, fonteDeProteina, SO_REGISTRO } from '../www/js/data/foods.js';
+// os alimentos só para registrar (frituras, salgados, lanches: data/foods.js, SO_REGISTRO) não têm preço: não entram em compra
+const COM_PRECO = ALIMENTOS.filter((f) => !SO_REGISTRO.includes(f.id));
 import { REFS } from '../www/js/data/knowledge.js';
 import { PERGUNTAS, respostasCompletas, calcular, cardapio, proximaSemente, assinatura, faltasDaCasa, USADOS_EM_CASA, emVoltaDoTreino, imcFaixa } from '../www/js/logic/nutrition.js';
 
@@ -151,7 +153,8 @@ test('faixas de preço: nenhum alimento sem faixa e o critério se reproduz', ()
   // toda faixa vem de preço pesquisado, com fonte e data: não existe mais preço estimado "pelo parecido"
   const FONTES = ['PS', 'DP', 'MM', 'MS', 'GO', 'UF', 'AN', 'RN', 'SD', 'MF', 'CG', 'NT', 'RC', 'MX'];
   const porFonte = {};
-  for (const f of ALIMENTOS) {
+  for (const f of ALIMENTOS) if (SO_REGISTRO.includes(f.id)) assert.ok(f.preco === null && f.soDiario === true, 'só para registrar, sem preço e fora do cardápio: ' + f.id);
+  for (const f of COM_PRECO) {
     const p = f.preco;
     assert.ok(p && [1, 2, 3].includes(p.faixa), 'sem faixa de preço: ' + f.id);
     assert.ok(NOME_FAIXA[p.faixa]);
@@ -170,9 +173,9 @@ test('faixas de preço: nenhum alimento sem faixa e o critério se reproduz', ()
     assert.deepEqual(calcularPreco(f), { ...p }, 'calcularPreco não reproduz: ' + f.id);
     cont[p.faixa]++;
   }
-  for (const k of [1, 2, 3]) assert.ok(cont[k] >= ALIMENTOS.length * 0.15, `faixa ${k} com poucos alimentos: ${cont[k]}`);
+  for (const k of [1, 2, 3]) assert.ok(cont[k] >= COM_PRECO.length * 0.15, `faixa ${k} com poucos alimentos: ${cont[k]}`);
   // notícia (NT), atacado (CG) e conta de receita (RC) são último recurso: têm de ser minoria
-  assert.ok((porFonte.NT || 0) + (porFonte.CG || 0) + (porFonte.RC || 0) <= ALIMENTOS.length * 0.08, 'fontes de último recurso demais');
+  assert.ok((porFonte.NT || 0) + (porFonte.CG || 0) + (porFonte.RC || 0) <= COM_PRECO.length * 0.08, 'fontes de último recurso demais');
   const fx = (id) => FOOD.get(id).preco.faixa;
   for (const id of ['arroz-branco-cozido', 'feijao-carioca-cozido', 'ovo-cozido', 'peito-de-frango-grelhado', 'banana-prata', 'repolho-branco-cru', 'oleo-de-soja']) assert.equal(fx(id), 1, id);
   for (const id of ['patinho-grelhado', 'tilapia-grelhada', 'leite-integral', 'maca-fuji', 'azeite-de-oliva']) assert.equal(fx(id), 2, id);
@@ -200,7 +203,7 @@ test('cardápio com "mais baratos": respeita restrições, fecha as metas e most
 test('lista de alimentos: grande variedade, de todos os grupos e faixas de preço', () => {
   assert.ok(ALIMENTOS.length >= 250, 'alimentos: ' + ALIMENTOS.length);
   const porCat = {};
-  for (const f of ALIMENTOS) { porCat[f.cat] = porCat[f.cat] || { n: 0, faixas: new Set() }; porCat[f.cat].n++; porCat[f.cat].faixas.add(f.preco.faixa); }
+  for (const f of COM_PRECO) { porCat[f.cat] = porCat[f.cat] || { n: 0, faixas: new Set() }; porCat[f.cat].n++; porCat[f.cat].faixas.add(f.preco.faixa); }
   for (const [cat, x] of Object.entries(porCat)) { assert.ok(x.n >= 10, `poucos alimentos em ${cat}: ${x.n}`); assert.ok(x.faixas.size >= 2, 'grupo com uma só faixa de preço: ' + cat); }
   // (os alimentos "só diário" — refrigerantes, salgados, doces — não contam: o cardápio nunca os usa)
   assert.ok(USADOS_EM_CASA.size >= ALIMENTOS.filter((f) => !f.soDiario).length * 0.8, 'o cardápio de casa sabe usar poucos alimentos: ' + USADOS_EM_CASA.size);
@@ -500,7 +503,7 @@ test('pratos prontos: o custo sai da receita da TACO, com preços pesquisados, e
   const custo2026 = { 'canjica-com-leite': 4.54, 'macarrao-a-bolonhesa': 6.62, 'baiao-de-dois': 5.12, 'feijao-tropeiro': 26.64, feijoada: 10.25, 'estrogonofe-de-carne': 72.11, 'estrogonofe-de-frango': 39.22, 'omelete-de-queijo': 23.56 };
   const esperada = { 'canjica-com-leite': 1, 'macarrao-a-bolonhesa': 2, 'baiao-de-dois': 2, 'feijao-tropeiro': 3, feijoada: 1, 'estrogonofe-de-carne': 3, 'estrogonofe-de-frango': 2, 'omelete-de-queijo': 2 };
   assert.deepEqual(Object.keys(RECEITAS).sort(), Object.keys(esperada).sort());
-  assert.deepEqual(ALIMENTOS.filter((f) => f.preco.fonte === 'RC').map((f) => f.id).sort(), Object.keys(esperada).sort());
+  assert.deepEqual(COM_PRECO.filter((f) => f.preco.fonte === 'RC').map((f) => f.id).sort(), Object.keys(esperada).sort());
   for (const [id, r] of Object.entries(RECEITAS)) {
     const f = FOOD.get(id);
     assert.ok(f && r.rende > 0 && r.ing.length >= 3, id);

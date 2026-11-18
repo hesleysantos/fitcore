@@ -14,6 +14,7 @@ import { EQUIPAMENTOS } from '../data/equipment.js';
 import { REFS } from '../data/knowledge.js';
 import { barrarSemTreino, avisoDoTreino } from './saude-fora.js';
 import { efeitoDeHoje } from '../logic/saude-fora.js';
+import { itensDoDia as itensDaSemana } from '../logic/ajuste-semana.js';
 import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate, agendarAviso, cancelarAviso, fimDoDescanso } from '../device.js';
 
 // ---------- carga recomendada ----------
@@ -77,7 +78,8 @@ export async function startSession(planId, dayId, opc = {}) {
   const plan = planById(planId);
   const day = plan && plan.dias.find((d) => d.id === dayId);
   if (!day) return;
-  const itensDoDia = opc && Array.isArray(opc.itens) && opc.itens.length ? opc.itens : day.itens;
+  // sem lista pronta: a versão "só nesta semana" do treino, se houver (logic/ajuste-semana.js); senão, o plano
+  const itensDoDia = opc && Array.isArray(opc.itens) && opc.itens.length ? opc.itens : itensDaSemana(state, planId, dayId, dateKey(new Date()));
   if (!itensDoDia.length) { toast('Este treino ainda não tem exercícios.'); return; }
   // febre, diarreia, pancada na cabeça... (logic/saude-fora.js): dia sem treino, com o porquê e o "Já melhorei"
   if (barrarSemTreino()) return;

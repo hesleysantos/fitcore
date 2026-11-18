@@ -53,6 +53,13 @@ function faqs(lista) {
 }
 
 // ---------- o que os botões fazem ----------
+// pergunta relacionada: o mesmo que escrever a pergunta
+function perguntar(coach, m, s) {
+  euDisse(coach, s.rotulo);
+  m.respondida = true;
+  falar(coach, M.sugestao(s.valor, coach, ctx(coach)));
+  redesenhar(coach, true);
+}
 function escolher(coach, m, o) {
   euDisse(coach, o.rotulo);
   m.respondida = true;
@@ -80,7 +87,8 @@ async function executar(coach, m, i) {
 function irPara(coach, x) {
   if (x.rota) { go(x.rota); return; }
   if (x.abrir === 'contar-dor') {
-    contarDor({ aoSalvar: () => falar(coach, { texto: ['Anotado. O treino passa a levar essa dor em conta.'], opcoes: [{ rotulo: 'Ver os assuntos', valor: 'a' }], proximo: (v, cc) => M.saudacao(coach, cc) }) });
+    // depois de contar a dor: o que o treino muda, para aplicar ali mesmo (só hoje, só nesta semana ou sempre)
+    contarDor({ aoSalvar: () => { const u = [...conversa(coach).msgs].reverse().find((x) => x.de === 'coach'); if (u) u.respondida = true; falar(coach, M.depoisDaDor(coach, ctx(coach))); } });
   } else if (x.abrir === 'combinado') perguntarCombinado({ aoMudar: () => falar(coach, { texto: ['Prioridade guardada. Os treinos passam a segui-la.'] }) });
   else if (x.abrir === 'corrida-entrevista') abrirEntrevistaCorrida();
   else if (x.abrir === 'nutri-entrevista') abrirEntrevistaNutri();
@@ -105,6 +113,8 @@ function balaoCoach(coach, m, ativo) {
     for (const o of p.opcoes || []) bt.appendChild(btn(o.rotulo, () => escolher(coach, m, o), 'block chat-op'));
     for (const x of p.ir || []) bt.appendChild(btn(x.rotulo, () => irPara(coach, x), 'ghost block', 'right'));
     if (bt.firstChild) box.appendChild(bt);
+    // perguntas relacionadas: botões pequenos, depois do resto
+    if (p.sugestoes && p.sugestoes.length) box.appendChild(h('div', { class: 'chat-sugestoes', role: 'group', 'aria-label': 'Perguntas relacionadas' }, ...p.sugestoes.map((s) => btn(s.rotulo, () => perguntar(coach, m, s), 'ghost sm chat-sug'))));
   } else if (ativo && p.ir) {
     const bt = h('div', { class: 'chat-opcoes' });
     for (const x of p.ir) bt.appendChild(btn(x.rotulo, () => irPara(coach, x), 'ghost block', 'right'));

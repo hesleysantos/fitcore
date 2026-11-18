@@ -1,14 +1,15 @@
 // Diário alimentar: validação na fronteira, gravação, totais, comparação com a meta, modos de segurança e estresse.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ALIMENTOS } from '../www/js/data/foods.js';
+import { ALIMENTOS, SO_REGISTRO } from '../www/js/data/foods.js';
 import { REFS, FAQ_NUTRI } from '../www/js/data/knowledge.js';
-import { PERGUNTAS, calcular, cardapio } from '../www/js/logic/nutrition.js';
+import { PERGUNTAS, calcular, cardapio, cardapioDoDia, outraSugestaoDoDia, trocarRefeicaoDoDia, USADOS_EM_CASA } from '../www/js/logic/nutrition.js';
 import {
   REFEICOES, MAX_DIAS, MAX_ITENS_DIA, G_MAX, KCAL_MAX, PROT_MAX, NOME_MAX, AVISO_DO_REGISTRO, REFS_DO_DIARIO,
   diarioPadrao, limparDiario, limparItem, itensDoDia, gravarItem, apagarItem, copiarRefeicao, idDaRefeicao, refeicaoRegistrada, diasRegistrados,
   nutrientesDoItem, totaisDoDia, modoDoDiario, compararComMeta, resumoDaSemana, metaDoDia, resumoDeHoje, somarDias, hojeLocal,
   perfilDoDiario, primeiroDiaDoDiario, refeicaoCopiada, lerCalorias, lerProteina, buscarAlimentos, marcarDaSugestao, desmarcarRefeicao, estadoDaSugestao,
+  gravarVarios, SUPLEMENTOS, MAX_SUP_DIA, SUP_NOME_MAX, limparSup, supDoDia, gravarSup, apagarSup, ultimoSup, textoDoSup,
 } from '../www/js/logic/diario.js';
 
 const FOOD = new Map(ALIMENTOS.map((f) => [f.id, f]));
@@ -584,4 +585,126 @@ test('B4: diário antigo (sem a marca de origem) abre igual, sem contagem dobrad
   marcarDaSugestao(d2, HOJE, lanche, lanche.itens[0].id, true, HOJE);
   assert.equal(itensDoDia(d2, HOJE)[0].s, true);
   assert.deepEqual(limparDiario(J(d2), HOJE), d2);
+});
+
+// ---------- 1.10: alimentos só para registrar, vários de uma vez e suplementos do dia ----------
+test('alimentos só para registrar (frituras, salgados, lanches): fonte oficial, sem preço e NUNCA no cardápio', () => {
+  assert.ok(SO_REGISTRO.length >= 30, 'alimentos novos: ' + SO_REGISTRO.length);
+  for (const id of SO_REGISTRO) {
+    const f = FOOD.get(id);
+    assert.ok(f, 'não existe: ' + id);
+    assert.ok(f.soDiario === true && f.preco === null, 'só diário e sem preço: ' + id);
+    assert.ok(['TACO', 'IBGE'].includes(f.fonte), 'fonte TACO ou POF/IBGE: ' + id);
+    assert.ok(f.porcao.g > 0 && f.porcao.desc, 'medida caseira: ' + id);
+    assert.ok(!USADOS_EM_CASA.has(id), 'na lista de casa: ' + id);
+  }
+  // cardápio, trocas e "outra sugestão": muitos perfis e sementes, com e sem "só o que tenho em casa" (marcando TUDO)
+  const todos = ALIMENTOS.map((f) => f.id);
+  const novos = new Set(SO_REGISTRO);
+  let dias = 0;
+  for (const objetivo of ['emagrecer', 'manter', 'ganhar']) for (const refeicoes of ['3', '4', '5', '6']) for (const restricoes of [['nenhuma'], ['vegetariano'], ['sem_lactose']]) {
+    const r = calcular({ ...base, objetivo, refeicoes, restricoes });
+    for (let seed = 0; seed < 6; seed++) for (const opcoes of [{}, { emCasa: todos }]) {
+      const c = cardapio(r, seed, opcoes);
+      dias++;
+      for (const ref of c.refeicoes) for (const it of ref.itens) assert.ok(!novos.has(it.id), `alimento só de registro no cardápio: ${it.id} (${objetivo}/${refeicoes}/${seed})`);
+    }
+    for (let k = 0; k < 7; k++) {
+      const data = somarDias(HOJE, k);
+      const c = cardapioDoDia(r, data);
+      const outra = outraSugestaoDoDia(r, data, null);
+      const troca = c && c.refeicoes.length ? trocarRefeicaoDoDia(r, data, null, c.refeicoes[0].ordem) : null;
+      for (const x of [c, outra && cardapioDoDia(r, data, outra), troca && cardapioDoDia(r, data, troca)]) if (x) for (const ref of x.refeicoes) for (const it of ref.itens) assert.ok(!novos.has(it.id), 'na troca ou outra sugestão: ' + it.id);
+    }
+  }
+  assert.ok(dias >= 400);
+});
+
+test('busca por sinônimos: x-salada, hamburguer, salgado, fritura, à passarinho, esfirra', () => {
+  const acha = (t) => buscarAlimentos(t, 80).map((f) => f.id);
+  assert.ok(acha('x-salada').includes('hamburguer-sanduiche'));
+  assert.ok(acha('hamburguer').includes('hamburguer-sanduiche') && acha('hamburguer').includes('hamburguer-bovino-grelhado'));
+  for (const id of ['coxinha-de-frango', 'pastel-de-carne-frito', 'pastel-de-queijo-frito', 'empada-de-frango', 'esfiha-de-carne', 'quibe-frito', 'enroladinho', 'risoles', 'croquete-de-carne-frito']) assert.ok(acha('salgado').includes(id), 'salgado → ' + id);
+  for (const id of ['frango-frito', 'asa-de-frango-frita', 'batata-inglesa-frita', 'coxinha-de-frango', 'pastel-de-carne-frito', 'mandioca-frita']) assert.ok(acha('fritura').includes(id), 'fritura → ' + id);
+  assert.ok(acha('frango a passarinho').includes('frango-frito') && acha('frango torrado').includes('frango-frito'));
+  assert.ok(acha('esfirra').includes('esfiha-de-queijo'));
+  assert.ok(acha('lanche').includes('cachorro-quente') && acha('hot dog').includes('cachorro-quente'));
+  for (const t of ['empada', 'bolo', 'torta', 'pizza', 'pastel', 'coxinha', 'pudim', 'brigadeiro', 'sorvete', 'cerveja', 'acai granola']) assert.ok(acha(t).length >= 1, 'achou ' + t);
+});
+
+test('contas de calorias conferidas à mão (3 exemplos) e "adicionar todos"', () => {
+  const d = diarioPadrao();
+  // 1) frango frito, 2 pedaços de 55 g (POF 7800302 frito: 261,66 kcal e 27,3 g de proteína por 100 g)
+  //    261,66 × 1,10 = 287,826 kcal; 27,3 × 1,10 = 30,03 g
+  const x1 = nutrientesDoItem({ id: 'i1', ref: 'almoco', al: 'frango-frito', g: 110, m: true });
+  assert.ok(Math.abs(x1.kcal - 287.826) < 1e-6 && Math.abs(x1.p - 30.03) < 1e-6 && x1.medida.startsWith('110 g (2 pedaços'));
+  // 2) 1 fatia de pizza portuguesa (POF 8500917: 247,49 kcal por 100 g; fatia média 125 g): 247,49 × 1,25 = 309,3625
+  assert.ok(Math.abs(nutrientesDoItem({ id: 'i1', ref: 'jantar', al: 'pizza-portuguesa', g: 125, m: true }).kcal - 309.3625) < 1e-6);
+  // 3) almoço lançado de uma vez: hambúrguer (125 g × 2,6716 = 333,95) + batata frita (65 g × 2,67 = 173,55)
+  //    + cerveja (350 mL × 0,41 = 143,5) = 651 kcal
+  const lista = [{ ref: 'almoco', al: 'hamburguer-sanduiche', g: 125, m: true }, { ref: 'almoco', al: 'batata-inglesa-frita', g: 65, m: true }, { ref: 'almoco', al: 'cerveja', g: 350, m: true }];
+  assert.equal(gravarVarios(d, HOJE, lista, HOJE), 3);
+  const t = totaisDoDia(d, HOJE);
+  assert.ok(Math.abs(t.kcal - 651) < 1e-6 && t.n === 3, 'total: ' + t.kcal);
+  assert.deepEqual(itensDoDia(d, HOJE).map((x) => x.id), ['i1', 'i2', 'i3']);
+  // vários de uma vez: um inválido → nenhum entra; não cabe no dia → nenhum entra; data futura → nada
+  assert.equal(gravarVarios(d, HOJE, [{ ref: 'jantar', al: 'cerveja', g: 350 }, { ref: 'jantar', al: 'nao-existe', g: 10 }], HOJE), 0);
+  assert.equal(gravarVarios(d, HOJE, [{ ref: 'jantar', al: 'cerveja', g: 350 }, { ref: 'jantar', nome: '', kcal: 10 }], HOJE), 0);
+  assert.equal(gravarVarios(d, HOJE, [{ id: 'i9', ref: 'jantar', al: 'cerveja', g: 350 }], HOJE), 0, 'item com id não entra pelo "adicionar todos"');
+  assert.equal(gravarVarios(d, somarDias(HOJE, 1), [{ ref: 'jantar', al: 'cerveja', g: 350 }], HOJE), 0);
+  assert.equal(itensDoDia(d, HOJE).length, 3);
+  const cheio = Array.from({ length: MAX_ITENS_DIA - 2 }, () => ({ ref: 'outro', al: 'brigadeiro', g: 15 }));
+  assert.equal(gravarVarios(d, HOJE, cheio, HOJE), 0);
+  assert.equal(gravarVarios(d, HOJE, cheio.slice(1), HOJE), MAX_ITENS_DIA - 3);
+  assert.equal(itensDoDia(d, HOJE).length, MAX_ITENS_DIA);
+  // alimento fora da lista também vai junto
+  const d2 = diarioPadrao();
+  assert.equal(gravarVarios(d2, HOJE, [{ ref: 'outro', nome: 'Bolo da vó', kcal: 300, p: null }, { ref: 'outro', al: 'brigadeiro', g: 15, m: true }], HOJE), 2);
+  assert.equal(Math.round(totaisDoDia(d2, HOJE).kcal * 100) / 100, Math.round((300 + 334.48 * 0.15) * 100) / 100);
+});
+
+test('suplementos e vitaminas do dia: só registro, validação na fronteira, whey com o rótulo entra na proteína', () => {
+  assert.deepEqual(Object.keys(SUPLEMENTOS), ['creatina', 'whey', 'cafeina', 'multi', 'vitd', 'omega3', 'ferro', 'outro']);
+  const d = diarioPadrao();
+  const c = gravarSup(d, HOJE, { tipo: 'creatina', qtd: 5, un: 'g' }, HOJE);
+  assert.deepEqual(c, { id: 's1', tipo: 'creatina', qtd: 5, un: 'g' });
+  // whey: 1,5 dose × 24 g = 36 g de proteína; 1,5 × 120 = 180 kcal (valores do rótulo)
+  const w = gravarSup(d, HOJE, { tipo: 'whey', qtd: 1.5, un: 'dose', pDose: 24, kcalDose: 120 }, HOJE);
+  assert.equal(w.id, 's2');
+  let t = totaisDoDia(d, HOJE);
+  assert.ok(t.p === 36 && t.kcal === 180 && t.n === 0 && t.sup.length === 2, JSON.stringify(t));
+  assert.deepEqual(textoDoSup(w), { nome: 'Whey (proteína em pó)', dose: '1,5 doses · 36 g de proteína' });
+  assert.deepEqual(textoDoSup(w, false), { nome: 'Whey (proteína em pó)', dose: '1,5 doses' }, 'sem números para menores');
+  // whey sem o rótulo: registrado, sem números
+  gravarSup(d, HOJE, { tipo: 'whey', qtd: 1, un: 'dose' }, HOJE);
+  t = totaisDoDia(d, HOJE);
+  assert.ok(t.p === 36 && t.sup.length === 3);
+  // o dia só com suplemento fica guardado; alimento e suplemento convivem; apagar um não mexe no outro
+  assert.equal(limparDiario(J(d), HOJE).dias.length, 1);
+  gravarItem(d, HOJE, { ref: 'cafe', al: 'pao-frances', g: 50 }, HOJE);
+  assert.ok(apagarItem(d, HOJE, 'i1') && supDoDia(d, HOJE).length === 3, 'apagar o alimento mantém os suplementos');
+  assert.ok(apagarSup(d, HOJE, 's3') && !apagarSup(d, HOJE, 's3') && supDoDia(d, HOJE).length === 2);
+  // a última dose que a PESSOA marcou (para repetir), por tipo
+  assert.equal(ultimoSup(d, 'creatina', somarDias(HOJE, 1)).qtd, 5);
+  assert.equal(ultimoSup(d, 'ferro', HOJE), null);
+  // correção pelo id
+  assert.equal(gravarSup(d, HOJE, { id: 's1', tipo: 'creatina', qtd: 3, un: 'g' }, HOJE).qtd, 3);
+  assert.equal(gravarSup(d, HOJE, { id: 's9', tipo: 'creatina', qtd: 3, un: 'g' }, HOJE), null);
+  // lixo é recusado: tipo e unidade fora da lista, quantidade 0, negativa, enorme ou texto, "outro" sem nome, id estranho
+  for (const raw of [{ tipo: 'anabolizante', qtd: 1, un: 'g' }, { tipo: 'creatina', qtd: 1, un: 'kg' }, { tipo: 'creatina', qtd: 0, un: 'g' }, { tipo: 'creatina', qtd: -2, un: 'g' },
+    { tipo: 'creatina', qtd: 9999, un: 'g' }, { tipo: 'creatina', qtd: '5', un: 'g' }, { tipo: 'outro', qtd: 1, un: 'dose' }, { tipo: 'outro', qtd: 1, un: 'dose', nome: '   ' }, { tipo: 'cafeina', qtd: 0.001, un: 'mg' }]) {
+    assert.equal(gravarSup(d, HOJE, raw, HOJE), null, JSON.stringify(raw));
+  }
+  assert.equal(gravarSup(d, somarDias(HOJE, 1), { tipo: 'creatina', qtd: 5, un: 'g' }, HOJE), null, 'amanhã não');
+  const o = gravarSup(d, HOJE, { tipo: 'outro', qtd: 2, un: 'cápsula', nome: '  Magnésio\u0007 quelato  ' + 'x'.repeat(40) }, HOJE);
+  assert.ok(o && o.nome.length <= SUP_NOME_MAX && !/\u0007/.test(o.nome) && o.nome.startsWith('Magnésio quelato'));
+  assert.equal(limparSup({ id: 'x1', tipo: 'creatina', qtd: 5, un: 'g' }), null, 'id fora do formato');
+  assert.equal(limparSup({ id: 's1', tipo: 'whey', qtd: 1, un: 'dose', pDose: 900, kcalDose: -5 }).pDose, null, 'proteína impossível vira desconhecida');
+  // no máximo MAX_SUP_DIA por dia; um backup com lixo é limpo
+  const d3 = diarioPadrao();
+  for (let i = 0; i < MAX_SUP_DIA; i++) assert.ok(gravarSup(d3, HOJE, { tipo: 'multi', qtd: 1, un: 'comprimido' }, HOJE));
+  assert.equal(gravarSup(d3, HOJE, { tipo: 'multi', qtd: 1, un: 'comprimido' }, HOJE), null);
+  const sujo = { dias: [{ data: HOJE, itens: [], sup: [{ id: 's1', tipo: 'creatina', qtd: 5, un: 'g', extra: '<img>' }, { id: 's1', tipo: 'ferro', qtd: 1, un: 'mg' }, null, 'x', { id: 's2', tipo: 'whey', qtd: 1, un: 'dose', pDose: '24' }] }, { data: '2026-11-15', sup: 'nada' }] };
+  const limpo = limparDiario(sujo, HOJE);
+  assert.deepEqual(limpo, { dias: [{ data: HOJE, itens: [], sup: [{ id: 's1', tipo: 'creatina', qtd: 5, un: 'g' }, { id: 's2', tipo: 'whey', qtd: 1, un: 'dose', pDose: null, kcalDose: null }] }] });
 });

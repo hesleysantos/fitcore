@@ -3,7 +3,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PERGUNTAS, respostasCompletas, perfil, gerarPlano, avisosBloqueio, limparRegistro, limparRegistros, limparCorrida, planoDaSemana, resumoParaNutricao, treinoDoDia, expandirBlocos, evolucao, alertas, dicas, efeitoDaDor, somaDias, segundaDe, diaDaSemana, ritmosDe, inicioPara, recordeSeg, diasEntre, planejadoDe, analiseDoRegistro, analiseRecente, planoDaSemanaEm, efeitoDoFoco, guardarDoDia, planoAtual } from '../www/js/logic/corrida.js';
-import { TIPOS_TREINO, REFS_CORRIDA, FAQ_CORRIDA, DOR_CORRIDA, FONTES_TELA } from '../www/js/data/corrida.js';
+import { TIPOS_TREINO, REFS_CORRIDA, FAQ_CORRIDA, DOR_CORRIDA, FONTES_TELA, MOTIVOS_CARGA } from '../www/js/data/corrida.js';
+import { REFS_CARGA } from '../www/js/logic/carga-corrida.js';
 import { LOCAIS_DOR, TIPOS_DOR } from '../www/js/logic/dor.js';
 
 // ---------- gerador pseudoaleatório com semente fixa (mulberry32) ----------
@@ -410,7 +411,8 @@ test('estresse: sanitização rejeita lixo e mantém os limites', () => {
   }
   for (let i = 0; i < 2000; i++) {
     const c = limparCorrida(r() < 0.2 ? um(r, lixo) : { answers: r() < 0.5 ? respostas(r) : um(r, lixo), aceitoEm: um(r, ['2026-11-02T10:00:00.000Z', ...lixo]), inicio: um(r, ['2026-11-05', ...lixo]), pausas: um(r, [[{ de: '2026-11-06', ate: '2026-11-30', semanas: 3 }, { de: 'x', ate: 5 }, 7], ...lixo]), pausadoEm: um(r, ['2026-11-09T10:00:00.000Z', ...lixo]), mostrados: um(r, [[{ data: '2026-11-06', tipo: 'leve', nome: 'n'.repeat(99), resumo: 5, durMin: 1e9 }, { data: '2026-11-06', tipo: '__proto__' }, { data: 'x' }, 7], ...lixo]), degrau: um(r, [{ pontos: 2, base: 'entrevista' }, { pontos: 2.5, base: 'x' }, { pontos: 99, base: '2026-11-01' }, ...lixo]), cron: um(r, [{ data: '2026-11-10', i: 2, fim: 1794000000000, pausadoEm: 0, inicio: 1793999000000, parado: 0, inicioPasso: 1793999500000, terminado: 0, chave: 77 }, { data: '2026-11-10', i: -3, fim: 'x' }, { data: 'x', i: 1e99 }, ...lixo]), x: 1 });
-    assert.deepEqual(Object.keys(c).sort(), ['aceitoEm', 'answers', 'cron', 'degrau', 'inicio', 'mostrados', 'pausadoEm', 'pausas']);
+    assert.deepEqual(Object.keys(c).sort(), ['aceitoEm', 'answers', 'carga', 'cron', 'degrau', 'inicio', 'mostrados', 'pausadoEm', 'pausas']);
+    assert.ok(Array.isArray(c.carga) && (c.inicio !== '' || !c.carga.length)); // ajustes da carga da semana (tests/carga-corrida.test.mjs)
     assert.ok(Array.isArray(c.mostrados) && c.mostrados.length <= 400 && c.mostrados.every((m) => Object.keys(m).length === 9 && /^\d{4}-\d{2}-\d{2}$/.test(m.data) && (m.tipo === '' || TIPOS_TREINO[m.tipo]) && m.nome.length <= 60 && m.resumo.length <= 160) && (c.inicio !== '' || !c.mostrados.length));
     assert.ok(c.degrau === null || (c.inicio !== '' && Number.isInteger(c.degrau.pontos) && c.degrau.pontos >= 1 && c.degrau.pontos <= 10));
     assert.ok(Array.isArray(c.pausas) && c.pausas.length <= 20 && c.pausas.every((p) => Object.keys(p).length === 3 && p.de <= p.ate && Number.isInteger(p.semanas) && p.semanas >= 0 && p.semanas * 7 <= diasEntre(p.de, p.ate)) && (c.inicio !== '' || !c.pausas.length));
@@ -548,6 +550,9 @@ test('base de conhecimento: toda fonte citada existe e toda fonte é usada', () 
   }
   for (const x of alertas([{ id: 'a', data: '2026-11-01', tipo: 'leve', distKm: 5, durMin: 30, pse: 9, dor: { onde: 'joelho', nivel: 4 } }, { id: 'b', data: '2026-11-03', tipo: 'leve', distKm: 5, durMin: 30, pse: 9, dor: { onde: 'joelho', nivel: 4 } }, { id: 'c', data: '2026-11-10', tipo: 'longo', distKm: 12, durMin: 80, pse: 9 }], '2026-11-12')) marca(x.refs);
   marca(evolucao([], '2026-11-12').refs);
+  // carga da semana (logic/carga-corrida.js)
+  for (const m of Object.values(MOTIVOS_CARGA)) marca(m.refs);
+  marca(REFS_CARGA);
   const sobrando = Object.keys(REFS_CORRIDA).filter((k) => !usadas.has(k));
   // toda fonte da lista tem de ser citada em algum texto que a pessoa vê
   assert.deepEqual(sobrando, [], 'referências sem uso');

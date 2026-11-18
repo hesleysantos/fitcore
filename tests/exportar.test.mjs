@@ -30,7 +30,7 @@ function estado(extra = {}) {
     ],
     body: [{ data: '2026-10-01', peso: 80, cintura: 90 }, { data: '2026-11-01', peso: 79.2, cintura: null }, { data: '2026-11-15', peso: 78.5, cintura: 88 }],
     sono: { acordar: '', idade: null, registros: [{ data: '2026-11-14', horas: 443 / 60, qualidade: 4, dormiu: '23:10', acordou: '06:40' }, { data: '2026-11-15', horas: 6.5 }], cochilos: [{ data: '2026-11-14', min: 20, inicio: '14:00' }] },
-    diario: { dias: [{ data: '2026-11-15', itens: [{ id: 'i1', ref: 'jantar', al: 'arroz-branco-cozido', g: 150, m: false }, { id: 'i2', ref: 'cafe', nome: '@pão da padaria', kcal: 300, p: 9 }] }] },
+    diario: { dias: [{ data: '2026-11-15', itens: [{ id: 'i1', ref: 'jantar', al: 'arroz-branco-cozido', g: 150, m: false }, { id: 'i2', ref: 'cafe', nome: '@pão da padaria', kcal: 300, p: 9 }], sup: [{ id: 's1', tipo: 'whey', qtd: 1.5, un: 'dose', pDose: 24, kcalDose: 120 }, { id: 's2', tipo: 'creatina', qtd: 5, un: 'g' }] }] },
     dores: [{ id: 'd1', data: '2026-11-05', onde: 'ombro', lado: 'd', tipo: 'articular', quando: 'durante', nivel: 4, nota: '-piora no supino', fim: '' }, { id: 'd0', data: '2026-01-05', onde: 'lombar', lado: '', tipo: 'muscular', quando: 'depois', nivel: 2, nota: '', fim: '2026-01-08' }],
     trainer: { answers: { idade: 31 } }, nutri: { answers: {} }, run: { answers: {} },
     ...extra,
@@ -85,13 +85,17 @@ test('diário alimentar segue as proteções da tela: calorias para adultos, só
   assert.deepEqual(adulto[1].slice(0, 3), ['15/11/2026', 'Café da manhã', "'@pão da padaria"], 'ordem das refeições do dia e texto com @ neutralizado');
   assert.deepEqual(adulto[1].slice(5), ['300', '9']);
   assert.deepEqual([adulto[2][2], adulto[2][3], adulto[2][5]], ['Arroz branco cozido', '150', '192']);
+  // suplementos e vitaminas do dia: depois dos alimentos, com a dose marcada; números só do whey com o rótulo
+  assert.deepEqual(adulto[3], ['15/11/2026', 'Suplemento ou vitamina', 'Whey (proteína em pó)', '', '1,5 doses', '180', '36']);
+  assert.deepEqual(adulto[4], ['15/11/2026', 'Suplemento ou vitamina', 'Creatina', '', '5 g', '', '']);
   const menor = ler(planilha(estado({ run: { answers: { idade: 16 } } }), 'diario', HOJE).texto);
   assert.equal(menor[0].length, 5, 'menor de 18 anos: sem calorias nem proteína');
+  assert.deepEqual(menor[3], ['15/11/2026', 'Suplemento ou vitamina', 'Whey (proteína em pó)', '', '1,5 doses']);
   assert.ok(!menor.flat().includes('300'));
   const ta = estado({ nutri: { answers: { condicoes: ['transtorno'] } } });
   assert.equal(planilha(ta, 'diario', HOJE), null);
   assert.ok(!planilhasDisponiveis(ta).some((x) => x.id === 'diario'));
-  assert.deepEqual(planilhasDisponiveis(estado()).map((x) => [x.id, x.linhas]), [['musculacao', 6], ['corridas', 2], ['peso', 3], ['sono', 3], ['diario', 2], ['dores', 2], ['saude', 0]]);
+  assert.deepEqual(planilhasDisponiveis(estado()).map((x) => [x.id, x.linhas]), [['musculacao', 6], ['corridas', 2], ['peso', 3], ['sono', 3], ['diario', 4], ['dores', 2], ['saude', 0]]);
   assert.equal(TIPOS_PLANILHA.length, 7);
 });
 

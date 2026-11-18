@@ -545,7 +545,11 @@ test('objetivo: hipertrofia chega a 10+ séries semanais nos grupos grandes quan
   for (const experiencia of ['intermediario', 'avancado']) for (const dias of ['3', '4', '5', '6']) for (const tempo of ['60', '75']) {
     const p = gerarPlano({ ...base, experiencia, dias, tempo }, GYM_ALL, 0);
     TOTAL++;
-    for (const g of ['peito', 'costas', 'quadriceps', 'posteriores']) if (p.volume[g] < 9) F.add('hipertrofia abaixo de ~10 séries semanais', `${experiencia}/${dias}d/${tempo}min: ${g} = ${p.volume[g]}`); // Schoenfeld 2017
+    // posteriores: 8 ou mais. Desde que o agachamento e o leg press deixaram de somar meia série aos posteriores (eles não
+    // crescem com esses exercícios — refs kubo2019, plotkin2023, kinoshita2026), o treino de pernas único da divisão de 3
+    // dias (empurrar, puxar, pernas) fica com 2 exercícios diretos de posteriores, 8 séries: dentro da faixa de "alta
+    // eficiência" de Pelland (5 a 10 — ref pelland2026). Uma 3ª vaga tiraria o abdômen da semana e a vaga da prioridade.
+    for (const g of ['peito', 'costas', 'quadriceps', 'posteriores']) if (p.volume[g] < (g === 'posteriores' ? 8 : 9)) F.add('hipertrofia abaixo de ~10 séries semanais', `${experiencia}/${dias}d/${tempo}min: ${g} = ${p.volume[g]}`); // Schoenfeld 2017
   }
   for (const objetivo of OBJ) for (const experiencia of EXP) for (const dias of DIAS) for (const tempo of ['45', '60', '75']) {
     const p = gerarPlano({ ...base, objetivo, experiencia, dias, tempo }, GYM_ALL, 0);

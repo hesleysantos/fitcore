@@ -13,6 +13,7 @@ import { limparCombo, comboPadrao, chaveValida } from './logic/combinado.js';
 import { limparDiario, diarioPadrao } from './logic/diario.js';
 import { diaValido } from './logic/saude.js';
 import { limparPerdidos } from './logic/perdido.js';
+import { limparAjustesSemana } from './logic/ajuste-semana.js';
 import { limparEsteira } from './logic/esteira.js';
 
 const DB_NAME = 'fitcore';
@@ -42,7 +43,7 @@ const defaults = () => ({
   body: [],
   // Treinador de corrida (logic/corrida.js): entrevista e plano aceito; runs = corridas registradas
   // esteira: dias em que a corrida do plano vai para a esteira (logic/esteira.js)
-  run: { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [], mostrados: [], degrau: null, esteira: [] },
+  run: { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [], mostrados: [], degrau: null, carga: [], esteira: [] },
   runs: [],
   dores: [], // dores contadas ao Treinador (logic/dor.js); valem para musculação e corrida
   saudeFora: [], // problemas de saúde que não vêm do treino: febre, pancada, corte... (logic/saude-fora.js)
@@ -50,6 +51,7 @@ const defaults = () => ({
   combo: comboPadrao(), // corrida + musculação: foco e fortalecimento (logic/combinado.js)
   diario: diarioPadrao(), // diário alimentar: o que a pessoa comeu de fato (logic/diario.js)
   perdidos: [], // "Não treinei" e "Não corri": dias marcados e para onde o treino foi (logic/perdido.js)
+  ajustesSemana: [], // treino mudado só numa semana: a versão do treino para aquela semana (logic/ajuste-semana.js)
   // objetivosOk: par "treino|alimentação" que o usuário escolheu manter diferente (logic/objetivos.js)
   // backupAdiadoEm: quando a pessoa tocou em "Depois" no lembrete de backup da tela inicial
   ui: { onboarded: false, installDismissedAt: '', backupEm: '', backupAdiadoEm: '', objetivosOk: '' },
@@ -230,6 +232,8 @@ export function sanitize(raw, { doAparelho = false } = {}) {
   d.run.esteira = limparEsteira(isObj(raw.run) ? raw.run.esteira : null); // só datas válidas e recentes (logic/esteira.js)
   d.runs = limparRegistros(raw.runs); // até 3000 registros, sem id repetido
   d.perdidos = limparPerdidos(raw.perdidos);
+  // só versões de treinos que ainda existem no plano
+  d.ajustesSemana = limparAjustesSemana(raw.ajustesSemana).filter((x) => d.plans.some((p) => p.id === x.planId && p.dias.some((dd) => dd.id === x.diaId)));
   const u = isObj(raw.ui) ? raw.ui : {};
   d.ui = { onboarded: bool(u.onboarded, false), installDismissedAt: iso(u.installDismissedAt), backupEm: iso(u.backupEm), backupAdiadoEm: iso(u.backupAdiadoEm), objetivosOk: parValido(u.objetivosOk) ? u.objetivosOk : '' };
   return d;

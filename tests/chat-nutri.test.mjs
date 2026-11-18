@@ -357,3 +357,23 @@ test('perfil: as proteções vêm de qualquer entrevista', () => {
   assert.deepEqual([...P.alergias].sort(), ['amendoim', 'leite', 'ovo']);
   assert.ok(limparAjustes(PERFIS.adulto().nutri.ajustes));
 });
+
+// O texto livre no motor (logic/chat/motor.js): a pergunta frequente que vira resposta direta e as perguntas relacionadas
+// também seguem a regra — quem a Nutricionista protege nunca vê número de calorias, peso ou gramas.
+test('texto livre: perguntas frequentes e perguntas relacionadas sem números para transtorno alimentar e menores de 18', async () => {
+  const M = await import('../www/js/logic/chat/motor.js');
+  const frases = ['quanta proteína preciso por dia?', 'quantas calorias devo comer para emagrecer?', 'qnto de proteina eu tenho q comer por dia', 'quantas calorias eu como pra secar?', 'creatina funciona?', 'quanta agua devo beber?',
+    'jejum intermitente funciona?', 'como comer pra ganhar massa?', 'low carb emagrece mais?', 'whey engorda?', 'como dividir a proteina nas refeicoes', 'o que comer depois do treino?'];
+  for (const nome of ESTRITOS) {
+    const st = PERFIS[nome]();
+    for (const coach of ['nutri', 'treinador', 'corrida']) {
+      for (const f of frases) {
+        const ctx = { ...ctxDe(st), coach };
+        const p = M.limparPasso(M.responder(f, coach, ctx));
+        const ver = (q, onde) => { for (const t of [...textosDo(q), ...(q.sugestoes || []).map((s) => s.rotulo)]) assert.ok(!NUMERO_PROIBIDO.test(t), `${nome}/${coach}/${onde}: "${t}"`); };
+        ver(p, f);
+        for (const s of p.sugestoes || []) ver(M.limparPasso(M.sugestao(s.valor, coach, { ...ctx, memoria: p.memoria })), f + ' > ' + s.rotulo);
+      }
+    }
+  }
+});

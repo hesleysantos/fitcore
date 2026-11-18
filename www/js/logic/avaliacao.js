@@ -3,9 +3,17 @@
 // as mesmas fontes (data/knowledge.js). É um sistema de regras fixas, sem internet e sem IA. Puro: sem DOM e sem estado.
 //
 // Fontes das regras usadas aqui:
-//  • séries por semana em cada grupo: cerca de 4 já dão resultado (ref iversen2021); 10 ou mais para ganhar massa (ref
-//    schoenfeld2017vol); teto de 12, 16 ou 20 séries diretas conforme o nível (ref bazvalle2022); o músculo principal de
-//    um exercício conta 1 série e o auxiliar, meia (ref pelland2026);
+//  • séries por semana em cada grupo: cerca de 4 já dão resultado (ref iversen2021; em Pelland, 4 séries fracionadas são
+//    a dose mínima — ref pelland2026); 10 ou mais para ganhar massa (ref schoenfeld2017vol); "demais" = mais séries
+//    diretas que o teto do nível (12, 16 ou 20 — ref bazvalle2022) ou mais de 1,5 vez o teto contando as meias séries
+//    (18, 24 ou 30: onde o rendimento cai na tabela 2A de Pelland), a mesma regra do plano do Treinador (trainer.js);
+//  • a conta: o músculo principal de um exercício conta 1 série e o auxiliar ("ajuda"), meia — a contagem "fracionada",
+//    a que melhor explicou o ganho entre as três que Pelland comparou (só diretas, tudo inteiro, ou ajuda = ½; ref
+//    pelland2026). Fica num lugar só (trainer.js, pesosDoExercicio): lá estão também os auxiliares que não contam, com as
+//    fontes (posteriores no agachamento, no leg press e na elevação pélvica — refs kubo2019, plotkin2023, kinoshita2026;
+//    quadríceps nos abdominais). Glúteo conta inteiro no agachamento, no afundo e no leg press: eles fazem o glúteo crescer
+//    (refs kubo2019, plotkin2023, kinoshita2026). Corrida e cardio não entram: não são séries de musculação, e os estudos
+//    de volume são só de musculação (ref pelland2026);
 //  • para que o treino serve, pela faixa de repetições: até 6, força (1 a 6 repetições máximas — ref acsm2009); 15 ou
 //    mais, resistência muscular; entre as duas, a faixa média, a mais prática para ganhar massa. A massa cresce numa faixa
 //    ampla de cargas, a partir de cerca de 30% da carga máxima, e não há "zona ideal" de hipertrofia (ref schoenfeld2021). "Definição" não é um tipo de treino: vem de comer menos do que se gasta,
@@ -20,7 +28,8 @@
 //    faigenbaum2009); até 3 treinos de força por semana em dias não seguidos para menores de 18 e para quem tem diabetes
 //    (refs lloyd2014, colberg2016); 1 a 3 séries por exercício para quem está começando (ref acsm2009);
 //  • quem corre: treino de pernas a 24 horas ou mais da corrida forte (ref blagrove2018).
-import { EX_POR_ID } from '../data/exercises.js';
+import { EXERCICIOS, EX_POR_ID } from '../data/exercises.js';
+import { EQUIPAMENTOS } from '../data/equipment.js';
 import { MUSCULOS, PADROES } from '../data/muscles.js';
 import { perfil, respostasCompletas, pesosDoExercicio, tetoSeries, duracaoEstimada, motivosContra, alternativas, nomeGrupo, soManual, alertaDoExercicio } from './trainer.js';
 // (os motivos de motivosContra incluem as limitações da entrevista reconhecidas pela mecânica do exercício — "usa a
@@ -54,17 +63,34 @@ function itensDe(dia) {
   }
   return out;
 }
-// séries por grupo: total (principal = 1, auxiliar = 0,5) e diretas (só como principal)
+// séries por grupo: total (principal = 1, auxiliar = 0,5), diretas (só como principal), ajuda (séries em que o grupo é
+// auxiliar, antes do ½) e, por grupo, os exercícios que contam: [{ ex, nome, diaId, diaNome, series, vezes, peso, conta }]
+// (`vezes` = quantas vezes o treino aparece na semana; `conta` = séries × vezes × peso). `listas`: [{ diaId, diaNome, itens }].
 function contar(listas) {
-  const vol = {}, dir = {};
-  for (const itens of listas) for (const it of itens) {
+  const vol = {}, dir = {}, aju = {}, por = {};
+  for (const l of listas) for (const it of l.itens) {
     if (ehCardio(it.ex)) continue;
     const w = pesosDoExercicio(it.ex);
-    for (const g in w) { vol[g] = (vol[g] || 0) + it.series * w[g]; if (w[g] === 1) dir[g] = (dir[g] || 0) + it.series; }
+    for (const g in w) {
+      vol[g] = (vol[g] || 0) + it.series * w[g];
+      if (w[g] === 1) dir[g] = (dir[g] || 0) + it.series; else aju[g] = (aju[g] || 0) + it.series;
+      const lista = por[g] || (por[g] = []);
+      const ja = lista.find((x) => x.ex === it.ex.id && x.diaId === l.diaId && x.series === it.series);
+      if (ja) ja.vezes++; else lista.push({ ex: it.ex.id, nome: it.ex.nome, diaId: l.diaId, diaNome: l.diaNome, series: it.series, vezes: 1, peso: w[g] });
+    }
   }
   for (const g in vol) vol[g] = Math.round(vol[g] * 2) / 2;
-  return { vol, dir };
+  for (const g in por) {
+    for (const x of por[g]) x.conta = x.series * x.vezes * x.peso;
+    por[g].sort((a, b) => b.peso - a.peso || b.conta - a.conta);
+  }
+  return { vol, dir, aju, por };
 }
+// "demais": a regra do plano do Treinador (trainer.js, ajustarVolume) — séries diretas acima do teto do nível, ou o total
+// (com as meias séries) acima de 1,5 vez o teto. Devolve 'diretas', 'total' ou ''.
+const excessoDe = (dir, vol, teto) => (dir > teto ? 'diretas' : vol > teto * 1.5 ? 'total' : '');
+// as vezes que o treino aparece na semana contam: um treino em dois dias soma as séries duas vezes
+const detalhe = (g, c) => ({ diretas: (c.por[g] || []).reduce((t, x) => t + (x.peso === 1 ? x.series * x.vezes : 0), 0), ajuda: (c.por[g] || []).reduce((t, x) => t + (x.peso < 1 ? x.series * x.vezes : 0), 0), itens: c.por[g] || [] });
 // para que o treino serve, pela faixa de repetições (pesada pelas séries)
 function tipoDoTreino(itens) {
   const cont = { forca: 0, hipertrofia: 0, resistencia: 0 };
@@ -184,7 +210,8 @@ export function avaliarDia(dia, contexto) {
   const itens = itensDe(dia);
   if (!itens.length) return vazio('Este treino ainda não tem exercícios.');
   const c = contextoDe(contexto);
-  const { vol, dir } = contar([itens]);
+  const cont = contar([{ diaId: dia.id || '', diaNome: dia.nome || '', itens }]);
+  const { vol, dir } = cont;
   const ordem = ordenados(vol);
   const forca = itens.filter((it) => !ehCardio(it.ex));
   // foco pelas séries DIRETAS (o músculo como principal): a meia série do ombro no supino não faz de um treino de
@@ -206,8 +233,10 @@ export function avaliarDia(dia, contexto) {
   const soAux = ordem.filter((g) => !comDir.includes(g));
   const menos = comDir.length > 1 ? item(comDir[comDir.length - 1], true) : mais && soAux.length && soAux[soAux.length - 1] !== mais.g ? item(soAux[soAux.length - 1], false) : null;
   const teto = c.pf ? tetoSeries(c.pf.nivel) : 20;
-  // muito de um músculo num treino só: mais séries diretas do que o teto de uma semana inteira
-  const sobra = GRUPOS_AV.filter((g) => (dir[g] || 0) > teto).map((g) => ({ g, nome: nomeGrupo(g), series: dir[g], teto }));
+  // muito de um músculo num treino só: passa, sozinho, do teto de uma semana inteira (a mesma regra da semana)
+  const sobra = GRUPOS_AV.filter((g) => excessoDe(dir[g] || 0, vol[g] || 0, teto)).map((g) => ({ g, nome: nomeGrupo(g), series: dir[g] || 0, total: vol[g], motivo: excessoDe(dir[g] || 0, vol[g], teto), teto }));
+  // cada grupo trabalhado no treino, com os exercícios que contam para ele (para a lista que abre ao toque)
+  const grupos = ordem.map((g) => { const ex = excessoDe(dir[g] || 0, vol[g], teto); return { g, nome: nomeGrupo(g), series: vol[g], ...detalhe(g, cont), excesso: ex, faixa: ex ? 'muito' : '' }; });
   const rep = repetidos(itens);
   const p = conferirPerfil(itens, c, [], sobra.length > 0 || rep.length > 0);
   const soCardio = !forca.length;
@@ -218,9 +247,9 @@ export function avaliarDia(dia, contexto) {
   if (sobra.length) partes.push(`Tem séries demais de ${min(e(sobra.map((x) => x.nome)))} para um treino só.`);
   if (!sobra.length || p.veredito === 'nao') partes.push(fraseDoPerfil(p, c, 'Serve para o seu perfil.'));
   return {
-    vazio: false, foco: { grupos: focoGrupos, texto: focoTexto, padroes }, mais, menos, volume: vol, diretas: dir, tipo, definicao: DEFINICAO,
+    vazio: false, foco: { grupos: focoGrupos, texto: focoTexto, padroes }, mais, menos, volume: vol, diretas: dir, grupos, teto, tipo, definicao: DEFINICAO,
     duracaoMin: duracao, exercicios: itens.length, series: itens.reduce((t, it) => t + it.series, 0), sobra, repetidos: rep, perfil: p, semPerfil: !c.pf,
-    conclusao: partes.join(' '), refs: ['iversen2021', 'bazvalle2022', 'pelland2026', 'acsm2009', 'schoenfeld2021', 'helms2014', 'oppert2021'],
+    conclusao: partes.join(' '), refs: ['iversen2021', 'bazvalle2022', 'pelland2026', 'kubo2019', 'plotkin2023', 'kinoshita2026', 'acsm2009', 'schoenfeld2021', 'helms2014', 'oppert2021'],
   };
 }
 
@@ -233,24 +262,25 @@ export function avaliarPlano(plano, contexto) {
   const porId = new Map(dias.map((d) => [d.id, d]));
   const agenda = plano && plano.agenda && typeof plano.agenda === 'object' ? plano.agenda : {};
   let semana = [];
-  for (let wd = 0; wd < 7; wd++) { const d = porId.get(agenda[wd]); if (d) semana.push({ wd, itens: itensDe(d) }); }
+  for (let wd = 0; wd < 7; wd++) { const d = porId.get(agenda[wd]); if (d) semana.push({ wd, diaId: d.id, diaNome: d.nome, itens: itensDe(d) }); }
   // sem agenda: cada treino conta uma vez por semana
-  if (!semana.length) semana = dias.map((d) => ({ wd: null, itens: itensDe(d) }));
+  if (!semana.length) semana = dias.map((d) => ({ wd: null, diaId: d.id, diaNome: d.nome, itens: itensDe(d) }));
   semana = semana.filter((x) => x.itens.length);
   if (!semana.length) return vazio('Este plano ainda não tem exercícios.');
   const c = contextoDe(contexto);
-  const { vol, dir } = contar(semana.map((x) => x.itens));
+  const cont = contar(semana);
+  const { vol, dir } = cont;
   const todos = semana.flatMap((x) => x.itens);
   const teto = c.pf ? tetoSeries(c.pf.nivel) : 20;
   const v = (g) => vol[g] || 0;
-  const grupos = GRUPOS_AV.map((g) => ({ g, nome: nomeGrupo(g), series: v(g), diretas: dir[g] || 0, faixa: (dir[g] || 0) > teto ? 'muito' : !v(g) ? 'nada' : v(g) < MINIMO ? 'pouco' : v(g) < BOM ? 'ok' : 'bom' }));
+  const grupos = GRUPOS_AV.map((g) => { const ex = excessoDe(dir[g] || 0, v(g), teto); return { g, nome: nomeGrupo(g), series: v(g), ...detalhe(g, cont), excesso: ex, faixa: ex ? 'muito' : !v(g) ? 'nada' : v(g) < MINIMO ? 'pouco' : v(g) < BOM ? 'ok' : 'bom' }; });
   const ordem = ordenados(vol);
   const mais = ordem.length ? { g: ordem[0], nome: nomeGrupo(ordem[0]), series: v(ordem[0]) } : null;
   const fraco = grupos.filter((x) => GRANDES.includes(x.g)).sort((a, b) => a.series - b.series)[0];
   const menos = { g: fraco.g, nome: fraco.nome, series: fraco.series };
   const soCardio = todos.every((it) => ehCardio(it.ex));
   const falta = soCardio ? [] : grupos.filter((x) => GRANDES.includes(x.g) && x.series < MINIMO).map((x) => ({ g: x.g, nome: x.nome, series: x.series }));
-  const sobra = grupos.filter((x) => x.faixa === 'muito').map((x) => ({ g: x.g, nome: x.nome, series: x.diretas, teto }));
+  const sobra = grupos.filter((x) => x.faixa === 'muito').map((x) => ({ g: x.g, nome: x.nome, series: x.diretas, total: x.series, motivo: x.excesso, teto }));
   // equilíbrio entre os lados do corpo
   const equilibrio = [];
   if (v('peito') >= 6 && v('costas') < v('peito') * 0.67) equilibrio.push({ id: 'empurra-puxa', texto: `Empurra mais do que puxa: ${num(v('peito'))} séries de peito e ${num(v('costas'))} de costas. Inclua remadas ou puxadas.` });
@@ -300,6 +330,56 @@ export function avaliarPlano(plano, contexto) {
   return {
     vazio: false, treinos: semana.length, grupos, mais, menos, volume: vol, diretas: dir, teto, tipo, definicao: DEFINICAO, equilibrio, falta, sobra,
     duracaoMin: { menor: Math.min(...duracoes), maior: Math.max(...duracoes) }, corrida, perfil: p, semPerfil: !c.pf,
-    conclusao: partes.join(' '), refs: ['iversen2021', 'schoenfeld2017vol', 'bazvalle2022', 'pelland2026', 'acsm2009', 'schoenfeld2021', 'bonilla2022', 'helms2014', 'oppert2021', ...(c.corrida ? ['blagrove2018'] : [])],
+    conclusao: partes.join(' '), refs: ['iversen2021', 'schoenfeld2017vol', 'bazvalle2022', 'pelland2026', 'kubo2019', 'plotkin2023', 'kinoshita2026', 'acsm2009', 'schoenfeld2021', 'bonilla2022', 'helms2014', 'oppert2021', ...(c.corrida ? ['blagrove2018'] : [])],
   };
+}
+
+// ---------- o que pôr no treino, sem sair da avaliação ----------
+// Exercício seguro para a pessoa: com as respostas do Treinador, nenhum motivo contra (as regras de segurança do
+// Treinador: nível, limitações, dores, gestação, idade, aparelhos — trainer.js, motivosContra); sem as respostas, só
+// exercícios de iniciante, sem supervisão nem dor contada, com os aparelhos marcados. Com bloqueio de saúde, nada.
+// Respostas de saúde que pedem liberação, ainda sem o perfil completo (a entrevista parou no meio): nada a sugerir.
+const saudePendente = (ctx) => { const r = ctx && ctx.respostas && typeof ctx.respostas === 'object' ? ctx.respostas : {}; return lista(r.triagem).some((x) => x !== 'nenhum') || lista(r.condicoes).some((x) => ['cardiaco', 'gestante', 'posparto'].includes(x)); };
+function seguro(ex, c) {
+  if (c.bloqueado || (!c.pf && c.pendente) || ehCardio(ex) || ex.grupo === 'funcional' || soManual(ex.id)) return false;
+  if (ex.registro !== 'reps' && ex.registro !== 'peso_reps' && !(ex.grupo === 'abdomen' && ex.registro === 'segundos')) return false;
+  if (c.pf) return !motivosContra(ex, c.pf, c.gym, c.dores).length;
+  const gym = c.gym && typeof c.gym === 'object' ? c.gym : { all: true, has: {} };
+  const temAparelho = gym.all !== false ? !ex.equip.some((q) => EQUIPAMENTOS[q] && EQUIPAMENTOS[q].raro) : ex.equip.every((q) => gym.has && gym.has[q] === true);
+  return ex.nivel === 1 && temAparelho && !motivosDe(ex, c).length;
+}
+const ORDEM_CAT = new Map(EXERCICIOS.map((x, i) => [x.id, i]));
+const principais = (ex) => Object.keys(pesosDoExercicio(ex)).filter((g) => pesosDoExercicio(ex)[g] === 1);
+// Até `n` exercícios seguros que têm `g` como músculo principal, fora os que já estão no plano (`usados`, ids) e, de
+// preferência, sem pegar como principal um grupo que já passou do máximo (`evitar`). Os que trabalham só esse músculo
+// e os mais simples vêm antes. Devolve [{ ex, nome }].
+export function sugestoesPara(g, contexto, usados = [], evitar = [], n = 3) {
+  const c = { ...contextoDe(contexto), pendente: saudePendente(contexto) };
+  const fora = new Set(usados);
+  const l = EXERCICIOS.filter((ex) => !fora.has(ex.id) && pesosDoExercicio(ex)[g] === 1 && !principais(ex).some((x) => x !== g && evitar.includes(x)) && seguro(ex, c));
+  l.sort((a, b) => principais(a).length - principais(b).length || a.nivel - b.nivel || ORDEM_CAT.get(a.id) - ORDEM_CAT.get(b.id));
+  // no máximo um por movimento: a lista mostra opções diferentes de verdade
+  const out = [], padroes = new Set();
+  for (const ex of l) { if (out.length >= n) break; if (padroes.has(ex.padrao)) continue; padroes.add(ex.padrao); out.push({ ex: ex.id, nome: ex.nome }); }
+  return out;
+}
+// Troca para um exercício que pesa demais em `g`: um exercício seguro que mantém os outros músculos principais do atual e
+// não tem `g` como principal (leg press com glúteos demais → um de quadríceps que não carrega o glúteo). Se o atual só
+// trabalha `g`, a troca é por um exercício de um grupo que está com pouco (`faltam`, na ordem). Devolve [{ ex, nome, para }].
+export function trocasPara(exId, g, contexto, usados = [], faltam = [], n = 3) {
+  const atual = EX_POR_ID.get(exId);
+  if (!atual) return [];
+  const resto = principais(atual).filter((x) => x !== g);
+  if (resto.length) {
+    const c = { ...contextoDe(contexto), pendente: saudePendente(contexto) };
+    const fora = new Set([...usados, exId]);
+    const l = EXERCICIOS.filter((ex) => !fora.has(ex.id) && pesosDoExercicio(ex)[g] !== 1 && pesosDoExercicio(ex)[resto[0]] === 1 && seguro(ex, c));
+    l.sort((a, b) => (a.padrao === atual.padrao ? 0 : 1) - (b.padrao === atual.padrao ? 0 : 1) || a.nivel - b.nivel || ORDEM_CAT.get(a.id) - ORDEM_CAT.get(b.id));
+    return l.slice(0, n).map((ex) => ({ ex: ex.id, nome: ex.nome, para: resto[0] }));
+  }
+  for (const f of faltam) {
+    const l = sugestoesPara(f, contexto, [...usados, exId], [g], n);
+    if (l.length) return l.map((x) => ({ ...x, para: f }));
+  }
+  return [];
 }

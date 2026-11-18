@@ -169,7 +169,8 @@ export default async (page) => {
   ok(t.includes('Sua evolução') && evol.includes('corrida registrada') && evol.includes('Constância'), 'evolução (seção fechada) mostra volume, corridas e constância');
   ok(t.includes('Como foram os seus treinos') && (await page.eval(`return document.querySelectorAll('#como-foram .item').length === 1;`)), 'painel resume como foram os treinos, com o selo de cada corrida');
   ok(t.includes('Dores que você contou') && t.includes('Feita'), 'cartão de dores e treino marcado como feito');
-  await page.eval(`const d = [...document.querySelectorAll('details.pq summary')].find((e) => e.textContent === 'Por quê?'); d.click(); return true;`); await page.sleep(150);
+  // (o primeiro "Por quê?" do cartão "O que ajustei no plano"; o cartão "Sua semana" vem antes e tem o seu)
+  await page.eval(`const d = [...document.querySelectorAll('[data-ajustes] details.pq summary')].find((e) => e.textContent === 'Por quê?'); d.click(); return true;`); await page.sleep(150);
   ok((await texto()).includes('Você contou dor de intensidade 4'), 'o motivo do ajuste abre ao toque, com as fontes');
   await foto('7-ajuste');
   // conta uma dor de alerta na canela: a corrida é suspensa
@@ -348,6 +349,72 @@ export default async (page) => {
   await page.goto(B + '#/corrida', 900);
   ok(await page.eval(`return document.documentElement.scrollWidth <= 361;`), 'proposta cabe em 360 px sem rolagem lateral');
   await foto('11-360');
+
+  console.log('8. Sua semana: 1º treino de pernas depois de 3 semanas, hoje, e o longão amanhã');
+  await page.send('Emulation.clearDeviceMetricsOverride', {});
+  // estado de teste: plano de corrida aceito há 4 semanas (terça, quinta e sábado; longão na terça), corridas registradas nas
+  // semanas anteriores e musculação com pernas hoje; o último treino de pernas foi há 25 dias
+  const montado = await page.eval(`
+    const s = await import('/js/store.js'); const c = await import('/js/logic/corrida.js');
+    const k = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const hoje = k(new Date()); const seg = c.segundaDe(hoje);
+    const a = { idade: 34, experiencia: 'regular', kmSemana: 30, longoAtual: 14, pausa: 'treinando', objetivo: 'distancia', distancia: '21', dias: ['2', '4', '6'], diaLongo: '2', tempo: '60', tempoLongo: '120', aparelho: 'gps', local: 'rua', peso: 75, altura: 176, lesao12m: 'nao', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'], remedios: ['nenhum'], resultado: 'nao' };
+    for (const q of c.PERGUNTAS) if (!(q.k in a) && !(q.se && !q.se(a)) && !q.opcional) a[q.k] = q.tipo === 'numero' ? (q.padrao ?? q.min) : q.tipo === 'um' ? q.op[0][0] : [q.op[0][0]];
+    const runs = [];
+    for (let w = 1; w <= 4; w++) { const b = c.somaDias(seg, -7 * w); runs.push({ id: 'ra' + w, data: c.somaDias(b, 1), tipo: 'longo', distKm: 13, durMin: 80, pse: 4 }, { id: 'rb' + w, data: c.somaDias(b, 3), tipo: 'leve', distKm: 8, durMin: 48, pse: 4 }, { id: 'rc' + w, data: c.somaDias(b, 5), tipo: 'leve', distKm: 7, durMin: 42, pse: 4 }); }
+    const it = (ex) => ({ ex, series: 3, reps: '8-12', descanso: 90, nota: '' });
+    const pernas = [it('agachamento-peso-corporal'), it('flexao-nordica'), it('ponte-gluteos-solo')];
+    const d25 = new Date(Date.now() - 25 * 86400000); d25.setHours(18, 0, 0, 0);
+    const sess = { id: 'sv1', planId: 'p1', diaId: 'a', nome: 'Pernas', inicio: d25.toISOString(), fim: new Date(d25.getTime() + 3600000).toISOString(), nota: '', itens: pernas.map((x) => ({ ex: x.ex, alvo: '10', descanso: 90, sets: [1, 2, 3].map(() => ({ kg: 20, reps: 10, seg: null, ok: true })) })) };
+    const dados = { v: s.VERSAO, plans: [{ id: 'p1', nome: 'Meu treino', origem: 'manual', criadoEm: new Date(Date.now() - 60 * 86400000).toISOString(), dias: [{ id: 'a', nome: 'Pernas', foco: '', itens: pernas }], agenda: { 1: 'a' }, info: '' }], activePlan: 'p1',
+      sessions: [sess], runs, run: { answers: a, aceitoEm: new Date(Date.now() - 28 * 86400000).toISOString(), inicio: c.somaDias(seg, -28), pausadoEm: '' }, combo: { foco: 'corrida', fortalecimento: 'nao', em: new Date().toISOString() } };
+    s.importData(JSON.stringify({ app: 'fitcore', v: s.VERSAO, dados }));
+    return { hoje, ok: !!c.planoAtual(s.state, hoje) };`);
+  ok(montado.ok, 'estado de teste com plano de corrida e treino de pernas hoje');
+  await page.reload(1500); await page.goto(B + '#/corrida', 1000);
+  t = await texto();
+  const card = await page.eval(`const e = document.getElementById('corrida-sua-semana'); return e ? { nivel: e.dataset.nivel, aplicado: e.dataset.aplicado, txt: e.innerText } : null;`);
+  ok(card && card.nivel === 'puxada' && /Semana puxada: 1º treino de pernas depois de [34] semanas hoje/.test(card.txt), 'cartão "Sua semana" mostra a semana puxada: ' + (card ? card.txt.replace(/\n/g, ' | ').slice(0, 200) : 'sem cartão'));
+  ok(card && /Longão de amanhã: (mais curto|passa para)/.test(card.txt), 'o cartão diz o que muda no longão de amanhã');
+  const naTela = await page.eval(`const e = document.getElementById('corrida-sua-semana'); const r = e.getBoundingClientRect(); return r.top < 2.5 * innerHeight;`);
+  ok(naTela, 'o cartão aparece logo no começo do painel');
+  await page.goto(B, 900);
+  ok(await page.eval(`const e = document.getElementById('inicio-carga'); return !!e && e.dataset.aplicado === 'nao' && /Longão de amanhã/.test(e.innerText);`), 'Início avisa que o longão de amanhã pode mudar');
+  await foto('s1-inicio');
+  await page.goto(B + '#/corrida', 900);
+  const longoAntes = await page.eval(`const c = await import('/js/logic/corrida.js'); const s = (await import('/js/store.js')).state; const amanha = c.somaDias(${JSON.stringify(montado.hoje)}, 1); const d = c.treinoDoDia(s, ${JSON.stringify(montado.hoje)}, amanha); return d ? { tipo: d.tipo, durMin: d.durMin } : null;`);
+  await page.eval(`document.getElementById('corrida-sua-semana').scrollIntoView({ block: 'start' }); return true;`); await page.sleep(150);
+  await foto('s2-sua-semana');
+  await page.click('Ajustar a semana'); await page.sleep(300);
+  ok((await texto()).includes('Ajustar a sua semana?'), 'pede confirmação antes de ajustar');
+  await page.eval(`[...document.querySelectorAll('.sheet-ft .btn')].find((e) => e.textContent.trim() === 'Ajustar').click(); return true;`); await page.sleep(700);
+  const aplicado = await estado(`{ carga: s.run.carga.length, movidas: s.perdidos.filter((e) => e.tipo === 'corrida' && e.para).length }`);
+  ok(aplicado.carga === 1, 'ajuste guardado: ' + JSON.stringify(aplicado));
+  const longoDepois = await page.eval(`const c = await import('/js/logic/corrida.js'); const s = (await import('/js/store.js')).state; const amanha = c.somaDias(${JSON.stringify(montado.hoje)}, 1); const d = c.treinoDoDia(s, ${JSON.stringify(montado.hoje)}, amanha); return d ? { tipo: d.tipo, durMin: d.durMin } : null;`);
+  ok(longoAntes && (aplicado.movidas === 1 ? !longoDepois : longoDepois && longoDepois.durMin < longoAntes.durMin), `o longão de amanhã mudou: ${JSON.stringify(longoAntes)} → ${JSON.stringify(longoDepois)}`);
+  ok(await page.eval(`const e = document.getElementById('corrida-sua-semana'); return e.dataset.aplicado === 'sim' && /Desfazer/.test(e.innerText) && !/Ajustar a semana/.test(e.innerText);`), 'cartão mostra o ajuste feito e o "Desfazer"');
+  await page.eval(`window.scrollTo(0, 0); return true;`); await page.sleep(100);
+  await foto('s3-ajustado');
+  await page.reload(1500); await page.goto(B + '#/corrida', 800);
+  ok((await estado('s.run.carga.length')) === 1 && (await page.eval(`return document.getElementById('corrida-sua-semana').dataset.aplicado;`)) === 'sim', 'o ajuste continua depois de recarregar');
+  await page.goto(B, 800);
+  ok(await page.eval(`const e = document.getElementById('inicio-carga'); return !!e && e.dataset.aplicado === 'sim';`), 'Início mostra o longão já ajustado');
+  await page.goto(B + '#/corrida', 800);
+  await page.click('Desfazer'); await page.sleep(500);
+  const desfeito = await estado(`{ carga: s.run.carga.length, movidas: s.perdidos.filter((e) => e.tipo === 'corrida' && e.para).length }`);
+  ok(desfeito.carga === 0 && desfeito.movidas === 0 && (await page.eval(`return document.getElementById('corrida-sua-semana').dataset.aplicado;`)) === 'nao', 'Desfazer volta ao plano');
+  // 360 px, claro e escuro
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 360, height: 760, deviceScaleFactor: 1, mobile: true });
+  for (const tema of ['claro', 'escuro']) {
+    await page.goto(B + '#/corrida', 800);
+    await page.eval(`if (${JSON.stringify(tema)} === 'claro') document.documentElement.dataset.theme = 'light'; else delete document.documentElement.dataset.theme; document.getElementById('corrida-sua-semana').scrollIntoView({ block: 'start' }); return true;`); await page.sleep(200);
+    ok(await page.eval(`return document.documentElement.scrollWidth <= 361;`), `"Sua semana" cabe em 360 px (${tema})`);
+    if (process.env.FOTOS_SEMANA) await page.shot('semana/360-' + tema);
+  }
+  await page.eval(`delete document.documentElement.dataset.theme; return true;`);
+  await page.goto(B, 800);
+  if (process.env.FOTOS_SEMANA) await page.shot('semana/360-inicio');
+  await page.send('Emulation.clearDeviceMetricsOverride', {});
 
   const erros = page.erros.filter((e) => !/favicon|SWv:/.test(e));
   ok(erros.length === 0, 'nenhum erro no console' + (erros.length ? ': ' + erros.join(' || ').slice(0, 500) : ''));

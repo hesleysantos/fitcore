@@ -285,17 +285,20 @@ const academia = (gym) => (gym && typeof gym === 'object' ? { all: gym.all === t
 // ---------- divisão semanal ----------
 const S = (p, extra) => ({ p: Array.isArray(p) ? p : [p], ...extra });
 const CORE = S(['anti_extensao', 'flexao_tronco', 'flexao_quadril', 'rotacao'], { core: true });
+// Posteriores de coxa: como o agachamento e o leg press não contam para eles (ver pesosDoExercicio), o "Corpo inteiro B"
+// tenta primeiro a dobradiça de quadril (stiff, terra romeno) e só depois a elevação pélvica, e nos treinos de pernas a
+// flexão de joelho vem antes do 2º agachamento (com pouco tempo, é o 2º agachamento que sai).
 const DIAS_MODELO = {
   fullA: { nome: 'Corpo inteiro A', foco: 'Pernas, peito, costas e abdômen', slots: [S('agachar', { main: 1 }), S('empurrar_horizontal', { main: 1 }), S('puxar_horizontal', { main: 1 }), S(['flexao_joelho', 'dobradica_quadril']), S('empurrar_vertical'), S('puxar_vertical'), CORE, S('flexao_plantar')] },
-  fullB: { nome: 'Corpo inteiro B', foco: 'Posteriores, costas, ombros e braços', slots: [S(['dobradica_quadril', 'extensao_quadril'], { main: 1 }), S('puxar_vertical', { main: 1 }), S('empurrar_horizontal', { main: 1, alt: 1 }), S(['afundo', 'agachar'], { alt: 1 }), S('elevacao_lateral'), S('flexao_cotovelo'), S('extensao_cotovelo'), CORE] },
+  fullB: { nome: 'Corpo inteiro B', foco: 'Posteriores, costas, ombros e braços', slots: [S(['dobradica_quadril', 'extensao_quadril'], { main: 1, ordem: 1 }), S('puxar_vertical', { main: 1 }), S('empurrar_horizontal', { main: 1, alt: 1 }), S(['afundo', 'agachar'], { alt: 1 }), S('elevacao_lateral'), S('flexao_cotovelo'), S('extensao_cotovelo'), CORE] },
   fullC: { nome: 'Corpo inteiro C', foco: 'Pernas, ombros, costas e abdômen', slots: [S('agachar', { main: 1, alt: 1 }), S('empurrar_vertical', { main: 1 }), S('puxar_horizontal', { main: 1, alt: 1 }), S('flexao_joelho'), S('aducao_horizontal'), S('extensao_joelho'), CORE, S('flexao_plantar')] },
   supA: { nome: 'Superiores A', foco: 'Peito, costas, ombros e braços', slots: [S('empurrar_horizontal', { main: 1 }), S('puxar_horizontal', { main: 1 }), S('empurrar_vertical'), S('puxar_vertical'), S('elevacao_lateral'), S('flexao_cotovelo'), S('extensao_cotovelo'), S('abducao_horizontal')] },
   supB: { nome: 'Superiores B', foco: 'Costas, peito, ombros e braços', slots: [S('puxar_vertical', { main: 1 }), S('empurrar_horizontal', { main: 1, alt: 1 }), S('puxar_horizontal', { alt: 1 }), S('aducao_horizontal'), S('abducao_horizontal'), S('flexao_cotovelo', { alt: 1 }), S('extensao_cotovelo', { alt: 1 }), S('elevacao_lateral', { alt: 1 })] },
   infA: { nome: 'Inferiores A', foco: 'Quadríceps, posteriores, panturrilhas e abdômen', slots: [S('agachar', { main: 1 }), S('dobradica_quadril', { main: 1 }), S('extensao_joelho'), S('flexao_joelho'), S('flexao_plantar'), CORE, S('abducao')] },
-  infB: { nome: 'Inferiores B', foco: 'Glúteos, posteriores, quadríceps e abdômen', slots: [S('extensao_quadril', { main: 1 }), S('agachar', { main: 1, alt: 1 }), S('afundo'), S('flexao_joelho', { alt: 1 }), S('abducao'), S('flexao_plantar', { alt: 1 }), CORE] },
+  infB: { nome: 'Inferiores B', foco: 'Glúteos, posteriores, quadríceps e abdômen', slots: [S('extensao_quadril', { main: 1 }), S('agachar', { main: 1, alt: 1 }), S('flexao_joelho', { alt: 1 }), S('afundo'), S('abducao'), S('flexao_plantar', { alt: 1 }), CORE] },
   push: { nome: 'Empurrar', foco: 'Peito, ombros e tríceps', slots: [S('empurrar_horizontal', { main: 1 }), S('empurrar_vertical', { main: 1 }), S('empurrar_horizontal', { alt: 1 }), S('aducao_horizontal'), S('elevacao_lateral'), S('extensao_cotovelo'), S('extensao_cotovelo', { alt: 1 })] },
   pull: { nome: 'Puxar', foco: 'Costas, bíceps e ombro posterior', slots: [S('puxar_vertical', { main: 1 }), S('puxar_horizontal', { main: 1 }), S(['puxar_vertical', 'extensao_ombro'], { alt: 1 }), S('abducao_horizontal'), S('flexao_cotovelo'), S('flexao_cotovelo', { alt: 1 }), S('encolhimento')] },
-  legs: { nome: 'Pernas', foco: 'Quadríceps, posteriores, glúteos e panturrilhas', slots: [S('agachar', { main: 1 }), S('dobradica_quadril', { main: 1 }), S('agachar', { alt: 1 }), S('flexao_joelho'), S('extensao_joelho'), S('flexao_plantar'), CORE] },
+  legs: { nome: 'Pernas', foco: 'Quadríceps, posteriores, glúteos e panturrilhas', slots: [S('agachar', { main: 1 }), S('dobradica_quadril', { main: 1 }), S('flexao_joelho'), S('agachar', { alt: 1 }), S('extensao_joelho'), S('flexao_plantar'), CORE] },
   cardio: { nome: 'Cardio e abdômen', foco: 'Coração, fôlego e abdômen', slots: [S('cardio', { cardio: 1 }), S('anti_extensao', { core: true, leve: 1 }), S(['flexao_tronco', 'flexao_quadril', 'rotacao'], { core: true, leve: 1 })] },
 };
 // cardio no fim do treino de força, para os objetivos em que o aeróbico faz parte do plano
@@ -1103,8 +1106,23 @@ const GRUPOS_VOL = ['peito', 'costas', 'ombros', 'biceps', 'triceps', 'quadricep
 const grupoVol = (m) => (m === 'trapezio' ? 'trapezio' : m === 'lombar' ? 'lombar' : m === 'manguito' ? null : MUSCULOS[m] ? MUSCULOS[m].grupo : null);
 const ESTABILIZA = new Set(['abdomen', 'obliquos', 'lombar', 'antebraco', 'trapezio']);
 const PESOS = new Map();
-// Quanto cada série de um exercício conta para cada grupo: 1 para os músculos principais e 0,5 para os auxiliares.
-// Os músculos que só estabilizam o corpo não contam, nem os exercícios de cardio. É a mesma conta da tela Evolução.
+// Auxiliar que não conta, porque o exercício não treina o músculo de forma que ele cresça:
+//  • posteriores de coxa em agachamentos, afundos, leg press e elevação pélvica/ponte: na ressonância, os posteriores não
+//    cresceram com agachamento completo nem com meio agachamento (ref kubo2019, que cita o mesmo em Bloomquist 2013), nem
+//    com agachamento ou elevação pélvica (ref plotkin2023: "little to no growth" nos dois grupos); no leg press, cresceram
+//    só o mesmo pouco que com a cadeira extensora, que não usa os posteriores (ref kinoshita2026). Na tabela de Pelland, os
+//    posteriores não têm exercício "indireto" (ref pelland2026);
+//  • quadríceps nos abdominais e pranchas: ali a coxa só dobra o quadril ou fica parada; o joelho não estende contra a
+//    carga, e é isso que treina os vastos (a maior parte do quadríceps). Pelland conta como auxiliar só o exercício que
+//    "treina de forma significativa" o músculo (ref pelland2026).
+const SEM_POSTERIOR = new Set(['agachar', 'afundo']);
+const naoConta = (ex, g) => (g === 'posteriores' && (SEM_POSTERIOR.has(ex.padrao) || /^(elevacao-pelvica|ponte-gluteos)/.test(ex.id)))
+  || (g === 'quadriceps' && ex.grupo === 'abdomen');
+// Quanto cada série de um exercício conta para cada grupo: 1 para os músculos principais e 0,5 para os auxiliares — a
+// contagem "fracionada", a que melhor explicou o ganho de massa e de força entre as três testadas por Pelland (só os
+// principais, principais + auxiliares inteiros, ou auxiliar = meia série; ref pelland2026). Os músculos que só
+// estabilizam o corpo não contam, nem os exercícios de cardio (nem a corrida, que não é série de musculação: os estudos de
+// volume são de musculação — ref pelland2026). É a mesma conta da tela Evolução, do plano do Treinador e da avaliação.
 export function pesosDoExercicio(ex) {
   if (!ex) return {};
   let w = PESOS.get(ex.id);
@@ -1112,7 +1130,7 @@ export function pesosDoExercicio(ex) {
   w = {};
   if (ex.grupo !== 'cardio' && ex.padrao !== 'cardio') {
     for (const m of ex.primarios) { const g = grupoVol(m); if (g) w[g] = 1; }
-    for (const m of ex.secundarios) { const g = grupoVol(m); if (g && !ESTABILIZA.has(m) && !w[g]) w[g] = 0.5; }
+    for (const m of ex.secundarios) { const g = grupoVol(m); if (g && !ESTABILIZA.has(m) && !w[g] && !naoConta(ex, g)) w[g] = 0.5; }
   }
   PESOS.set(ex.id, w);
   return w;
@@ -1135,6 +1153,11 @@ export function volumeSemanal(dias) {
 // há tempo (Schoenfeld 2017; ACSM 2026 — refs schoenfeld2017vol, acsm2026). Teto de séries diretas por grupo: 12 para
 // iniciantes, 16 para intermediários e 20 para avançados (Baz-Valle 2022 — ref bazvalle2022: acima de 20 o ganho extra
 // é pequeno); contando as meias séries dos músculos auxiliares, o total não passa de 1,5 vez o teto.
+// Por que o teto vale para as séries diretas: Baz-Valle contou toda série inteira, mas nos estudos de quadríceps todos os
+// exercícios eram do próprio músculo (agachamento, leg press, extensora — "diretos" na tabela de Pelland), e lá a série
+// direta e a inteira são a mesma. Os 1,5 vez o teto (18, 24 e 30 na conta fracionada) caem onde Pelland vê o rendimento
+// cair: 11 a 18 séries, eficiência intermediária; 19 a 29, baixa; 30 a 42, a mais baixa (ref pelland2026, tabela 2A).
+// A avaliação do treino feito à mão (logic/avaliacao.js) usa este mesmo teto, com a mesma conta.
 export const tetoSeries = (nivel) => (nivel === 1 ? 12 : nivel === 2 ? 16 : 20);
 function seriesDiretas(dias) {
   const v = {};
@@ -1195,7 +1218,10 @@ function ajustarVolume(dias, pf, tetoFoco = {}) {
     let mudou = false;
     for (const p of principais) {
       if ((c.tot[p] || 0) >= pisoDe(p)) continue;
-      const sobe = linhas.filter((x) => x.w[p] === 1 && x.reps && x.it.series < maxDe(x)).sort((a, b) => a.it.series - b.it.series || (b.it._main ? 1 : 0) - (a.it._main ? 1 : 0));
+      // a série a mais vai, de preferência, para o exercício que tem só esse músculo como principal (a mesa flexora antes
+      // do stiff, que também conta inteiro para os glúteos)
+      const outros = (x) => Object.keys(x.w).filter((g) => g !== p && x.w[g] === 1).length;
+      const sobe = linhas.filter((x) => x.w[p] === 1 && x.reps && x.it.series < maxDe(x)).sort((a, b) => a.it.series - b.it.series || outros(a) - outros(b) || (b.it._main ? 1 : 0) - (a.it._main ? 1 : 0));
       for (const x of sobe) {
         x.it.series++;
         const dep = conta();

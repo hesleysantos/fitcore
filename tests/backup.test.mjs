@@ -8,6 +8,7 @@ import { PERGUNTAS as P_NUTRI, respostasCompletas as nutriOk } from '../www/js/l
 import { PERGUNTAS as P_CORRIDA, respostasCompletas as corridaOk } from '../www/js/logic/corrida.js';
 import { ALIMENTOS } from '../www/js/data/foods.js';
 import { EQUIPAMENTOS } from '../www/js/data/equipment.js';
+import { semanaDe } from '../www/js/logic/ajuste-semana.js';
 
 const J = (x) => JSON.parse(JSON.stringify(x));
 // responde uma entrevista inteira: primeira opção de cada pergunta (ou a opção `i`), respeitando as perguntas condicionais
@@ -58,13 +59,18 @@ function estadoCheio() {
     sono: { acordar: '06:30', idade: 31, registros: [{ data: '2026-11-11', horas: 7.5 }, { data: '2026-11-12', horas: 6.25, qualidade: 2 }, { data: '2026-11-13', horas: 8, qualidade: 4 }], cochilos: [{ data: '2026-11-12', min: 25, inicio: '13:40' }, { data: '2026-11-13', min: 20, inicio: '14:10' }, { data: '2026-11-13', min: 45 }] },
     diario: { dias: [
       { data: '2026-11-12', itens: [{ id: 'i1', ref: 'cafe', al: ALIMENTOS[0].id, g: 150, m: true }, { id: 'i2', ref: 'almoco', al: ALIMENTOS[5].id, g: 80, m: false }] },
-      { data: '2026-11-13', itens: [{ id: 'i1', ref: 'outro', nome: 'Bolo de cenoura', kcal: 310, p: 4.5 }, { id: 'i2', ref: 'jantar', nome: 'Sopa da casa', kcal: 180, p: null }] },
+      { data: '2026-11-13', itens: [{ id: 'i1', ref: 'outro', nome: 'Bolo de cenoura', kcal: 310, p: 4.5 }, { id: 'i2', ref: 'jantar', nome: 'Sopa da casa', kcal: 180, p: null }],
+        // suplementos e vitaminas do dia (só registro; o whey com a proteína e as calorias do rótulo)
+        sup: [{ id: 's1', tipo: 'creatina', qtd: 5, un: 'g' }, { id: 's2', tipo: 'whey', qtd: 1, un: 'dose', pDose: 24, kcalDose: 120 }, { id: 's3', tipo: 'outro', qtd: 2, un: 'cápsula', nome: 'Magnésio' }] },
+      { data: '2026-11-14', itens: [], sup: [{ id: 's1', tipo: 'vitd', qtd: 2, un: 'gota' }] },
     ] },
     // "Não treinei" (com o treino passado para outro dia) e "Não corri"
     perdidos: [
       { tipo: 'musculacao', data: '2026-11-03', planId: 'p1', diaId: plano.dias[0].id, movs: [{ diaId: plano.dias[0].id, de: '2026-11-03', para: '2026-11-05' }], em: '2026-11-03T21:00:00.000Z' },
       { tipo: 'corrida', data: '2026-11-04', em: '2026-11-04T21:00:00.000Z' },
     ],
+    // treino mudado só nesta semana (logic/ajuste-semana.js): a semana de hoje, para não sair da janela das semanas recentes
+    ajustesSemana: [{ planId: 'p1', diaId: plano.dias[0].id, semana: semanaDe(new Date()), itens: [{ ex: plano.dias[0].itens[0].ex, series: 2, reps: '8-12', descanso: 90, nota: '' }], em: '2026-11-03T21:00:00.000Z' }],
     ui: { onboarded: true, installDismissedAt: '2026-11-01T09:00:00.000Z', backupEm: '2026-11-07T09:00:00.000Z', backupAdiadoEm: '2026-11-05T09:00:00.000Z', objetivosOk: 'hipertrofia|emagrecer' },
   };
 }
@@ -100,6 +106,7 @@ test('backup: o estado completo sai no arquivo e volta idêntico', () => {
   assert.deepEqual(limpo.diario, cheio.diario, 'diário alimentar preservado: dias, refeições, alimentos da lista e fora dela');
   assert.deepEqual(limpo.combo, cheio.combo);
   assert.deepEqual(limpo.perdidos, cheio.perdidos, 'treinos marcados como não feitos preservados');
+  assert.deepEqual(limpo.ajustesSemana, cheio.ajustesSemana, 'treino mudado só nesta semana preservado');
   assert.deepEqual(limpo.ui, cheio.ui);
   // validar duas vezes não muda mais nada
   assert.deepEqual(store.sanitize(J(limpo)), limpo);

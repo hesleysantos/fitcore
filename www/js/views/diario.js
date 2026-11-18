@@ -1,7 +1,7 @@
 // Diário alimentar na tela: "O que comi hoje" (bloco da Nutrição) e "Comi isso" / "Comi outra coisa" no cardápio de
 // exemplo. As contas e a validação ficam em logic/diario.js (o Início usa resumoDeHoje(), de lá).
 // Nenhum texto digitado vira HTML: tudo passa por h() (textContent), e o que é gravado passa por gravarItem().
-import { h, btn, iconBtn, icon, seg, sheet, confirmSheet, stepper, toast, fmtInt, fmtDate, dateKey } from '../ui.js';
+import { h, btn, iconBtn, icon, seg, sheet, confirmSheet, stepper, toast, note, fmtInt, fmtDate, dateKey } from '../ui.js';
 import { state, update } from '../store.js';
 import { refresh } from '../router.js';
 import { ALIMENTOS, alergenosDe, NOME_ALERGIA } from '../data/foods.js';
@@ -10,7 +10,8 @@ import { medida } from '../logic/nutrition.js';
 import {
   REFEICOES, G_MIN, G_MAX, KCAL_MAX, PROT_MAX, NOME_MAX, MAX_ITENS_DIA, AVISO_DO_REGISTRO, REFS_DO_DIARIO,
   itensDoDia, gravarItem, apagarItem, copiarRefeicao, marcarDaSugestao, desmarcarRefeicao, estadoDaSugestao, idDaRefeicao, nutrientesDoItem, totaisDoDia,
-  modoDoDiario, compararComMeta, resumoDaSemana, metaDoDia, somarDias, primeiroDiaDoDiario, lerCalorias, lerProteina, buscarAlimentos,
+  modoDoDiario, compararComMeta, resumoDaSemana, metaDoDia, somarDias, primeiroDiaDoDiario, lerCalorias, lerProteina, buscarAlimentos, gravarVarios,
+  SUPLEMENTOS, MAX_SUP_DIA, SUP_NOME_MAX, SUP_P_MAX, SUP_KCAL_MAX, supDoDia, gravarSup, apagarSup, ultimoSup, textoDoSup,
 } from '../logic/diario.js';
 
 const FOOD = new Map(ALIMENTOS.map((f) => [f.id, f]));
@@ -39,8 +40,11 @@ function salvar(data, raw) {
   return it;
 }
 
-// ---------- folha: adicionar ou editar um alimento ----------
-// { data, ref, item }: `item` (do diário) abre em modo de edição, com Apagar.
+// ---------- folha: adicionar (um ou vários) ou corrigir um alimento ----------
+// { data, ref, item }: `item` (do diário) abre em modo de correção, com Apagar.
+// Para adicionar, a folha monta a lista "Para adicionar": busca → quantidade → "+ Acrescentar" (no rodapé) → busca o
+// próximo… → "Adicionar todos (N)" grava todos de uma vez (logic/diario.js, gravarVarios: entram todos ou nenhum). Para
+// um só, nada muda: escolhe, ajusta e toca em "Adicionar". Cada alimento da lista pode ser mudado (toque) ou tirado (×).
 export function folhaAlimento({ data, ref, item = null }) {
   const desenhadoEm = dateKey();
   const st = {
@@ -51,15 +55,18 @@ export function folhaAlimento({ data, ref, item = null }) {
     livre: !!item && !item.al,
     nome: item && !item.al ? item.nome : '', kcalTxt: item && !item.al ? String(item.kcal) : '', pTxt: item && !item.al && item.p != null ? String(item.p).replace('.', ',') : '',
   };
+  const fila = [];   // "Para adicionar": { al, g, m } ou { nome, kcal, p } (a refeição é a da folha, na hora de gravar)
   const corpo = h('div', { class: 'col' });
   const selRef = h('select', { class: 'input', 'aria-label': 'Refeição', onChange: (e) => { st.ref = e.target.value; } },
     ...Object.entries(REFEICOES).map(([k, nome]) => h('option', { value: k, selected: k === st.ref, text: nome })));
+  // menores de 18 anos (em qualquer entrevista): a folha não mostra nem pede calorias
+  const mostraKcal = modoDoDiario(metaDoDia(state, desenhadoEm), state) !== 'alimentos';
 
   // busca no catálogo (logic/diario.js, buscarAlimentos): sem acento nem pontuação, pelo começo das palavras, 2 letras ou mais
   const resultados = h('div', { class: 'list', id: 'diario-resultados' });
   const buscar = (termo) => {
     while (resultados.firstChild) resultados.removeChild(resultados.firstChild);
-    if (String(termo).replace(/[^0-9A-Za-zÀ-ÿ]/g, '').length < 2) { resultados.appendChild(h('p', { class: 'small muted', text: 'Digite pelo menos 2 letras do nome do alimento.' })); return; }
+    if (String(termo).replace(/[^0-9A-Za-zÀ-ÿ]/g, '').length < 2) { resultados.appendChild(h('p', { class: 'small muted', text: fila.length ? 'Busque o próximo alimento.' : 'Digite pelo menos 2 letras do nome do alimento.' })); return; }
     const achados = buscarAlimentos(termo);
     if (!achados.length) { resultados.appendChild(h('p', { class: 'small muted', text: mostraKcal ? 'Não achei esse alimento. Toque em “Não achei na lista” para informar as calorias.' : 'Não achei esse alimento. Toque em “Não achei na lista” para escrever o nome.' })); return; }
     // alergia informada à Nutricionista: o alimento continua na busca (a pessoa pode ter comido), mas com aviso
@@ -72,9 +79,62 @@ export function folhaAlimento({ data, ref, item = null }) {
         mostraKcal ? h('span', { class: 'small bold nowrap', text: `${fmtInt((f.kcal * f.porcao.g) / 100)} kcal` }) : null));
     }
   };
-  const campoBusca = h('input', { class: 'input', type: 'search', placeholder: 'Buscar alimento (ex.: arroz, banana)', 'aria-label': 'Buscar alimento', autocomplete: 'off', maxlength: 40, onInput: (e) => buscar(e.target.value) });
-  // menores de 18 anos (em qualquer entrevista): a folha não mostra nem pede calorias
-  const mostraKcal = modoDoDiario(metaDoDia(state, desenhadoEm), state) !== 'alimentos';
+  const campoBusca = h('input', { class: 'input', type: 'search', placeholder: 'Buscar alimento (ex.: arroz, coxinha)', 'aria-label': 'Buscar alimento', autocomplete: 'off', maxlength: 40, onInput: (e) => buscar(e.target.value) });
+
+  // o alimento em andamento (escolhido na busca ou escrito à mão): { raw } pronto para gravar, { erro } ou {} (nenhum)
+  function atual() {
+    if (st.livre) {
+      if (!st.nome.trim()) return { erro: 'Escreva o nome do alimento.' };
+      if (!mostraKcal) return { raw: { nome: st.nome, kcal: item && !item.al ? item.kcal : 0, p: item && !item.al ? item.p : null } };
+      // calorias: só número inteiro ("1.200" e "1 200" valem 1200); o que for ambíguo é recusado, com aviso
+      const kcal = lerCalorias(st.kcalTxt);
+      if (kcal == null) return { erro: st.kcalTxt.trim() ? 'Digite as calorias em número inteiro, sem vírgula (ex.: 1200).' : 'Informe as calorias.' };
+      if (kcal > KCAL_MAX) return { erro: `As calorias de um alimento vão de 0 a ${fmtInt(KCAL_MAX)}.` };
+      const p = st.pTxt.trim() ? lerProteina(st.pTxt) : null;
+      if (st.pTxt.trim() && (p == null || p > PROT_MAX)) return { erro: `Digite a proteína em gramas, de 0 a ${PROT_MAX} (ex.: 12 ou 4,5).` };
+      return { raw: { nome: st.nome, kcal, p } };
+    }
+    return st.al && FOOD.has(st.al) ? { raw: { al: st.al, g: st.g, m: st.porMedida } } : {};
+  }
+  const limparAtual = () => { st.al = ''; st.livre = false; st.nome = ''; st.kcalTxt = ''; st.pTxt = ''; st.g = 0; st.porMedida = true; };
+  const carregar = (x) => {
+    limparAtual();
+    if (x.al) { st.al = x.al; st.g = x.g; st.porMedida = x.m === true; } else { st.livre = true; st.nome = x.nome; st.kcalTxt = String(x.kcal); st.pTxt = x.p != null ? String(x.p).replace('.', ',') : ''; }
+  };
+  const acrescentar = () => {
+    const a = atual();
+    if (a.erro) { toast(a.erro); return; }
+    if (!a.raw) { toast('Escolha um alimento na busca.'); return; }
+    if (itensDoDia(state.diario, data).length + fila.length + 1 > MAX_ITENS_DIA) { toast('Este dia já tem o máximo de alimentos.'); return; }
+    fila.push(a.raw);
+    limparAtual(); campoBusca.value = '';
+    desenha();
+    try { campoBusca.focus({ preventScroll: true }); } catch { /* sem foco */ }
+  };
+
+  // "Para adicionar": nome, medida e calorias de cada um, o total; tocar muda, × tira
+  function blocoFila() {
+    if (!fila.length) return null;
+    const linhas = fila.map((x) => nutrientesDoItem({ ...x, id: 'i1', ref: st.ref }));
+    const total = linhas.reduce((s, x) => s + x.kcal, 0);
+    const lista = h('div', { class: 'list' });
+    linhas.forEach((x, i) => {
+      lista.appendChild(h('div', { class: 'item fila-item', dataset: { al: fila[i].al || '' } },
+        h('button', { type: 'button', class: 'grow fila-mudar', 'aria-label': `Mudar ${x.nome}`, title: 'Mudar a quantidade', onClick: () => {
+          // o que estava escolhido (válido) vai para a lista antes, para não se perder
+          const a = atual(); const [y] = fila.splice(i, 1);
+          if (a.raw) fila.push(a.raw);
+          carregar(y); desenha();
+        } },
+          h('div', { class: 't', text: x.nome }), h('div', { class: 's', text: x.livre ? 'fora da lista' : x.medida })),
+        mostraKcal ? h('span', { class: 'small bold nowrap', text: `${fmtInt(x.kcal)} kcal` }) : null,
+        iconBtn('close', `Tirar ${x.nome}`, () => { fila.splice(i, 1); desenha(); })));
+    });
+    return h('div', { class: 'col gap-s fila', id: 'diario-fila' },
+      h('div', { class: 'row between' }, h('span', { class: 'fila-rot', text: `Para adicionar (${fila.length})` }),
+        mostraKcal ? h('span', { class: 'small bold nowrap', id: 'diario-fila-total', text: `Total ${fmtInt(total)} kcal` }) : null),
+      lista);
+  }
 
   function quantidade(f) {
     const saida = h('p', { class: 'bold', id: 'diario-conta' });
@@ -100,9 +160,21 @@ export function folhaAlimento({ data, ref, item = null }) {
       mostraKcal ? campo('Calorias (kcal)', { type: 'text', inputmode: 'numeric', maxlength: 7, value: st.kcalTxt, placeholder: 'Ex.: 1200', 'aria-label': 'Calorias', onInput: (e) => { st.kcalTxt = e.target.value; } }) : null,
       mostraKcal ? campo('Proteína em gramas (opcional)', { type: 'text', inputmode: 'decimal', maxlength: 5, value: st.pTxt, 'aria-label': 'Proteína em gramas', onInput: (e) => { st.pTxt = e.target.value; } }) : null);
   }
+  function rodape() {
+    if (!f || !f.footer) return;
+    while (f.footer.firstChild) f.footer.removeChild(f.footer.firstChild);
+    if (item) { f.footer.append(btn('Apagar', apagar, 'ghost danger'), btn('Salvar', gravar, 'primary grow')); return; }
+    // com um alimento escolhido: "+ Acrescentar" (vai para a lista e volta à busca) e "Adicionar" (grava já, com a lista)
+    const escolhido = !!(st.al || st.livre);
+    const n = fila.length + (escolhido ? 1 : 0);
+    f.footer.append(escolhido ? btn('Acrescentar', acrescentar, 'ghost acrescentar', 'plus') : btn('Cancelar', () => f.close(), 'ghost'),
+      btn(n > 1 ? `Adicionar todos (${n})` : 'Adicionar', gravar, 'primary adicionar-todos'));
+  }
   function desenha() {
     while (corpo.firstChild) corpo.removeChild(corpo.firstChild);
     corpo.appendChild(h('label', { class: 'field' }, h('span', { text: 'Refeição' }), selRef));
+    const fl = item ? null : blocoFila();
+    if (fl) corpo.appendChild(fl);
     if (st.livre) corpo.appendChild(foraDaLista());
     else if (st.al && FOOD.has(st.al)) corpo.appendChild(quantidade(FOOD.get(st.al)));
     else {
@@ -111,43 +183,38 @@ export function folhaAlimento({ data, ref, item = null }) {
       corpo.appendChild(btn('Não achei na lista', () => { st.livre = true; st.al = ''; if (!st.nome) st.nome = campoBusca.value.trim().slice(0, NOME_MAX); desenha(); }, 'block ghost', 'plus'));
       buscar(campoBusca.value);
     }
+    rodape();
   }
-  const gravar = () => {
+  function gravar() {
     // o dia virou com a folha aberta ("hoje" e "ontem" já são outros): avisa, redesenha e não grava
     if (!mesmoDia(desenhadoEm)) { f.close(); return; }
-    let raw;
-    if (st.livre) {
-      if (!st.nome.trim()) { toast('Escreva o nome do alimento.'); return; }
-      if (!mostraKcal) raw = { ref: st.ref, nome: st.nome, kcal: item && !item.al ? item.kcal : 0, p: item && !item.al ? item.p : null };
-      else {
-        // calorias: só número inteiro ("1.200" e "1 200" valem 1200); o que for ambíguo é recusado, com aviso
-        const kcal = lerCalorias(st.kcalTxt);
-        if (kcal == null) { toast(st.kcalTxt.trim() ? 'Digite as calorias em número inteiro, sem vírgula (ex.: 1200).' : 'Informe as calorias.'); return; }
-        if (kcal > KCAL_MAX) { toast(`As calorias de um alimento vão de 0 a ${fmtInt(KCAL_MAX)}.`); return; }
-        const p = st.pTxt.trim() ? lerProteina(st.pTxt) : null;
-        if (st.pTxt.trim() && (p == null || p > PROT_MAX)) { toast(`Digite a proteína em gramas, de 0 a ${PROT_MAX} (ex.: 12 ou 4,5).`); return; }
-        raw = { ref: st.ref, nome: st.nome, kcal, p };
-      }
-    } else {
-      if (!st.al) { toast('Escolha um alimento na busca.'); return; }
-      raw = { ref: st.ref, al: st.al, g: st.g, m: st.porMedida };
+    const a = atual();
+    if (a.erro) { toast(a.erro); return; }
+    const lista = [...fila, ...(a.raw ? [a.raw] : [])].map((x) => ({ ...x, ref: st.ref }));
+    if (!lista.length) { toast('Escolha um alimento na busca.'); return; }
+    if (item || lista.length === 1) {
+      const raw = lista[0];
+      if (item) raw.id = item.id;
+      // corrigir a quantidade de um alimento marcado na sugestão não muda de onde ele veio
+      if (item && item.s && raw.al === item.al) raw.s = true;
+      if (salvar(data, raw)) { f.close(); redesenharNoLugar(seletorDoCartao(st.ref)); }
+      return;
     }
-    if (item) raw.id = item.id;
-    // corrigir a quantidade de um alimento marcado na sugestão não muda de onde ele veio
-    if (item && item.s && raw.al === item.al) raw.s = true;
-    if (salvar(data, raw)) { f.close(); redesenharNoLugar(seletorDoCartao(st.ref)); }
-  };
-  const apagar = async () => {
+    let n = 0;
+    update((s) => { n = gravarVarios(s.diario, data, lista, dateKey()); });
+    if (!n) { toast(itensDoDia(state.diario, data).length + lista.length > MAX_ITENS_DIA ? 'Não cabem todos: o dia tem no máximo ' + MAX_ITENS_DIA + ' alimentos.' : 'Confira os valores e tente de novo.'); return; }
+    toast(`${n} alimentos adicionados em ${REFEICOES[st.ref]}.`);
+    f.close(); redesenharNoLugar(seletorDoCartao(st.ref));
+  }
+  async function apagar() {
     const x = nutrientesDoItem(item);
     const sim = await confirmSheet({ title: 'Apagar este alimento?', text: `${x.nome}${x.medida ? ', ' + x.medida : ''}. Não dá para desfazer.`, okLabel: 'Apagar', danger: true });
     if (!sim) return;
     update((s) => { apagarItem(s.diario, data, item.id); });
     f.close(); redesenharNoLugar(seletorDoCartao(item.ref));
-  };
-  const f = sheet({
-    title: item ? 'Corrigir alimento' : `Adicionar alimento · ${nomeDoDia(data, desenhadoEm).toLowerCase()}`, full: true, body: corpo,
-    footer: [item ? btn('Apagar', apagar, 'ghost danger') : btn('Cancelar', () => f.close(), 'ghost'), btn(item ? 'Salvar' : 'Adicionar', gravar, 'primary grow')],
-  });
+  }
+  let f = null;
+  f = sheet({ title: item ? 'Corrigir alimento' : `Adicionar alimento · ${nomeDoDia(data, desenhadoEm).toLowerCase()}`, full: true, body: corpo, footer: [] });
   desenha();
   return f;
 }
@@ -214,7 +281,7 @@ export function botaoDaSugestao(refeicao) {
 // botão de um alimento registrado: tocar abre a correção (e o apagar). `daSugestao`: marcado na sugestão.
 function botaoDoItem(x, data, hoje, comKcal, daSugestao = false) {
   const rotulo = `Corrigir ${x.nome}`;
-  const sub = x.livre ? 'fora da lista' + (comKcal && x.p != null ? ` · ${dec(x.p)} g de proteína` : '') : (daSugestao ? 'da sugestão · ' : '') + x.medida;
+  const sub = x.livre ? 'fora da lista' + (comKcal && x.p != null ? ` · ${dec(x.p)} g de proteína` : '') : x.medida;
   return h('button', { type: 'button', class: 'item diario-item', dataset: { id: x.id }, 'aria-label': rotulo, title: rotulo, onClick: () => { if (mesmoDia(hoje)) folhaAlimento({ data, item: x }); } },
     h('div', { class: 'grow' }, h('div', { class: 't', text: x.nome }), h('div', { class: 's', text: sub })),
     comKcal ? h('span', { class: 'small bold nowrap', text: `${fmtInt(x.kcal)} kcal` }) : null, icon('edit', 's'));
@@ -262,20 +329,29 @@ export function voceComeu(refeicao, r) {
   const sugeridos = new Set(est.itens.map((x) => x.al));
   const daSug = itens.filter((x) => !x.livre && sugeridos.has(x.al));
   const aMao = itens.filter((x) => !daSug.includes(x));
-  const box = h('div', { class: 'col gap-s comido', dataset: { ref: est.ref } },
-    h('div', { class: 'comido-rot', text: comKcal && itens.length ? `Você comeu · ${fmtInt(tot.kcal)} kcal` : 'Você comeu' }));
+  // "Você comeu" é o bloco de destaque do card (fundo próprio, título e calorias em negrito); a sugestão, acima, fica
+  // mais leve. Dentro dele, "Da sugestão" e "Fora da sugestão" (o que a pessoa adicionou à mão) têm cada um o seu rótulo.
+  const box = h('div', { class: 'col comido', dataset: { ref: est.ref } },
+    h('div', { class: 'row between comido-hd' }, h('span', { class: 'comido-tit', text: 'Você comeu' }),
+      comKcal && itens.length ? h('span', { class: 'comido-kcal nowrap', text: `${fmtInt(tot.kcal)} kcal` }) : null));
   if (!itens.length) box.appendChild(h('p', { class: 'small muted', text: 'Nada marcado ainda.' }));
   else {
-    const lista = h('div', { class: 'list diario-comido', dataset: { ref: est.ref } });
-    if (est.toda && daSug.length > 1) {
-      // a sugestão inteira numa linha; tocar mostra os alimentos (para corrigir a quantidade de um deles)
-      const soma = daSug.reduce((s, x) => s + x.kcal, 0);
-      lista.appendChild(h('details', { class: 'comido-grupo' },
-        h('summary', null, h('span', { class: 'grow', text: `${refeicao.nome} da sugestão (${daSug.length} alimentos)` }), comKcal ? h('span', { class: 'small bold nowrap', text: `${fmtInt(soma)} kcal` }) : null),
-        h('div', { class: 'list' }, ...daSug.map((x) => botaoDoItem(x, hoje, hoje, comKcal, true)))));
-    } else for (const x of daSug) lista.appendChild(botaoDoItem(x, hoje, hoje, comKcal, true));
-    for (const x of aMao) lista.appendChild(botaoDoItem(x, hoje, hoje, comKcal));
-    box.appendChild(lista);
+    const secoes = h('div', { class: 'col diario-comido', dataset: { ref: est.ref } });
+    const secao = (cls, rotulo, kcal, ...filhos) => h('div', { class: 'col gap-s comido-sec ' + cls },
+      h('div', { class: 'row between comido-sub' }, h('span', { text: rotulo }), comKcal ? h('span', { class: 'nowrap', text: `${fmtInt(kcal)} kcal` }) : null), ...filhos);
+    const soma = (l) => l.reduce((s, x) => s + x.kcal, 0);
+    if (daSug.length) {
+      const lista = h('div', { class: 'list' });
+      if (est.toda && daSug.length > 1) {
+        // a sugestão inteira numa linha; tocar mostra os alimentos (para corrigir a quantidade de um deles)
+        lista.appendChild(h('details', { class: 'comido-grupo' },
+          h('summary', null, h('span', { class: 'grow', text: `${refeicao.nome} da sugestão (${daSug.length} alimentos)` }), icon('down', 's')),
+          h('div', { class: 'list' }, ...daSug.map((x) => botaoDoItem(x, hoje, hoje, comKcal, true)))));
+      } else for (const x of daSug) lista.appendChild(botaoDoItem(x, hoje, hoje, comKcal, true));
+      secoes.appendChild(secao('da-sug', 'Da sugestão', soma(daSug), lista));
+    }
+    if (aMao.length) secoes.appendChild(secao('fora-sug', 'Fora da sugestão', soma(aMao), h('div', { class: 'list' }, ...aMao.map((x) => botaoDoItem(x, hoje, hoje, comKcal)))));
+    box.appendChild(secoes);
   }
   box.appendChild(btn('Adicionar outro alimento', () => { if (mesmoDia(hoje)) folhaAlimento({ data: hoje, ref: est.ref }); }, 'ghost block add-alimento', 'plus'));
   return box;
@@ -330,6 +406,8 @@ export function historicoDoDiario(r) {
     corpo.appendChild(lista);
   }
   corpo.appendChild(btn(`Adicionar alimento em ${diaMes(data)}`, () => { if (mesmoDia(hoje)) folhaAlimento({ data }); }, 'block alvo', 'plus'));
+  const supPassado = linhaDeSuplementos(r, data);
+  if (supPassado) corpo.appendChild(supPassado);
   // a semana fica dentro de "Dias anteriores" (uma seção fechada a menos no fim da tela)
   const sem = resumoDaSemana(state.diario, hoje, r, state);
   const linhas = h('div');
@@ -409,6 +487,8 @@ export function blocoDiario(r, { aoResponder = null } = {}) {
     card.appendChild(lista);
   }
   card.appendChild(btn('Adicionar alimento', () => { if (mesmoDia(hoje)) folhaAlimento({ data }); }, 'primary block', 'plus'));
+  const supDoBloco = linhaDeSuplementos(r, data);
+  if (supDoBloco) card.appendChild(supDoBloco);
   if (comKcal && tot.n) {
     card.appendChild(h('p', { class: 'small muted', id: 'diario-macros', text: `Carboidrato ${Math.round(tot.c)} g · gordura ${Math.round(tot.gd)} g · fibras ${Math.round(tot.fibra)} g` + (tot.livres ? ` (sem contar ${tot.livres === 1 ? '1 alimento' : tot.livres + ' alimentos'} fora da lista${tot.semProteina ? '; a proteína de ' + (tot.semProteina === 1 ? 'um deles' : tot.semProteina + ' deles') + ' não foi informada' : ''})` : '') + '.' }));
   }
@@ -420,4 +500,125 @@ export function blocoDiario(r, { aoResponder = null } = {}) {
   const semana = h('details', { class: 'acc', id: 'diario-semana' }, h('summary', { text: `Últimos 7 dias · ${sem.registrados === 1 ? '1 dia registrado' : sem.registrados + ' dias registrados'}` }),
     h('div', null, sem.frase ? h('p', { class: 'small', text: sem.frase }) : null, linhas));
   return [titulo, card, semana, comKcal ? fontes() : null].filter(Boolean);
+}
+
+// ---------- suplementos e vitaminas do dia (só registro: logic/diario.js, SUPLEMENTOS) ----------
+// Uma linha discreta: "Suplementos e vitaminas · Creatina, Whey" (ou "nenhum hoje"); o toque abre a folha de marcar.
+// Quem marcou transtorno alimentar não recebe o diário, e esta linha também não aparece.
+const nomeCurtoSup = (s) => textoDoSup(s).nome.split(' (')[0];
+export function linhaDeSuplementos(r, data = dateKey()) {
+  if (modoDoDiario(r, state) === 'sem') return null;
+  const hoje = dateKey();
+  const sup = supDoDia(state.diario, data);
+  const resumo = sup.length ? sup.map(nomeCurtoSup).join(', ') : data === hoje ? 'nenhum hoje' : 'nenhum';
+  return h('button', { type: 'button', class: 'sup-dia', dataset: { dia: data, n: String(sup.length) }, 'aria-label': `Suplementos e vitaminas: ${resumo}. Toque para marcar.`,
+    onClick: () => { if (mesmoDia(hoje)) folhaSuplementos({ data, r }); } },
+  h('span', { class: 'grow sup-dia-txt' }, h('span', { class: 'sup-dia-t', text: 'Suplementos e vitaminas' }), h('span', { class: 'sup-dia-r', text: resumo })), icon('right', 's'));
+}
+const UN_CONTAGEM = ['dose', 'cápsula', 'comprimido'];
+// quantidade digitada: número com até 2 casas, com vírgula ou ponto ("5", "2,5", "0.25"); o resto é recusado (null)
+const lerQtd = (t) => (/^\d{1,6}([.,]\d{1,2})?$/.test(String(t).trim()) ? Number(String(t).trim().replace(',', '.')) : null);
+export function folhaSuplementos({ data, r = null }) {
+  const desenhadoEm = dateKey();
+  const modo = modoDoDiario(r, state);
+  const comNumeros = modo !== 'alimentos';
+  const menor = modo === 'alimentos';
+  const corpo = h('div', { class: 'col', id: 'sup-folha' });
+  let form = null;   // null: a lista do dia; { id, tipo, qtdTxt, un, nome, pTxt, kTxt, repetiu }
+  const abrir = (tipo, s = null) => {
+    const S = SUPLEMENTOS[tipo];
+    // um tipo novo vem com a dose que a PESSOA marcou da última vez (o app não sugere dose)
+    const base = s || ultimoSup(state.diario, tipo, data);
+    form = { id: s ? s.id : '', tipo, un: base && S.un.includes(base.un) ? base.un : S.un[0], nome: base && base.nome ? base.nome : '',
+      qtdTxt: base ? String(base.qtd).replace('.', ',') : UN_CONTAGEM.includes(S.un[0]) ? '1' : '',
+      pTxt: base && base.pDose != null ? String(base.pDose).replace('.', ',') : '', kTxt: base && base.kcalDose != null ? String(base.kcalDose) : '', repetiu: !s && !!base };
+    desenha();
+  };
+  const campo = (rotulo, props) => h('label', { class: 'field' }, h('span', { text: rotulo }), h('input', { class: 'input', autocomplete: 'off', ...props }));
+  function lista() {
+    const sup = supDoDia(state.diario, data);
+    if (!sup.length) corpo.appendChild(h('p', { class: 'small muted', id: 'sup-vazio', text: data === desenhadoEm ? 'Nada marcado hoje.' : 'Nada marcado neste dia.' }));
+    else {
+      const l = h('div', { class: 'list', id: 'sup-lista' });
+      for (const s of sup) {
+        const t = textoDoSup(s, comNumeros);
+        l.appendChild(h('div', { class: 'item sup-item', dataset: { id: s.id, tipo: s.tipo } },
+          h('button', { type: 'button', class: 'grow fila-mudar', 'aria-label': `Corrigir ${t.nome}`, onClick: () => abrir(s.tipo, s) }, h('div', { class: 't', text: t.nome }), h('div', { class: 's', text: t.dose })),
+          iconBtn('close', `Tirar ${t.nome}`, () => {
+            if (!mesmoDia(desenhadoEm)) { sh.close(); return; }
+            update((st) => { apagarSup(st.diario, data, s.id); });
+            toast(`${t.nome}: tirado.`); desenha();
+          })));
+      }
+      corpo.appendChild(l);
+    }
+    corpo.appendChild(h('div', { class: 'comido-sub', text: 'Marcar' }));
+    const chips = h('div', { class: 'chips wrap', id: 'sup-tipos' });
+    // o tipo já marcado no dia abre o registro dele (para mudar a dose), em vez de criar outro; "Outro" sempre cria
+    for (const [k, S] of Object.entries(SUPLEMENTOS)) {
+      const ja = k === 'outro' ? null : sup.find((x) => x.tipo === k);
+      chips.appendChild(h('button', { type: 'button', class: 'chip sm alvo' + (ja ? ' on' : ''), 'aria-pressed': ja ? 'true' : 'false', dataset: { tipo: k }, onClick: () => abrir(k, ja || null) }, S.nome.split(' (')[0]));
+    }
+    corpo.appendChild(chips);
+    corpo.appendChild(h('p', { class: 'tiny muted', text: comNumeros ? 'Só registro: o app não indica dose. A proteína do whey entra no dia pelo valor do rótulo.' : 'Só registro: o app não indica dose.' }));
+  }
+  function formulario() {
+    const S = SUPLEMENTOS[form.tipo];
+    corpo.appendChild(h('h3', { text: form.tipo === 'outro' ? 'Outro suplemento' : S.nome }));
+    // antes dos 18 anos: o mesmo cuidado da seção de suplementos (logic/nutrition.js), em uma linha
+    if (menor && form.tipo === 'cafeina') corpo.appendChild(note('warn', 'A Anvisa não permite suplemento de cafeína para menores de 18 anos.'));
+    else if (menor && ['creatina', 'whey'].includes(form.tipo)) corpo.appendChild(note('warn', 'Antes dos 18 anos, só com orientação do médico ou nutricionista.'));
+    if (form.tipo === 'outro') corpo.appendChild(campo('Nome', { type: 'text', maxlength: SUP_NOME_MAX, value: form.nome, placeholder: 'Ex.: magnésio', 'aria-label': 'Nome do suplemento', onInput: (e) => { form.nome = e.target.value; } }));
+    corpo.appendChild(campo(S.rotulo ? 'Quantas doses' : 'Quantidade', { type: 'text', inputmode: 'decimal', maxlength: 9, value: form.qtdTxt, 'aria-label': 'Quantidade', onInput: (e) => { form.qtdTxt = e.target.value; } }));
+    if (S.un.length > 1) corpo.appendChild(seg(S.un.map((u) => [u, u]), form.un, (v) => { form.un = v; desenha(); }));
+    else corpo.appendChild(h('p', { class: 'small muted', text: S.un[0] === 'dose' ? 'Em doses (o medidor do pote).' : `Em ${S.un[0]}.` }));
+    if (S.rotulo && comNumeros) {
+      corpo.appendChild(h('div', { class: 'row gap-s sup-rotulo' },
+        campo('Proteína por dose (g)', { type: 'text', inputmode: 'decimal', maxlength: 5, value: form.pTxt, placeholder: 'do rótulo', 'aria-label': 'Proteína por dose', onInput: (e) => { form.pTxt = e.target.value; } }),
+        campo('kcal por dose', { type: 'text', inputmode: 'numeric', maxlength: 5, value: form.kTxt, placeholder: 'opcional', 'aria-label': 'Calorias por dose', onInput: (e) => { form.kTxt = e.target.value; } })));
+      corpo.appendChild(h('p', { class: 'tiny muted', text: 'Veja na tabela do rótulo. Sem a proteína, o whey fica só registrado.' }));
+    }
+    if (form.repetiu) corpo.appendChild(h('p', { class: 'tiny muted', text: 'Preenchido como da última vez que você marcou.' }));
+  }
+  function salvarSup() {
+    if (!mesmoDia(desenhadoEm)) { sh.close(); return; }
+    const S = SUPLEMENTOS[form.tipo];
+    const qtd = lerQtd(form.qtdTxt);
+    if (qtd == null || qtd <= 0) { toast('Digite a quantidade em número (ex.: 1 ou 2,5).'); return; }
+    if (form.tipo === 'outro' && !form.nome.trim()) { toast('Escreva o nome do suplemento.'); return; }
+    const raw = { tipo: form.tipo, qtd, un: form.un };
+    if (form.id) raw.id = form.id;
+    if (form.tipo === 'outro') raw.nome = form.nome;
+    if (S.rotulo) {
+      const p = form.pTxt.trim() ? lerProteina(form.pTxt) : null;
+      if (form.pTxt.trim() && (p == null || p > SUP_P_MAX)) { toast(`Digite a proteína por dose em gramas, de 0 a ${SUP_P_MAX} (ex.: 24).`); return; }
+      const k = form.kTxt.trim() ? lerCalorias(form.kTxt) : null;
+      if (form.kTxt.trim() && (k == null || k > SUP_KCAL_MAX)) { toast('Digite as calorias por dose em número inteiro (ex.: 120).'); return; }
+      // sem números (menores de 18): o que já estava guardado continua
+      const antes = form.id ? supDoDia(state.diario, data).find((x) => x.id === form.id) : null;
+      raw.pDose = comNumeros ? p : antes ? antes.pDose : null;
+      raw.kcalDose = comNumeros ? k : antes ? antes.kcalDose : null;
+    }
+    let it = null;
+    update((st) => { it = gravarSup(st.diario, data, raw, dateKey()); });
+    if (!it) { toast(supDoDia(state.diario, data).length >= MAX_SUP_DIA && !raw.id ? 'Este dia já tem o máximo de suplementos.' : 'Confira a quantidade e tente de novo.'); return; }
+    toast(`${textoDoSup(it).nome}: marcado.`);
+    form = null; desenha();
+  }
+  function rodape() {
+    if (!sh || !sh.footer) return;
+    while (sh.footer.firstChild) sh.footer.removeChild(sh.footer.firstChild);
+    if (form) sh.footer.append(btn('Voltar', () => { form = null; desenha(); }, 'ghost'), btn('Salvar', salvarSup, 'primary grow'));
+    else sh.footer.append(btn('Fechar', () => sh.close(), 'ghost grow'));
+  }
+  function desenha() {
+    while (corpo.firstChild) corpo.removeChild(corpo.firstChild);
+    if (form) formulario(); else lista();
+    rodape();
+  }
+  let sh = null;
+  sh = sheet({ title: `Suplementos e vitaminas · ${nomeDoDia(data, desenhadoEm).toLowerCase()}`, body: corpo, footer: [],
+    onClose: () => redesenharNoLugar(`#conteudo .sup-dia[data-dia="${data}"]`) });
+  desenha();
+  return sh;
 }

@@ -43,6 +43,18 @@ export const REFS = {
   schumann2022: 'Schumann M et al. Compatibility of concurrent aerobic and strength training for skeletal muscle size and function: an updated systematic review and meta-analysis. Sports Med. 2022;52(3):601-612.',
   // prioridade de músculo e volume de manutenção
   pelland2026: 'Pelland JC et al. The resistance training dose-response: meta-regressions exploring the effects of weekly volume and frequency on muscle hypertrophy and strength gain. SportRxiv [preprint, versão 2]; 2024. doi:10.51224/SRXIV.460 (publicado depois em Sports Med. 2026;56(2):481-505; a versão lida é o preprint).',
+  // contagem das séries por músculo (logic/trainer.js, pesosDoExercicio; logic/avaliacao.js), em texto completo em novembro
+  // de 2026: pelland2026 (preprint v2, seção 2.4 e tabela 1A: direta = o músculo é o principal gerador de força; indireta =
+  // treinado de forma significativa, sem ser o principal; a contagem fracionada, indireta = 0,5, teve a evidência mais forte;
+  // tabela 2A: faixas de eficiência em séries fracionadas); bazvalle2022 (PDF da revista: "all single and multi-joint sets
+  // have been quantified"); schoenfeld2017vol (PDF: séries por grupo muscular por semana, sem separar auxiliares);
+  // kubo2019 (PDF: agachamento completo e meio agachamento não mudaram o volume dos posteriores; glúteo máximo +6,7% e
+  // +2,2%); plotkin2023 (PMC10593473: elevação pélvica e agachamento deram crescimento parecido do glúteo; posteriores com
+  // "little to no growth" nos dois); kinoshita2026 (PDF da revista: leg press +15,4% no glúteo máximo, extensora nada;
+  // posteriores +1,5 a 5,3% nos dois, sem diferença)
+  kubo2019: 'Kubo K, Ikebukuro T, Yata H. Effects of squat training with different depths on lower limb muscle volumes. Eur J Appl Physiol. 2019;119:1933-1942.',
+  plotkin2023: 'Plotkin DL, Rodas MA, Vigotsky AD et al. Hip thrust and back squat training elicit similar gluteus muscle hypertrophy and transfer similarly to the deadlift. Front Physiol. 2023;14:1279170.',
+  kinoshita2026: 'Kinoshita M, Maeo S, Kobayashi Y et al. Hypertrophic effects of single- versus multi-joint exercise: a direct comparison between knee extension and leg press. Med Sci Sports Exerc. 2026 (publicação antecipada). doi:10.1249/MSS.0000000000003957.',
   scarpelli2022: 'Scarpelli MC et al. Muscle hypertrophy response is affected by previous resistance training volume in trained individuals. J Strength Cond Res. 2022;36(4):1153-1157.',
   barsuhn2025: 'Barsuhn A et al. Training volume increases or maintenance based on previous volume: the effects on muscular adaptations in trained males. J Appl Physiol. 2025;138(1):259-269.',
   camargo2026: 'Camargo JBB et al. Large increases in resistance training volume do not impair muscle hypertrophy or anabolic-catabolic molecular signaling in trained individuals. bioRxiv [preprint]; 2026 (publicado depois em J Appl Physiol. 2026;141(2):477-493; a versão lida é o preprint).',

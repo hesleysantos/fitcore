@@ -154,6 +154,7 @@ export default async (page) => {
 
   console.log('6. Chat da corrida e da Nutricionista');
   await page.goto(B + '#/corrida', 300); await page.reload(1400);
+  await espera('.chat-entrada'); // a tela da corrida demora um pouco a montar
   ok(await page.click('Perguntar ao treinador de corrida'), 'entrada na tela da Corrida');
   await espera('#chat');
   ok(await botao('Choveu ou não dá para correr na rua'), 'assunto da chuva');
@@ -296,6 +297,47 @@ export default async (page) => {
   ok(await campoVisivel(), 'campo de texto largo e à vista');
   await foto('chat/letra-mudar-corrida');
   await page.eval(`const st = await import('/js/store.js'); st.update((x) => { x.settings.letra = 'normal'; }); return 1;`);
+
+  console.log('9. Conversa livre: o exercício citado, perguntas relacionadas, "e no stiff?", trocar com "só hoje / só nesta semana / sempre", por quê e reformular');
+  await recomecar('chat/treinador');
+  const sug = () => page.eval(`return [...document.querySelectorAll('.chat-msg.ativo .chat-sugestoes button')].map((b) => b.innerText.trim());`);
+  await escrever('posso aumentar o peso no supino?');
+  ok(/Qual deles\?/.test(await ultima()), '"supino" com dois supinos no plano: pergunta qual');
+  ok(await botao('Supino inclinado com halteres'), 'escolhe o supino inclinado');
+  await page.sleep(250);
+  ok(/^COACH: Supino inclinado com halteres: \d/.test(await ultima()), 'responde sobre AQUELE exercício: ' + (await ultima()).slice(0, 80));
+  const s1 = await sug();
+  ok(s1.length >= 2 && s1.length <= 3 && s1.some((x) => /^Como faz o supino inclinado/.test(x)), 'perguntas relacionadas em botões: ' + s1.join(' | '));
+  await foto('chat/livre-supino');
+  ok(await page.click(s1.find((x) => /^Como faz/.test(x)), '.chat-msg.ativo .chat-sugestoes button'), 'toca em "Como faz…"');
+  await page.sleep(300);
+  ok(/1\. /.test(await ultima()) && (await falas()).some((x) => /^EU: Como faz o supino/.test(x)), 'a pergunta tocada aparece como fala e a resposta traz os passos');
+  await escrever('e no stiff?');
+  ok(/^COACH: Stiff com halteres: /.test(await ultima()), '"e no stiff?": o mesmo assunto com o outro exercício');
+  await escrever('posso trocar o stiff?');
+  ok(/No lugar de Stiff com halteres/.test(await ultima()), 'trocar: as alternativas do Treinador');
+  const alt = await page.eval(`return [...document.querySelectorAll('.chat-msg.ativo .chat-opcoes button.chat-op')].map((b) => b.innerText.trim());`);
+  ok(alt.length >= 1 && await botao(alt[0]), 'escolhe a alternativa ' + alt[0]);
+  await page.sleep(250);
+  const alc = await page.eval(`return [...document.querySelectorAll('.chat-msg.ativo .chat-opcoes button.primary')].map((b) => b.innerText.trim());`);
+  ok(alc.includes('Só nesta semana') && alc.includes('Sempre (no plano)'), 'alcance da mudança em botões: ' + alc.join(' | '));
+  await foto('chat/livre-trocar');
+  ok(await page.click('Só nesta semana', '.chat-msg.ativo .chat-opcoes button'), 'toca em "Só nesta semana"');
+  ok(await confirmar(), 'confirma');
+  const semana = await estadoApp(`(s.ajustesSemana || []).length`);
+  ok(semana >= 1 && /Pronto: mudei só nesta semana/.test(await ultima()), 'gravou a versão só desta semana (' + semana + ')');
+  const noPlano = await estadoApp(`s.plans[0].dias.some((d) => d.itens.some((it) => it.ex === 'stiff-halteres'))`);
+  ok(noPlano, 'o plano continua com o stiff');
+  await escrever('pq o treino de hoje ta mais leve?');
+  ok(/O .+ de hoje (segue o plano|muda por isto)/.test(await ultima()), '"por quê": explica com o que o app guarda');
+  await escrever('como faço pra passar no enem');
+  ok(/Você quer saber sobre .+\?/.test(await ultima()), 'sem entender: pergunta de volta com os assuntos mais próximos');
+  ok(await botao('Outra coisa'), '"Outra coisa"');
+  await page.sleep(250);
+  ok(/poucas palavras/.test(await ultima()), 'pede para reformular, com exemplos');
+  await foto('chat/livre-reformular');
+  const larga3 = await page.eval(`return [...document.querySelectorAll('#chat *')].filter((e) => e.getBoundingClientRect().right > innerWidth + 1).map((e) => e.className || e.tagName).slice(0, 3);`);
+  ok(await semRolagem() && !larga3.length, 'conversa livre a 360 px: sem rolagem para o lado ' + larga3.join(' '));
 
   const erros = page.erros.filter((x) => !/favicon|SWv|vibrate/.test(x));
   ok(!erros.length, 'sem erro no console: ' + erros.join(' | ').slice(0, 300));

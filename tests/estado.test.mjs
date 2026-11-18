@@ -39,7 +39,7 @@ test('sanitize: dados inválidos ou maliciosos são descartados', () => {
   const s = store.sanitize(sujo);
   assert.equal({}.polluted, undefined, 'protótipo global poluído!');
   assert.equal(Object.prototype.hasOwnProperty.call(s, 'extra'), false);
-  assert.deepEqual(Object.keys(s).sort(), ['activePlan', 'body', 'combo', 'current', 'diario', 'dores', 'gym', 'nutri', 'perdidos', 'plans', 'run', 'runs', 'saudeFora', 'sessions', 'settings', 'sono', 'trainer', 'ui', 'v'].sort());
+  assert.deepEqual(Object.keys(s).sort(), ['activePlan', 'ajustesSemana', 'body', 'combo', 'current', 'diario', 'dores', 'gym', 'nutri', 'perdidos', 'plans', 'run', 'runs', 'saudeFora', 'sessions', 'settings', 'sono', 'trainer', 'ui', 'v'].sort());
   assert.equal(s.settings.tema, 'auto');
   assert.equal(s.settings.descanso, 600);
   assert.equal(s.settings.som, true);
@@ -229,7 +229,7 @@ test('sanitize: Treinador de corrida (run) e corridas registradas (runs)', () =>
   }`);
   const s = store.sanitize(sujo);
   assert.equal({}.x, undefined, 'protótipo global poluído!');
-  assert.deepEqual(Object.keys(s.run).sort(), ['aceitoEm', 'answers', 'cron', 'degrau', 'esteira', 'inicio', 'mostrados', 'pausadoEm', 'pausas']);
+  assert.deepEqual(Object.keys(s.run).sort(), ['aceitoEm', 'answers', 'carga', 'cron', 'degrau', 'esteira', 'inicio', 'mostrados', 'pausadoEm', 'pausas']);
   assert.deepEqual(s.run.pausas, []);
   assert.equal(s.run.cron, null);
   assert.deepEqual(Object.keys(s.run.answers).sort(), ['dias', 'experiencia', 'idade', 'liberado'], 'só perguntas e valores que existem');
@@ -247,7 +247,7 @@ test('sanitize: Treinador de corrida (run) e corridas registradas (runs)', () =>
   assert.equal(r6.distKm, 0, 'texto no lugar de número não vale'); assert.equal(Math.round(r6.durMin * 60), 2476, 'tempo guardado com precisão de 1 segundo'); assert.equal(r6.pse, 6); assert.deepEqual(r6.dores, []);
   // sem aceite válido, não há início nem pausa
   const semAceite = store.sanitize({ run: { answers: {}, aceitoEm: 'x', inicio: '2026-11-02', pausadoEm: '2026-11-03T10:00:00.000Z' } });
-  assert.deepEqual(semAceite.run, { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [], mostrados: [], degrau: null, esteira: [] });
+  assert.deepEqual(semAceite.run, { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [], mostrados: [], degrau: null, carga: [], esteira: [] });
   // cronômetro da corrida em andamento: guardado só com números válidos
   const comCron = store.sanitize({ run: { answers: {}, aceitoEm: '2026-11-02T10:00:00.000Z', inicio: '2026-11-02', cron: { data: '2026-11-03', i: 2, fim: 1794000000000, pausadoEm: 0, inicio: 1793999000000, parado: 0, inicioPasso: 1793999500000, terminado: 0, chave: 4321, extra: '<x>' }, pausas: [{ de: '2026-11-04', ate: '2026-11-20', semanas: 9, extra: '<x>' }, { de: 'ontem', ate: 'hoje' }, '<x>'] } });
   assert.deepEqual(comCron.run.cron, { data: '2026-11-03', i: 2, fim: 1794000000000, pausadoEm: 0, inicio: 1793999000000, parado: 0, inicioPasso: 1793999500000, terminado: 0, chave: 4321 });
@@ -255,7 +255,7 @@ test('sanitize: Treinador de corrida (run) e corridas registradas (runs)', () =>
   assert.equal(store.sanitize({ run: { answers: {}, aceitoEm: '2026-11-02T10:00:00.000Z', inicio: '2026-11-02', cron: { data: 'ontem', i: 'a', fim: {} } } }).run.cron, null);
   for (const bad of [null, 5, 'x', [], { run: 7, runs: 'abc' }, { run: [], runs: {} }]) {
     const z = store.sanitize(bad);
-    assert.deepEqual(z.run, { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [], mostrados: [], degrau: null, esteira: [] });
+    assert.deepEqual(z.run, { answers: {}, aceitoEm: '', inicio: '', pausadoEm: '', cron: null, pausas: [], mostrados: [], degrau: null, carga: [], esteira: [] });
     assert.deepEqual(z.runs, []);
   }
   // limite de 3000 registros

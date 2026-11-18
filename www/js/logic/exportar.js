@@ -12,7 +12,7 @@ import { EX_POR_ID } from '../data/exercises.js';
 import { TIPOS_TREINO } from '../data/corrida.js';
 import { LOCAIS_DOR, TIPOS_DOR, QUANDO_DOR } from './dor.js';
 import { TIPOS_SAUDE, GRAUS_SAUDE, limparSaudeFora } from './saude-fora.js';
-import { REFEICOES, nutrientesDoItem, modoDoDiario } from './diario.js';
+import { REFEICOES, nutrientesDoItem, modoDoDiario, supDoDia, textoDoSup, nutrientesDoSup } from './diario.js';
 import { e1rm, assistido } from './progress.js';
 
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -110,6 +110,12 @@ function diario(st) {
     for (const x of itens) {
       const base = [dataBR(d.data), REFEICOES[x.ref], texto(x.nome), x.livre ? '' : x.g, x.livre ? '' : texto(x.medida)];
       linhas.push(cal ? [...base, numBR(x.kcal, 0), x.p == null ? '' : numBR(x.p, 1)] : base);
+    }
+    // suplementos e vitaminas do dia: nome e dose como a pessoa marcou; números só do whey com o valor do rótulo
+    for (const sp of supDoDia(st.diario, d.data)) {
+      const t = textoDoSup(sp, false), n = nutrientesDoSup(sp);
+      const base = [dataBR(d.data), 'Suplemento ou vitamina', texto(t.nome), '', texto(t.dose)];
+      linhas.push(cal ? [...base, sp.kcalDose == null ? '' : numBR(n.kcal, 0), sp.pDose == null ? '' : numBR(n.p, 1)] : base);
     }
   }
   const cab = ['Data', 'Refeição', 'Alimento', 'Quantidade (g)', 'Medida caseira'];

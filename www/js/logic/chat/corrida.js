@@ -386,7 +386,7 @@ const comDataFutura = (i) => i.datas.some((d) => !d.semana && d.data !== i.hoje)
 export const INTENCOES = [
   {
     id: 'chuva', coach: 'corrida', titulo: 'Choveu ou não dá para correr na rua', resumo: 'chuva ou não poder correr na rua', data: true,
-    palavras: ['!chuva', 'correr+chuva', 'chuva nao correr', 'esta chuva', 'ta chuva', 'chuva forte', 'correr rua', 'nao da correr rua', 'sem lugar correr', 'escuro', 'tempo ruim', 'tempo ruim correr', 'clima', 'frio demais', 'muito frio', 'frio correr', 'frio rua', 'alagado', 'rua molhada', 'calor demais', 'muito calor', 'perigoso rua', 'raio', 'trovao'],
+    palavras: ['!alagado', '!alagada', 'rua alagada', '!chuva', 'correr+chuva', 'chuva nao correr', 'esta chuva', 'ta chuva', 'chuva forte', 'correr rua', 'nao da correr rua', 'sem lugar correr', 'escuro', 'tempo ruim', 'tempo ruim correr', 'clima', 'frio demais', 'muito frio', 'frio correr', 'frio rua', 'alagado', 'rua molhada', 'calor demais', 'muito calor', 'perigoso rua', 'raio', 'trovao'],
     disponivel: comPlano,
     inicio: passoChuva,
   },
@@ -416,13 +416,13 @@ export const INTENCOES = [
   },
   {
     id: 'mais-devagar', coach: 'corrida', titulo: 'Posso ir mais devagar?', resumo: 'correr mais devagar ou menos', data: true,
-    palavras: ['mais devagar', '!devagar', 'diminuir', 'mais leve', 'fazer mais leve', 'pegar leve', 'mais tranquilo', 'mais calmo', 'sem gas', 'sem energia', '!diminuir ritmo', '!baixar ritmo', 'correr menos', '!reduzir', 'encurtar', 'encurtar correr', 'ta pesado', 'muito pesado', 'muito dificil', 'nao aguento', 'nao aguentei', 'muito forte', 'pesado', 'diminuir distancia', 'menos km', 'cansado', '!cansado ritmo', 'ritmo pesado', 'pesado ritmo', 'ritmo forte demais', 'parar meio', 'caminhar', 'cansativo', '!puxado', 'sem folego', 'ofegante', 'baixar ritmo', 'ir mais devagar'],
+    palavras: ['caminhar meio', 'andar pouco', 'parar caminhar', 'caminhar pouco', 'mais devagar', '!devagar', 'diminuir', 'mais leve', 'fazer mais leve', 'pegar leve', 'mais tranquilo', 'mais calmo', 'sem gas', 'sem energia', '!diminuir ritmo', '!baixar ritmo', 'correr menos', '!reduzir', 'encurtar', 'encurtar correr', 'ta pesado', 'muito pesado', 'muito dificil', 'nao aguento', 'nao aguentei', 'muito forte', 'pesado', 'diminuir distancia', 'menos km', 'cansado', '!cansado ritmo', 'ritmo pesado', 'pesado ritmo', 'ritmo forte demais', 'parar meio', 'caminhar', 'cansativo', '!puxado', 'sem folego', 'ofegante', 'baixar ritmo', 'ir mais devagar'],
     disponivel: comPlano,
     inicio: passoMaisDevagar,
   },
   {
     id: 'mover-corrida', coach: 'corrida', titulo: 'Mudar a corrida de dia', resumo: 'mudar a corrida de dia', data: true,
-    palavras: ['mudar correr amanha', 'passar correr amanha', 'correr outro dia', 'adiar correr', 'deixar correr amanha', 'remarcar correr', 'mudar para amanha', 'passar para amanha', 'adiar', 'antecipar', 'adiantar', 'correr lugar', 'em vez de', 'no lugar de', 'outro dia', 'passar para', 'jogar correr', 'jogar para', 'empurrar correr', 'mudar correr', 'passar correr', 'mudar correr dia', 'mudar correr outro dia', 'correr de dia', 'fizer', 'fazer correr'],
+    palavras: ['dia longao', 'trocar dia longao', 'mudar dia longao', 'mudar longao', 'mudar correr amanha', 'passar correr amanha', 'correr outro dia', 'adiar correr', 'deixar correr amanha', 'remarcar correr', 'mudar para amanha', 'passar para amanha', 'adiar', 'antecipar', 'adiantar', 'correr lugar', 'em vez de', 'no lugar de', 'outro dia', 'passar para', 'jogar correr', 'jogar para', 'empurrar correr', 'mudar correr', 'passar correr', 'mudar correr dia', 'mudar correr outro dia', 'correr de dia', 'fizer', 'fazer correr'],
     bonus: (i) => (comDuasDatas(i) ? 3 : comDataFutura(i) ? 1.5 : 0),
     disponivel: comPlano,
     inicio: passoMover,
@@ -442,18 +442,18 @@ export const INTENCOES = [
   {
     id: 'corrida-perdida', coach: 'corrida', titulo: 'Não vou correr hoje', resumo: 'faltar à corrida de hoje', resumoNoDia: 'faltar à corrida', data: true, prioridade: 1,
     bonus: (i) => (i.datas.some((d) => d.data === i.hoje) && i.datas.some((d) => !d.semana && d.data > i.hoje) && /\b(nao|nem)\b/.test(i.texto) ? 1.5 : 0),
-    palavras: ['nao vou correr', 'nao quero correr', 'sem vontade correr', 'nao consigo correr', 'nao posso correr', 'nao vou poder correr', 'nao corri', 'nao deu correr', 'perder correr', 'perdi correr', 'faltar correr', 'pular correr', 'faltar', 'sem tempo correr', 'nao vai dar correr', 'nao vou conseguir correr', 'doente', 'gripado', 'gripe'],
+    palavras: ['nao rola correr', 'nao rola', 'sem correr', 'nao vou correr', 'nao quero correr', 'sem vontade correr', 'nao consigo correr', 'nao posso correr', 'nao vou poder correr', 'nao corri', 'nao deu correr', 'perder correr', 'perdi correr', 'faltar correr', 'pular correr', 'faltar', 'sem tempo correr', 'nao vai dar correr', 'nao vou conseguir correr', 'doente', 'gripado', 'gripe'],
     disponivel: comPlano,
     inicio: passoCorridaPerdida,
   },
   {
     id: 'dor-corrida', coach: 'corrida', titulo: 'Estou com dor', resumo: 'uma dor', prioridade: 3,
-    palavras: ['dor', 'dor depois correr', 'dor muscular', 'machucar', 'lesao', 'canela', 'dor canela', 'dor joelho', 'dor pe', 'dor tornozelo', 'dor quadril', 'dor panturrilha', 'aquiles', 'fascite', 'canelite', 'tendinite', 'estou dor', 'to dor', 'tou dor', 'sinto dor', 'senti dor', '!fisgada', 'pontada', 'torci', 'estou dolorido', 'todo dolorido', 'joelho dor', 'dor joelho', 'ombro dor', 'dor ombro', 'costas dor', 'dor costas', 'lombar dor', 'dor lombar', 'punho dor', 'dor punho', 'cotovelo dor', 'dor cotovelo', 'tornozelo dor', 'dor tornozelo', 'quadril dor', 'dor quadril', 'panturrilha dor', 'dor panturrilha', 'canela dor', 'dor canela', 'pe dor', 'dor pe', 'coxa dor', 'dor coxa', 'perna dor', 'dor perna', 'pescoco dor', 'dor pescoco', 'braco dor', 'dor braco', 'gluteo dor', 'dor gluteo', 'virilha dor', 'dor virilha'],
+    palavras: ['latejando', 'lateja', 'estalou', 'sola pe', 'dor', 'dor depois correr', 'dor muscular', 'machucar', 'lesao', 'canela', 'dor canela', 'dor joelho', 'dor pe', 'dor tornozelo', 'dor quadril', 'dor panturrilha', 'aquiles', 'fascite', 'canelite', 'tendinite', 'estou dor', 'to dor', 'tou dor', 'sinto dor', 'senti dor', '!fisgada', 'pontada', 'torci', 'estou dolorido', 'todo dolorido', 'joelho dor', 'dor joelho', 'ombro dor', 'dor ombro', 'costas dor', 'dor costas', 'lombar dor', 'dor lombar', 'punho dor', 'dor punho', 'cotovelo dor', 'dor cotovelo', 'tornozelo dor', 'dor tornozelo', 'quadril dor', 'dor quadril', 'panturrilha dor', 'dor panturrilha', 'canela dor', 'dor canela', 'pe dor', 'dor pe', 'coxa dor', 'dor coxa', 'perna dor', 'dor perna', 'pescoco dor', 'dor pescoco', 'braco dor', 'dor braco', 'gluteo dor', 'dor gluteo', 'virilha dor', 'dor virilha'],
     inicio: (ctx) => passoDor(ctx, 'corrida'),
   },
   {
     id: 'mudar-corrida', coach: 'corrida', titulo: 'Mudar o plano de corrida', resumo: 'mudar o plano de corrida',
-    palavras: ['mudar plano', 'mudar dia', 'mudar dias', 'mudar dia correr', 'trocar dia', 'refazer plano', 'refazer entrevista', 'outro plano', 'plano novo', 'nova prova', 'mudar prova', 'mudar objetivo', 'mudar', 'pausar plano', 'parar plano', 'mudar dias semana', 'dias da semana'],
+    palavras: ['vezes semana', 'correr vezes', 'mais dias', 'menos dias', 'mudar plano', 'mudar dia', 'mudar dias', 'mudar dia correr', 'trocar dia', 'refazer plano', 'refazer entrevista', 'outro plano', 'plano novo', 'nova prova', 'mudar prova', 'mudar objetivo', 'mudar', 'pausar plano', 'parar plano', 'mudar dias semana', 'dias da semana'],
     disponivel: (ctx) => temCorrida(ctx.st),
     inicio: () => ({
       texto: ['Os dias, a prova e o tempo mudam nas respostas da entrevista.', 'Ao terminar, o plano novo começa da semana 1. As corridas registradas continuam.'],

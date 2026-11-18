@@ -16,6 +16,8 @@ import { botaoNaoTreinei, botaoNaoCorri, linhaNaoTreinado, linhaNaoCorrida } fro
 import { situacaoDoPlano, cartaoVariacao } from './variacao.js';
 import { registrarTrocaManual } from '../logic/variacao.js';
 import { diasBloqueados } from '../logic/dias-livres.js';
+import { itensDoDia } from '../logic/ajuste-semana.js';
+import { alcance, mudarItens, seloSemana } from './ajuste-semana.js';
 
 const ORDEM_SEMANA = [1, 2, 3, 4, 5, 6, 0];
 const AGENDA_PADRAO = { 1: [1], 2: [1, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5], 6: [1, 2, 3, 4, 5, 6], 7: [1, 2, 3, 4, 5, 6, 0] };
@@ -229,16 +231,18 @@ export function plansView() {
   const efetiva = plan ? semanaEfetiva(plan, state.perdidos, dateKey(segunda)) : null;
   const acoesPerdido = (b) => h('div', { class: 'perdido-acoes' }, b);
   // `ef` = o dia na semana com as marcas: treino que veio de outro dia mostra de onde veio (no lugar do "Trocar")
-  const blocoTreino = (d, wd = null, ef = null) => h('div', { class: 'treino col gap-s', 'data-treino': d.id, ...(ef && ef.veioDe ? { 'data-movido': ef.veioDe } : {}) },
+  // treino mudado só nesta semana (logic/ajuste-semana.js): a contagem é a da semana, com o selo e o "Desfazer"
+  const blocoTreino = (d0, wd = null, ef = null) => { const dataK = wd != null ? dateKey(dataDe(wd)) : ''; const d = dataK ? { ...d0, itens: itensDoDia(state, plan.id, d0.id, dataK) } : d0; return h('div', { class: 'treino col gap-s', 'data-treino': d.id, ...(ef && ef.veioDe ? { 'data-movido': ef.veioDe } : {}) },
     h('div', { class: 'row top' },
       h('div', { class: 'grow' }, h('h3', { text: d.nome }), h('div', { class: 'small muted', text: d.foco || 'Sem descrição' }),
         ef && ef.veioDe ? h('div', { class: 'small', text: `Veio de ${nomeDoDia(ef.veioDe, hojeK)}.` }) : null,
         h('div', { class: 'tiny muted mt', text: d.itens.length ? `${plural(d.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(d)} min` : 'Nenhum exercício ainda' })),
       ef && ef.veioDe ? badge('Movido', 'acc') : wd != null ? chipAgenda(wd, d) : h('button', { class: 'chip sm', type: 'button', onClick: () => diaSheet(plan, d) }, 'Definir dia')),
+    dataK ? seloSemana(plan.id, d.id, dataK, refresh) : null,
     h('div', { class: 'row' },
       btn('Editar', () => go(`treino/${plan.id}/${d.id}`), 'ghost grow', 'edit'),
       semanaVista === 0 || wd == null ? btn('Iniciar', () => startSession(plan.id, d.id), 'primary grow', 'play') : null),
-    ef && semanaVista === 0 && podeMarcar(state, ef.data, hojeK).pode ? acoesPerdido(botaoNaoTreinei(ef.data, refresh)) : null);
+    ef && semanaVista === 0 && podeMarcar(state, ef.data, hojeK).pode ? acoesPerdido(botaoNaoTreinei(ef.data, refresh)) : null); };
   const blocoCorrida = (c) => h('div', { class: 'treino col gap-s' },
     h('div', { class: 'row top' },
       h('div', { class: 'grow' }, h('h3', { text: String(c.nome || 'Corrida') }), c.resumo ? h('div', { class: 'small muted', text: String(c.resumo) }) : null),
@@ -276,7 +280,7 @@ export function plansView() {
   }
   body.push(semana);
   // análise do plano: o que ele trabalha mais e menos, para que serve e se combina com o perfil
-  if (plan) { let av = null; try { av = cartaoAvaliacaoDoPlano(plan); } catch { av = null; } if (av) body.push(av); }
+  if (plan) { let av = null; try { av = cartaoAvaliacaoDoPlano(plan, { data: dateKey(segunda) }); } catch { av = null; } if (av) body.push(av); }
 
   if (plan) {
     // treinos do plano que ainda não têm dia da semana
@@ -339,23 +343,35 @@ const descTxt = (s) => (s === 0 ? 'Sem descanso' : s < 60 ? `${s} s` : s % 60 ==
 
 export function dayView(planId, dayId) {
   const plan = planById(planId);
-  const day = plan && plan.dias.find((d) => d.id === dayId);
-  if (!day) return { redirect: 'treinos' };
+  const day0 = plan && plan.dias.find((d) => d.id === dayId);
+  if (!day0) return { redirect: 'treinos' };
   const mutDay = (fn) => mut(planId, (p) => { const d = p.dias.find((x) => x.id === dayId); if (d) fn(d, p); });
+  // os exercícios: a versão desta semana, se o treino foi mudado só nesta semana; senão, o plano. Cada mudança pergunta
+  // (uma vez por tela) se vale só nesta semana ou sempre (views/ajuste-semana.js). Nome e descrição valem sempre.
+  const hojeK = dateKey(new Date());
+  const day = { ...day0, itens: itensDoDia(state, planId, dayId, hojeK) };
+  const mudar = async (fn, depois) => {
+    const modo = await alcance(planId, dayId, hojeK);
+    if (!modo) { refresh(); return; }
+    mudarItens(planId, dayId, hojeK, modo, (itens, p) => fn(itens, p, modo));
+    if (depois) depois(modo);
+    refresh();
+  };
   const body = [];
+  { const sl = seloSemana(planId, dayId, hojeK, refresh); if (sl) body.push(h('div', { class: 'col gap-s', id: 'editor-semana' }, sl, h('p', { class: 'tiny muted', text: 'As mudanças deste treino valem só nesta semana. Na semana que vem, volta o de sempre.' }))); }
   const foco = h('input', { class: 'input', type: 'text', value: day.foco, maxlength: 90, placeholder: 'Ex.: peito, ombros e tríceps', onInput: (e) => mutDay((d) => { d.foco = e.target.value.trim().slice(0, 90); }) }); // grava a cada letra: sair da tela sem tirar o foco do campo não perde o texto
   body.push(h('label', { class: 'field' }, h('span', { text: 'O que este treino trabalha (opcional)' }), foco));
   if (!day.itens.length) body.push(h('div', { class: 'empty' }, icon('dumbbell'), h('p', { text: 'Este treino ainda está vazio. Adicione os exercícios que você quer fazer neste dia.' })));
   else body.push(h('p', { class: 'small muted', text: `${plural(day.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(day)} minutos` }));
   // análise deste treino (foco, músculo mais e menos trabalhado, para que serve, se serve para o perfil)
-  if (day.itens.length) { let av = null; try { av = cartaoAvaliacaoDoDia(plan, day); } catch { av = null; } if (av) body.push(av); }
+  if (day.itens.length) { let av = null; try { av = cartaoAvaliacaoDoDia(plan, day, { data: hojeK }); } catch { av = null; } if (av) body.push(av); }
 
   day.itens.forEach((it, i) => {
     const ex = EX_POR_ID.get(it.ex);
     if (!ex) return;
     const tempo = ex.registro === 'segundos';
     const cardio = ex.registro === 'minutos';
-    const set = (k, v) => { mutDay((d) => { if (d.itens[i]) d.itens[i][k] = v; }); refresh(); };
+    const set = (k, v) => mudar((itens) => { if (itens[i]) itens[i][k] = v; });
     const unidade = cardio ? 'Minutos' : tempo ? 'Segundos' : 'Repetições';
     const controls = h('div', { class: 'row gap-s' });
     if (!cardio) controls.appendChild(h('label', { class: 'field grow' }, h('span', { text: 'Séries' }), select([1, 2, 3, 4, 5, 6, 7, 8].map((n) => [n, String(n)]), it.series, (v) => set('series', Number(v)), 'Séries')));
@@ -367,25 +383,24 @@ export function dayView(planId, dayId) {
         h('div', { class: 'grow' }, h('div', { class: 'bold', text: `${i + 1}. ${ex.nome}` }), h('div', { class: 'small muted', text: subtitulo(ex) }), h('div', { class: 'tiny muted', text: alvoTexto(it) }))),
       controls,
       h('div', { class: 'row' },
-        iconBtn('up', 'Mover para cima', () => { if (i === 0) { toast('Este já é o primeiro exercício.'); return; } mutDay((d) => { const [x] = d.itens.splice(i, 1); d.itens.splice(i - 1, 0, x); }); refresh(); }, 'soft'),
-        iconBtn('down', 'Mover para baixo', () => { if (i >= day.itens.length - 1) { toast('Este já é o último exercício.'); return; } mutDay((d) => { const [x] = d.itens.splice(i, 1); d.itens.splice(i + 1, 0, x); }); refresh(); }, 'soft'),
+        iconBtn('up', 'Mover para cima', () => { if (i === 0) { toast('Este já é o primeiro exercício.'); return; } mudar((itens) => { const [x] = itens.splice(i, 1); itens.splice(i - 1, 0, x); }); }, 'soft'),
+        iconBtn('down', 'Mover para baixo', () => { if (i >= day.itens.length - 1) { toast('Este já é o último exercício.'); return; } mudar((itens) => { const [x] = itens.splice(i, 1); itens.splice(i + 1, 0, x); }); }, 'soft'),
         h('div', { class: 'grow' }),
         btn('Trocar', async () => {
           const usados = new Set(day.itens.map((x) => x.ex));
           const [novo] = await pickExercises({ title: 'Trocar ' + ex.nome, multi: false, padrao: ex.padrao, excluir: usados });
           if (!novo) return;
           const nx = EX_POR_ID.get(novo);
-          // a troca à mão entra no histórico da variação: o novo não sai logo e o antigo não volta logo (logic/variacao.js)
-          mutDay((d, p) => { if (d.itens[i]) { d.itens[i] = nx.registro === ex.registro ? { ...d.itens[i], ex: novo } : novoItem(nx); registrarTrocaManual(p, ex.id, novo, new Date().toISOString()); } });
-          toast('Exercício trocado'); refresh();
+          // a troca à mão entra no histórico da variação: o novo não sai logo e o antigo não volta logo (logic/variacao.js);
+          // a troca só desta semana, não
+          mudar((itens, p, modo) => { if (itens[i]) { itens[i] = nx.registro === ex.registro ? { ...itens[i], ex: novo } : novoItem(nx); if (modo === 'sempre') registrarTrocaManual(p, ex.id, novo, new Date().toISOString()); } }, () => toast('Exercício trocado'));
         }, 'sm', 'swap'),
         // só o ícone (com nome para leitor de tela): com texto, ↑ ↓ Trocar Remover não cabem em 360 px
         iconBtn('trash', `Remover ${ex.nome}`, async () => {
           const ok = await confirmSheet({ title: 'Remover este exercício?', text: `“${ex.nome}” sai deste treino. O histórico de treinos já feitos não muda.`, okLabel: 'Remover', danger: true });
           if (!ok) return;
           // remove o exercício confirmado, mesmo que a lista tenha mudado enquanto a pergunta estava aberta
-          mutDay((d) => { const k = d.itens[i] && d.itens[i].ex === it.ex ? i : d.itens.findIndex((x) => x.ex === it.ex); if (k >= 0) d.itens.splice(k, 1); });
-          refresh();
+          mudar((itens) => { const k = itens[i] && itens[i].ex === it.ex ? i : itens.findIndex((x) => x.ex === it.ex); if (k >= 0) itens.splice(k, 1); });
         }, 'soft danger'))));
   });
   body.push(btn('Adicionar exercícios', async () => {
@@ -393,9 +408,8 @@ export function dayView(planId, dayId) {
     const ids = await pickExercises({ excluir: new Set(day.itens.map((x) => x.ex)) });
     if (!ids.length) return;
     let entraram = 0;
-    mutDay((d) => { for (const id of ids) { const ex = EX_POR_ID.get(id); if (ex && d.itens.length < MAX_ITENS) { d.itens.push(novoItem(ex)); entraram++; } } });
-    if (entraram < ids.length) toast(`Limite de ${MAX_ITENS} exercícios por treino: ${entraram ? `entraram só os ${entraram} primeiros` : 'nenhum foi adicionado'}.`);
-    refresh();
+    mudar((itens) => { for (const id of ids) { const ex = EX_POR_ID.get(id); if (ex && itens.length < MAX_ITENS) { itens.push(novoItem(ex)); entraram++; } } },
+      () => { if (entraram < ids.length) toast(`Limite de ${MAX_ITENS} exercícios por treino: ${entraram ? `entraram só os ${entraram} primeiros` : 'nenhum foi adicionado'}.`); });
   }, 'block', 'plus'));
   if (plan.dias.length > 1) {
     body.push(btn('Excluir este treino', async () => {

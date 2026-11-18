@@ -249,7 +249,8 @@ test('cada assunto, percorrido até o fim em perfis variados e em todos os dias 
               assert.ok(p.aviso && p.aviso.tipo === 'danger' && !p.acoes && !p.opcoes, 'triagem bloqueada, mas o chat sugeriu treino: ' + onde);
             }
             for (const a of p.acoes || []) {
-              if (a.iniciar) confereVersaoCurta(st, a.iniciar, onde);
+              // "Só hoje" (uma troca ou o ajuste da dor) começa o treino com a mudança; as outras, a versão curta
+              if (a.iniciar) (a.rotulo === 'Só hoje' ? confereTrocaHoje : confereVersaoCurta)(st, a.iniciar, onde);
               if (a.aplicar) confereAcao(st, a, ctx, onde);
             }
           }
@@ -259,6 +260,20 @@ test('cada assunto, percorrido até o fim em perfis variados e em todos os dias 
   }
   assert.ok(passos > 2000, 'passos percorridos: ' + passos);
 });
+// "Só hoje" depois de uma troca: o mesmo treino, na mesma ordem, cada exercício trocado com as séries, repetições e
+// descanso do que saiu (nada a mais), e só exercícios do catálogo
+function confereTrocaHoje(st, ini, onde) {
+  const dia = st.plans[0].dias.find((d) => d.id === ini.diaId);
+  assert.ok(dia && ini.planId === 'p1' && ini.itens.length >= 1 && ini.itens.length <= dia.itens.length, onde);
+  const orig = new Map(dia.itens.map((it) => [it.ex, it]));
+  const sairam = dia.itens.filter((it) => !ini.itens.some((x) => x.ex === it.ex));
+  for (const it of ini.itens) {
+    assert.ok(EX_POR_ID.has(it.ex), 'fora do catálogo: ' + onde);
+    const o = orig.get(it.ex) || sairam.find((s) => s.series >= it.series && s.reps === it.reps && s.descanso === it.descanso);
+    assert.ok(o, 'exercício a mais: ' + onde);
+    assert.ok(it.series <= o.series && it.reps === o.reps && it.descanso === o.descanso, 'dose mudou na troca: ' + onde);
+  }
+}
 function confereVersaoCurta(st, ini, onde) {
   const dia = st.plans[0].dias.find((d) => d.id === ini.diaId);
   assert.ok(dia && ini.planId === 'p1', onde);

@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 import { EXERCICIOS, EX_POR_ID } from '../www/js/data/exercises.js';
 import { MODELOS } from '../www/js/data/templates.js';
 import { REFS } from '../www/js/data/knowledge.js';
-import { avaliarDia, avaliarPlano } from '../www/js/logic/avaliacao.js';
-import { gerarPlano, perfil, motivosContra, soManual, tetoSeries } from '../www/js/logic/trainer.js';
+import { avaliarDia, avaliarPlano, sugestoesPara, trocasPara } from '../www/js/logic/avaliacao.js';
+import { gerarPlano, perfil, motivosContra, soManual, tetoSeries, pesosDoExercicio } from '../www/js/logic/trainer.js';
 
 const GYM = { all: true, has: {} };
 const base = { objetivo: 'hipertrofia', idade: 30, peso: 75, altura: 175, experiencia: 'intermediario', dias: '4', tempo: '60', local: 'completa', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'], foco: ['equilibrado'] };
@@ -316,4 +316,115 @@ test('limitação da entrevista vale pela mecânica também na avaliação: quad
     if (pb.troca) assert.ok(!EX_POR_ID.get(pb.troca.ex).equip.includes('barra_fixa'));
   }
   assert.ok(!avaliarDia(dia('f', it('barra-fixa-pronada', 3, '6-10')), { respostas: base, gym: GYM }).perfil.problemas.some((p) => p.grave));
+});
+
+// ---------- a conta de cada músculo, conferida à mão ----------
+// Um treino de pernas montado à mão, como o do dono do app (ele contou 20 de quadríceps e o app mostrava 28; 28 de glúteo
+// e o app, 43). Números conferidos à mão, exercício por exercício: principal = série inteira; ajuda = meia série.
+const PERNAS = [['agachamento-livre-barra', 4], ['leg-press-45', 4], ['agachamento-bulgaro-halteres', 4], ['hack-machine', 4], ['cadeira-extensora', 4],
+  ['elevacao-pelvica-barra', 4], ['gluteo-maquina-coice', 4], ['cadeira-abdutora', 4], ['stiff-barra', 4], ['mesa-flexora', 4], ['levantamento-terra-convencional', 4], ['elevacao-pernas-deitado', 4]];
+const planoPernas = (agenda = { 1: 'p' }) => ({ dias: [dia('p', ...PERNAS.map(([ex, s]) => it(ex, s)))], agenda });
+
+test('caso do dono: cada músculo mostra as séries diretas, as de ajuda (× ½) e os exercícios que contam', () => {
+  const a = avaliarPlano(planoPernas(), {});
+  const g = (k) => a.grupos.find((x) => x.g === k);
+  // quadríceps: 5 exercícios de 4 séries como principal = 20; elevação pélvica e terra ajudam (8 séries × ½ = 4) → 24.
+  // O abdominal infra não conta mais (a coxa só dobra o quadril): na conta antiga, ele somava mais 2.
+  assert.deepEqual([g('quadriceps').diretas, g('quadriceps').ajuda, g('quadriceps').series], [20, 8, 24]);
+  assert.deepEqual(g('quadriceps').itens.filter((x) => x.peso === 1).map((x) => x.ex).sort(), ['agachamento-bulgaro-halteres', 'agachamento-livre-barra', 'cadeira-extensora', 'hack-machine', 'leg-press-45']);
+  assert.deepEqual(g('quadriceps').itens.filter((x) => x.peso < 1).map((x) => [x.ex, x.conta]), [['elevacao-pelvica-barra', 2], ['levantamento-terra-convencional', 2]]);
+  assert.ok(!g('quadriceps').itens.some((x) => x.ex === 'elevacao-pernas-deitado'));
+  // glúteos: agachamento, leg press, búlgaro e hack contam inteiro (fazem o glúteo crescer), mais elevação pélvica,
+  // coice, stiff e terra = 8 × 4 = 32; a cadeira abdutora ajuda (4 × ½ = 2) → 34
+  assert.deepEqual([g('gluteos').diretas, g('gluteos').ajuda, g('gluteos').series], [32, 4, 34]);
+  assert.equal(g('gluteos').faixa, 'muito');
+  assert.equal(g('gluteos').excesso, 'diretas');
+  // posteriores: stiff, mesa flexora e terra = 12; o coice ajuda (2) → 14. Agachamento, leg press, búlgaro, hack e
+  // elevação pélvica não contam (na ressonância, os posteriores não crescem com eles): na conta antiga, somavam 10.
+  assert.deepEqual([g('posteriores').diretas, g('posteriores').ajuda, g('posteriores').series], [12, 4, 14]);
+  assert.ok(!g('posteriores').itens.some((x) => ['agachamento-livre-barra', 'leg-press-45', 'hack-machine', 'elevacao-pelvica-barra'].includes(x.ex)));
+  // quadríceps com 20 diretas e 24 no total: dentro do máximo sem perfil (20 diretas; 30 no total)
+  assert.equal(g('quadriceps').faixa, 'bom');
+  assert.ok(a.sobra.some((x) => x.g === 'gluteos' && x.motivo === 'diretas' && x.series === 32));
+  // o mesmo treino em dois dias da semana: cada exercício aparece uma vez, com "2× na semana", e a conta dobra
+  const b = avaliarPlano(planoPernas({ 1: 'p', 4: 'p' }), {});
+  const q = b.grupos.find((x) => x.g === 'quadriceps');
+  assert.deepEqual([q.diretas, q.ajuda, q.series], [40, 16, 48]);
+  assert.ok(q.itens.every((x) => x.vezes === 2) && q.itens.length === 7);
+  // no treino (um dia só): a mesma lista, com os grupos trabalhados e o "demais" pela mesma regra
+  const d = avaliarDia(planoPernas().dias[0], {});
+  assert.equal(d.grupos.find((x) => x.g === 'quadriceps').itens.length, 7);
+  assert.equal(d.grupos.find((x) => x.g === 'gluteos').faixa, 'muito');
+  assert.ok(d.grupos.every((x) => x.series > 0));
+});
+
+test('a conta: principal = 1, ajuda = ½; posteriores não contam no agachamento, quadríceps não conta no abdominal; cardio e corrida não entram', () => {
+  const w = (id) => pesosDoExercicio(EX_POR_ID.get(id));
+  assert.deepEqual(w('supino-maquina'), { peito: 1, ombros: 0.5, triceps: 0.5 });
+  assert.equal(w('leg-press-45').gluteos, 1);
+  assert.equal(w('agachamento-livre-barra').posteriores, undefined);
+  assert.equal(w('leg-press-45').posteriores, undefined);
+  assert.equal(w('elevacao-pelvica-barra').posteriores, undefined);
+  assert.equal(w('levantamento-terra-convencional').quadriceps, 0.5, 'no terra o joelho estende: o quadríceps ajuda');
+  assert.equal(w('stiff-barra').posteriores, 1);
+  assert.equal(w('elevacao-pernas-deitado').quadriceps, undefined);
+  for (const ex of EXERCICIOS) if (ex.grupo === 'abdomen') assert.equal(pesosDoExercicio(ex).quadriceps, undefined, ex.id);
+  for (const ex of EXERCICIOS) if (ex.padrao === 'agachar' || ex.padrao === 'afundo') assert.notEqual(pesosDoExercicio(ex).posteriores, 0.5, ex.id);
+  // cardio (esteira, bicicleta, corrida) não soma série em músculo nenhum
+  for (const ex of EXERCICIOS) if (ex.grupo === 'cardio' || ex.padrao === 'cardio') assert.deepEqual(pesosDoExercicio(ex), {}, ex.id);
+  const cardio = EXERCICIOS.find((ex) => ex.grupo === 'cardio' && ex.registro === 'minutos');
+  const com = avaliarPlano({ dias: [dia('p', ...PERNAS.map(([ex, s]) => it(ex, s)), { ex: cardio.id, series: 1, reps: '30', descanso: 0 })], agenda: { 1: 'p' } }, {});
+  const sem = avaliarPlano(planoPernas(), {});
+  assert.deepEqual(com.volume, sem.volume);
+  // a corrida do plano de corrida só entra nos avisos de dia (véspera), nunca nas séries
+  const corre = avaliarPlano(planoPernas(), { corrida: { dias: [2, 3], fortes: [2], longos: [] } });
+  assert.deepEqual(corre.volume, sem.volume);
+});
+
+test('"demais" com a mesma regra do Treinador: diretas acima do teto ou total acima de 1,5 vez o teto', () => {
+  // iniciante (teto 12): 12 séries diretas de tríceps não passam; com 24 séries de supino (ajuda: 12 × ½ = 6) o total é 18
+  const d = dia('t', it('triceps-pulley-corda', 4), it('triceps-testa-barra-w', 4), it('triceps-frances-halter', 4), it('supino-maquina', 4), it('supino-inclinado-maquina', 4), it('supino-reto-halteres', 4));
+  for (const x of d.itens) assert.ok(EX_POR_ID.has(x.ex), x.ex);
+  const ctx = { respostas: { ...base, experiencia: 'iniciante' }, gym: GYM };
+  const a = avaliarPlano({ dias: [d], agenda: { 1: 't' } }, ctx);
+  const tri = a.grupos.find((x) => x.g === 'triceps');
+  assert.deepEqual([tri.diretas, tri.ajuda, tri.series], [12, 12, 18]);
+  assert.notEqual(tri.faixa, 'muito', '18 = 1,5 × 12: ainda não passa');
+  const d2 = { ...d, itens: [...d.itens, it('supino-declinado-barra', 4)] };
+  const b = avaliarPlano({ dias: [d2], agenda: { 1: 't' } }, ctx);
+  const tri2 = b.grupos.find((x) => x.g === 'triceps');
+  assert.equal(tri2.series, 20);
+  assert.equal(tri2.excesso, 'total');
+  assert.equal(tri2.faixa, 'muito');
+  // o peito passa pelas diretas (16 > 12)
+  assert.equal(b.grupos.find((x) => x.g === 'peito').excesso, 'diretas');
+});
+
+test('sugestões e trocas dentro da avaliação: só exercícios seguros para o perfil, fora os que já estão no plano', () => {
+  // sem perfil: só de iniciante, sem supervisão, com os aparelhos
+  const s0 = sugestoesPara('posteriores', {}, ['mesa-flexora']);
+  assert.ok(s0.length >= 1 && s0.length <= 3);
+  for (const x of s0) { const ex = EX_POR_ID.get(x.ex); assert.equal(pesosDoExercicio(ex).posteriores, 1); assert.equal(ex.nivel, 1); assert.notEqual(x.ex, 'mesa-flexora'); assert.ok(!soManual(x.ex)); }
+  // com perfil: nenhum motivo contra (gestação, 60+ com pressão alta e limitação, menor de 18, quem nunca treinou)
+  const perfis = [{ ...base, condicoes: ['gestante'], liberado: 'sim' }, { ...base, idade: 68, condicoes: ['hipertensao'], limitacoes: ['joelho'] }, { ...base, idade: 15 }, { ...base, experiencia: 'nunca' }];
+  for (const r of perfis) for (const g of ['posteriores', 'gluteos', 'costas', 'peito', 'quadriceps']) {
+    const pf = perfil(r);
+    for (const x of sugestoesPara(g, { respostas: r, gym: GYM })) assert.deepEqual(motivosContra(EX_POR_ID.get(x.ex), pf, GYM, []), [], `${JSON.stringify(r)} / ${g}: ${x.ex}`);
+  }
+  // academia sem nada marcado: nenhuma sugestão pede aparelho que a pessoa não tem
+  for (const x of sugestoesPara('costas', { gym: { all: false, has: {} } })) assert.ok(EX_POR_ID.get(x.ex).equip.length === 0, x.ex);
+  // pede liberação médica (com ou sem a resposta da liberação) ou é menor de 14: nenhuma sugestão nem troca
+  for (const extra of [{ triagem: ['dor_peito'] }, { triagem: ['dor_peito'], liberado: 'nao' }, { idade: 12 }, { condicoes: ['gestante'] }]) {
+    assert.deepEqual(sugestoesPara('peito', { respostas: { ...base, ...extra }, gym: GYM }), [], JSON.stringify(extra));
+    assert.deepEqual(trocasPara('leg-press-45', 'gluteos', { respostas: { ...base, ...extra }, gym: GYM }), [], JSON.stringify(extra));
+  }
+  // troca de leg press com glúteos demais: mantém o quadríceps como principal e tira o glúteo
+  const t1 = trocasPara('leg-press-45', 'gluteos', { respostas: base, gym: GYM }, ['cadeira-extensora']);
+  assert.ok(t1.length >= 1);
+  for (const x of t1) { const w = pesosDoExercicio(EX_POR_ID.get(x.ex)); assert.equal(w.quadriceps, 1); assert.notEqual(w.gluteos, 1); assert.equal(x.para, 'quadriceps'); assert.notEqual(x.ex, 'cadeira-extensora'); }
+  // exercício que só trabalha o músculo em excesso: a troca é por um do grupo que está com pouco
+  const t2 = trocasPara('cadeira-extensora', 'quadriceps', { respostas: base, gym: GYM }, [], ['posteriores']);
+  assert.ok(t2.length >= 1 && t2.every((x) => x.para === 'posteriores' && pesosDoExercicio(EX_POR_ID.get(x.ex)).posteriores === 1 && pesosDoExercicio(EX_POR_ID.get(x.ex)).quadriceps !== 1));
+  assert.deepEqual(trocasPara('cadeira-extensora', 'quadriceps', { respostas: base, gym: GYM }, [], []), []);
+  assert.deepEqual(trocasPara('nao-existe', 'quadriceps', {}), []);
 });

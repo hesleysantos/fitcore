@@ -32,7 +32,7 @@ export default async (page) => {
     await new Promise((r) => setTimeout(r, 400));
     const st = store.state;
     const lista = [];
-    for (let k = 0; k <= 6; k++) { const dd = c.somaDias(hoje, k); const t = c.treinoDoDia(st, hoje, dd); if (t) lista.push({ data: dd, tipo: t.tipo, intens: t.intensidade, tiros: t.blocos.some((b) => b.repeticoes > 1 && b.pausa) }); }
+    for (let k = 0; k <= 6; k++) { const dd = c.somaDias(hoje, k); const t = c.treinoDoDia(st, hoje, dd); if (t) lista.push({ data: dd, tipo: t.tipo, intens: t.intensidade, tiros: t.intensidade === 'forte' && t.blocos.some((b) => b.repeticoes > 1 && b.pausa) }); }
     return { hoje, lista };`);
   const hoje = sem.hoje;
   const dHoje = sem.lista.find((x) => x.data === hoje);
@@ -47,6 +47,8 @@ export default async (page) => {
   ok(await page.eval(`return !!document.getElementById('corrida-esteira');`), 'cartão "Na esteira" aparece');
   ok(/Inclinação (1%|0 a 1%)/.test(t) && /\d+,\d( a \d+,\d)? km\/h/.test(t), 'mostra a inclinação e as velocidades em km/h');
   ok(t.includes('chave de segurança') && t.includes('Nunca pule'), 'mostra os cuidados de segurança');
+  // hoje pode ser o próprio dia de tiros (a semana muda com a data): aí a conferência dos tiros é aqui
+  if (dHoje && dHoje.tiros) ok(t.includes('Inclinação 1%') && t.includes('antes do apito'), 'hoje é dia de tiros: 1% de inclinação e a troca de velocidade antes do apito');
   ok(await page.eval(`const d = document.querySelector('#corrida-esteira details.pq'); return !!d && !d.open && /FONTES/.test(d.textContent) && /Miller/.test(d.textContent);`), '"Por quê?" fechado, com as fontes');
   ok((await estado(`s.run.esteira`)).includes(hoje), 'a marcação fica no estado (run.esteira)');
   ok(await page.eval(`return [...document.querySelectorAll('#registro-local .chip')].find((e) => e.dataset.local === 'esteira').getAttribute('aria-checked') === 'true';`), 'o registro já vem com "Esteira" marcado');

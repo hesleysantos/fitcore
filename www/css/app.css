@@ -387,6 +387,24 @@ label.menu-item { cursor: pointer; }
 .plainlink { border: 0; background: transparent; color: var(--text); padding: 0; text-align: left; width: 100%; }
 /* "Troque por:" da avaliação e a linha do Treinador no lugar dela: alvo de toque de 44 px */
 details.avaliacao .plainlink, .plainlink.avaliacao-link { min-height: 44px; padding: 10px 0; }
+/* músculos da avaliação: uma linha por músculo, que abre com os exercícios que contam e o que mudar ali mesmo */
+.musc-lista { display: flex; flex-direction: column; }
+details.musc { border-bottom: 1px solid var(--border); }
+details.musc:last-child { border-bottom: 0; }
+details.musc > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 0; }
+details.musc > summary::-webkit-details-marker { display: none; }
+details.musc > summary::after { content: ''; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); flex: none; margin: 0 4px 3px 2px; transition: transform 0.15s; }
+details.musc[open] > summary::after { transform: rotate(-135deg); margin-bottom: -3px; }
+details.musc > summary .grow { min-width: 0; overflow-wrap: anywhere; }
+.musc-corpo { display: flex; flex-direction: column; gap: 8px; padding: 0 0 12px; }
+.musc-corpo .musc-conta { margin: 0; }
+.musc-ex { display: flex; flex-direction: column; gap: 6px; padding: 6px 0; border-top: 1px dashed var(--border); }
+.musc-ex .grow { min-width: 0; overflow-wrap: anywhere; }
+.musc-acoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.musc-acoes .btn { max-width: 100%; white-space: normal; text-align: left; line-height: 1.2; }
+.musc-feito { gap: 8px; align-items: center; background: var(--surface-2); border-radius: 10px; padding: 6px 10px; }
+.musc-feito .grow { min-width: 0; }
+.selo-semana { gap: 8px; align-items: center; }
 /* chips de grupo muscular (Exercícios) e seções por grupo */
 .chips.grupos .chip { min-height: 44px; }
 details.grupo-ex > summary { min-height: 48px; padding: 10px 14px; }
@@ -485,7 +503,6 @@ details.acc > div > ul { margin: 0; }
 .refeicao .ref-sug-hd { align-items: center; margin-top: 2px; }
 .refeicao .comido-rot.sug-rot { color: var(--muted); margin-top: 0; }
 .refeicao .btn.trocar { min-height: 44px; color: var(--accent); padding: 0 10px; }
-.refeicao .comido { margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--border); }
 #diario-hoje .comido-rot { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ok); }
 .btn.add-alimento { min-height: 44px; color: var(--accent); justify-content: flex-start; }
 details.comido-grupo { border-radius: var(--radius); background: var(--surface-2); }
@@ -505,6 +522,32 @@ details.comido-grupo > .list { padding: 0 6px 6px; }
 .sug-marca.on { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
 .sug-marca.on .ic { opacity: 1; }
 .diario-acoes-sug .btn { min-height: 44px; }
+/* Peso visual: a "Sugestão" (o que o app propõe) fica leve; o "Você comeu" (o que conta) é o bloco de destaque, com
+   fundo próprio, título e calorias em negrito. Dentro dele, "Da sugestão" e "Fora da sugestão" com rótulo e linha leve. */
+.refeicao .comido { margin-top: 8px; padding: 10px; gap: 8px; border: 0; border-left: 3px solid var(--ok); border-radius: 12px; background: var(--surface-2); }
+.refeicao .comido-hd { align-items: baseline; }
+.refeicao .comido-tit { font-size: 1rem; font-weight: 800; }
+.refeicao .comido-kcal { font-size: 1rem; font-weight: 800; }
+.refeicao .comido .item { background: var(--surface); }
+.refeicao .diario-comido { gap: 10px; }
+.comido-sub { display: flex; justify-content: space-between; gap: 8px; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.refeicao .comido-sec.fora-sug { padding-top: 10px; border-top: 1px solid var(--border); }
+.refeicao .comido-sec.da-sug + .comido-sec.fora-sug { margin-top: 2px; }
+.refeicao .itens .kv { font-size: 0.88rem; }
+.refeicao .sug-marca { font-weight: 600; }
+.sheet-ft .btn.adicionar-todos { flex: 1.7 1 0; white-space: nowrap; padding: 0 10px; }
+.sheet-ft .btn.acrescentar { padding: 0 8px; white-space: nowrap; }
+/* folha "Adicionar alimento": a lista "Para adicionar" */
+.fila { padding: 10px; border-radius: 12px; background: var(--accent-soft); }
+.fila-rot { font-weight: 800; }
+.fila .item, .sup-item { min-height: 52px; padding: 4px 4px 4px 10px; gap: 6px; }
+.fila-mudar { display: block; min-width: 0; min-height: 44px; padding: 4px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+/* suplementos e vitaminas do dia: uma linha discreta; o toque abre a folha */
+.sup-dia { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 6px 10px 6px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.sup-dia-txt { display: flex; flex-direction: column; min-width: 0; }
+.sup-dia-t { font-size: 0.9rem; font-weight: 650; }
+.sup-dia-r { font-size: 0.82rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sup-rotulo > .field { flex: 1 1 0; min-width: 0; }
 .semana-dia { display: flex; flex-direction: column; gap: 8px; }
 .semana-dia .treino-dia { font-size: 0.86rem; }
 .semana-dia details.acc > summary { min-height: 48px; padding: 10px 12px; }

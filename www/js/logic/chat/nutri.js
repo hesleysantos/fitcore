@@ -239,7 +239,7 @@ function perguntaMotivo(P, ref) {
 }
 const TROCAR = {
   id: 'nutri-trocar', coach: 'nutri', titulo: 'Trocar uma refeição do cardápio', resumo: 'trocar uma refeição do cardápio',
-  palavras: ['trocar alimento', 'trocar refeicao', 'trocar cardapio', 'troca cardapio', 'trocar almoco', 'trocar jantar', 'trocar lanche', 'trocar cafe da manha', 'trocar ceia', 'mudar almoco', 'mudar jantar',
+  palavras: ['nao gosto de', 'tem como mudar', 'trocar alimento', 'trocar refeicao', 'trocar cardapio', 'troca cardapio', 'trocar almoco', 'trocar jantar', 'trocar lanche', 'trocar cafe da manha', 'trocar ceia', 'mudar almoco', 'mudar jantar',
     'substituir', 'substituto', 'substituicao', 'outra opcao', 'nao gosto', 'nao gostei', 'odeio', 'nao tenho em casa', 'acabou', 'faltou', 'alergia', 'alergico', 'alergica', 'nao posso comer', 'intolerancia',
     'acabou+casa', 'nao tem+casa', 'trocar janta', 'mudar janta', 'outra coisa almoco', 'outra coisa jantar', 'nao curto', 'detesto', 'enjoei', 'nao tem em casa', 'trocar refeicao hoje'],
   // quem não tem cardápio (modo educativo) não troca refeição; sem entrevista, o assunto convida a responder
@@ -262,7 +262,7 @@ const TROCAR = {
 // ---------- comi fora do plano ----------
 const EXAGEREI = {
   id: 'nutri-exagerei', coach: 'nutri', titulo: 'Comi fora do plano', resumo: 'ter comido fora do plano',
-  palavras: ['!exagerei', '!exagero', 'exagerar', 'comi demais', 'comi muito', 'comi besteira', 'sai da dieta', 'fugi da dieta', 'furei a dieta', 'chutei o balde', 'pe na jaca', 'fora do plano',
+  palavras: ['bebi muito', 'bebi demais', 'muita cerveja', 'tomei muito', 'litros de refrigerante', 'refrigerante ontem', '!exagerei', '!exagero', 'exagerar', 'comi demais', 'comi muito', 'comi besteira', 'sai da dieta', 'fugi da dieta', 'furei a dieta', 'chutei o balde', 'pe na jaca', 'fora do plano',
     'passei da meta', 'estourei', 'comi doce', 'comi pizza', 'comi lanche', 'rodizio', 'festa', 'churrasco', 'aniversario', 'compensar', 'culpa', 'culpado', 'culpada', 'arrependido', 'arrependida',
     '!jaquei', 'enfiei o pe na jaca', 'comi hamburguer', 'comi chocolate', 'comi bolo', 'comi besteira ontem', 'fim de semana comi', 'final de semana comi', 'sai dieta', 'comilanca', 'larica', 'atacar geladeira'],
   inicio: (ctx) => {
@@ -536,7 +536,7 @@ function passoJejum(P) {
 }
 const TREINO = {
   id: 'nutri-treino', coach: 'nutri', titulo: 'O que comer antes e depois do treino', resumo: 'o que comer antes e depois do treino',
-  palavras: ['antes do treino', 'depois do treino', 'pos treino', 'comer antes de treinar', 'comer depois de treinar', 'o que comer antes', 'o que comer depois', 'antes de correr', 'depois de correr',
+  palavras: ['estomago vazio', 'lanche pre treino', 'melhor lanche', 'antes do treino', 'depois do treino', 'pos treino', 'comer antes de treinar', 'comer depois de treinar', 'o que comer antes', 'o que comer depois', 'antes de correr', 'depois de correr',
     'durante a corrida', 'gel de carboidrato', 'gel', 'janela anabolica', 'treinar em jejum', 'treino em jejum', 'correr em jejum', 'refeicao pre treino', 'refeicao pos treino',
     'antes de malhar', 'depois de malhar', 'antes da academia', 'depois da academia', 'comer antes', 'comer depois', 'treinar sem comer', 'correr sem comer', 'antes da corrida', 'depois da corrida'],
   inicio: (ctx) => {
@@ -635,7 +635,7 @@ function passoPratico(P, qual) {
 }
 const PRATICO = {
   id: 'nutri-pratico', coach: 'nutri', titulo: 'Sem fome, sem tempo ou comendo fora', resumo: 'falta de fome, de tempo ou comer fora de casa',
-  palavras: ['sem fome', 'nao tenho fome', 'sem apetite', 'falta de apetite', 'sem tempo', 'nao tenho tempo', 'correria', 'sem tempo para cozinhar', 'nao sei cozinhar', 'cozinhar', 'marmita',
+  palavras: ['trabalho o dia todo', 'fora o dia todo', 'comer direito', 'dia todo fora', 'sem fome', 'nao tenho fome', 'sem apetite', 'falta de apetite', 'sem tempo', 'nao tenho tempo', 'correria', 'sem tempo para cozinhar', 'nao sei cozinhar', 'cozinhar', 'marmita',
     'comer fora', 'vou comer fora', 'restaurante', 'lanchonete', 'almoco fora', 'comida a quilo', 'self service', 'fast food', 'delivery', 'pedir comida', 'viagem', 'viajar', '!restaurante', '!lanchonete', 'almocar fora', 'jantar fora', 'almocar restaurante', 'comer restaurante',
     'fome nenhuma', 'nao consigo comer muito', 'trabalho fora', 'marmita trabalho', 'ifood', 'lanche rua', 'sem tempo comer'],
   inicio: (ctx) => {
@@ -682,7 +682,7 @@ function passoPlano(P, qual) {
 }
 const PLANO = {
   id: 'nutri-plano', coach: 'nutri', titulo: 'Mudar o meu plano alimentar', resumo: 'mudar o seu plano alimentar',
-  palavras: ['refazer o plano', 'refazer a entrevista', 'mudar o plano', 'mudar a dieta', 'ajustar a dieta', 'ajustar o plano', 'mudei de objetivo', 'mudar objetivo', 'novo objetivo', 'meu peso mudou', 'peso mudou',
+  palavras: ['ganhei peso', 'perdi peso', 'refazer o plano', 'refazer a entrevista', 'mudar o plano', 'mudar a dieta', 'ajustar a dieta', 'ajustar o plano', 'mudei de objetivo', 'mudar objetivo', 'novo objetivo', 'meu peso mudou', 'peso mudou',
     'emagreci', 'engordei', 'atualizar peso', 'mudei a rotina', 'mudar horario', 'novo horario', 'plano alimentar', 'recalcular', 'atualizar plano'],
   inicio: (ctx) => {
     const P = perfilNutri(ctx);
@@ -762,7 +762,7 @@ const CARDAPIO = {
   id: 'nutri-cardapio', coach: 'nutri', titulo: 'O que eu como hoje', resumo: 'o seu cardápio de hoje', resumoNoDia: 'o seu cardápio', data: true,
   // "o que eu como hoje?", "o que almoçar?": "como" sozinho é ambíguo ("como fica"); com "o que" na frente é o cardápio
   bonus: (i) => (/\b(o que|que|oq|q) (eu )?(vou )?(como|comer|almoco|almocar|janto|jantar|lancho|lanchar|tomo de cafe)\b/.test(i.texto) && !/\b(antes|depois|durante|pre|pos|treino|treinar|correr|corrida)\b/.test(i.texto) ? 2.5 : 0),
-  palavras: ['!cardapio', 'o que vou comer', 'menu', 'refeicoes hoje', 'comer amanha', 'o que almocar', 'o que jantar', 'almoco hoje', 'jantar hoje', 'cafe da manha hoje', 'sugestao almoco', 'sugestao jantar', 'qual almoco', 'qual jantar', 'cardapio amanha', 'minhas refeicoes', 'tem pra comer', 'lanche agora', 'o que lanchar'],
+  palavras: ['lanche da tarde', 'tem pro lanche', 'o que tem pro', '!cardapio', 'o que vou comer', 'menu', 'refeicoes hoje', 'comer amanha', 'o que almocar', 'o que jantar', 'almoco hoje', 'jantar hoje', 'cafe da manha hoje', 'sugestao almoco', 'sugestao jantar', 'qual almoco', 'qual jantar', 'cardapio amanha', 'minhas refeicoes', 'tem pra comer', 'lanche agora', 'o que lanchar'],
   inicio: (ctx) => {
     const hoje = isObj(ctx) && diaOk(ctx.hoje) ? ctx.hoje : hojeLocal();
     const data = diaDoCtx(ctx);
