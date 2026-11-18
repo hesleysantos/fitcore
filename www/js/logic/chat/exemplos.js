@@ -10,7 +10,7 @@
 // bem como pedir reconhece o próprio pedido num deles.
 export const EXEMPLOS = {
   // ---------- Treinador ----------
-  'treino-perdido': ['hoje nao vou conseguir ir na academia', 'nao vou treinar hoje', 'to sem animo nenhum pra treinar', 'surgiu um compromisso e vou faltar', 'vou viajar e perder o treino', 'nao estou afim de malhar hoje', 'posso pular o treino de hoje', 'trabalhei ate tarde e nao vai dar pra treinar'],
+  'treino-perdido': ['hoje nao vou conseguir ir na academia', 'nao vou treinar hoje', 'surgiu um compromisso e vou faltar', 'vou viajar e perder o treino', 'nao estou afim de malhar hoje', 'posso pular o treino de hoje', 'trabalhei ate tarde e nao vai dar pra treinar'],
   'pouco-tempo': ['so tenho 30 minutos hoje', 'to com pressa, da pra fazer um treino rapido', 'tenho meia hora pra treinar', 'como encurtar o treino de hoje', 'preciso de um treino mais curto', 'tenho pouco tempo na academia hoje'],
   'qual-treino': ['qual o treino de hoje', 'o que eu faco hoje na academia', 'qual a ficha de hoje', 'o que tem pra hoje', 'que exercicios eu faco amanha', 'qual treino toca hoje'],
   duracao: ['quanto tempo leva o treino', 'quanto tempo vou ficar na academia', 'o treino demora quanto', 'em quantos minutos termino o treino', 'qual a duracao do treino de hoje'],
@@ -124,6 +124,19 @@ const SITUACOES_2 = {
 };
 for (const [id, l] of Object.entries(SITUACOES_2)) SITUACOES[id] = [...(SITUACOES[id] || []), ...l];
 for (const [id, l] of Object.entries(SITUACOES)) EXEMPLOS[id] = [...(EXEMPLOS[id] || []), ...l];
+// assuntos de hábito (logic/chat/habitos.js): desânimo, sem resultado, dormi mal e água no treino
+const HABITOS = {
+  desanimo: ['to sem vontade nenhuma de treinar', 'desanimei da academia', 'perdi o pique de treinar', 'to desmotivado', 'como ter motivacao pra treinar', 'nao consigo manter a rotina de treino', 'to pensando em desistir da academia', 'que preguica de ir treinar', 'como criar o habito de treinar'],
+  'desanimo-corrida': ['to sem vontade de correr', 'desanimei da corrida', 'perdi a motivacao pra correr', 'que preguica de correr', 'nao consigo manter a rotina de corrida', 'to pensando em parar de correr'],
+  'sem-resultado': ['nao vejo resultado no treino', 'treino faz meses e nao ganho massa', 'estagnei na academia', 'meu corpo nao muda', 'nao ganho forca', 'continuo igual mesmo treinando', 'parei de evoluir no supino', 'o treino nao ta funcionando'],
+  'dormi-mal': ['dormi mal, posso treinar hoje', 'nao dormi nada essa noite', 'dormi pouquinho, treino assim mesmo', 'to com muito sono, vale treinar', 'passei a noite acordado', 'tive insonia, e o treino'],
+  'dormi-mal-corrida': ['dormi mal, posso correr hoje', 'nao dormi nada, corro assim mesmo', 'dormi pouco, faco o longao', 'to com sono, vale correr hoje'],
+  'agua-treino': ['quanto de agua beber no treino', 'preciso de isotonico na academia', 'bebo agua durante o treino', 'como me hidratar pra treinar', 'suo muito no treino, e a agua', 'gatorade ajuda no treino'],
+  'agua-corrida': ['quanto beber na corrida', 'preciso levar agua no longao', 'isotonico ajuda na corrida', 'como me hidratar pra correr', 'bebo agua correndo'],
+  'nutri-sem-resultado': ['nao estou emagrecendo', 'a balanca nao mexe', 'meu peso nao desce', 'faco a dieta certinho e nao perco peso', 'engordei mesmo fazendo dieta', 'estagnei no peso', 'por que nao emagreco'],
+  'nutri-agua-treino': ['quanta agua beber no treino', 'isotonico serve pra que', 'como me hidratar pra treinar', 'bebo agua durante o treino', 'agua antes ou depois do treino'],
+};
+for (const [id, l] of Object.entries(HABITOS)) EXEMPLOS[id] = [...(EXEMPLOS[id] || []), ...l];
 
 export const JEITOS = {
   'treino-perdido': ['Não vou treinar hoje', 'Vou faltar ao treino', 'Hoje não dá'],
@@ -169,4 +182,13 @@ export const JEITOS = {
   'nutri-pratico': ['Sem fome, sem tempo ou comendo fora', 'Sem tempo para cozinhar'],
   'nutri-plano': ['Mudar o meu plano alimentar', 'Mudar a dieta'],
   'nutri-apoio': ['Preocupação com a comida', 'Culpa ou ansiedade com comida'],
+  desanimo: ['Estou sem vontade de treinar', 'Desanimei', 'Como manter o hábito'],
+  'desanimo-corrida': ['Estou sem vontade de correr', 'Desanimei da corrida'],
+  'sem-resultado': ['Não vejo resultado', 'Não ganho massa nem força'],
+  'dormi-mal': ['Dormi mal. Treino hoje?', 'Treinar com sono'],
+  'dormi-mal-corrida': ['Dormi mal. Corro hoje?', 'Correr com sono'],
+  'agua-treino': ['Água no treino', 'Isotônico vale a pena?'],
+  'agua-corrida': ['Água na corrida', 'Isotônico na corrida'],
+  'nutri-sem-resultado': ['Não estou emagrecendo', 'A balança não mexe'],
+  'nutri-agua-treino': ['Água no treino', 'Isotônico vale a pena?'],
 };

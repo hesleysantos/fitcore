@@ -66,6 +66,13 @@ function escolher(coach, m, o) {
   falar(coach, M.seguir(m.passo, o.valor, ctx(coach)));
   redesenhar(coach, true);
 }
+// "Não era isso": os outros assuntos prováveis da frase (logic/chat/motor.js, naoEraIsso)
+function naoEra(coach, m) {
+  euDisse(coach, 'Não era isso');
+  m.respondida = true;
+  falar(coach, M.naoEraIsso(coach, ctx(coach)));
+  redesenhar(coach, true);
+}
 async function executar(coach, m, i) {
   const a = m.passo.acoes[i];
   if (!a || m.feitas.has(i)) return;
@@ -115,6 +122,8 @@ function balaoCoach(coach, m, ativo) {
     if (bt.firstChild) box.appendChild(bt);
     // perguntas relacionadas: botões pequenos, depois do resto
     if (p.sugestoes && p.sugestoes.length) box.appendChild(h('div', { class: 'chat-sugestoes', role: 'group', 'aria-label': 'Perguntas relacionadas' }, ...p.sugestoes.map((s) => btn(s.rotulo, () => perguntar(coach, m, s), 'ghost sm chat-sug'))));
+    // resposta direta: um botão discreto para quando o chat entendeu outro assunto
+    if (p.naoEra) box.appendChild(h('div', { class: 'chat-naoera' }, btn('Não era isso', () => naoEra(coach, m), 'plain sm')));
   } else if (ativo && p.ir) {
     const bt = h('div', { class: 'chat-opcoes' });
     for (const x of p.ir) bt.appendChild(btn(x.rotulo, () => irPara(coach, x), 'ghost block', 'right'));

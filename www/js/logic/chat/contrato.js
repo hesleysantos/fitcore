@@ -16,7 +16,7 @@
 // Antes de tudo, o motor (logic/chat/motor.js) procura SINAIS DE ALERTA no texto digitado (dor ou aperto no peito, falta
 // de ar, desmaio, tontura, palpitação...): com um deles, a conversa para e mostra a orientação de segurança do app.
 //
-// Módulos de assuntos (logic/chat/treino.js, logic/chat/corrida.js, logic/chat/nutri.js…) exportam
+// Módulos de assuntos (logic/chat/treino.js, logic/chat/corrida.js, logic/chat/nutri.js, logic/chat/habitos.js…) exportam
 //   export const INTENCOES = [ Intencao, ... ]
 //
 // Intencao = {
@@ -58,8 +58,9 @@
 //   sugestoes?: [{ rotulo, valor }],      // o motor acrescenta: até 3 perguntas relacionadas (só em falas que terminam,
 //                                         // nunca num alerta); valor 'i:assunto|texto', 'x:assunto:exercício' ou 'f:pergunta'
 //                                         // (motor.sugestao(valor, coach, ctx) responde como se fosse escrito)
-//   (o motor acrescenta: assunto (id), memoria { assunto, data, de, pendente } e, quando o texto aceita uma ação em
-//    aberto, executar (índice da ação: a tela abre a mesma confirmação do botão))
+//   (o motor acrescenta: assunto (id), memoria { assunto, data, de, pendente, alt, altTxt }, naoEra (resposta direta:
+//    a tela mostra o botão discreto "Não era isso", que chama motor.naoEraIsso com os outros assuntos prováveis em
+//    memoria.alt) e, quando o texto aceita uma ação em aberto, executar (índice da ação: a tela abre a mesma confirmação do botão))
 // }
 //
 // Acao = {

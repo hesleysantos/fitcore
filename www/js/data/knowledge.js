@@ -303,6 +303,38 @@ export const REFS = {
   ms_transtornos2025: 'Brasil. Ministério da Saúde. Biblioteca Virtual em Saúde. “Quebre o preconceito e apoie as famílias”: 02/6 – Dia Mundial de Ação contra os Transtornos Alimentares 2025. Brasília, 5 de junho de 2025.',
   ms_raps2022: 'Brasil. Ministério da Saúde. Dados da Rede de Atenção Psicossocial (RAPS) no Sistema Único de Saúde (SUS). Brasília: CGMAD/Saps, setembro de 2022.',
   cvv: 'Centro de Valorização da Vida (CVV). Apoio emocional e prevenção do suicídio: telefone 188, chat e e-mail. cvv.org.br, consulta em novembro de 2026.',
+  // ---------- desânimo, sem resultado e água no treino (logic/chat/habitos.js), texto completo lido ----------
+  // gardner2012 (pmc.ncbi.nlm.nih.gov/articles/PMC3505409): "repeat an action consistently in the same context"; "choose a
+  // time and place that you encounter every day of the week"; platô da automaticidade "after an average of 66 days";
+  // "Missing the occasional opportunity to perform the behaviour did not seriously impair the habit formation process";
+  // "aim for small and manageable behaviour changes, because failure can be discouraging"
+  gardner2012: 'Gardner B, Lally P, Wardle J. Making health habitual: the psychology of "habit-formation" and general practice. Br J Gen Pract. 2012;62(605):664-666.',
+  // silva2018 (Europe PMC, PMC6235272): planos que dizem "when, how and where"; com reforço do plano, 0,25 (IC 95% 0,05–0,45)
+  silva2018: 'Silva MAV, São-João TM, Brizon VC, Franco DH, Mialhe FL. Impact of implementation intentions on physical activity practice in adults: a systematic review and meta-analysis of randomized clinical trials. PLoS One. 2018;13(11):e0206294.',
+  // greaves2011 (Europe PMC, PMC3048531): "intervention effectiveness was increased by engaging social support"; para manter:
+  // "self-monitoring of progress, providing feedback, reviewing of goals, engaging social support"
+  greaves2011: 'Greaves CJ, Sheppard KE, Abraham C et al. Systematic review of reviews of intervention components associated with increased effectiveness in dietary and physical activity interventions. BMC Public Health. 2011;11:119.',
+  // teixeira2012 (Europe PMC, PMC3441783): "intrinsic motivation being more predictive of long-term exercise adherence";
+  // quem se sente "internally pressured" tende a sentir culpa
+  teixeira2012: 'Teixeira PJ, Carraça EV, Markland D, Silva MN, Ryan RM. Exercise, physical activity, and self-determination theory: a systematic review. Int J Behav Nutr Phys Act. 2012;9:78.',
+  // oms_depressao (who.int, ficha de 11/09/2026): "They last most of the day, nearly every day, for at least two weeks";
+  // outros sinais: "thoughts about dying or suicide", "disrupted sleep", "changes in appetite or weight"
+  oms_depressao: 'Organização Mundial da Saúde. Depressive disorder (depression). Ficha informativa. Genebra: OMS; atualizada em 11 de setembro de 2026.',
+  // ms_depressao (gov.br/saude, Saúde de A a Z): tratamento "na Atenção Primária" e "nos Centros de Atenção Psicossocial (CAPS)"
+  ms_depressao: 'Brasil. Ministério da Saúde. Depressão. Saúde de A a Z, gov.br/saude. Consulta em novembro de 2026.',
+  // turicchi2020 (Europe PMC, PMC7192384): "Within-week fluctuations of 0.35% were observed, characterised by weekend weight
+  // gain and weekday reduction"; no Natal, "weight increased by a mean 1.35% and was not fully compensated for in following months"
+  turicchi2020: 'Turicchi J, O’Driscoll R, Horgan G et al. Weekly, seasonal and holiday body weight fluctuation patterns among individuals engaged in a European multi-centre behavioural weight loss maintenance intervention. PLoS One. 2020;15(4):e0232152.',
+  // trexler2014 (Europe PMC, PMC3943438; não confundir com trexler2015, da beta-alanina): "as weight loss begins to plateau,
+  // energy intake or expenditure should be adjusted to “re-open” the energy deficit"; o movimento do dia a dia "also
+  // decreases with an energy deficit"
+  trexler2014: 'Trexler ET, Smith-Ryan AE, Norton LE. Metabolic adaptation to weight loss: implications for the athlete. J Int Soc Sports Nutr. 2014;11:7.',
+  // mcdermott2017 (pmc.ncbi.nlm.nih.gov/articles/PMC5634236): menos de 1 hora "should require no substances other than water";
+  // "not allow more than a 2% body mass loss"; acima disso, "decrements in strength, power, and anaerobic endurance are
+  // consistently apparent"; "Up to 150% of the estimated fluid deficit needs to be consumed" (menos de 4 horas); conferir
+  // por "first morning urine color (or USG), thirst sensation, and body mass"; "Individuals should not gain body mass (or
+  // body weight) during exercise"; hiponatremia: "headache, dizziness, physical exhaustion, muscular twitching, and nausea"
+  mcdermott2017: 'McDermott BP, Anderson SA, Armstrong LE et al. National Athletic Trainers’ Association position statement: fluid replacement for the physically active. J Athl Train. 2017;52(9):877-895.',
   // nhs_dor_peito (texto completo, nhs.uk, revisado em 08/08/2023): emergência com dor que aperta, pressiona ou queima, que vai para o braço, o pescoço, o queixo, a barriga ou as costas, ou com suor, enjoo, tontura ou falta de ar; dor que começa depois de lesão ou exercício do peito, pior ao inspirar e melhor com repouso, costuma ser distensão do músculo (triagem do peito no chat, logic/chat/motor.js).
   nhs_dor_peito: 'NHS (Reino Unido). Chest pain. nhs.uk/symptoms/chest-pain. Revisado em 8 de agosto de 2023; consulta em novembro de 2026.',
   // problemas de saúde que não vêm do treino (logic/saude-fora.js: o que foi tirado de cada uma está no cabeçalho de lá),

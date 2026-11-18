@@ -45,6 +45,7 @@ import { expandir, conceitos, radical, idfDe, oracoes } from './nlu.js';
 import { exercicioDoTexto, corpoDoTexto, musculosDoTexto, numerosDoTexto } from './entidades.js';
 import { planoAtivo } from '../perdido.js';
 import { EXEMPLOS as FRASES_EX, JEITOS } from './exemplos.js';
+import { INTENCOES as I_HABITOS } from './habitos.js';
 
 // Problemas de saúde fora do treino (pancada, corte, febre...): outro módulo, usado se existir
 let SAUDE = null;
@@ -53,11 +54,16 @@ try { SAUDE = await import('./saude.js'); } catch { SAUDE = null; }
 export const LIMIAR = 2.5;   // pontos mínimos para reconhecer um assunto
 export const FOLGA = 1;      // vantagem mínima sobre o segundo assunto
 export const DIRETO = 2;     // vantagem a partir da qual o treinador responde direto, sem "É isso?"
+// frase que só conta uma situação, sem pergunta ("to preso no aeroporto"): pede mais folga para responder direto; com
+// menos, confirma ("Você quer falar sobre...?", com os outros assuntos ao lado). Na leva 10, as respostas diretas de
+// outro assunto caíram de 13 para 6, e 8 respostas certas passaram a confirmar antes.
+export const DIRETO_CONTADA = 3;
+const PERGUNTA_FIM = /\?\s*$/;
 const FAQ_DO = { treinador: FAQ_TREINO, corrida: FAQ_CORRIDA, nutri: FAQ_NUTRI };
 // ordem dos assuntos nos botões da abertura (os que não estão aqui vêm depois, na ordem dos módulos)
 const ORDEM_MENU = {
-  treinador: ['treino-perdido', 'pouco-tempo', 'qual-treino', 'semana', 'dor-treino', 'juntar-treino', 'carga', 'aparelho-falta', 'mudar-plano', 'aparelho-ocupado', 'duracao', 'antecipar', 'seguidos', 'explicar', 'recomendar', 'ex-como', 'ex-trocar', 'ex-musculo', 'ex-seguro'],
-  corrida: ['chuva', 'corrida-perdida', 'corrida-dia', 'ritmo', 'mover-corrida', 'dor-corrida', 'esteira', 'semana-corrida', 'mais-rapido', 'mais-devagar', 'juntar-corrida', 'mudar-corrida'],
+  treinador: ['treino-perdido', 'pouco-tempo', 'qual-treino', 'semana', 'dor-treino', 'juntar-treino', 'carga', 'aparelho-falta', 'mudar-plano', 'aparelho-ocupado', 'duracao', 'antecipar', 'seguidos', 'explicar', 'recomendar', 'ex-como', 'ex-trocar', 'ex-musculo', 'ex-seguro', 'desanimo', 'sem-resultado', 'dormi-mal', 'agua-treino'],
+  corrida: ['chuva', 'corrida-perdida', 'corrida-dia', 'ritmo', 'mover-corrida', 'dor-corrida', 'esteira', 'semana-corrida', 'mais-rapido', 'mais-devagar', 'juntar-corrida', 'mudar-corrida', 'desanimo-corrida', 'dormi-mal-corrida', 'agua-corrida'],
 };
 
 // ---------- registro ----------
@@ -70,7 +76,7 @@ let registro = null;
 export function intencoes() {
   if (registro) return registro;
   const vistos = new Set(), out = [];
-  for (const lista of [I_TREINO, I_EX, I_CORRIDA, NUTRI.INTENCOES, SAUDE && SAUDE.INTENCOES]) {
+  for (const lista of [I_TREINO, I_EX, I_CORRIDA, NUTRI.INTENCOES, I_HABITOS, SAUDE && SAUDE.INTENCOES]) {
     for (const i of Array.isArray(lista) ? lista : []) {
       if (!intencaoValida(i) || vistos.has(i.id)) continue;
       vistos.add(i.id);
@@ -107,8 +113,10 @@ const GRUPOS = {
   correr: 'correr corrida corridas corri corro correndo corre corrido_x rodagem trote trotar corridinha',
   chuva: 'chuva chuvas chovendo choveu chover chove chuvoso chuvosa temporal tempestade garoa garoando molhado molhada toro aguaceiro chuvarada',
   esteira: 'esteira esteiras treadmill',
-  cansado: 'cansado cansada cansaco cansei exausto exausta exaustao esgotado esgotada moido moida acabado acabada quebrado_x fadiga indisposto indisposta desanimado desanimada preguica morto morta destruido destruida',
-  dormir: 'dormir dormi dormiu durmo sono insonia acordei',
+  cansado: 'cansado cansada cansaco cansei exausto exausta exaustao esgotado esgotada moido moida acabado acabada quebrado_x fadiga indisposto indisposta morto morta destruido destruida',
+  // desânimo é outro assunto (logic/chat/habitos.js): não é cansaço do corpo
+  desanimo: 'desanimo desanimado desanimada desanimei desmotivado desmotivada desmotivacao preguica preguicoso preguicosa',
+  dormir: 'dormir dormi dormiu durmo sono insonia',
   peito: 'peito peitoral peitorais',
   dor: 'dor dores doendo doi doem doiam doia doeu doer dolorido dolorida doloridos doloridas latejando lateja latejou machuquei machucado machucada machucou lesao lesionei lesionado lesionada incomodo incomodando incomoda',
   // torção e contusão são lesões agudas (pancada, queda): assunto de saúde fora do treino (logic/chat/saude.js)
@@ -189,7 +197,7 @@ function distancia(a, b, max) {
   return d[a.length][b.length];
 }
 const canon1 = (w) => SIN.get(w) || w;
-const CONHECIDAS = 'segunda terca quarta quinta sexta sabado domingo amanha ontem anteontem semana feriado preco dinheiro cinema futebol filme serie netflix gasolina carro cachorro gato trabalho escola faculdade dedo'.split(' ');
+const CONHECIDAS = 'segunda terca quarta quinta sexta sabado domingo amanha ontem anteontem semana feriado preco dinheiro cinema futebol filme serie netflix gasolina carro cachorro gato trabalho escola faculdade dedo prato pratos'.split(' ');
 let vocab = null;
 function vocabulario() {
   if (vocab) return vocab;
@@ -228,7 +236,12 @@ function lerPalavra(w) {
   else if (w.length >= 5 && w.endsWith('s') && voc.includes(w.slice(0, -1))) out = { c: canon1(w.slice(0, -1)), f: false }; // plural
   else if (w.length >= 6 && (perto1 = perto(w, voc, 1))) out = { c: canon1(perto1), f: true }; // 1 letra errada vem antes do radical
   else if (w.length >= 5 && radicais().has(radical(w))) out = { c: canon1(radicais().get(radical(w))), f: false }; // mesmo radical ("alagada" → "alagado")
-  else if (w.length >= 6 && !/^\d+$/.test(w)) {
+  else if (w.length >= 4 && w.length <= 5 && !/\d/.test(w)) {
+    // palavra curta ("agau", "tenos", "prena"): 1 letra errada, mesma primeira letra e só UM jeito de corrigir
+    const achou = new Set();
+    for (const v of voc) if (v.length >= 4 && v[0] === w[0] && Math.abs(v.length - w.length) <= 1 && distancia(w, v, 1) <= 1) { achou.add(canon1(v)); if (achou.size > 1) break; }
+    out = achou.size === 1 ? { c: [...achou][0], f: true } : { c: w, f: false };
+  } else if (w.length >= 6 && !/^\d+$/.test(w)) {
     const max = w.length >= 8 ? 2 : 1;
     let melhor = null, dm = max + 1;
     for (const v of voc) {
@@ -455,7 +468,8 @@ export function entender(texto, coach, ctx) {
   // uma dor é reconhecida com um pouco menos (segurança antes: melhor perguntar como é a dor do que não responder)
   const claro = (x, y) => !!x && x.pontos >= LIMIAR - (prioridade(x.intencao) >= 3 ? 0.5 : 0) && x.pontos - (y ? y.pontos : 0) >= FOLGA;
   const confiante = claro(a, b);
-  const direto = confiante && a.pontos - (b ? b.pontos : 0) >= DIRETO;
+  const contada = !ors.some((o) => o.pergunta) && !PERGUNTA_FIM.test(String(texto || '')) && toks.length >= 5;
+  const direto = confiante && a.pontos - (b ? b.pontos : 0) >= (contada ? DIRETO_CONTADA : DIRETO);
   let deOutro = null;
   if (!confiante) {
     const outros = rank(Object.keys(COACHES).filter((c) => c !== coach).flatMap((c) => assuntos(c, ctx)));
@@ -675,6 +689,9 @@ export function memoriaLimpa(m) {
     pendente: Array.isArray(x.pendente) ? x.pendente.filter((id) => typeof id === 'string' && intencaoPorId(id)).slice(0, 3) : [],
     ex: typeof x.ex === 'string' && EX_POR_ID.has(x.ex) ? x.ex : '',
     n: Number.isInteger(x.n) && x.n >= 0 ? Math.min(x.n, 1e6) : 0,
+    // "Não era isso": os outros assuntos prováveis da última frase respondida direto, e a frase (para os botões)
+    alt: Array.isArray(x.alt) ? x.alt.filter((id) => typeof id === 'string' && intencaoPorId(id)).slice(0, 3) : [],
+    altTxt: typeof x.altTxt === 'string' ? x.altTxt.slice(0, 300) : '',
   };
 }
 // O assunto pendente (de uma mensagem com dois assuntos) entra como botão nas falas que terminam a conversa
@@ -847,7 +864,8 @@ export function respostaAberta(texto, passo, novoAssunto = false) {
     return null;
   }
   if (NAO.test(t)) {
-    const n = ops.find((o) => pol(o) === -1 || o.valor === 'nao');
+    // o botão de recusa ("Outra coisa", valor 'nao') vem antes de um que só começa com "Não" ("Não tenho um aparelho")
+    const n = ops.find((o) => o.valor === 'nao') || ops.find((o) => pol(o) === -1);
     if (n) return { valor: n.valor };
     if (ops.length && pergSimNao(passo)) { const o = [...ops].reverse().find((x) => !String(x.valor).startsWith('#')); if (o && ops.length === 2) return { valor: o.valor }; }
     return acoes.length || ops.length ? { nao: true } : null;
@@ -1007,8 +1025,15 @@ export function responder(texto, coach, ctx) {
   delete c.aberto; delete c.memoria;
   const r = entender(texto, coach, c);
   // o assunto pendente (de uma mensagem com dois assuntos) só fica enquanto a pessoa segue nos botões dele
-  const memNova = { ...mem, pendente: [] };
+  const memNova = { ...mem, pendente: [], alt: [], altTxt: '' };
   const fim = (p) => lembrar(limparPasso(p) || erroDePasso(), memNova, coach, c);
+  // resposta direta: guarda os outros assuntos prováveis para o "Não era isso" (botão discreto e o texto)
+  const altDe = (sem) => {
+    const ids = r.ranking.filter((x) => x.pontos >= 1 && x.intencao.id !== sem).map((x) => x.intencao.id).slice(0, 3);
+    for (const id of COMUNS[coach] || []) { const i = intencaoPorId(id); if (ids.length < 3 && id !== sem && !ids.includes(id) && i && disponivel(i, c)) ids.push(id); }
+    return ids;
+  };
+  const comAlt = (p, sem, m = memNova) => (p ? lembrar({ ...p, naoEra: true }, { ...m, alt: altDe(sem), altTxt: c.texto }, coach, c) : p);
   // 1. segurança primeiro: alertas do corpo (com a triagem do peito), emergências de saúde e risco alimentar
   if (r.alerta) return lembrar(limparPasso(r.alerta.triagem ? passoTriagemPeito(coach) : passoAlerta(r.alerta, coach)), memNova, coach);
   const emerg = passoDeEmergencia(texto, c);
@@ -1016,6 +1041,8 @@ export function responder(texto, coach, ctx) {
   const risco = sinaisDeRisco(texto);
   const pRisco = risco.length ? passoDeRisco(risco, c) : null;
   if (pRisco) return lembrar(limparPasso(pRisco), memNova, coach);
+  // "não era isso" logo depois de uma resposta direta: os outros assuntos prováveis daquela frase
+  if (mem.alt.length && NAO_ERA.test(c.texto)) return naoEraIsso(coach, { ...c0, memoria: mem });
   // 2. resposta à pergunta em aberto ("sim", "pode", "não", o texto de um botão)
   if (isObj(c0.aberto)) {
     const resp = respostaAberta(texto, c0.aberto, r.direto);
@@ -1044,7 +1071,7 @@ export function responder(texto, coach, ctx) {
     // do dia; perguntar do treino ou da semana logo depois não é um segundo assunto
     const outros = prioridade(um.intencao) >= 3 ? todos.filter((x) => !SO_O_DIA.has(x.intencao.id)) : todos;
     const p = iniciar(um.intencao.id, cData);
-    if (!outros.length) return lembrar(p, memNova, coach, c);
+    if (!outros.length) return comAlt(p, um.intencao.id);
     const lead = `Primeiro, ${um.intencao.resumo}. Depois, ${outros[0].intencao.resumo}.`;
     const novaMem = { ...memNova, pendente: outros.map((x) => x.intencao.id) };
     return lembrar({ ...p, texto: [lead, ...p.texto] }, novaMem, coach, c);
@@ -1057,7 +1084,7 @@ export function responder(texto, coach, ctx) {
   const comoFaq = (it) => {
     const p = passoDaFaq(it);
     const rel = perto.slice(0, 2).map((i) => ({ rotulo: i.titulo, valor: 'i:' + i.id }));
-    return fim(rel.length ? { ...p, sugestoes: rel } : p);
+    return comAlt(limparPasso(rel.length ? { ...p, sugestoes: rel } : p), '');
   };
   // nunca na frente de uma dor ou de um exercício citado, nem de um pedido ("quero treinar 5 vezes")
   const pedido = /^(quero|queria|vou|preciso mudar|gostaria)\b/.test(c.texto);
@@ -1068,7 +1095,7 @@ export function responder(texto, coach, ctx) {
   if (r.confiante) {
     const i = r.melhor.intencao;
     const dataTxt = datas.length && !datas[0].semana && datas[0].data !== c.hoje && i.data ? noDia(datas[0].data, c.hoje) : '';
-    if (r.direto) return lembrar(iniciar(i.id, cData), memNova, coach, c);
+    if (r.direto) return comAlt(iniciar(i.id, cData), i.id);
     const rd = i.resumoNoDia || i.resumo;
     const resumo = !dataTxt ? i.resumo : rd.includes('{dia}') ? rd.replace('{dia}', nomeDia(datas.find((d) => !d.semana && d.data !== c.hoje).data, c.hoje)) : `${rd} ${dataTxt}`;
     // "Sim" e, ao lado, os outros assuntos próximos (com o jeito de dizer mais parecido com a frase): quem quis dizer outra
@@ -1108,6 +1135,22 @@ export function responder(texto, coach, ctx) {
     return fim({ texto: [varia(NAO_ENTENDI, mem) + ' Veja se uma destas perguntas ajuda:'], faq, opcoes, proximo: (v, cc) => (v === 'v' ? saudacao(coach, cc) : passoReformular(coach, mem, cc)) });
   }
   return fim(passoNaoEntendi(coach, mem, c));
+}
+// "Não era isso" (botão discreto debaixo de uma resposta direta, ou escrito): os outros assuntos prováveis daquela frase,
+// cada um com o jeito de dizer mais parecido com ela, e o caminho para escrever de outro jeito
+const NAO_ERA = /^(nao|n) ?(era|e|foi) ?(isso|esse|essa|bem isso|o que eu (queria|perguntei|quis dizer))( nao)?$|^(nao|n) (entendeu|me entendeu)$|^(errou|errado|nada a ver|resposta errada)$/;
+export function naoEraIsso(coach, ctx) {
+  const mem = memoriaLimpa(ctx && ctx.memoria);
+  const lista = mem.alt.map(intencaoPorId).filter((i) => i && disponivel(i, ctx));
+  const limpa = { ...mem, alt: [], altTxt: '', pendente: [] };
+  if (!lista.length) return lembrar(limparPasso(passoNaoEntendi(coach, mem, ctx)), limpa, coach);
+  const comTexto = (cc) => { const datas = datasDe(mem.altTxt, cc); return { ...cc, texto: mem.altTxt, datas, ...(datas.length ? { data: datas[0].data } : {}) }; };
+  const p = {
+    texto: ['Desculpe. Era sobre um destes?'],
+    opcoes: [...opcoesDeAssuntos(lista, mem.altTxt, mem), { rotulo: 'Escrever de outro jeito', valor: '#reformular' }],
+    proximo: (v, cc) => (v === '#reformular' ? passoReformular(coach, mem, cc) : iniciar(v, comTexto(cc))),
+  };
+  return lembrar(limparPasso(p), limpa, coach);
 }
 // Botões de assuntos com o jeito de dizer mais parecido com a frase (logic/chat/exemplos.js, JEITOS)
 function opcoesDeAssuntos(lista, texto, mem) {
@@ -1200,6 +1243,7 @@ export function limparPasso(p) {
   if (Number.isInteger(p.executar) && p.executar >= 0) out.executar = p.executar;
   if (typeof p.ex === 'string' && EX_POR_ID.has(p.ex)) out.ex = p.ex;
   if (typeof p.faqQ === 'string' && p.faqQ) out.faqQ = p.faqQ;
+  if (p.naoEra === true) out.naoEra = true;
   const sug = (Array.isArray(p.sugestoes) ? p.sugestoes : []).filter((s) => isObj(s) && typeof s.rotulo === 'string' && s.rotulo && typeof s.valor === 'string' && /^[ixf]:/.test(s.valor)).slice(0, 3);
   if (sug.length) out.sugestoes = sug;
   if (!out.texto.length && !out.aviso && !out.faq) return null;
@@ -1222,7 +1266,7 @@ function enxugar(texto, temBotoes) {
 // Segue para o próximo passo depois de um botão (com proteção). Com ctx.memoria, o passo volta com a memória nova.
 export function seguir(passo, valor, ctx) {
   if (!passo || typeof passo.proximo !== 'function') return null;
-  const mem = memoriaLimpa(ctx && ctx.memoria);
+  const mem = { ...memoriaLimpa(ctx && ctx.memoria), alt: [], altTxt: '' };
   const coach = (ctx && ctx.coach) || '';
   if (valor === '#pend' && mem.pendente.length) {
     const [id, ...resto] = mem.pendente;

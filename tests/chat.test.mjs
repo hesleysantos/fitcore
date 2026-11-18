@@ -127,7 +127,7 @@ const reconhece = (texto, coach, id) => {
 test('reconhecimento: frases reais do Treinador, com e sem acento', () => {
   const casos = [
     ['Não vou conseguir treinar hoje', 'treino-perdido'], ['nao vou conseguir treinar hoje', 'treino-perdido'], ['hoje não vou poder treinar', 'treino-perdido'],
-    ['tô cansado demais pra treinar', 'treino-perdido'], ['dormi mal essa noite', 'treino-perdido'], ['estou gripado', M.intencaoPorId('saude-fora-treino') ? 'saude-fora-treino' : 'treino-perdido'], ['vou viajar amanhã', 'treino-perdido'],
+    ['tô cansado demais pra treinar', 'treino-perdido'], ['dormi mal essa noite', 'dormi-mal'], ['estou gripado', M.intencaoPorId('saude-fora-treino') ? 'saude-fora-treino' : 'treino-perdido'], ['vou viajar amanhã', 'treino-perdido'],
     ['tenho só 30 minutos hoje', 'pouco-tempo'], ['estou com pressa, dá pra fazer um treino rápido?', 'pouco-tempo'], ['tô sem tempo', 'pouco-tempo'], ['preciso de uma versão curta do treino', 'pouco-tempo'],
     ['quantos quilos eu coloco no supino?', 'carga'], ['quanto tempo de descanso entre as séries?', 'carga'], ['quantas repetições devo fazer?', 'carga'], ['quando aumentar a carga', 'carga'],
     ['quero mudar os dias do treino', 'mudar-plano'], ['quero treinar em casa', 'mudar-plano'], ['enjoei do meu treino', 'mudar-plano'], ['quero um treino novo', 'mudar-plano'],
@@ -523,7 +523,7 @@ test('fontes novas: Miller 2019 lida em texto completo e citada numa pergunta fr
 function assuntoDe(texto, coach, st = ADULTO, hoje = TER, memoria = null, aberto = null) {
   const ctx = { ...ctxDe(st, hoje, coach), memoria, aberto };
   let p = M.responder(texto, coach, ctx);
-  const confirmou = !!(p.texto && /^Entendi que você quer/.test(p.texto[0]));
+  const confirmou = !!(p.texto && /^(Entendi que você quer|Você quer falar sobre)/.test(p.texto[0]));
   if (confirmou) p = M.seguir(p, 'sim', { ...ctx, memoria: p.memoria });
   return { id: (p && p.assunto) || '', p, confirmou };
 }

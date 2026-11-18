@@ -339,6 +339,36 @@ export default async (page) => {
   const larga3 = await page.eval(`return [...document.querySelectorAll('#chat *')].filter((e) => e.getBoundingClientRect().right > innerWidth + 1).map((e) => e.className || e.tagName).slice(0, 3);`);
   ok(await semRolagem() && !larga3.length, 'conversa livre a 360 px: sem rolagem para o lado ' + larga3.join(' '));
 
+  console.log('10. "Não era isso": botão discreto debaixo da resposta direta, as opções e o assunto escolhido');
+  await recomecar('chat/treinador');
+  await escrever('quanto tempo dura o treino de hoje?');
+  const ne = await page.eval(`const b = document.querySelector('.chat-msg.ativo .chat-naoera button'); if (!b) return null; const r = b.getBoundingClientRect(); const cs = getComputedStyle(b); return { txt: b.innerText.trim(), h: Math.round(r.height), borda: cs.borderTopColor, fundo: cs.backgroundColor };`);
+  ok(ne && ne.txt === 'Não era isso' && ne.h >= 44, 'botão "Não era isso" discreto na resposta direta: ' + JSON.stringify(ne));
+  await foto('chat/nao-era-isso-1');
+  ok(await page.click('Não era isso', '.chat-msg.ativo .chat-naoera button'), 'toca em "Não era isso"');
+  await page.sleep(300);
+  ok(/Era sobre um destes\?/.test(await ultima()) && (await falas()).some((x) => /^EU: Não era isso/.test(x)), 'mostra os outros assuntos prováveis');
+  const opsNe = await page.eval(`return [...document.querySelectorAll('.chat-msg.ativo .chat-opcoes button.chat-op')].map((b) => b.innerText.trim());`);
+  ok(opsNe.length >= 3 && opsNe.at(-1) === 'Escrever de outro jeito', 'opções: ' + opsNe.join(' | '));
+  await foto('chat/nao-era-isso-2');
+  ok(await botao(opsNe[0]), 'escolhe ' + opsNe[0]);
+  await page.sleep(300);
+  ok(!/Era sobre um destes/.test(await ultima()), 'abre o assunto escolhido: ' + (await ultima()).slice(0, 80));
+  // pergunta de volta (confirmação) não tem o botão
+  await escrever('tem um casal fazendo selfie no leg press faz meia hora');
+  ok(/Você quer falar sobre/.test(await ultima()) && !(await page.eval(`return !!document.querySelector('.chat-msg.ativo .chat-naoera');`)), 'frase contada: confirma antes, sem "Não era isso"');
+  // assunto novo: desânimo, com o aviso de quando procurar ajuda
+  await escrever('to sem vontade nenhuma de treinar');
+  ok(/Acontece com todo mundo/.test(await ultima()), 'desânimo: resposta própria');
+  ok(await page.eval(`return /188/.test(document.querySelector('.chat-msg.ativo').innerText);`), 'desânimo: aviso com o 188 à vista');
+  await foto('chat/desanimo');
+  ok(await botao('Como manter o hábito'), '"Como manter o hábito"');
+  await page.sleep(300);
+  ok(/Mesmo horário e lugar/.test(await ultima()), 'as dicas do hábito');
+  await foto('chat/habito');
+  const larga4 = await page.eval(`return [...document.querySelectorAll('#chat *')].filter((e) => e.getBoundingClientRect().right > innerWidth + 1).map((e) => e.className || e.tagName).slice(0, 3);`);
+  ok(await semRolagem() && !larga4.length, '"Não era isso" a 360 px: sem rolagem para o lado ' + larga4.join(' '));
+
   const erros = page.erros.filter((x) => !/favicon|SWv|vibrate/.test(x));
   ok(!erros.length, 'sem erro no console: ' + erros.join(' | ').slice(0, 300));
   console.log(falhas.length ? `\nRESULTADO: ${falhas.length} falha(s)` : '\nRESULTADO: tudo certo');

@@ -749,7 +749,7 @@ export function passoDeRisco(sinais = [], _ctx = null) {
 }
 const APOIO = {
   id: 'nutri-apoio', coach: 'nutri', titulo: 'Preocupação com a comida', resumo: 'a sua relação com a comida',
-  palavras: ['pensar em comida', 'penso em comida', 'parar de pensar comida', '!culpa', '!culpado', '!culpada', 'como escondido', 'comer escondido', 'escondido', 'nervoso+comer', 'como nervoso', 'ansioso+comer', 'sinto culpa', 'fico mal', 'me sinto mal', 'ansiedade comida', 'ansiedade+comida', 'vomitar', 'vomito', 'provocar vomito', 'laxante', 'diuretico', 'remedio para emagrecer', 'jejum de dias', 'ficar sem comer', 'comer quase nada', 'parei de comer', 'medo de comer', 'medo de engordar',
+  palavras: ['pensar em comida', 'penso em comida', 'pensando em comida', 'pensando comida', 'parar de pensar comida', '!culpa', '!culpado', '!culpada', 'como escondido', 'comer escondido', 'escondido', 'nervoso+comer', 'como nervoso', 'ansioso+comer', 'sinto culpa', 'fico mal', 'me sinto mal', 'ansiedade comida', 'ansiedade+comida', 'vomitar', 'vomito', 'provocar vomito', 'laxante', 'diuretico', 'remedio para emagrecer', 'jejum de dias', 'ficar sem comer', 'comer quase nada', 'parei de comer', 'medo de comer', 'medo de engordar',
     'transtorno alimentar', 'anorexia', 'bulimia', 'compulsao', 'compulsao alimentar', 'relacao com a comida', 'perdi o controle'],
   inicio: (ctx) => passoDeRisco(['geral'], ctx),
 };

@@ -13,7 +13,7 @@ import { entregarArquivo } from './arquivo.js';
 import { abrirExportar } from './exportar.js';
 import { abrirPrivacidade, abrirTermos, blocoPrivacidade, blocoTermos } from './termos.js';
 
-export const APP_VERSAO = '1.12.0';
+export const APP_VERSAO = '1.13.0';
 
 // ---------- Minha academia ----------
 export function gymView() {

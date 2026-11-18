@@ -399,3 +399,47 @@ test('situações contadas: doença de outra pessoa, cansar de algo, o que imped
   const [q] = conversar('treinador', ['ja faz 3 meses fazendo a msm coisa e to enjoado']);
   assert.notEqual(q.assunto, 'saude-fora-treino');
 });
+
+// ---------- 1.13.0: "Não era isso", erro de digitação em palavra curta, frase contada confirma antes ----------
+test('"Não era isso": resposta direta guarda os outros assuntos; botão ou texto mostram as opções', () => {
+  const [p1, p2] = conversar('treinador', ['quanto tempo dura o treino de hoje?', 'não era isso']);
+  assert.equal(p1.assunto, 'duracao');
+  assert.equal(p1.naoEra, true);
+  assert.ok(p1.memoria.alt.length >= 2 && !p1.memoria.alt.includes('duracao'));
+  assert.match(p2.texto[0], /Era sobre um destes/);
+  assert.ok(p2.opcoes.length >= 3 && p2.opcoes.at(-1).valor === '#reformular');
+  assert.ok(!p2.opcoes.some((o) => o.valor === 'duracao'));
+  // o botão leva ao assunto escolhido, com a frase original
+  const ctx = { ...ctxDe(ADULTO, 'treinador'), memoria: p2.memoria };
+  const p3 = M.limparPasso(M.seguir(p2, p2.opcoes[0].valor, ctx));
+  assert.equal(p3.assunto, p2.opcoes[0].valor);
+  // pela função da tela (botão discreto)
+  const q = M.naoEraIsso('treinador', { ...ctxDe(ADULTO, 'treinador'), memoria: p1.memoria });
+  assert.match(q.texto[0], /Era sobre um destes/);
+  // confirmação ("Você quer falar sobre…?") não tem o botão; "não era isso" ali é a recusa, não "Não tenho um aparelho"
+  const [c1, c2] = conversar('treinador', ['tem um casal fazendo selfie no leg press faz meia hora', 'nao era isso']);
+  assert.match(c1.texto[0], /^Você quer falar sobre/);
+  assert.ok(!c1.naoEra);
+  assert.equal(c2.texto[0], 'Qual destes?');
+  // depois de seguir por um botão, "não era isso" não volta à frase antiga
+  const [, , d3] = conversar('treinador', ['nao vou treinar hoje', '#Estou sem tempo', 'não era isso']);
+  assert.ok(!/Era sobre um destes/.test(d3.texto[0]));
+});
+test('erro de digitação em palavra curta (4 e 5 letras): só com um jeito de corrigir e a mesma primeira letra', () => {
+  const ler = (t) => M.lerTexto(t).map((x) => x.c).join(' ');
+  assert.match(ler('quanta agau devo beber'), /agua/);
+  assert.match(ler('tneho pouco tempo'), /tenho/);
+  assert.match(ler('qual meu rimto hoje'), /ritmo/);
+  assert.equal(M.entender('quanta agau devo beber', 'nutri', ctxDe(ADULTO, 'nutri')).melhor.intencao.id, 'nutri-metas');
+  // dois jeitos de corrigir ("corer": correr ou comer): fica como está
+  assert.match(ler('posso corer'), /corer/);
+  // alerta não nasce de erro de digitação em palavra curta
+  assert.equal(M.sinalDeAlerta('to tento correr mais'), null);
+});
+test('frase que só conta a situação (5 palavras ou mais, sem pergunta) confirma antes; pergunta e frase curta seguem direto', () => {
+  assert.equal(M.DIRETO_CONTADA, 3);
+  const r = M.entender('tem um casal fazendo selfie no leg press faz meia hora', 'treinador', ctxDe(ADULTO, 'treinador'));
+  assert.ok(r.confiante && !r.direto, 'contada: confirma');
+  assert.ok(M.entender('quanto tempo dura o treino de hoje?', 'treinador', ctxDe(ADULTO, 'treinador')).direto);
+  assert.ok(M.entender('vou faltar hoje', 'treinador', ctxDe(ADULTO, 'treinador')).direto);
+});

@@ -379,7 +379,7 @@ function passoCorridaPerdida(ctx) {
   };
 }
 
-const comPlano = (ctx) => temCorrida(ctx.st) && temPlano(ctx);
+export const comPlano = (ctx) => temCorrida(ctx.st) && temPlano(ctx);
 // bônus do motor: uma data na frase ("para amanhã", "sexta") puxa para mudar de dia
 const comDuasDatas = (i) => i.datas.filter((d) => !d.semana).length >= 2;
 const comDataFutura = (i) => i.datas.some((d) => !d.semana && d.data !== i.hoje) && /\b(mudar|mudo|passar|passo|trocar|troco|adiar|adio|deixar|deixo|remarcar|mover|antecipar|adiantar|fizer|jogar|empurrar|em vez|no lugar)\b/.test(i.texto);
@@ -442,7 +442,7 @@ export const INTENCOES = [
   {
     id: 'corrida-perdida', coach: 'corrida', titulo: 'Não vou correr hoje', resumo: 'faltar à corrida de hoje', resumoNoDia: 'faltar à corrida', data: true, prioridade: 1,
     bonus: (i) => (i.datas.some((d) => d.data === i.hoje) && i.datas.some((d) => !d.semana && d.data > i.hoje) && /\b(nao|nem)\b/.test(i.texto) ? 1.5 : 0) + (impedimento(i.texto) ? 2.5 : 0),
-    palavras: ['nao rola correr', 'nao rola', 'sem correr', 'nao vou correr', 'nao quero correr', 'sem vontade correr', 'nao consigo correr', 'nao posso correr', 'nao vou poder correr', 'nao corri', 'nao deu correr', 'perder correr', 'perdi correr', 'faltar correr', 'pular correr', 'faltar', 'sem tempo correr', 'nao vai dar correr', 'nao vou conseguir correr', 'doente', 'gripado', 'gripe'],
+    palavras: ['nao rola correr', 'nao rola', 'sem correr', 'nao vou correr', 'nao quero correr', 'nao consigo correr', 'nao posso correr', 'nao vou poder correr', 'nao corri', 'nao deu correr', 'perder correr', 'perdi correr', 'faltar correr', 'pular correr', 'faltar', 'sem tempo correr', 'nao vai dar correr', 'nao vou conseguir correr', 'doente', 'gripado', 'gripe'],
     disponivel: comPlano,
     inicio: passoCorridaPerdida,
   },
