@@ -31,7 +31,7 @@ export default async (page) => {
   // o tempo que os campos de horas e minutos mostram dentro de `escopo`, escrito como a tela escreve ("7 h 30", "8 h")
   const LER_TEMPO = `const lerTempo = (raiz) => { const c = raiz.querySelectorAll('.sono-passo .sono-tempo input'); const m = Number(c[0].value) * 60 + Number(c[1].value); return m % 60 ? Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') : (m / 60) + ' h'; };`;
   // dentro de `escopo`, anda `delta` quartos de hora com − ou + (cada toque vale 5 minutos: 3 toques por quarto de hora)
-  const horas = (escopo, delta) => page.eval(`${LER_TEMPO} const raiz = document.querySelector(${JSON.stringify(escopo)}); const b = raiz && raiz.querySelector('.sono-passo button[aria-label="${delta < 0 ? 'Menos' : 'Mais'} 5 minutos de sono"]'); if (!b) return false; for (let i = 0; i < ${Math.abs(delta) * 3}; i++) b.click(); return lerTempo(raiz);`);
+  const horas = (escopo, delta) => page.eval(`${LER_TEMPO} const raiz = [...document.querySelectorAll(${JSON.stringify(escopo)})].pop(); const b = raiz && raiz.querySelector('.sono-passo button[aria-label="${delta < 0 ? 'Menos' : 'Mais'} 5 minutos de sono"]'); if (!b) return false; for (let i = 0; i < ${Math.abs(delta) * 3}; i++) b.click(); return lerTempo(raiz);`);
   // digita em um campo da folha de cima (pelo rótulo) e sai dele
   const digitar = (rotulo, valor) => page.eval(`const f = [...document.querySelectorAll('.sheet')].pop(); const i = f && f.querySelector('input[aria-label=${JSON.stringify(rotulo)}]'); if (!i) return false; i.focus(); i.value = ${JSON.stringify(valor)}; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); return true;`);
   const tempoDaFolha = () => page.eval(`${LER_TEMPO} return lerTempo([...document.querySelectorAll('.sheet')].pop());`);
@@ -47,9 +47,12 @@ export default async (page) => {
   // registra (ou corrige) a noite de um dia pelos botões da semana; `passos` = quantos toques em − (negativo) ou +
   async function noiteDoDia(data, passos, q) {
     const abriu = await page.eval(`const b = document.querySelector('.sono-dia[data-dia="${data}"]'); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true;`);
-    await page.sleep(300);
-    const h = await horas('.sheet', passos);
-    if (q) await nota('.sheet', q);
+    // espera a folha abrir (às vezes leva mais de 300 ms)
+    await page.eval(`for (let i = 0; i < 30 && !document.querySelector('.sheet .sono-passo'); i++) await new Promise((r) => setTimeout(r, 100)); return 1;`);
+    await page.sleep(150);
+    // a folha da noite (outra folha, como a de instalar o app, pode estar aberta por baixo)
+    const h = await horas('.sheet:has(#sono-folha-noite)', passos);
+    if (q) await nota('.sheet:has(#sono-folha-noite)', q);
     const salvou = await naFolha('Salvar');
     await page.sleep(400);
     return abriu && salvou ? h : false;
@@ -206,7 +209,8 @@ export default async (page) => {
   ok(await page.eval(`const g = document.querySelector('#sono-semana svg.sono-graf'); const m = document.querySelector('.sono-dia.hoje .sono-mais'); return g.querySelectorAll('rect.bar.cochilo').length === 1 && g.querySelectorAll('rect.bar:not(.cochilo)').length === 4 && !!document.querySelector('#sono-semana .sono-legenda') && !!m && m.textContent === '+30m';`), 'semana: o cochilo é uma barra separada da noite, com legenda, e aparece no dia');
   const stats3 = await page.eval(`return [...document.querySelectorAll('#sono-semana .stat')].map((e) => e.textContent);`);
   ok(stats3[0].includes('7 h 04') && t.includes('Cochilos: em 1 dia, 30 min em média por dia.') && !t.includes('Não entram na média da noite') && t.split('Não entram na meta').length === 2, 'adulto: a média continua sendo a da noite e os cochilos aparecem em separado (o "não entram na meta" só no cartão dos cochilos): ' + stats3[0]);
-  ok(t.includes('Verde: sua faixa. Tracejado: o alvo. Toque num dia para corrigir.') && (await page.eval(`const b = [...document.querySelectorAll('#sono-semana .stat b')][2]; return !!b && getComputedStyle(b).whiteSpace === 'nowrap';`)), 'legenda curta da semana, e a variação não quebra linha');
+  // 1.15.2: a legenda do gráfico fica no "?" do título (sem linha a mais na tela)
+  ok(!t.includes('Verde: sua faixa.') && !!(await page.eval(`return document.querySelector('#sono-semana .ajuda-btn');`)) && (await page.eval(`const b = [...document.querySelectorAll('#sono-semana .stat b')][2]; return !!b && getComputedStyle(b).whiteSpace === 'nowrap';`)), 'legenda do gráfico no "?", e a variação não quebra linha');
   // corrigir
   await page.eval(`document.querySelector('#sono-cochilo .sono-cochilo').click(); return true;`); await comFolhas(1);
   ok((await texto()).includes('Corrigir o cochilo') && (await minutos(-1)) === '25 min', 'a folha de correção abre com os 30 minutos e desce para 25');

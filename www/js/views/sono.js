@@ -1,6 +1,6 @@
 // Meta de sono: a tela (#/sono) e o cartão da tela inicial.
 // As regras e as contas ficam em logic/sono.js; os textos e as referências, em data/sono.js.
-import { h, btn, icon, badge, note, stepper, toast, confirmSheet, dateKey, DIAS_CURTO, SVG_NS } from '../ui.js';
+import { h, btn, icon, badge, note, stepper, toast, confirmSheet, dateKey, DIAS_CURTO, SVG_NS, ajuda } from '../ui.js';
 import { state, update } from '../store.js';
 import { refresh } from '../router.js';
 import { folha } from './common.js';
@@ -335,10 +335,9 @@ function cartaoSemana(pn) {
   }
   const ck = semana.cochilo;
   const card = h('div', { class: 'card col', id: 'sono-semana' },
-    h('div', { class: 'row between' }, h('h3', { text: 'Últimos 7 dias' }), h('span', { class: 'small muted', text: `${semana.n} de 7 noites` })),
+    h('div', { class: 'row between' }, h('span', { class: 'com-ajuda' }, h('h3', { text: 'Últimos 7 dias' }), ajuda('Gráfico do sono', ['Verde: a sua faixa de sono.', 'Tracejado: o alvo.', 'Toque num dia para corrigir.'])), h('span', { class: 'small muted', text: `${semana.n} de 7 noites` })),
     grafico(semana), dias,
-    ck.dias ? h('div', { class: 'sono-legenda tiny muted' }, h('span', null, h('i', { class: 'cochilo' }), 'cochilo, por cima da barra da noite')) : null,
-    h('p', { class: 'tiny muted', text: 'Verde: sua faixa. Tracejado: o alvo. Toque num dia para corrigir.' }));
+    ck.dias ? h('div', { class: 'sono-legenda tiny muted' }, h('span', null, h('i', { class: 'cochilo' }), 'cochilo, por cima da barra da noite')) : null);
   if (semana.n) {
     card.appendChild(h('div', { class: 'stats' },
       h('div', { class: 'stat' }, h('b', { text: fmtHoras(semana.mediaDaMeta) }), h('span', { text: semana.soma24h ? 'média 24 h' : 'média' })),

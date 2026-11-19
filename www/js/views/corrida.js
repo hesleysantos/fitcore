@@ -1,5 +1,5 @@
 // Telas do Treinador de corrida: entrevista, proposta, painel do plano e o treino de cada dia (com cronômetro guiado e registro).
-import { h, btn, icon, note, badge, sectionTitle, toggle, toast, confirmSheet, stepper, parseNum, plural, dateKey, fmtClock, uid, DIAS_CURTO, DIAS_LONGO } from '../ui.js';
+import { h, btn, icon, note, badge, sectionTitle, toggle, toast, confirmSheet, stepper, parseNum, plural, dateKey, fmtClock, uid, DIAS_CURTO, DIAS_LONGO, ajuda, comAjuda } from '../ui.js';
 import { state, update } from '../store.js';
 import { go, refresh } from '../router.js';
 import { interview, abasTreinador, cartaoLiberacao } from './coach.js';
@@ -110,7 +110,7 @@ function zonasCard(p) {
   const extra = [];
   if (R) {
     extra.push(h('p', { class: 'small', text: `Calculado pelo seu resultado: ${fmtKm(R.base.distKm)} em ${fmtTempo(R.base.seg)}. Previsões de hoje: 5 km em ${fmtTempo(R.previsoes[5])}, 10 km em ${fmtTempo(R.previsoes[10])}, meia maratona em ${fmtTempo(R.previsoes[21])}, maratona entre ${fmtTempo(R.previsoes[42])} e ${fmtTempo(R.previsoes.maratonaAte)}.` }));
-    extra.push(h('p', { class: 'tiny muted', text: 'A previsão de maratona costuma ser otimista para quem treina pouco volume: por isso aparece como faixa.' }));
+    extra.push(h('div', { class: 'row' }, h('span', { class: 'grow' }), comAjuda(h('span', { class: 'tiny muted', text: 'Por que a maratona é uma faixa?' }), 'Previsão da maratona', ['A previsão de maratona costuma ser otimista para quem treina pouco volume: por isso aparece como faixa.'])));
   } else extra.push(h('p', { class: 'small', text: 'Sem um resultado recente, os treinos são guiados pelo esforço e pelo teste da fala. Registre um “Teste de ritmo” de 3 km ou 5 km para ter ritmos calculados.' }));
   extra.push(porQue(p.zonas.fcMax ? 'A frequência cardíaca máxima é estimada pela idade e pode errar 10 batimentos ou mais. Prefira o esforço e a fala.' : 'Com o remédio que deixa o pulso mais baixo, as zonas vão só pelo esforço e pela fala.', FONTES_TELA.zonas, 'Como é calculado'));
   return acc('Zonas de esforço e ritmos', box, ...extra);
@@ -519,6 +519,9 @@ export function corridaView() {
 }
 
 // ---------- treino do dia ----------
+// a escala do esforço, para o "?" (o mesmo texto que aparece ao marcar o esforço no registro)
+const AJUDA_ESFORCO = () => ['É o quanto o treino pesa para você, de 1 a 10:', ['1', 'Muito, muito fácil'], ['2', 'Fácil'], ['3', 'Moderado'], ['4', 'Um pouco difícil'], ['5 e 6', 'Difícil'], ['7 e 8', 'Muito difícil'], ['9', 'Quase no limite'], ['10', 'Máximo'],
+  'Teste da fala: no leve (2 a 4), dá para falar frases inteiras; no moderado (5 a 6), só frases curtas; no forte (7 a 9), não dá para falar com conforto.'];
 const PSE_TXT = ['', 'Muito, muito fácil', 'Fácil', 'Moderado', 'Um pouco difícil', 'Difícil', 'Difícil', 'Muito difícil', 'Muito difícil', 'Quase no limite', 'Máximo'];
 const LOCAIS_CORRIDA = ['joelho', 'canela', 'panturrilha', 'aquiles', 'tornozelo', 'pe', 'coxa-frente', 'coxa-tras', 'quadril', 'virilha', 'gluteo', 'lombar'];
 const TIPOS_LIVRES = ['livre', 'leve', 'longo', 'corrida_caminhada', 'progressivo', 'fartlek', 'tempo', 'intervalado', 'tiros', 'teste', 'prova', 'caminhada'];
@@ -674,7 +677,7 @@ function formulario(data, planejado, existente, aoFechar) {
     const chips = h('div', { class: 'chips wrap', role: 'radiogroup', 'aria-label': 'Tipo de corrida' });
     const draw = () => { while (chips.firstChild) chips.removeChild(chips.firstChild); for (const t of TIPOS_LIVRES) chips.appendChild(h('button', { type: 'button', class: 'chip' + (r.tipo === t ? ' on' : ''), role: 'radio', 'aria-checked': r.tipo === t ? 'true' : 'false', onClick: () => { r.tipo = t; draw(); if (typeof drawMedidas === 'function') drawMedidas(); } }, TIPOS_TREINO[t].nome)); };
     draw();
-    card.appendChild(h('div', { class: 'col gap-s' }, h('div', { class: 'small bold muted', text: 'Tipo' }), chips, h('p', { class: 'tiny muted', text: 'Marque “Teste de ritmo” ou “Dia da prova” em uma corrida forte e contínua: o resultado atualiza os seus ritmos.' })));
+    card.appendChild(h('div', { class: 'col gap-s' }, comAjuda(h('div', { class: 'small bold muted', text: 'Tipo' }), 'Tipo da corrida', ['O tipo vem do treino do dia, mas dá para mudar (fez um treino forte no dia leve, trocou por caminhada...).', 'Marque “Teste de ritmo” ou “Dia da prova” em uma corrida forte e contínua: o resultado atualiza os seus ritmos.']), chips));
   }
   // onde correu: na esteira, o registro guarda local 'esteira' (conta igual na semana — logic/esteira.js)
   {
@@ -753,8 +756,7 @@ function formulario(data, planejado, existente, aoFechar) {
     pseTxt.textContent = r.pse ? PSE_TXT[r.pse] : 'Não informado. Sem o esforço, a análise do treino fica só no tempo e na distância.';
   };
   drawPse();
-  card.appendChild(h('div', { class: 'col gap-s' }, h('div', { class: 'small bold', text: 'Esforço do treino, de 1 (muito fácil) a 10 (máximo)' }), pseChips, pseTxt,
-    h('p', { class: 'tiny muted', text: 'Pense no treino inteiro, uns minutos depois de terminar.' })));
+  card.appendChild(h('div', { class: 'col gap-s' }, comAjuda(h('div', { class: 'small bold', text: 'Esforço do treino, de 1 a 10' }), 'Esforço de 1 a 10', [...AJUDA_ESFORCO(), 'Pense no treino inteiro, uns minutos depois de terminar.']), pseChips, pseTxt));
   // dor: uma ou mais regiões, cada uma com a intensidade e o tipo
   const dorBox = h('div', { class: 'col gap-s', id: 'registro-dores' });
   let comDor = r.dores.length > 0;
@@ -771,11 +773,10 @@ function formulario(data, planejado, existente, aoFechar) {
         drawDor();
       } }, LOCAIS_DOR[k]));
     }
-    dorBox.appendChild(h('div', { class: 'small bold', text: 'Onde doeu? Pode marcar mais de uma região.' }));
+    dorBox.appendChild(comAjuda(h('div', { class: 'small bold', text: 'Onde doeu? Pode marcar mais de uma região.' }), 'Dores da corrida', ['Cada dor entra também em “Dores que você contou”, e o plano se ajusta.']));
     dorBox.appendChild(chips);
     for (const d of r.dores) dorBox.appendChild(linhaDeDor(d));
     if (r.dores.length) dorBox.appendChild(guiaDorMuscular());
-    dorBox.appendChild(h('p', { class: 'tiny muted', text: 'Cada dor entra também em “Dores que você contou”, e o plano se ajusta.' }));
   };
   // intensidade e tipo de uma região
   const linhaDeDor = (d) => {
@@ -790,11 +791,10 @@ function formulario(data, planejado, existente, aoFechar) {
       for (const [id, nome, sub] of tipos) opts.appendChild(h('button', { type: 'button', class: 'chip' + (d.tipo === id ? ' on' : ''), role: 'radio', 'aria-checked': d.tipo === id ? 'true' : 'false', title: sub, onClick: () => { d.tipo = id; draw(); } }, nome));
     };
     draw();
-    box.appendChild(h('div', { class: 'row between' }, h('div', { class: 'bold', text: LOCAIS_DOR[d.onde] }),
+    box.appendChild(h('div', { class: 'row between' }, comAjuda(h('div', { class: 'bold', text: LOCAIS_DOR[d.onde] }), 'Intensidade da dor', ['De 1 (leve) a 10 (insuportável).', ...(temMusculo ? [] : ['Aqui não há um músculo grande: dor nesta região é tratada como de articulação, osso ou tendão.'])]),
       stepper({ value: d.nivel, min: 1, max: 10, step: 1, cls: 'sm', label: `Intensidade da dor: ${LOCAIS_DOR[d.onde]}`, onChange: (v) => { d.nivel = v; } })));
-    box.appendChild(h('div', { class: 'tiny muted', text: 'Intensidade de 1 (leve) a 10 (insuportável). Como foi?' }));
+    box.appendChild(h('div', { class: 'tiny muted', text: 'Como foi?' }));
     box.appendChild(opts);
-    if (!temMusculo) box.appendChild(h('p', { class: 'tiny muted', text: 'Aqui não há um músculo grande: dor nesta região é tratada como de articulação, osso ou tendão.' }));
     return box;
   };
   card.appendChild(h('div', { class: 'row' }, h('div', { class: 'grow small bold', text: 'Senti dor durante ou depois' }), toggle(comDor, (v) => { comDor = v; if (!v) r.dores = []; drawDor(); }, 'Senti dor')));
@@ -907,7 +907,7 @@ export function corridaDiaView(data) {
         card.appendChild(ol);
       }
       card.appendChild(h('div', { class: 'col gap-s' },
-        h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Esforço' }), h('span', { text: `${planejado.pse[0]} a ${planejado.pse[1]} em 10` })),
+        h('div', { class: 'kv' }, comAjuda(h('span', { class: 'muted', text: 'Esforço' }), 'Esforço de 1 a 10', AJUDA_ESFORCO()), h('span', { text: `${planejado.pse[0]} a ${planejado.pse[1]} em 10` })),
         h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Teste da fala' }), h('span', { text: planejado.fala })),
         planejado.ritmo && (planejado.modo !== 'tempo' || ves) ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: planejado.modo === 'esteira' || ves ? 'Velocidade' : 'Ritmo' }), h('span', { text: fmtFaixa(planejado.ritmo, ves ? 'esteira' : planejado.modo) })) : null,
         ves ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Inclinação' }), h('span', { text: ves.inclinacao })) : null,

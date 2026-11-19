@@ -1,5 +1,5 @@
 // Histórico de treinos e progresso.
-import { h, btn, icon, iconBtn, confirmSheet, toast, note, badge, sectionTitle, seg, fmtDate, fmtDur, fmtInt, fmtKg, plural, dateKey, parseNum } from '../ui.js';
+import { h, btn, icon, iconBtn, confirmSheet, toast, note, badge, sectionTitle, seg, fmtDate, fmtDur, fmtInt, fmtKg, plural, dateKey, parseNum, ajuda } from '../ui.js';
 import { state, update } from '../store.js';
 import { go, refresh, replace } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
@@ -150,22 +150,22 @@ export function progressView() {
     }
     const recs = [...marcas.values()].filter((m) => m.r).sort((a, b) => b.n - a.n);
     if (recs.length) {
-      body.push(sectionTitle('Melhores marcas'));
+      body.push(sectionTitle('Melhores marcas', ajuda('Força estimada (≈ kg)', ['≈ kg: força estimada para 1 repetição.', 'Serve só para comparar a sua evolução.'])));
       const l = h('div', { class: 'list' });
       for (const { ex, r } of recs.slice(0, 8)) l.appendChild(exItem(ex, { onClick: () => go('exercicio/' + ex.id), sub: `${fmtKg(r.kg)} kg × ${r.reps} · ${fmtDate(r.data, true)}`, right: badge(`≈ ${fmtKg(Math.round(e1rm(r.kg, r.reps)))} kg`, 'acc') }));
       body.push(l);
     }
-    if (tend.length || recs.length) body.push(h('p', { class: 'tiny muted', text: '≈ kg: força estimada para 1 repetição. Serve só para comparar a sua evolução.' }));
+    if (tend.length && !recs.length) body.push(h('p', { class: 'tiny muted', text: '≈ kg: força estimada para 1 repetição. Serve só para comparar a sua evolução.' }));
   }
 
   if (aba === 'volume') {
     const g = an.resumo.series;
     if (total) {
       const rows = GRUPOS_VOLUME.map((k) => ({ label: GRUPOS[k], value: g[k], cls: g[k] < SERIES_MIN ? 'low' : g[k] > SERIES_TETO + 2 ? 'high' : '' }));
-      body.push(h('div', { class: 'card col' }, h('h2', { text: 'Séries por semana' }), hbarChart(rows, { faixa: [SERIES_BOM, SERIES_TETO], label: 'Séries por semana em cada grupo muscular' }), h('p', { class: 'tiny muted', text: 'Média das últimas 2 semanas. Músculo auxiliar conta meia série.' })));
+      body.push(h('div', { class: 'card col' }, h('div', { class: 'row between' }, h('h2', { text: 'Séries por semana' }), ajuda('Séries por semana', ['Média das últimas 2 semanas.', 'Músculo auxiliar conta meia série.'])), hbarChart(rows, { faixa: [SERIES_BOM, SERIES_TETO], label: 'Séries por semana em cada grupo muscular' })));
     }
     const vols = volumePorSemana(8);
-    if (vols.some((v) => v.vol > 0)) body.push(h('div', { class: 'card col' }, h('h2', { text: 'Carga total por semana' }), barChart(vols.map((v) => ({ label: v.rotulo, value: v.vol })), 'Carga total levantada por semana'), h('p', { class: 'tiny muted', text: 'Carga × repetições de todas as séries, em kg.' })));
+    if (vols.some((v) => v.vol > 0)) body.push(h('div', { class: 'card col' }, h('div', { class: 'row between' }, h('h2', { text: 'Carga total por semana' }), ajuda('Carga total por semana', ['Carga × repetições de todas as séries, em kg.'])), barChart(vols.map((v) => ({ label: v.rotulo, value: v.vol })), 'Carga total levantada por semana')));
     if (!total) body.push(note('info', 'Finalize o seu primeiro treino para ver os gráficos.'));
   }
 

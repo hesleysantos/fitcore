@@ -101,6 +101,21 @@ export function icon(name, cls) {
 // ---------- componentes ----------
 export const btn = (label, onClick, cls = '', ic) => h('button', { class: 'btn ' + cls, type: 'button', onClick }, ic ? icon(ic) : null, label);
 export const iconBtn = (ic, label, onClick, cls = '') => h('button', { class: 'iconbtn ' + cls, type: 'button', 'aria-label': label, title: label, onClick }, icon(ic));
+// Botão "?" discreto: a explicação abre numa folha ao toque, em vez de ficar escrita na tela. `conteudo`: textos
+// (parágrafos) e pares [à esquerda, à direita] (uma linha de tabela, como "1 · Muito, muito fácil").
+export function ajuda(titulo, conteudo) {
+  const abrir = () => {
+    const corpo = h('div', { class: 'col gap-s ajuda-corpo' });
+    for (const x of conteudo || []) {
+      if (Array.isArray(x)) corpo.appendChild(h('div', { class: 'kv' }, h('span', { class: 'bold', text: x[0] }), h('span', { text: x[1] })));
+      else if (x) corpo.appendChild(h('p', { class: 'small', text: x }));
+    }
+    sheet({ title: titulo, body: corpo });
+  };
+  return h('button', { class: 'ajuda-btn', type: 'button', 'aria-label': 'Explicação: ' + titulo, title: 'O que é isso?', onClick: (e) => { e.stopPropagation(); abrir(); } }, h('span', { 'aria-hidden': 'true', text: '?' }));
+}
+// um rótulo com o "?" ao lado
+export const comAjuda = (el, titulo, conteudo) => h('span', { class: 'com-ajuda' }, el, ajuda(titulo, conteudo));
 export const note = (kind, text, ic) => h('div', { class: 'note ' + kind }, icon(ic || (kind === 'info' ? 'info' : kind === 'ok' ? 'check' : 'warn')), h('div', null, text));
 export const badge = (text, cls = '') => h('span', { class: 'badge ' + cls, text });
 export const sectionTitle = (text, action) => h('div', { class: 'section-title' }, h('h2', { text }), action || null);

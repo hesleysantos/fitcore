@@ -5,7 +5,7 @@
 // suplementos e vitaminas do dia → [Semana e compras] [Tenho em casa] → a linha "Para consultar" → dias anteriores →
 // suas metas e o total do cardápio →
 // "Saiba mais" (tudo o que é só leitura) → refazer a entrevista → o aviso educativo, uma linha.
-import { h, btn, chip, seg, sheet, icon, note, toast, norm, fmtInt, dateKey, DIAS_LONGO } from '../ui.js';
+import { h, btn, chip, seg, sheet, icon, note, toast, norm, fmtInt, dateKey, DIAS_LONGO, ajuda } from '../ui.js';
 import { state, update } from '../store.js';
 import { refresh, go } from '../router.js';
 import { FAQ_NUTRI, REFS } from '../data/knowledge.js';
@@ -266,7 +266,7 @@ function opcoesDoCardapio(r, c) {
       h('p', { class: 'small muted', text: 'Escolha com o que o cardápio de hoje é montado.' }),
       modoCasa,
       btn(emCasa.length ? `Editar o que tenho em casa (${emCasa.length})` : 'Marcar o que tenho em casa', fecharE(escolherEmCasa), 'block ghost alvo', 'edit'),
-      soCasa ? null : h('div', { class: 'col gap-s' }, chipBarato, h('p', { class: 'tiny muted', text: '$ barato · $$ médio · $$$ caro. O preço varia com a região e a época.' })),
+      soCasa ? null : h('div', { class: 'row gap-s' }, chipBarato, ajuda('Preços', ['$ barato · $$ médio · $$$ caro.', 'O preço varia com a região e a época.'])),
       btn('Outra sugestão para o dia todo', fecharE(outra), 'block ghost alvo', 'refresh'),
       h('p', { class: 'tiny muted', text: 'Para trocar uma refeição só, use “Trocar” dentro dela.' })),
     footer: [btn('Fechar', () => sh.close(), 'ghost grow')],
@@ -377,7 +377,7 @@ function abrirSemana(r) {
   const desenhaCompras = () => {
     const l = lista7();
     const box = h('div', { class: 'col compras', id: 'lista-compras' });
-    box.appendChild(h('p', { class: 'tiny muted', text: 'Soma dos 7 cardápios. Arroz, feijão, carnes e peixes em peso cru; frutas com casca. Quantidades aproximadas.' }));
+    box.appendChild(h('div', { class: 'row' }, h('span', { class: 'grow' }), h('span', { class: 'com-ajuda' }, h('span', { class: 'tiny muted', text: 'Como a lista é feita' }), ajuda('Lista de compras', ['Soma dos 7 cardápios.', 'Arroz, feijão, carnes e peixes em peso cru; frutas com casca.', 'Quantidades aproximadas.']))));
     if (l.itens) box.appendChild(btn('Copiar a lista como texto', () => copiarTexto('Copiar a lista', textoDaListaDeCompras(l, tituloLista())), 'block alvo', 'copy'));
     if (!l.itens) box.appendChild(h('p', { class: 'small muted', text: 'Nada para comprar: não há cardápio nesta semana.' }));
     for (const g of l.grupos) {

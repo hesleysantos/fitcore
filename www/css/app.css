@@ -656,3 +656,9 @@ details.pq.perdido-pq > summary { min-height: 44px; }
 /* feriado (aba Treinos): botão discreto, alvo de toque de 44 px */
 .feriado-acao .btn.plain, .feriado-linha .btn.plain { min-height: 44px; color: var(--muted); font-weight: 500; }
 .feriado-linha { border-top: 1px dashed var(--border); padding-top: 6px; }
+/* botão "?" (ui.js, ajuda): discreto, alvo de toque de 44 px; a explicação abre numa folha */
+.com-ajuda { display: inline-flex; align-items: center; gap: 2px; }
+.ajuda-btn { position: relative; width: 44px; height: 44px; margin: -10px -10px -10px -6px; flex: none; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 0; padding: 0; cursor: pointer; color: var(--muted); }
+.ajuda-btn > span { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid currentColor; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; line-height: 1; }
+.ajuda-btn:hover, .ajuda-btn:focus-visible { color: var(--accent); }
+.ajuda-corpo .kv { gap: 12px; }
