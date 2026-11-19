@@ -155,7 +155,10 @@ export default async (page) => {
   console.log('6. Chat da corrida e da Nutricionista');
   await page.goto(B + '#/corrida', 300); await page.reload(1400);
   await espera('.chat-entrada'); // a tela da corrida demora um pouco a montar
-  ok(await page.click('Perguntar ao treinador de corrida'), 'entrada na tela da Corrida');
+  // a tela da corrida às vezes ainda está montando: algumas tentativas antes de tocar
+  let entrou = false;
+  for (let k = 0; k < 15 && !entrou; k++) { entrou = await page.click('Perguntar ao treinador de corrida'); if (!entrou) await page.sleep(200); }
+  ok(entrou, 'entrada na tela da Corrida');
   await espera('#chat');
   ok(await botao('Choveu ou não dá para correr na rua'), 'assunto da chuva');
   await page.sleep(250);

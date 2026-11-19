@@ -61,7 +61,7 @@ export const DIRETO = 2;     // vantagem a partir da qual o treinador responde d
 export const DIRETO_CONTADA = 3;
 const PERGUNTA_FIM = /\?\s*$/;
 // jeito de perguntar como usar o app ("como marco...", "onde vejo...", "tem como...")
-const USO_DO_APP = /^(como (eu )?(faco|marco|informo|aviso|coloco|registro|anoto|vejo|uso|mudo|aumento|diminuo|troco|ligo|desligo|acho|encontro|salvo|apago|desfaco|edito|configuro|escolho|peco|conto|digo|passo|comeco|inicio)|onde (fica|ficam|vejo|registro|acho|marco|mudo|encontro|esta|estao|coloco|anoto)|tem como|da pra (marcar|registrar|mudar|ver|salvar|trocar|informar))\b/;
+const USO_DO_APP = /^(o que (significa|quer dizer)|o que e (o |esse |este |a )?(botao|ponto|simbolo|sinal|interrogacao)|qual (e )?o significado|como (eu )?(faco|marco|informo|aviso|coloco|registro|anoto|vejo|uso|mudo|aumento|diminuo|troco|ligo|desligo|acho|encontro|salvo|apago|desfaco|edito|configuro|escolho|peco|conto|digo|passo|comeco|inicio)|onde (fica|ficam|vejo|registro|acho|marco|mudo|encontro|esta|estao|coloco|anoto)|tem como|da pra (marcar|registrar|mudar|ver|salvar|trocar|informar))\b/;
 // a frase fala do assunto de outro treinador? (correr, comer...): sem isso, o chat não manda a pessoa para lá
 const DOMINIO = {
   corrida: /\b(corr\w*|km|quilometro\w*|pace|ritmo|longao|prova|maratona|meia maratona|trote|tiros?|rodagem|5k|10k)\b/,
@@ -565,7 +565,9 @@ export function faqBusca(texto, coach, app = false) {
   return { ...a, boa, forte };
 }
 // frases curtas para o balão e o resto no "Por quê?"
-function frases(paragrafo) { return String(paragrafo).match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g)?.map((x) => x.trim()).filter(Boolean) || []; }
+// corta só no fim de frase seguido de uma frase nova (maiúscula, número, aspas ou lista): "toque em “Tem feriado nesta
+// semana?” e escolha o dia" fica inteira
+function frases(paragrafo) { return String(paragrafo).split(/(?<=[.!?][”"’)]?)\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ0-9“"(•])/).map((x) => x.trim()).filter(Boolean); }
 export function passoDaFaq(it) {
   const todas = [...it.a, ...(Array.isArray(it.mais) ? it.mais : [])];
   const p1 = frases(todas[0] || '');

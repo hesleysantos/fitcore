@@ -95,3 +95,29 @@ test('dicas com pesquisa (1.15.0): cada pergunta nova tem fontes e é reconhecid
   const dia = M.limparPasso(M.responder('corri 10km de manha e de noite ainda tem treino de perna', 'treinador', ctx()));
   assert.ok(dia.assunto && !(dia.faqQ || '').startsWith('Qual o melhor horário'), JSON.stringify(dia.assunto));
 });
+
+// ---------- novidades no chat (1.16.x) ----------
+test('o chat conhece as novidades: pace, teste de ritmo marcado, distância total, esforço, botão "?" e feriado', async () => {
+  const C = await import('../www/js/logic/corrida.js');
+  const a = { experiencia: 'regular', kmSemana: 25, longoAtual: 4, provas: '5a10', pausa: 'treinando', objetivo: 'saude', dias: ['1', '2', '4', '6'], diaLongo: 'auto', tempo: '60', tempoLongo: '120', aparelho: 'gps', local: 'rua', idade: 31, peso: 78, altura: 176, lesao12m: 'nao', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'], resultado: 'nao' };
+  for (const q of C.PERGUNTAS) if (!(q.k in a) && !(q.se && !q.se(a)) && !q.opcional) a[q.k] = q.tipo === 'numero' ? (q.padrao ?? q.min) : q.tipo === 'um' ? q.op[0][0] : [q.op[0][0]];
+  const st = store.sanitize({ v: store.VERSAO, run: { answers: a, aceitoEm: '2026-11-16T12:00:00.000Z', inicio: '2026-11-16', pausadoEm: '' } });
+  const r = (coach, t) => M.limparPasso(M.responder(t, coach, { st, hoje: '2026-11-19', agora: Date.parse('2026-11-19T15:00:00Z'), coach }));
+  assert.match(r('corrida', 'como registro o pace dos tiros?').faqQ || '', /^Como registro o pace/);
+  assert.match(r('corrida', 'qual o meu pace?').texto.join(' '), /O plano marcou um teste de 3 km para/);
+  assert.match(r('corrida', 'por que o treino deu 3,8 km se era 3 km?').texto.join(' '), /O treino inteiro dá cerca de [\d,]+ km/);
+  assert.match(r('corrida', 'o que significa esforço 2 a 4 em 10').faqQ || '', /^O que é o esforço de 1 a 10/);
+  assert.match(r('treinador', 'o que é o ponto de interrogação?').faqQ || '', /^O que é o botão de interrogação/);
+  // frase com "?" no meio não perde o começo
+  assert.match(r('treinador', 'como marco um feriado?').texto[0], /^Na aba Treinos, depois dos dias da semana, toque em “Tem feriado nesta semana\?” e escolha o dia\.$/);
+});
+test('músculo citado: "por que tanto/pouco X" e "quero mais X" respondem direto com as séries da semana', () => {
+  for (const [t, id, re] of [['por que meu treino tem tanto exercício de costas', 'explicar', /Costas: [\d,]+ séries por semana/], ['por que não tem panturrilha no meu treino?', 'explicar', /Panturrilhas: [\d,]+ séries/],
+    ['posso treinar mais quadríceps', 'recomendar', /Quadríceps: [\d,]+ séries/], ['quero treinar mais glúteo', 'recomendar', /Glúteos: [\d,]+ séries/]]) {
+    const p = M.limparPasso(M.responder(t, 'treinador', ctx()));
+    assert.equal(p.assunto, id, t);
+    assert.match(p.texto.join(' '), re, t);
+  }
+  // pediu mais: também o caminho da prioridade
+  assert.ok(M.limparPasso(M.responder('quero treinar mais glúteo', 'treinador', ctx())).ir.some((b) => b.abrir === 'treinador-entrevista'));
+});

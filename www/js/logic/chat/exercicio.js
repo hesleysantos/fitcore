@@ -346,6 +346,12 @@ function passoPorQue(ctx) {
   if (temPalavra(ctx, /\b(series?|repeticao|repeticoes|reps|descanso|intervalo|carga|peso|kg)\b/)) return porqueDose(ctx);
   const e = exercicioDe(ctx);
   if (e && e.ex) return porqueExercicio(ctx, e.ex);
+  // um músculo citado ("por que tem tanto exercício de costas?", "por que não tem panturrilha?"): as séries dele na
+  // semana e o que fazer para mudar (a mesma conta da recomendação)
+  if (musculosDoTexto(typeof ctx.texto === 'string' ? ctx.texto : '').length) {
+    const p = passoRecomendar(ctx);
+    if (p && Array.isArray(p.texto)) return { ...p, texto: ['O Treinador divide as séries da semana pelo seu objetivo e pela prioridade que você escolheu.', ...p.texto] };
+  }
   return {
     texto: ['O que você quer entender?'],
     opcoes: [{ rotulo: 'Séries e repetições', valor: 'dose' }, { rotulo: 'Por que estes exercícios', valor: 'ex' }, { rotulo: 'Por que mudou um dia', valor: 'dia' }, { rotulo: 'Por que hoje está diferente', valor: 'leve' }],
@@ -383,6 +389,12 @@ function passoRecomendar(ctx) {
     }
     if (achados.some((x) => x.faixa === 'muito')) texto.push('Mais séries não vão ajudar: o volume já passou do teto e cansa mais.');
     else texto.push('O volume já está bom. Para crescer, suba a carga aos poucos: quando fizer o número mais alto de repetições em todas as séries.');
+    // pediu mais ("quero treinar mais glúteo"): também o caminho para dar mais séries, pela prioridade
+    const querMais = /\b(mais|priorizar|prioridade|focar|colocar|acrescentar|incluir)\b/.test(typeof ctx.texto === 'string' ? ctx.texto : '') && !achados.some((x) => x.faixa === 'muito');
+    if (querMais) {
+      texto.push(`Se quiser mesmo mais séries de ${minus(juntar(achados.slice(0, 2).map((x) => x.nome)))}, ponha em prioridade: o Treinador mostra o plano antes de valer.`);
+      return { texto, detalhes, refs, ir: [{ rotulo: 'Escolher a prioridade', abrir: 'treinador-entrevista' }, { rotulo: 'Ver a evolução', rota: 'progresso' }] };
+    }
     return { texto, detalhes, refs, ir: [{ rotulo: 'Ver a evolução', rota: 'progresso' }] };
   }
   const texto = [String(r.conclusao || '').slice(0, 250)].filter(Boolean);
@@ -476,7 +488,7 @@ export const INTENCOES = [
   {
     id: 'explicar', coach: 'treinador', titulo: 'Por que o meu treino é assim', resumo: 'entender o porquê do seu treino',
     palavras: ['abc', 'fullbody', 'full body', 'divisao treino', 'mesmo dia', 'costas biceps', 'peito triceps', '!explica', 'explicar', 'motivo treino', 'razao treino', 'nao entendi treino', 'entender treino', 'porque treino', 'porque mudou', 'porque series', 'porque mais leve', 'porque assim', 'porque exercicio', 'porque tenho', 'porque esta', 'porque ta'],
-    bonus: (i) => (perguntaPorQue(i) ? 2.5 : 0),
+    bonus: (i) => (perguntaPorQue(i) ? 2.5 : 0) + (/^(porque|pq)\b/.test(i.texto) && i.ent && i.ent.musculos.length ? 2.5 : 0),
     disponivel: temPlano,
     inicio: passoPorQue,
   },
@@ -484,7 +496,7 @@ export const INTENCOES = [
     id: 'recomendar', coach: 'treinador', titulo: 'O que você recomenda?', resumo: 'uma recomendação para o seu treino',
     palavras: ['fazer mais que treino', 'fazer mais', 'to animado', 'treinar mais hoje', 'quero mais treino', 'recomenda+treino', 'recomendacao+treino', 'sugere+treino', 'sugestao+treino', 'voce acha treino', 'treino bom', 'treino esta bom', 'treino ta bom', 'treino certo', 'treino equilibrado', 'treino completo', 'treino fraco', 'falta treino', 'falta algo treino', 'melhorar treino', 'avaliar treino', 'avalia treino', 'avaliacao treino', 'dica treino', 'conselho treino', 'plano bom', 'plano ta bom'],
     // um músculo e um pedido de melhora ("o que você recomenda para melhorar o glúteo?")
-    bonus: (i) => ((i.ent && i.ent.musculos.length && /\b(melhor\w*|cresc\w*|desenvolv\w*|aument\w*|ganhar|definir|evolu\w*|focar|recomend\w*|suger\w*|dica|forte|fortalec\w*|indic\w*|deixar|durinh\w*|empinad\w*|maior|afinar|tonific\w*)\b/.test(i.texto) && !/\b(dor|doi|doendo|machuc\w*)\b/.test(i.texto)) ? 2.5 : 0),
+    bonus: (i) => ((i.ent && i.ent.musculos.length && /\b(melhor\w*|cresc\w*|desenvolv\w*|aument\w*|ganhar|definir|evolu\w*|focar|recomend\w*|suger\w*|dica|forte|fortalec\w*|indic\w*|deixar|durinh\w*|empinad\w*|maior|afinar|tonific\w*|mais|colocar|acrescentar|incluir|priorizar|prioridade)\b/.test(i.texto) && !/\b(dor|doi|doendo|machuc\w*)\b/.test(i.texto)) ? 2.5 : 0),
     disponivel: temPlano,
     inicio: passoRecomendar,
   },

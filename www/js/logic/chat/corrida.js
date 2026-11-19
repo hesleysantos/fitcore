@@ -97,6 +97,8 @@ export function passoComoFazer(ctx) {
   const texto = [`${cap(noDia(data, hoje))} é dia de ${nomeMin(d)}. Faça nesta ordem:`, ...blocos.map((b, k) => `${k + 1}. ${textoBloco(b, d.modo)}`)];
   const temAcel = blocos.some((b) => /acelera/i.test(b.rotulo || ''));
   if (temAcel) texto.push('Acelerações: 15 segundos rápidos e soltos, com 1 minuto caminhando entre elas.');
+  // a distância do treino soma tudo: diz o total e de onde vem
+  if (d.kmCorrendo && d.distKm && d.modo !== 'tempo') texto.push(`O treino inteiro dá cerca de ${String(d.distKm).replace('.', ',')} km: a corrida mais ${temAcel ? 'as acelerações e a caminhada entre elas' : 'a caminhada'}.`);
   // perguntou das acelerações num dia sem elas: a resposta vem primeiro, depois o treino do dia
   else if (perguntaAcel) return { texto: [ACEL_GERAL, `${cap(noDia(data, hoje))} é dia de ${nomeMin(d)}, sem acelerações.`], detalhes: [d.detalhe].filter(Boolean), refs: ['haugen2022'], data, ir: [abrirDia(data)] };
   return { texto, detalhes: [d.detalhe].filter(Boolean), refs: temAcel || perguntaAcel ? ['haugen2022'] : [], data, ir: [abrirDia(data)] };
@@ -115,7 +117,11 @@ export function passoRitmo(ctx) {
     const z = pl && pl.zonas && Array.isArray(pl.zonas.lista) ? pl.zonas.lista.find((x) => x.id === (d.intensidade === 'forte' ? 'forte' : d.intensidade === 'moderado' ? 'moderado' : 'leve')) : null;
     if (z && z.fc && d.modo === 'fc') texto.push(`Pela frequência cardíaca: de ${z.fc[0]} a ${z.fc[1]} batimentos por minuto.`);
     // sem GPS (treino por tempo): o ritmo não é preciso; o teste só faz sentido onde dá para medir a distância
-    if (pl && !pl.ritmos) texto.push(d.modo === 'tempo' ? 'Sem GPS, o treino vai pelo tempo e pelo esforço: não precisa de ritmo. Se correr numa pista ou esteira, dá para registrar um “Teste de ritmo” de 3 ou 5 km.' : 'Para ter o ritmo calculado, registre um “Teste de ritmo” de 3 ou 5 km.');
+    // o teste de ritmo que o plano marcou (sem resultado recente): o dia e a distância
+    let teste = null;
+    for (let k = 0; k < 14 && !teste; k++) { const dk = somaDia(hoje, k); const t = corridaNoDia(ctx, dk); if (t && t.tipo === 'teste' && t.automatico) teste = { dk, t }; }
+    if (teste) texto.push(`O plano marcou um ${teste.t.nome.toLowerCase()} para ${nomeDia(teste.dk, hoje)}: o resultado calcula o ritmo de todos os treinos.`);
+    else if (pl && !pl.ritmos) texto.push(d.modo === 'tempo' ? 'Sem GPS, o treino vai pelo tempo e pelo esforço: não precisa de ritmo. Se correr numa pista ou esteira, dá para registrar um “Teste de ritmo” de 3 ou 5 km.' : 'Para ter o ritmo calculado, registre um “Teste de ritmo” de 3 ou 5 km.');
   }
   const f = faqDe(FAQ_CORRIDA, 'Como os ritmos dos treinos são calculados');
   const g = faqDe(FAQ_CORRIDA, 'Devo treinar por ritmo');
@@ -417,7 +423,7 @@ export const INTENCOES = [
   },
   {
     id: 'corrida-como', coach: 'corrida', titulo: 'Como fazer o treino de hoje', resumo: 'como fazer cada parte do treino', resumoNoDia: 'como fazer o treino', data: true,
-    palavras: ['!aceleracao', '!aceleracoes', 'tempo aceleracoes', 'tempo cada aceleracao', 'quanto tempo cada', 'como faco treino', 'como fazer treino', 'como funciona treino', 'como faco tiros', 'como fazer tiros', 'tiro quanto tempo',
+    palavras: ['distancia total', 'km a mais', 'distancia maior', 'deu km', 'km total', 'era km', 'total treino', '!aceleracao', '!aceleracoes', 'tempo aceleracoes', 'tempo cada aceleracao', 'quanto tempo cada', 'como faco treino', 'como fazer treino', 'como funciona treino', 'como faco tiros', 'como fazer tiros', 'tiro quanto tempo',
       'parte treino', 'etapas treino', 'ordem treino', 'como e o treino', 'o que e fartlek', 'como faco fartlek', 'como faco o intervalado', 'aquecimento quanto', 'volta calma', 'desaquecimento', 'educativo', 'educativos'],
     disponivel: comPlano,
     inicio: passoComoFazer,
