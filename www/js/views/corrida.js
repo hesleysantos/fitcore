@@ -909,9 +909,9 @@ export function corridaDiaView(data) {
       card.appendChild(h('div', { class: 'col gap-s' },
         h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Esforço' }), h('span', { text: `${planejado.pse[0]} a ${planejado.pse[1]} em 10` })),
         h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Teste da fala' }), h('span', { text: planejado.fala })),
-        planejado.ritmo ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: planejado.modo === 'esteira' || ves ? 'Velocidade' : 'Ritmo' }), h('span', { text: fmtFaixa(planejado.ritmo, ves ? 'esteira' : planejado.modo) })) : null,
+        planejado.ritmo && (planejado.modo !== 'tempo' || ves) ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: planejado.modo === 'esteira' || ves ? 'Velocidade' : 'Ritmo' }), h('span', { text: fmtFaixa(planejado.ritmo, ves ? 'esteira' : planejado.modo) })) : null,
         ves ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Inclinação' }), h('span', { text: ves.inclinacao })) : null,
-        h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Duração' }), h('span', { text: `cerca de ${planejado.durMin} min` + (planejado.distKm && planejado.tipo !== 'caminhada' ? ` · ${fmtKm(planejado.distKm)}${planejado.kmCorrendo ? ' no total' : ''}` : '') }))));
+        h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Duração' }), h('span', { text: `cerca de ${planejado.durMin} min` + (planejado.distKm && planejado.tipo !== 'caminhada' && (planejado.modo !== 'tempo' || ves || planejado.tipo === 'teste' || planejado.tipo === 'prova') ? ` · ${fmtKm(planejado.distKm)}${planejado.kmCorrendo ? ' no total' : ''}` : '') }))));
       if (t && t.paraQue) card.appendChild(porQue(t.paraQue + (t.sentir ? ' Como sentir: ' + t.sentir : ''), t.f, 'Para que serve este treino'));
       if (planejado.ajustado) card.appendChild(note('info', planejado.carga ? 'Este treino ficou mais leve por causa da sua semana puxada. Para voltar ao plano, use “Desfazer” em “Sua semana”.' : 'Este treino foi ajustado por causa de uma dor que você contou.'));
       if (planejado.guardado) card.appendChild(h('p', { class: 'tiny muted', text: 'É o treino que o plano mostrava neste dia.' }));

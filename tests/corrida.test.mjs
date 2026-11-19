@@ -1240,3 +1240,19 @@ test('3 km numa rodagem de 3 km + acelerações (3,8 km no total): "a menos", di
   const txt = analiseDoRegistro({ ...st, runs: [r] }, '2026-11-18', r).itens.map((x) => x.texto).join(' | ');
   assert.match(txt, /Você fez 0,8 km a menos que o planejado \(3,8 km, contando as acelerações e a caminhada entre elas\): -20%/);
 });
+test('cada treino diz o que fazer: acelerações com duração e caminhada; sem GPS, sem ritmo por km; teste sem GPS na pista', () => {
+  const b = { rotulo: 'Corrida leve', tipo: 'correr', seg: 2700, ritmo: { de: 363, ate: 434 } };
+  assert.match(textoBloco(b, 'gps'), /por km/);
+  assert.doesNotMatch(textoBloco(b, 'tempo'), /por km/);
+  const base = { experiencia: 'regular', kmSemana: 25, longoAtual: 10, provas: '5a10', pausa: 'treinando', objetivo: 'saude', dias: ['1', '2', '4', '6'], diaLongo: 'auto', tempo: '60', tempoLongo: '120', aparelho: 'gps', local: 'rua', idade: 31, peso: 78, altura: 176, lesao12m: 'nao', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'], resultado: '5', resultadoMin: 25 };
+  for (const aparelho of ['gps', 'tempo']) {
+    const p = planoAtual(estado({ ...base, aparelho }, '2026-11-02', '2026-11-02'), '2026-11-02');
+    const dias = p.semanas.flatMap((s) => s.dias).filter((d) => d && d.tipo);
+    const acel = dias.find((d) => /acelera/.test(d.resumo || ''));
+    if (acel) assert.match(acel.resumo, /6 acelerações de 15 s \(1 min caminhando entre elas\)/);
+    for (const d of dias.filter((x) => Array.isArray(x.blocos) && x.blocos.length)) {
+      for (const bl of d.blocos) if (/Aquecimento: trote leve/.test(bl.rotulo || '')) assert.match(bl.rotulo, /\(5 a 15 s\)/);
+      if (aparelho === 'tempo') for (const bl of d.blocos) assert.doesNotMatch(textoBloco(bl, d.modo), /por km/, d.nome);
+    }
+  }
+});

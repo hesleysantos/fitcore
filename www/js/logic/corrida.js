@@ -456,7 +456,8 @@ const medida = (b) => (b.seg ? fmtDuracao(b.seg) : b.m >= 1000 ? fmtKm(b.m / 100
 export function textoBloco(b, modo) {
   const base = b.repeticoes > 1 ? `${b.repeticoes} × ${medida(b)}` : medida(b);
   const pausa = b.pausa ? `, com ${fmtDuracao(b.pausa.seg)} de ${b.pausa.tipo === 'caminhar' ? 'caminhada' : 'trote leve'}` : '';
-  const r = b.ritmo ? ` (${fmtFaixa(b.ritmo, modo)})` : '';
+  // sem GPS (modo 'tempo'), o ritmo por km não dá para medir: o passo fica no tempo e no esforço
+  const r = b.ritmo && modo !== 'tempo' ? ` (${fmtFaixa(b.ritmo, modo)})` : '';
   return `${b.rotulo}: ${base}${pausa}${r}`;
 }
 
@@ -514,7 +515,7 @@ function tLeve(km, c, { strides = false, curto = false } = {}) {
   // acelerações: 5 a 15 segundos rápidos e soltos, com recuperação completa, depois da rodagem (haugen2022)
   if (strides) blocos.push(bl('Acelerações', 'forte', { seg: 15, repeticoes: 6, pausa: { tipo: 'caminhar', seg: 60 } }));
   const d = treino('leve', blocos, c, { ritmo: P ? P.leve : null });
-  d.resumo = `${c.porDist ? fmtKm(blocos[0].m / 1000) : fmtDuracao(blocos[0].seg)} em ritmo leve${strides ? ' + 6 acelerações de 15 s' : ''}${c.porDist ? ' · ' + aprox(d) : ''}`;
+  d.resumo = `${c.porDist ? fmtKm(blocos[0].m / 1000) : fmtDuracao(blocos[0].seg)} em ritmo leve${strides ? ' + 6 acelerações de 15 s (1 min caminhando entre elas)' : ''}${c.porDist ? ' · ' + aprox(d) : ''}`;
   d.detalhe = curto ? 'Bem leve, só para soltar as pernas antes do dia importante.' : 'Ritmo confortável do começo ao fim. Se não der para falar frases inteiras, diminua.' + (strides ? ' No final, 6 acelerações de 15 segundos, rápidas e soltas, caminhando 1 minuto entre elas.' : '')
     + (strides && c.porDist && d.distKm > blocos[0].m / 1000 ? ` As acelerações e a caminhada entre elas somam cerca de ${fmtKm(r1(d.distKm - blocos[0].m / 1000))}: o treino inteiro dá ${fmtKm(d.distKm)}.` : '');
   return d;
@@ -1018,7 +1019,7 @@ function tEvento(pf, c, cfg) {
   const usarAlvo = !!(pf.alvoSeg && P && pf.alvoSeg >= previsto * 0.95);
   const ritmo = usarAlvo ? { de: Math.round(pf.alvoSeg / km), ate: Math.round(pf.alvoSeg / km) } : P ? P.prova[dist] : null;
   const blocos = [];
-  if (dist <= 10) blocos.push(bl('Aquecimento: trote leve e 3 acelerações curtas', 'aquecer', { seg: 600 }));
+  if (dist <= 10) blocos.push(bl('Aquecimento: trote leve e, no fim, 3 acelerações curtas (5 a 15 s)', 'aquecer', { seg: 600 }));
   blocos.push(bl(evento === 'teste' ? 'Teste' : 'Prova', 'correr', { m: Math.round(km * 1000), ...(ritmo ? { ritmo } : {}) }));
   const d = treino(evento, blocos, c, { ritmo });
   d.distKm = r1(km);
@@ -1029,6 +1030,8 @@ function tEvento(pf, c, cfg) {
   d.detalhe = dist >= 21
     ? 'Comece um pouco mais devagar do que o ritmo planejado e segure até a metade. A maioria das quebras no fim vem de sair rápido demais. Beba água e coma como treinou nos longos.'
     : 'Aqueça bem. Largue controlado no primeiro quilômetro e aumente na segunda metade.';
+  // sem GPS: a distância precisa ser conhecida (pista de atletismo, 400 m por volta, ou um percurso medido)
+  if (c.modo === 'tempo' && evento === 'teste') d.detalhe += ` Sem GPS, faça numa pista de atletismo (400 m por volta: ${ROTULO.distancia[dist]} = ${Math.round(km * 1000 / 400 * 10) / 10} voltas) ou num percurso de distância conhecida, e anote o tempo.`;
   return d;
 }
 
@@ -1254,7 +1257,7 @@ function refazer(t, c) {
   t.durMin = tot.durMin; t.distKm = tot.distKm;
   const b = t.blocos[0], st = t.blocos.some((x) => x.rotulo === 'Acelerações');
   const med = b.m ? fmtKm(b.m / 1000) : fmtDuracao(b.seg);
-  if (t.tipo === 'leve') t.resumo = `${med} em ritmo leve${st ? ' + 6 acelerações de 15 s' : ''}${b.m ? ' · ' + aprox(t) : ''}`;
+  if (t.tipo === 'leve') t.resumo = `${med} em ritmo leve${st ? ' + 6 acelerações de 15 s (1 min caminhando entre elas)' : ''}${b.m ? ' · ' + aprox(t) : ''}`;
   else if (t.tipo === 'regenerativo') t.resumo = `${med} bem leve`;
   else if (t.tipo === 'longo' && t.blocos.length === 1) t.resumo = `${med} em ritmo leve${b.m ? ' · ' + aprox(t) : ''}`;
   return t;
