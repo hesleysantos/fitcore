@@ -210,6 +210,14 @@ export default async (page) => {
   await page.goto(B + '#treinos', 900);
   await page.click('Iniciar'); await page.sleep(900);
   ok(await page.eval(`return document.querySelectorAll('.check').length > 0;`), 'dá para iniciar um treino sem internet');
+  await page.eval(`const m = await import('/js/store.js'); m.update((x) => { x.current = null; }); return 1;`);
+  // o chat (sem IA, sem internet) responde, com o guia do app e as perguntas frequentes
+  await page.goto(B + '#/chat/treinador', 900);
+  await page.eval(`const i = document.getElementById('chat-campo'); i.value = 'como marco um feriado?'; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return 1;`);
+  await page.sleep(600);
+  ok(/Tem feriado nesta semana/.test(await texto()), 'o chat responde sem internet');
+  await page.goto(B + '#/nutricao', 900);
+  ok((await titulo()).includes('FitCore') && !(await page.eval(`return !!document.querySelector('.erro-tela');`)), 'a Nutrição abre sem internet');
   await page.offline(false);
 
   const erros = page.erros.filter((e) => !/net::ERR_INTERNET_DISCONNECTED|Failed to load resource/.test(e));
