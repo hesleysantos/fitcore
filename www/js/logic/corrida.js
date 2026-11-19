@@ -474,9 +474,9 @@ const FALA = { caminhada: 'Conversa normal', corrida_caminhada: 'Dá para conver
 const INTENS = { caminhada: 'leve', corrida_caminhada: 'leve', leve: 'leve', regenerativo: 'leve', longo: 'leve', progressivo: 'moderada', ritmo: 'moderada', fartlek: 'forte', tempo: 'forte', intervalado: 'forte', tiros: 'forte', teste: 'forte', prova: 'forte', descanso: 'leve' };
 const FORTES = new Set(['fartlek', 'tempo', 'intervalado', 'tiros', 'progressivo', 'ritmo', 'teste', 'prova']);
 
-// soma os blocos: duração (min) e distância (km) aproximadas. kmCorrendo: só os trechos de corrida (sem a caminhada
-// entre as acelerações ou entre os trechos de corrida): é o que a pessoa lê no treino ("3 km + 6 acelerações") e o que
-// a análise usa para dizer que a distância ficou abaixo do plano.
+// soma os blocos: duração (min) e distância (km) aproximadas. A distância do treino é a soma de tudo (a rodagem, as
+// acelerações e a caminhada entre elas); kmCorrendo é só a dos trechos de corrida, para a tela explicar o total
+// ("3,8 km no total: 3 km de rodagem + cerca de 0,8 km nas acelerações e na caminhada entre elas").
 function totais(blocos, c) {
   let seg = 0, km = 0, kmCaminhando = 0;
   const ritmoDe = (tipo, r) => (r ? media(r) : tipo === 'caminhar' ? RITMO_CAMINHADA : tipo === 'forte' ? c.est.forte : tipo === 'trote' ? c.est.trote : c.est.leve);
@@ -515,7 +515,8 @@ function tLeve(km, c, { strides = false, curto = false } = {}) {
   if (strides) blocos.push(bl('Acelerações', 'forte', { seg: 15, repeticoes: 6, pausa: { tipo: 'caminhar', seg: 60 } }));
   const d = treino('leve', blocos, c, { ritmo: P ? P.leve : null });
   d.resumo = `${c.porDist ? fmtKm(blocos[0].m / 1000) : fmtDuracao(blocos[0].seg)} em ritmo leve${strides ? ' + 6 acelerações de 15 s' : ''}${c.porDist ? ' · ' + aprox(d) : ''}`;
-  d.detalhe = curto ? 'Bem leve, só para soltar as pernas antes do dia importante.' : 'Ritmo confortável do começo ao fim. Se não der para falar frases inteiras, diminua.' + (strides ? ' No final, 6 acelerações de 15 segundos, rápidas e soltas, caminhando 1 minuto entre elas.' : '');
+  d.detalhe = curto ? 'Bem leve, só para soltar as pernas antes do dia importante.' : 'Ritmo confortável do começo ao fim. Se não der para falar frases inteiras, diminua.' + (strides ? ' No final, 6 acelerações de 15 segundos, rápidas e soltas, caminhando 1 minuto entre elas.' : '')
+    + (strides && c.porDist && d.distKm > blocos[0].m / 1000 ? ` As acelerações e a caminhada entre elas somam cerca de ${fmtKm(r1(d.distKm - blocos[0].m / 1000))}: o treino inteiro dá ${fmtKm(d.distKm)}.` : '');
   return d;
 }
 function tRegenerativo(km, c) {
@@ -1496,10 +1497,9 @@ function analisar(plan, r, ctx) {
   } else if (!previsto || semQuantidade) { /* sem quantidade planejada (ou só as etapas, ou tempo do plano): nada a comparar */ }
   else if (!feito) it('info', '', porTempo ? `O treino era por tempo (${txtPrevisto}) e o registro não tem o tempo: sem como comparar a duração.` : `O treino era por distância (${txtPrevisto}) e o registro não tem a distância: sem como comparar.`);
   else {
-    // por distância, com caminhada no meio: abaixo, compara com os km só correndo; acima, com o total
-    const base = !porTempo && plan.kmCorrendo && feito < previsto ? plan.kmCorrendo : previsto;
-    const txtBase = base !== previsto ? `${fmtKm(base)} de corrida` : txtPrevisto;
-    const dif = feito - base, pct = Math.round((dif / base) * 100), un = porTempo ? `${Math.round(Math.abs(dif))} min` : fmtKm(Math.abs(dif));
+    // a distância planejada é a do treino inteiro; com acelerações (ou corrida e caminhada), o texto diz o que entra nela
+    const txtBase = !porTempo && plan.kmCorrendo ? `${txtPrevisto}, contando as acelerações e a caminhada entre elas` : txtPrevisto;
+    const dif = feito - previsto, pct = Math.round((dif / previsto) * 100), un = porTempo ? `${Math.round(Math.abs(dif))} min` : fmtKm(Math.abs(dif));
     const grande = Math.abs(dif) >= (porTempo ? 5 : 0.6) && Math.abs(pct) >= 15;
     if (grande && dif > 0) {
       it('info', 'mais', `Você fez ${un} a mais que o planejado (${txtPrevisto}): +${pct}%.`);

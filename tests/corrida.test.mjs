@@ -1199,7 +1199,7 @@ test('zonas: com remédio que segura o pulso, nada de frequência cardíaca (só
 });
 
 // ---------- 1.14.0: acelerações, km só correndo, etapas e tempo do plano ----------
-test('rodagem com acelerações: o resumo diz 15 s, o "planejado" separa os km correndo e 3 km não é "20% a menos"', () => {
+test('rodagem com acelerações: o resumo diz 15 s, a distância soma tudo e o texto explica o que entra nela', () => {
   const inicio = '2026-11-02';
   const base = { experiencia: 'regular', kmSemana: 25, longoAtual: 10, provas: '5a10', pausa: 'treinando', objetivo: 'saude', dias: ['1', '2', '4', '6'], diaLongo: 'auto', tempo: '60', tempoLongo: '120', aparelho: 'gps', local: 'rua', idade: 31, peso: 78, altura: 176, lesao12m: 'nao', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'], resultado: '5', resultadoMin: 25 };
   const st = estado(base, inicio, inicio);
@@ -1212,11 +1212,16 @@ test('rodagem com acelerações: o resumo diz 15 s, o "planejado" separa os km c
   assert.ok(d.kmCorrendo && d.kmCorrendo < d.distKm, `km correndo ${d.kmCorrendo} < total ${d.distKm}`);
   const plan = planejadoDe(d);
   assert.equal(plan.kmCorrendo, d.kmCorrendo);
-  const correu = d.blocos[0].m / 1000; // os km da rodagem, como o resumo diz
+  // o detalhe diz quanto as acelerações e a caminhada somam e o total
+  assert.match(d.detalhe, /As acelerações e a caminhada entre elas somam cerca de [\d,]+ km: o treino inteiro dá/);
+  // só a rodagem (sem as acelerações): fica abaixo do total, e o texto diz o que o total inclui
+  const correu = d.blocos[0].m / 1000;
   const r = { ...reg('ac1', data, 'leve', correu, d.durMin - 1, 3), plan };
-  const an = analiseDoRegistro({ ...st, runs: [r] }, data, r);
-  const txt = an.itens.map((x) => x.texto).join(' | ');
-  assert.ok(!/a menos que o planejado/.test(txt), txt);
+  const txt = analiseDoRegistro({ ...st, runs: [r] }, data, r).itens.map((x) => x.texto).join(' | ');
+  if (d.distKm - correu >= 0.6 && (d.distKm - correu) / d.distKm >= 0.15) assert.match(txt, /a menos que o planejado \([\d,]+ km, contando as acelerações e a caminhada entre elas\)/);
+  // o treino inteiro: dentro do planejado
+  const r2 = { ...reg('ac2', data, 'leve', d.distKm, d.durMin, 3), plan };
+  assert.match(analiseDoRegistro({ ...st, runs: [r2] }, data, r2).itens.map((x) => x.texto).join(' | '), /Distância dentro do planejado/);
 });
 test('corrida e caminhada: as etapas de corrida contam; registro sem tempo usa o do plano, marcado como estimado', () => {
   const t = { tipo: 'corrida_caminhada', blocos: [{ tipo: 'aquecer', seg: 300 }, { tipo: 'correr', seg: 180, repeticoes: 4, pausa: { tipo: 'caminhar', seg: 120 }, pausaFinal: true }, { tipo: 'desaquecer', seg: 300 }] };
@@ -1227,4 +1232,11 @@ test('corrida e caminhada: as etapas de corrida contam; registro sem tempo usa o
   // etapas impossíveis saem; tempo estimado com distância não vale
   assert.equal(limparRegistro({ id: 'cc2', data: '2026-11-10', durMin: 25, etapas: { feitas: 5, de: 4 } }).etapas, undefined);
   assert.equal(limparRegistro({ id: 'cc3', data: '2026-11-10', durMin: 25, distKm: 3, durEst: true }).durEst, undefined);
+});
+test('3 km numa rodagem de 3 km + acelerações (3,8 km no total): "a menos", dizendo que o total conta as acelerações', () => {
+  const plan = { tipo: 'leve', durMin: 26, distKm: 3.8, kmCorrendo: 3.3, ritmo: null, pse: [2, 4], un: 'd' };
+  const st = { run: null, runs: [], dores: [], plans: [], activePlan: '' };
+  const r = { ...reg('ac3', '2026-11-18', 'leve', 3.04, 25, 3), plan };
+  const txt = analiseDoRegistro({ ...st, runs: [r] }, '2026-11-18', r).itens.map((x) => x.texto).join(' | ');
+  assert.match(txt, /Você fez 0,8 km a menos que o planejado \(3,8 km, contando as acelerações e a caminhada entre elas\): -20%/);
 });

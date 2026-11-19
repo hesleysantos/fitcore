@@ -225,4 +225,12 @@ export const FAQ_PALAVRAS = {
   'A amplitude do movimento importa': 'amplitude meia repeticao descer tudo movimento completo parcial embaixo fundo profundo agacho tanto faz ate embaixo',
   'Adolescente pode fazer musculação': 'adolescente jovem crianca filho 14 anos 15 anos 16 anos menor crescer altura',
   'Quando devo procurar um médico antes de começar': 'avaliacao medica exame antes de comecar liberacao medica check up',
+  'Peso livre ou máquina': 'maquina peso livre smith leg press hack substitui agachamento livre ou maquina',
+  'O drop set funciona': 'drop set dropset tecnica avancada baixar peso sem descanso rest pause bi set',
+  'Descer devagar faz diferença': 'descer devagar descida lenta cadencia excentrica tempo da repeticao lento rapido controlar descida frescura',
+  'Posso prender o ar no exercício': 'respirar respiracao respiro prender ar prendo ar valsalva soltar ar',
+  'Abdominal todo dia ajuda a perder barriga': 'abdominal barriga perder barriga gordura localizada secar barriga pança',
+  'Qual o melhor horário para treinar': 'melhor horario rende mais treinar cedo ou de noite horario ideal',
+  'O joelho pode passar da ponta do pé': 'joelho passa ponta pe agachamento joelho frente errado agacho joelho na frente do pe',
+  'Dor no dia seguinte quer dizer que o treino foi bom': 'dor dia seguinte treino bom dolorido sinal resultado nao doeu treino fraco sentir dor',
 };

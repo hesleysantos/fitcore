@@ -335,6 +335,38 @@ export const REFS = {
   // por "first morning urine color (or USG), thirst sensation, and body mass"; "Individuals should not gain body mass (or
   // body weight) during exercise"; hiponatremia: "headache, dizziness, physical exhaustion, muscular twitching, and nausea"
   mcdermott2017: 'McDermott BP, Anderson SA, Armstrong LE et al. National Athletic Trainers’ Association position statement: fluid replacement for the physically active. J Athl Train. 2017;52(9):877-895.',
+  // ---------- dicas do Treinador (1.14.0), texto completo lido ----------
+  // haugen2023 (Europe PMC, PMC10426227): "no significant differences in hypertrophy between the free-weight vs. the machine
+  // group"; "strength changes are specific to the training modality"; "more loads can be lifted with a Smith machine squat
+  // compared to a free-weight squat"; "most of the injuries were related to weights falling on people"
+  haugen2023: 'Haugen ME, Vårvik FT, Larsen S, Haugen AS, van den Tillaar R, Bjørnsen T. Effect of free-weight vs. machine-based strength training on maximal strength, hypertrophy and jump performance – a systematic review and meta-analysis. BMC Sports Sci Med Rehabil. 2023;15:103.',
+  // sodal2023 (Europe PMC, PMC10390395): "no significant difference in hypertrophy measurements between the drop set and
+  // traditional set groups"; "half to one-third of the time"; "well-suited for machine-based training"; "preliminary"
+  sodal2023: 'Sødal LK, Kristiansen E, Larsen S, van den Tillaar R. Effects of drop sets on skeletal muscle hypertrophy: a systematic review and meta-analysis. Sports Med Open. 2023;9:66.',
+  // havers2026 (Europe PMC, PMC13043944): 12 estudos; sem diferença de hipertrofia nem de força; "elevated perceptual demands"
+  havers2026: 'Havers T, Micke F, Geisler S, Held S. Acute and chronic effects of drop-set training: a meta-analysis and systematic review. Sports Med Open. 2026;12:38.',
+  // wilk2021 (Europe PMC, PMC8310485): "the most favorable is a combination of slower movement in the eccentric phase with a
+  // faster movement during the concentric phase"; "extremely slow tempos require lighter loads"; para força, "it is not
+  // clear whether any specific tempo is more effective than another"
+  wilk2021: 'Wilk M, Zajac A, Tufano JJ. The influence of movement tempo during resistance training on muscular strength and hypertrophy responses: a review. Sports Med. 2021;51(8):1629-1650.',
+  // blazek2019 (Europe PMC, PMC6945051): "greater stabilization of the trunk"; "an extreme elevation in blood pressure";
+  // "do not recommend its use by people with hypertension"; fluxo de sangue no cérebro cai "by 21-52%"
+  blazek2019: 'Blazek D, Stastny P, Maszczyk A, Krawczyk M, Matykiewicz P, Petr M. Systematic review of intra-abdominal and intrathoracic pressures initiated by the Valsalva manoeuvre during high-intensity resistance exercises. Biol Sport. 2019;36(4):373-386.',
+  // ramirezcampillo2022 (PDF aberto da revista, hummov.awf.wroc.pl): "Localized muscle training had no effect on localized
+  // adipose tissue depots"; "non-localized exercise involving large muscles groups would be preferable"
+  ramirezcampillo2022: 'Ramirez-Campillo R, Andrade DC, Clemente FM, Afonso J, Pérez-Castilla A, Gentil P. A proposed model to test the hypothesis of exercise-induced localized fat reduction (spot reduction), including a systematic review with meta-analysis. Hum Mov. 2022;23(3):1-14.',
+  // bruggisser2023 (Europe PMC, PMC10198889): "evidence neither for nor against a specific time of the day being more
+  // beneficial"; "larger effects when there is congruency between training and testing times"; risco de viés alto
+  bruggisser2023: 'Bruggisser F et al. Best time of day for strength and endurance training to improve health and performance? A systematic review with meta-analysis. Sports Med Open. 2023;9:34.',
+  // illmeier2023 (Europe PMC, PMC10143703): limitar o joelho aumentou o torque no quadril "by approximately 973%" (dados de
+  // Fry 2003); "increased trunk flexion in the thoracic and lumbar spine"; "limiting this natural mobility is probably not a
+  // good idea for healthy, trained individuals"; exceção: reabilitação do joelho
+  illmeier2023: 'Illmeier G, Rechberger JS, Legerlotz K. The limitations of anterior knee displacement during different barbell squat techniques: a comprehensive review. J Clin Med. 2023;12(8):2955.',
+  // schoenfeld2013doms (PDF no site do autor): "it therefore should not be used as a definitive gauge of results"; "training a
+  // muscle group on a frequent basis would reduce soreness, yet could still deliver impressive hypertrophic results"
+  // brobakken2023 (Europe PMC, PMC10680576): estudo pequeno em sentido contrário: "Trunk fat mass decreased more in the AG"
+  brobakken2023: 'Brobakken MF et al. Abdominal aerobic endurance exercise reveals spot reduction exists: a randomized controlled trial. Physiol Rep. 2023;11:e15853.',
+  schoenfeld2013doms: 'Schoenfeld BJ, Contreras B. Is postexercise muscle soreness a valid indicator of muscular adaptations? Strength Cond J. 2013;35(5):16-21.',
   // nhs_dor_peito (texto completo, nhs.uk, revisado em 08/08/2023): emergência com dor que aperta, pressiona ou queima, que vai para o braço, o pescoço, o queixo, a barriga ou as costas, ou com suor, enjoo, tontura ou falta de ar; dor que começa depois de lesão ou exercício do peito, pior ao inspirar e melhor com repouso, costuma ser distensão do músculo (triagem do peito no chat, logic/chat/motor.js).
   nhs_dor_peito: 'NHS (Reino Unido). Chest pain. nhs.uk/symptoms/chest-pain. Revisado em 8 de agosto de 2023; consulta em novembro de 2026.',
   // problemas de saúde que não vêm do treino (logic/saude-fora.js: o que foi tirado de cada uma está no cabeçalho de lá),
@@ -404,6 +436,15 @@ export const FAQ_TREINO = [
   { q: 'A amplitude do movimento importa?', tags: 'amplitude completa parcial movimento', a: ['Sim, principalmente nas pernas: usar a amplitude completa do movimento dá mais ganho muscular do que repetições parciais. Nos braços, os estudos são poucos e não concordam. Use a maior amplitude que você controla sem dor.'], f: ['schoenfeld2020rom'] },
   { q: 'Adolescente pode fazer musculação?', tags: 'adolescente jovem crianca menor idade', a: ['Pode, e traz benefícios, desde que com supervisão de um profissional, técnica correta e cargas adequadas. A prioridade é aprender os movimentos; aumentar a carga vem depois.', 'A recomendação é de 2 a 3 treinos de força por semana, em dias não seguidos: é assim que o Treinador monta o plano de quem tem menos de 18 anos, com cardio nos outros dias.'], f: ['faigenbaum2009', 'lloyd2014', 'oms2020'] },
   { q: 'Quando devo procurar um médico antes de começar?', tags: 'medico liberacao exame avaliacao comecar', a: ['Quem não tem doenças nem sintomas pode começar com intensidade leve a moderada. Procure liberação médica antes se você é sedentário e tem doença do coração, diabetes ou doença renal, ou se apresenta qualquer sintoma como dor no peito, falta de ar, tontura, desmaio ou palpitações.'], f: ['whitfield2017'] },
+  // ---------- dicas (1.14.0) ----------
+  { q: 'Peso livre ou máquina: qual é melhor?', tags: 'maquina peso livre smith leg press substitui agachamento livre', a: ['Para ganhar músculo, dá o mesmo: peso livre e máquina tiveram resultados iguais nos estudos.', 'A força cresce mais no tipo que você treina: quem treina na barra fica mais forte na barra; quem treina na máquina, na máquina. Escolha pelo seu objetivo e pelo que você gosta. No Smith dá para levantar mais carga que no agachamento livre.'], mais: ['Nos estudos, a maioria das lesões com peso livre foi de peso caindo sobre a pessoa, não do movimento.'], f: ['haugen2023'] },
+  { q: 'O drop set funciona?', tags: 'drop set dropset tecnica avancada baixar peso rest pause economizar tempo', a: ['Para ganhar músculo, drop set e séries normais deram resultado parecido, e o drop set leva de metade a um terço do tempo.', 'É uma opção para quando o tempo é curto. Ele cansa bem mais e combina mais com máquina, que é mais estável.'], mais: ['Os estudos ainda são poucos e pequenos.'], f: ['sodal2023', 'havers2026'] },
+  { q: 'Descer devagar faz diferença?', tags: 'descer devagar cadencia excentrica descida lenta repeticao lenta controlar descida', a: ['Descer controlando e subir com mais vigor parece o melhor jeito.', 'Repetição muito lenta, de uns 10 segundos, não mostrou vantagem e obriga a usar menos peso. Para a força, nenhum ritmo se mostrou melhor.'], f: ['wilk2021'] },
+  { q: 'Posso prender o ar no exercício?', tags: 'respirar respiracao respiro prender prendo ar valsalva soltar ar pressao supino agachamento terra peso pesado', a: ['Prender o ar firma o tronco, mas faz a pressão subir muito: quem tem pressão alta, problema no coração ou está grávida não deve prender.', 'Se sentir tontura, pare o exercício.'], mais: ['Prender o ar também pode reduzir por um momento o sangue que chega ao cérebro.'], f: ['blazek2019', 'aha2024'] },
+  { q: 'Abdominal todo dia ajuda a perder barriga?', tags: 'abdominal barriga perder barriga gordura localizada secar barriga', a: ['Não: treinar uma parte do corpo não tira a gordura daquela parte.', 'Para perder gordura, valem os exercícios com músculos grandes, que gastam mais, e a alimentação. O abdominal serve para fortalecer o tronco.'], mais: ['Um estudo pequeno, com 16 homens, viu um pouco mais de perda de gordura no tronco; a revisão de 13 estudos não viu efeito.'], f: ['ramirezcampillo2022', 'brobakken2023'] },
+  { q: 'Qual o melhor horário para treinar: manhã ou noite?', tags: 'melhor horario horario treinar rende mais cedo', a: ['Nenhum horário se mostrou melhor: treine no horário que você consegue manter.', 'O corpo rende mais no horário em que você costuma treinar.'], mais: ['Os estudos sobre isso têm muitas limitações.'], f: ['bruggisser2023'] },
+  { q: 'O joelho pode passar da ponta do pé no agachamento?', tags: 'joelho passa ponta pe agachamento joelho frente errado postura agacho', a: ['Pode: no agachamento fundo, o joelho passar da ponta do pé é natural na maioria das pessoas.', 'Segurar o joelho para trás alivia um pouco o joelho, mas joga muita carga no quadril e na lombar. A exceção é quem está em reabilitação do joelho: siga o fisioterapeuta.'], f: ['illmeier2023'] },
+  { q: 'Dor no dia seguinte quer dizer que o treino foi bom?', tags: 'dor dia seguinte treino bom dolorido sinal resultado nao doeu treino fraco', a: ['Não: a dor do dia seguinte não mede se o treino foi bom.', 'Com treinos frequentes, a dor diminui e o músculo continua crescendo. Dor forte atrapalha o próximo treino.'], f: ['schoenfeld2013doms'] },
 ];
 
 export const FAQ_NUTRI = [

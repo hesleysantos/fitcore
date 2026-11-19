@@ -924,7 +924,7 @@ export const INTENCOES = [
   },
   {
     id: 'juntar-treino', coach: 'treinador', titulo: 'Corrida e musculação no mesmo dia', resumo: 'fazer corrida e musculação no mesmo dia',
-    palavras: ['cardio antes', 'cardio depois', 'cardio antes depois', 'aerobico antes', 'aerobico depois', 'esteira antes', 'esteira depois', '!leg day', 'tiro+leg day', 'correr+leg day', 'correr+musculacao', 'correr+exercicio', 'correr+treino', 'correr+treino+juntar', 'correr+treino+mesmo dia', '!intervalo entre', 'correr+intervalo', 'correr+horas entre', 'correr+seguida', 'correr+colado', 'correr+logo depois', 'mesmo dia', 'juntar', 'juntar outro', 'juntar treino', 'correr depois', 'correr antes',
+    palavras: ['correr+treino perna', 'correr+perna', 'correr+musculacao', 'correr+academia', 'cardio antes', 'cardio depois', 'cardio antes depois', 'aerobico antes', 'aerobico depois', 'esteira antes', 'esteira depois', '!leg day', 'tiro+leg day', 'correr+leg day', 'correr+musculacao', 'correr+exercicio', 'correr+treino', 'correr+treino+juntar', 'correr+treino+mesmo dia', '!intervalo entre', 'correr+intervalo', 'correr+horas entre', 'correr+seguida', 'correr+colado', 'correr+logo depois', 'mesmo dia', 'juntar', 'juntar outro', 'juntar treino', 'correr depois', 'correr antes',
       'depois musculacao', 'antes musculacao', 'qual primeiro', 'ordem', 'prioridade', 'correr+academia'],
     disponivel: (ctx) => temOsDois(ctx.st),
     inicio: (ctx) => passoJuntar(ctx),

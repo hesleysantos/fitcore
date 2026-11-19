@@ -40,6 +40,7 @@ import { EX_POR_ID } from '../../data/exercises.js';
 import * as NUTRI from './nutri.js';
 import { refsValidas, lerDatas, nomeDia, noDia, diaValido } from './comum.js';
 import { FAQ_TREINO, FAQ_NUTRI, buscarFaq } from '../../data/knowledge.js';
+import { ajudaDe } from '../../data/ajuda.js';
 import { FAQ_CORRIDA } from '../../data/corrida.js';
 import { expandir, conceitos, radical, idfDe, oracoes } from './nlu.js';
 import { exercicioDoTexto, corpoDoTexto, musculosDoTexto, numerosDoTexto } from './entidades.js';
@@ -59,6 +60,8 @@ export const DIRETO = 2;     // vantagem a partir da qual o treinador responde d
 // outro assunto caíram de 13 para 6, e 8 respostas certas passaram a confirmar antes.
 export const DIRETO_CONTADA = 3;
 const PERGUNTA_FIM = /\?\s*$/;
+// jeito de perguntar como usar o app ("como marco...", "onde vejo...", "tem como...")
+const USO_DO_APP = /^(como (eu )?(faco|marco|informo|aviso|coloco|registro|anoto|vejo|uso|mudo|aumento|diminuo|troco|ligo|desligo|acho|encontro|salvo|apago|desfaco|edito|configuro|escolho|peco|conto|digo|passo|comeco|inicio)|onde (fica|ficam|vejo|registro|acho|marco|mudo|encontro|esta|estao|coloco|anoto)|tem como|da pra (marcar|registrar|mudar|ver|salvar|trocar|informar))\b/;
 // a frase fala do assunto de outro treinador? (correr, comer...): sem isso, o chat não manda a pessoa para lá
 const DOMINIO = {
   corrida: /\b(corr\w*|km|quilometro\w*|pace|ritmo|longao|prova|maratona|meia maratona|trote|tiros?|rodagem|5k|10k)\b/,
@@ -67,9 +70,13 @@ const DOMINIO = {
 };
 const falaDoTreinador = (coach, t) => (DOMINIO[coach] || DOMINIO.treinador).test(String(t || ''));
 // jeito de pedir dica ou opinião geral sobre treino; e um dia citado (aí é sobre o treino do dia, não uma dica geral)
+// respiração ("prendo o ar", "como respiro no supino"): a pergunta frequente da respiração, mesmo com um exercício citado
+const RESPIRA = /\b(respir\w*|prend\w* (o )?ar|valsalva)\b/;
 const DICA = /\b(vale a pena|vale|e bom|e ruim|faz mal|faz diferenca|ajuda|ajudam|devo|preciso|precisa|dica|dicas|o que e|qual a diferenca|funciona|estraga|atrapalha|prejudica|compensa|e melhor|qual e melhor|quantas vezes|quanto tempo de|e normal|tem problema|pode ser)\b/;
 const DIA_DITO = /\b(hoje|agora|amanha|ontem|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b/;
 const FAQ_DO = { treinador: FAQ_TREINO, corrida: FAQ_CORRIDA, nutri: FAQ_NUTRI };
+// como usar o app (data/ajuda.js: onde fica cada coisa): buscado só quando a frase pergunta do app (USO_DO_APP)
+const AJUDA_DO = { treinador: ajudaDe('treinador'), corrida: ajudaDe('corrida'), nutri: ajudaDe('nutri') };
 // ordem dos assuntos nos botões da abertura (os que não estão aqui vêm depois, na ordem dos módulos)
 const ORDEM_MENU = {
   treinador: ['treino-perdido', 'pouco-tempo', 'qual-treino', 'semana', 'dor-treino', 'juntar-treino', 'carga', 'aparelho-falta', 'mudar-plano', 'aparelho-ocupado', 'duracao', 'antecipar', 'seguidos', 'explicar', 'recomendar', 'ex-como', 'ex-trocar', 'ex-musculo', 'ex-seguro', 'desanimo', 'sem-resultado', 'dormi-mal', 'agua-treino'],
@@ -526,19 +533,20 @@ export function faqDireta(texto, coach) {
 const termo = (w) => radical(canon1(w));
 const termosDe = (s) => [...new Set(preparar(s).split(' ').filter((w) => w.length > 2 && !LIGACAO.has(w) && !VAGAS.has(w) && !NEGA.has(w) && !VAGAS_A.has(w)).map(termo))];
 const indiceFaq = new Map();
-function faqIndice(coach) {
-  if (indiceFaq.has(coach)) return indiceFaq.get(coach);
-  const lista = FAQ_DO[coach] || [];
+function faqIndice(coach, app = false) {
+  const chave = coach + (app ? ':app' : '');
+  if (indiceFaq.has(chave)) return indiceFaq.get(chave);
+  const lista = (app ? AJUDA_DO : FAQ_DO)[coach] || [];
   // etiquetas da pergunta + as outras palavras que as pessoas usam (logic/chat/exemplos.js, FAQ_PALAVRAS)
   const extra = (q) => { for (const [k, v] of Object.entries(FAQ_PALAVRAS)) if (String(q).startsWith(k)) return ' ' + v; return ''; };
   const docs = lista.map((it) => ({ it, q: new Set(termosDe(it.q)), tg: new Set(termosDe((it.tags || '') + (coach === 'treinador' ? extra(it.q) : ''))) }));
   const idf = idfDe(docs.map((d) => new Set([...d.q, ...d.tg])));
   const out = { docs, idf };
-  indiceFaq.set(coach, out);
+  indiceFaq.set(chave, out);
   return out;
 }
-export function faqBusca(texto, coach) {
-  const { docs, idf } = faqIndice(coach);
+export function faqBusca(texto, coach, app = false) {
+  const { docs, idf } = faqIndice(coach, app);
   const ws = termosDe(texto);
   if (!ws.length || ws.length > 14) return null;
   const peso = (w) => idf.get(w) || 0;
@@ -566,7 +574,8 @@ export function passoDaFaq(it) {
   while (p1.length && texto.length < 2 && n + p1[0].length <= 240) { n += p1[0].length; texto.push(p1.shift()); }
   if (!texto.length && p1.length) texto.push(p1.shift().slice(0, 240));
   const detalhes = [p1.join(' '), ...todas.slice(1)].filter((x) => x && x.trim());
-  return { texto, detalhes, refs: refsValidas(it.f), faqQ: it.q };
+  // como usar o app: o botão que abre a tela
+  return { texto, detalhes, refs: refsValidas(it.f), faqQ: it.q, ...(Array.isArray(it.ir) && it.ir.length ? { ir: it.ir } : {}) };
 }
 
 // ---------- passos do motor ----------
@@ -1074,6 +1083,13 @@ export function responder(texto, coach, ctx) {
   const t = c.texto;
   if (/^(oi+|ola|bom dia|boa tarde|boa noite|e ai|eai|opa|hey|hello|oie)( (treinador|nutricionista|tudo bem|td bem|tudo bom))?$/.test(t)) return fim(saudacao(coach, c));
   if (/^(obrigad[oa]|valeu|vlw|brigad[oa]|obg|agradeco|muito obrigad[oa]|thanks|show|beleza|blz|ok|certo|entendi|ta bom|perfeito|otimo|massa|top)( (demais|mesmo|treinador|pela ajuda|viu))?$/.test(t)) return fim({ texto: [varia(['Por nada! Se precisar de mais alguma coisa, é só escrever.', 'Imagina! Qualquer dúvida, é só escrever.', 'De nada! Estou por aqui.'], mem)] });
+  // pergunta de uso do app ("como marco um feriado?", "onde vejo meu histórico?"): o guia do app (data/ajuda.js)
+  // responde com o botão da tela, quando é ele que casa melhor com a frase
+  // (um pedido com dia, que o treinador faz aqui mesmo, como "como passo o treino pra amanhã", segue para o assunto)
+  if (USO_DO_APP.test(c.texto) && !(r.direto && datas.length)) {
+    const fu = faqBusca(texto, coach, true);
+    if (fu && fu.it && fu.it.app && fu.nq >= 1 && (fu.n >= 2 || fu.boa) && fu.cobre >= 0.4 && faqSegura(fu.it, c)) return comAlt(limparPasso(passoDaFaq(fu.it)), '');
+  }
   // 4. dois assuntos na mesma frase: o mais importante primeiro (a dor antes de tudo), o outro em seguida
   const varios = assuntosDaFrase(texto, coach, cData);
   if (varios.length >= 2 && (!r.confiante || varios.some((x) => x.intencao.id === r.melhor.intencao.id))) {
@@ -1106,7 +1122,11 @@ export function responder(texto, coach, ctx) {
   // pedido de dica, sem falar de um dia ("vale a pena…?", "cardio atrapalha…?", "devo alongar?"): a pergunta frequente
   // que casa bem responde, em vez de um assunto do treino do dia
   const dica = coach === 'treinador' && DICA.test(c.texto) && !DIA_DITO.test(c.texto);
-  if (dica && fb && fb.boa && faqOk(fb.it) && segura && !pedido && fb.cobre >= (globalThis.__DC2 ?? 0.55)) return comoFaq(fb.it);
+  // (com um exercício citado também: "posso prender o ar no supino?"; nunca na frente de uma dor)
+  const semDor = !r.melhor || prioridade(r.melhor.intencao) < 2;
+  const resp = coach === 'treinador' && semDor && RESPIRA.test(c.texto) ? achaFaq(coach, 'Posso prender o ar') : null;
+  if (resp && faqOk(resp)) return comoFaq(resp);
+  if (dica && fb && fb.boa && faqOk(fb.it) && semDor && !pedido && fb.cobre >= 0.55) return comoFaq(fb.it);
   // 6. o assunto: direto quando é bem claro; senão, confirma
   if (r.confiante) {
     const i = r.melhor.intencao;

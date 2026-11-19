@@ -251,21 +251,28 @@ export function plansView() {
       c.feito ? badge('Feita', 'ok') : null),
     btn(c.feito ? 'Ver corrida' : 'Abrir corrida', () => go('corrida/dia/' + c.data), c.feito ? 'ghost block' : 'block', 'run'),
     !c.feito && semanaVista === 0 && podeMarcarCorrida(state, c.data, hojeK) ? acoesPerdido(botaoNaoCorri(c.data, refresh)) : null);
-  // Feriado: a academia não abre (logic/perdido.js). Marcar guarda o dia (nenhum treino vem para ele) e, se o dia tem
-  // musculação, abre o "Não treinei" com o motivo feriado: o treinador propõe outro dia com as regras de sempre.
-  const linhaFeriado = (data, efComTreino) => {
-    if (!ehFeriado(state, data)) {
-      return h('div', { class: 'row feriado-acao' }, h('span', { class: 'grow' }), btn('É feriado?', () => {
-        update((st) => { st.feriados = [...(st.feriados || []), data]; });
-        refresh();
-        if (efComTreino && podeMarcar(state, data, hojeK, { futuro: true }).pode) folhaNaoTreinei(data, refresh, { motivo: 'feriado', futuro: true });
-        else toast('Feriado marcado. Nenhum treino vai para este dia.');
-      }, 'plain sm'));
-    }
-    return h('div', { class: 'col gap-s feriado-linha' },
-      h('div', { class: 'row between' }, h('span', { class: 'small' }, icon('calendar', 's'), ' Feriado: a academia não abre.'),
-        btn('Desfazer', () => { update((st) => { st.feriados = (st.feriados || []).filter((x) => x !== data); }); refresh(); }, 'plain sm')),
-      efComTreino && podeMarcar(state, data, hojeK, { futuro: true }).pode ? btn('Mudar o treino deste dia', () => folhaNaoTreinei(data, refresh, { motivo: 'feriado', futuro: true }), 'sm block', 'calendar') : null);
+  // Feriado: a academia não abre (logic/perdido.js). Nenhum dia vem marcado: a pessoa informa, por um link discreto no
+  // fim da semana. Marcar guarda o dia (nenhum treino vem para ele) e, se o dia tem musculação, abre o "Não treinei" com
+  // o motivo feriado: o treinador propõe outro dia com as regras de sempre. No dia marcado, uma linha com "Desfazer".
+  const treinoAindaNoDia = (data) => { const ef = efetiva ? efetiva.find((x) => x.data === data) : null; return !!(ef && ef.diaId && !ef.perdido) && podeMarcar(state, data, hojeK, { futuro: true }).pode; };
+  const marcarFeriado = (data) => {
+    update((st) => { st.feriados = [...(st.feriados || []), data]; });
+    refresh();
+    if (treinoAindaNoDia(data)) folhaNaoTreinei(data, refresh, { motivo: 'feriado', futuro: true });
+    else toast('Feriado marcado. Nenhum treino vai para este dia.');
+  };
+  const linhaFeriado = (data) => h('div', { class: 'col gap-s feriado-linha' },
+    h('div', { class: 'row between' }, h('span', { class: 'small' }, icon('calendar', 's'), ' Feriado: a academia não abre.'),
+      btn('Desfazer', () => { update((st) => { st.feriados = (st.feriados || []).filter((x) => x !== data); }); refresh(); }, 'plain sm')),
+    treinoAindaNoDia(data) ? btn('Mudar o treino deste dia', () => folhaNaoTreinei(data, refresh, { motivo: 'feriado', futuro: true }), 'sm block', 'calendar') : null);
+  const folhaFeriado = () => {
+    const dias = [];
+    for (let k = 0; k < 7; k++) { const dt = maisDias(segunda, k); const dk = dateKey(dt); if (dk >= hojeK && !ehFeriado(state, dk)) dias.push({ dk, wd: dt.getDay() }); }
+    const corpo = h('div', { class: 'col gap-s', id: 'folha-feriado' },
+      h('p', { class: 'small', text: 'Em qual dia a academia não abre? O treino desse dia vai para outro dia da semana.' }),
+      dias.length ? h('div', { class: 'chips wrap', role: 'group', 'aria-label': 'Dia do feriado' }, ...dias.map((x) => h('button', { class: 'chip alvo', type: 'button', 'data-dia': x.dk, onClick: () => { s.close(); marcarFeriado(x.dk); } }, `${DIAS_LONGO[x.wd]} · ${diaMes(maisDias(segunda, (x.wd + 6) % 7))}`)))
+        : h('p', { class: 'small muted', text: 'Não há mais dias nesta semana para marcar.' }));
+    const s = folha({ title: 'Feriado nesta semana', body: corpo });
   };
   const semana = h('div', { class: 'col semana' });
   for (const wd of ORDEM_SEMANA) {
@@ -294,12 +301,14 @@ export function plansView() {
       if (perdido) card.appendChild(linhaNaoTreinado(ef, perdido.nome, refresh, semanaVista === 0));
       else card.appendChild(d ? blocoTreino(d, wd, ef) : h('div', { class: 'small muted', text: saiu ? `${saiu.nome} passou para ${nomeDoDia(ef.foiPara, hojeK)}.` : c || extras.length ? 'Sem musculação neste dia.' : 'Descanso.' }));
     } else if (!c && !extras.length) card.appendChild(h('div', { class: 'small muted', text: 'Descanso.' }));
-    // feriado (só nesta semana, de hoje em diante): botão discreto; marcado, a linha com "Desfazer"
+    // feriado informado pela pessoa: a linha com "Desfazer" no dia
     const dataDia = dateKey(dataDe(wd));
-    if (plan && semanaVista === 0 && dataDia >= hojeK) card.appendChild(linhaFeriado(dataDia, d && !(ef && ef.perdido) && !feitoEm(d, wd) ? ef : null));
+    if (plan && semanaVista === 0 && dataDia >= hojeK && ehFeriado(state, dataDia)) card.appendChild(linhaFeriado(dataDia));
     semana.appendChild(card);
   }
   body.push(semana);
+  // um link só, discreto, no fim da semana (é usado pouco)
+  if (plan && semanaVista === 0) body.push(h('div', { class: 'row feriado-acao' }, h('span', { class: 'grow' }), btn('Tem feriado nesta semana?', folhaFeriado, 'plain sm', 'calendar')));
   // análise do plano: o que ele trabalha mais e menos, para que serve e se combina com o perfil
   if (plan) { let av = null; try { av = cartaoAvaliacaoDoPlano(plan, { data: dateKey(segunda) }); } catch { av = null; } if (av) body.push(av); }
 

@@ -1,226 +1,1514 @@
 {
-  "dicas": [
-    {"texto": "como eu faco pra crescer o peito? sinto q ta travado faz meses", "esperado": ["recomendar", "sem-resultado", "faq:Dá para dar prioridade a um músculo?"]},
-    {"texto": "dica pra melhorar o agachamento", "esperado": ["ex-como", "recomendar"]},
-    {"texto": "qual a forma certa de fazer terra sem detonar a lombar", "esperado": ["ex-como", "ex-seguro", "faq:Sinto dor nas costas. Devo parar de treinar?"]},
-    {"texto": "vale a pena alongar antes de treinar ou é mito?", "esperado": ["faq:Preciso aquecer e alongar antes do treino?"]},
-    {"texto": "qnto tempo de descanso entre uma serie e outra", "esperado": ["faq:Quanto tempo devo descansar entre as séries?", "carga"]},
-    {"texto": "preciso ir ate a falha em toda serie??", "esperado": ["faq:Preciso treinar até a falha?"]},
-    {"texto": "como eu sei a hora de colocar mais peso", "esperado": ["faq:Quando e quanto aumentar a carga?", "carga"]},
-    {"texto": "quantos dias na semana é o ideal pra quem ta comecando agora", "esperado": ["faq:Quantas vezes por semana devo treinar?"]},
-    {"texto": "cardio depois da musculacao atrapalha ganhar massa?", "esperado": ["faq:Fazer cardio atrapalha o ganho de músculo?", "juntar-treino"]},
-    {"texto": "o q é esse tal de deload q o pessoal fala tanto", "esperado": ["faq:O que é um “deload” e quando fazer?"]},
-    {"texto": "fiquei uns 3 meses parado por causa do trampo, como recomeço sem me machucar?", "esperado": ["faq:Fiquei um tempo parado. Como voltar?"]},
-    {"texto": "minha perna nao cresce de jeito nenhum, oq vc sugere", "esperado": ["recomendar", "sem-resultado", "faq:Dá para dar prioridade a um músculo?"]},
-    {"texto": "da pra focar mais no gluteo sem largar o resto?", "esperado": ["faq:Dá para dar prioridade a um músculo?", "recomendar"]},
-    {"texto": "quantas series por exercicio vc indica", "esperado": ["faq:Quantas séries e repetições devo fazer?", "carga"]},
-    {"texto": "8 ou 12 repeticoes, qual melhor pra hipertrofia", "esperado": ["faq:Quantas séries e repetições devo fazer?", "carga"]},
-    {"texto": "descer ate embaixo no agacho faz diferenca mesmo ou tanto faz", "esperado": ["faq:A amplitude do movimento importa?", "ex-como"]},
-    {"texto": "meio movimento no supino vale ou é roubo?", "esperado": ["faq:A amplitude do movimento importa?", "ex-como"]},
-    {"texto": "de quanto em quanto tempo eu troco a ficha", "esperado": ["faq:De quanto em quanto tempo devo trocar os exercícios?", "mudar-plano"]},
-    {"texto": "tenho 63 anos, ainda da tempo de começar musculação?", "esperado": ["faq:Tenho mais de 60 anos. Posso fazer musculação?", "ex-seguro"]},
-    {"texto": "minha mae tem 67 e quer treinar comigo, é seguro pra ela?", "esperado": ["faq:Tenho mais de 60 anos. Posso fazer musculação?", "ex-seguro"]},
-    {"texto": "como protejo o ombro no desenvolvimento", "esperado": ["faq:Como proteger os ombros na musculação?", "ex-seguro", "ex-como"]},
-    {"texto": "sempre sinto o ombro no supino, alguma dica pra nao machucar?", "esperado": ["faq:Como proteger os ombros na musculação?", "dor-treino", "ex-como"]},
-    {"texto": "tenho condromalacia, que exercicio de perna posso fazer sem piorar", "esperado": ["faq:Tenho dor no joelho. Quais exercícios adaptar?", "ex-seguro"]},
-    {"texto": "joelho estala no agachamento, troco por oq?", "esperado": ["faq:Tenho dor no joelho. Quais exercícios adaptar?", "ex-trocar", "ex-seguro"]},
-    {"texto": "correr 3x na semana estraga o ganho de musculo?", "esperado": ["faq:Corro e faço musculação: uma atrapalha a outra?", "faq:Fazer cardio atrapalha o ganho de músculo?"]},
-    {"texto": "faço corrida e academia, como encaixo os dois sem um matar o outro", "esperado": ["faq:Corro e faço musculação: uma atrapalha a outra?", "juntar-treino"]},
-    {"texto": "melhor treino pra secar barriga", "esperado": ["faq:Qual é o melhor treino para emagrecer?"]},
-    {"texto": "quero emagrecer, foco em cardio ou em peso?", "esperado": ["faq:Qual é o melhor treino para emagrecer?", "faq:Fazer cardio atrapalha o ganho de músculo?"]},
-    {"texto": "pq meu treino tem tanto exercicio de costas?", "esperado": ["explicar"]},
-    {"texto": "qual musculo a remada baixa pega", "esperado": ["ex-musculo"]},
-    {"texto": "stiff trabalha posterior ou gluteo? fiquei na duvida", "esperado": ["ex-musculo"]},
-    {"texto": "como faz puxada frente direito, so sinto o braço", "esperado": ["ex-como"]},
-    {"texto": "sinto mais o biceps q as costas na remada, oq to fazendo errado", "esperado": ["ex-como", "recomendar"]},
-    {"texto": "alguma dica pra subir carga no supino", "esperado": ["faq:Quando e quanto aumentar a carga?", "recomendar", "carga"]},
-    {"texto": "estagnei no supino em 60kg faz uns 2 meses, como destravar", "esperado": ["sem-resultado", "faq:Quando e quanto aumentar a carga?", "recomendar"]},
-    {"texto": "como melhorar a pegada pro levantamento terra", "esperado": ["recomendar", "ex-como"]},
-    {"texto": "precisa aquecer qnto tempo antes", "esperado": ["faq:Preciso aquecer e alongar antes do treino?"]},
-    {"texto": "aquecimento na esteira serve ou tem q ser no proprio exercicio com pouco peso?", "esperado": ["faq:Preciso aquecer e alongar antes do treino?"]},
-    {"texto": "treinar todo dia faz mal?", "esperado": ["faq:Quantas vezes por semana devo treinar?", "seguidos"]},
-    {"texto": "posso treinar o mesmo musculo dois dias seguidos", "esperado": ["seguidos"]},
-    {"texto": "posso escolher folga sabado e domingo?", "esperado": ["faq:Posso escolher os dias em que não treino?", "semana"]},
-    {"texto": "da pra deixar quarta como meu dia de descanso fixo", "esperado": ["faq:Posso escolher os dias em que não treino?", "semana"]},
-    {"texto": "se eu perder o treino de segunda faço na terca ou pulo?", "esperado": ["faq:Perdi um treino. Faço no dia seguinte?", "treino-perdido"]},
-    {"texto": "como sei se to treinando pesado o suficiente", "esperado": ["faq:Preciso treinar até a falha?", "carga", "recomendar"]},
-    {"texto": "drop set vale a pena?", "esperado": ["recomendar", "faq:Preciso treinar até a falha?"]},
-    {"texto": "qual a melhor forma de crescer braço", "esperado": ["recomendar", "faq:Dá para dar prioridade a um músculo?"]},
-    {"texto": "biceps fino, dicas?", "esperado": ["recomendar", "faq:Dá para dar prioridade a um músculo?"]},
-    {"texto": "panturrilha nao cresce nem a pau, ja tentei de tudo", "esperado": ["recomendar", "sem-resultado", "faq:Dá para dar prioridade a um músculo?"]},
-    {"texto": "quanto de agua devo beber durante o treino", "esperado": ["agua-treino"]},
-    {"texto": "pode beber agua gelada entre as series?", "esperado": ["agua-treino"]},
-    {"texto": "to com dor nas costas, paro de treinar?", "esperado": ["faq:Sinto dor nas costas. Devo parar de treinar?", "dor-treino"]},
-    {"texto": "lombar doendo de leve, posso fazer perna msm assim?", "esperado": ["faq:Sinto dor nas costas. Devo parar de treinar?", "dor-treino", "ex-seguro"]},
-    {"texto": "dor muscular de dois dias depois, treino assim mesmo ou espero passar", "esperado": ["faq:Estou com dor muscular depois do treino. Posso treinar?", "dor-treino"]},
-    {"texto": "quanto tempo deveria durar um treino", "esperado": ["duracao"]},
-    {"texto": "treino de 1h30 é demais?", "esperado": ["duracao", "explicar"]},
-    {"texto": "agachamento livre ou smith, qual é melhor?", "esperado": ["ex-trocar", "recomendar"]},
-    {"texto": "leg press substitui agachamento?", "esperado": ["ex-trocar"]},
-    {"texto": "posso trocar o supino reto de barra por halter", "esperado": ["ex-trocar"]},
-    {"texto": "terra é perigoso pra quem tem hernia de disco?", "esperado": ["ex-seguro", "faq:Sinto dor nas costas. Devo parar de treinar?"]},
-    {"texto": "como respirar durante o exercicio? sempre prendo o ar", "esperado": ["ex-como"]},
-    {"texto": "fazer a descida bem devagar ajuda a crescer?", "esperado": ["recomendar", "ex-como", "carga"]},
-    {"texto": "descanso pra força é diferente do de hipertrofia?", "esperado": ["faq:Quanto tempo devo descansar entre as séries?"]},
-    {"texto": "1 minuto de intervalo é pouco?", "esperado": ["faq:Quanto tempo devo descansar entre as séries?", "carga"]},
-    {"texto": "quero mudar meu treino pq enjoei dele", "esperado": ["mudar-plano", "faq:De quanto em quanto tempo devo trocar os exercícios?"]},
-    {"texto": "me monta um treino novo de perna", "esperado": ["mudar-plano", "recomendar"]},
-    {"texto": "pq tenho q fazer deload se nem to cansado", "esperado": ["faq:O que é um “deload” e quando fazer?", "explicar"]},
-    {"texto": "a cada quantas semanas faço uma semana mais leve", "esperado": ["faq:O que é um “deload” e quando fazer?"]},
-    {"texto": "como volto depois de uma gripe de 2 semanas sem treinar", "esperado": ["faq:Fiquei um tempo parado. Como voltar?"]},
-    {"texto": "voltei das ferias, pego leve por quanto tempo?", "esperado": ["faq:Fiquei um tempo parado. Como voltar?"]},
-    {"texto": "abdominal todo dia ajuda a perder barriga?", "esperado": ["faq:Qual é o melhor treino para emagrecer?", "recomendar"]},
-    {"texto": "da pra melhorar a postura com musculacao? trabalho sentado o dia todo e fico todo curvado", "esperado": ["recomendar"]},
-    {"texto": "qual musculo o crucifixo inverso trabalha", "esperado": ["ex-musculo"]},
-    {"texto": "elevacao lateral pega qual parte do ombro", "esperado": ["ex-musculo"]},
-    {"texto": "hip thrust, como posiciono o banco e a barra?", "esperado": ["ex-como"]},
-    {"texto": "nao consigo fazer nenhuma barra fixa, como evoluo ate conseguir", "esperado": ["recomendar", "ex-como", "ex-trocar"]},
-    {"texto": "flexao de braço conta como treino de peito?", "esperado": ["ex-musculo", "recomendar"]},
-    {"texto": "cardio antes ou depois do treino", "esperado": ["faq:Fazer cardio atrapalha o ganho de músculo?", "juntar-treino"]},
-    {"texto": "corrida longa no mesmo dia do treino de perna, pode?", "esperado": ["juntar-treino", "faq:Corro e faço musculação: uma atrapalha a outra?"]},
-    {"texto": "quanto peso eu deveria usar no leg", "esperado": ["carga"]},
-    {"texto": "quantas repetições no stiff", "esperado": ["carga", "faq:Quantas séries e repetições devo fazer?"]},
-    {"texto": "como evitar dor no punho no supino", "esperado": ["ex-como", "dor-treino"]},
-    {"texto": "e melhor treinar de manha ou a noite", "esperado": ["recomendar"]},
-    {"texto": "dicas pra ter mais energia durante o treino, sempre chego na metade morto", "esperado": ["recomendar", "desanimo"]},
-    {"texto": "como manter a constancia? sempre desisto depois de 1 mes", "esperado": ["desanimo"]},
-    {"texto": "tem alguma dica pra nao perder a vontade de ir na academia", "esperado": ["desanimo"]},
-    {"texto": "treino ha 6 meses e nao vejo mudanca nenhuma no espelho, o q faço", "esperado": ["sem-resultado"]},
-    {"texto": "como saber se to evoluindo de verdade", "esperado": ["sem-resultado", "faq:Quando e quanto aumentar a carga?"]},
-    {"texto": "rosca direta ou alternada", "esperado": ["ex-trocar", "recomendar"]},
-    {"texto": "pq a ficha tem só 3 series em cada exercicio", "esperado": ["explicar", "faq:Quantas séries e repetições devo fazer?"]},
-    {"texto": "pq tem tanto descanso no meu treino? acho q perco tempo", "esperado": ["explicar", "faq:Quanto tempo devo descansar entre as séries?"]},
-    {"texto": "ABC ou fullbody pra quem tem pouco tempo na semana", "esperado": ["mudar-plano", "recomendar", "faq:Quantas vezes por semana devo treinar?"]},
-    {"texto": "falha concentrica, excentrica... qual eu devo buscar afinal", "esperado": ["faq:Preciso treinar até a falha?"]},
-    {"texto": "subir a carga toda semana é bom?", "esperado": ["faq:Quando e quanto aumentar a carga?"]},
-    {"texto": "progressao de carga como funciona", "esperado": ["faq:Quando e quanto aumentar a carga?"]},
-    {"texto": "alongar depois do treino ajuda na recuperacao?", "esperado": ["faq:Preciso aquecer e alongar antes do treino?"]},
-    {"texto": "mobilidade de quadril, oq fazer antes do agachamento", "esperado": ["faq:Preciso aquecer e alongar antes do treino?", "recomendar", "ex-como"]},
-    {"texto": "como proteger o joelho no afundo", "esperado": ["faq:Tenho dor no joelho. Quais exercícios adaptar?", "ex-como", "ex-seguro"]},
-    {"texto": "pessoa de idade pode fazer agachamento?", "esperado": ["faq:Tenho mais de 60 anos. Posso fazer musculação?", "ex-seguro"]},
-    {"texto": "como fazer remada curvada sem doer a lombar", "esperado": ["ex-como", "faq:Sinto dor nas costas. Devo parar de treinar?", "ex-seguro"]},
-    {"texto": "abrir mais a pegada no supino muda alguma coisa?", "esperado": ["ex-musculo", "ex-como"]},
-    {"texto": "queria priorizar ombro esse mes, tem como", "esperado": ["faq:Dá para dar prioridade a um músculo?", "recomendar"]},
-    {"texto": "qual melhor exercicio pra peitoral superior", "esperado": ["recomendar", "ex-musculo"]},
-    {"texto": "vale treinar costas e biceps no mesmo dia?", "esperado": ["explicar", "recomendar", "mudar-plano"]},
-    {"texto": "academia 2x por semana da resultado ou é perda de tempo", "esperado": ["faq:Quantas vezes por semana devo treinar?"]},
-    {"texto": "posso fazer 5 dias seguidos?", "esperado": ["seguidos", "faq:Quantas vezes por semana devo treinar?"]},
-    {"texto": "quantos dias de folga entre um treino de perna e outro", "esperado": ["faq:Quantas vezes por semana devo treinar?", "seguidos"]},
-    {"texto": "melhor jeito de queimar gordura sem perder musculo", "esperado": ["faq:Qual é o melhor treino para emagrecer?", "faq:Fazer cardio atrapalha o ganho de músculo?"]},
-    {"texto": "tem como trocar a ordem dos exercicios ou tem q seguir certinho", "esperado": ["mudar-plano", "explicar"]},
-    {"texto": "qual seu time do coracao?", "esperado": ["nenhum"]},
-    {"texto": "vc viu o filme novo do batman? vale a pena?", "esperado": ["nenhum"]}
-  ],
-  "casos": [
-    {"texto": "cheguei na academia e o leg ta em manutencao", "esperado": ["aparelho-falta", "ex-trocar"]},
-    {"texto": "meu chefe me segurou e so tenho 25 min", "esperado": ["pouco-tempo"]},
-    {"texto": "ontem fiz perna e hoje to travado", "esperado": ["faq:Estou com dor muscular depois do treino. Posso treinar?", "dor-treino"]},
-    {"texto": "to num hotel so com halter de 10kg", "esperado": ["aparelho-falta", "ex-trocar", "mudar-plano"]},
-    {"texto": "choveu mt aqui e nao consegui sair de casa", "esperado": ["treino-perdido"]},
-    {"texto": "o supino ta todo ocupado, tem ate fila", "esperado": ["aparelho-ocupado"]},
-    {"texto": "dormi umas 4h so, a bebe chorou a noite toda", "esperado": ["dormi-mal"]},
-    {"texto": "esqueci o tenis em casa", "esperado": ["treino-perdido", "pouco-tempo"]},
-    {"texto": "transito parado na marginal, vou chegar uns 40 min atrasado e a academia fecha as 22h", "esperado": ["pouco-tempo"]},
-    {"texto": "to sem vontade nenhuma hj", "esperado": ["desanimo"]},
-    {"texto": "hoje é dia de que mesmo", "esperado": ["qual-treino"]},
-    {"texto": "abri o app e nao achei o treino de hj", "esperado": ["qual-treino"]},
-    {"texto": "amanha vou viajar cedo, queria adiantar o treino de quinta pra hoje", "esperado": ["antecipar"]},
-    {"texto": "fiz costas ontem e hoje caiu costas de novo??", "esperado": ["seguidos", "qual-treino", "explicar"]},
-    {"texto": "corri 10km de manha e de noite ainda tem treino de perna", "esperado": ["juntar-treino", "faq:Corro e faço musculação: uma atrapalha a outra?"]},
-    {"texto": "acordei com febre", "esperado": ["saude-fora-treino"]},
-    {"texto": "cortei o dedo cozinhando, ta todo enfaixado", "esperado": ["saude-fora-treino"]},
-    {"texto": "to gripado, nariz escorrendo e corpo mole", "esperado": ["saude-fora-treino"]},
-    {"texto": "dor de cabeça desde cedo", "esperado": ["saude-fora-treino"]},
-    {"texto": "senti uma fisgada no ombro no desenvolvimento e parei na hora", "esperado": ["dor-treino", "faq:Como proteger os ombros na musculação?"]},
-    {"texto": "joelho doendo depois do agachamento de ontem", "esperado": ["dor-treino", "faq:Tenho dor no joelho. Quais exercícios adaptar?"]},
-    {"texto": "minha lombar ta doendo desde o terra de sexta", "esperado": ["dor-treino", "faq:Sinto dor nas costas. Devo parar de treinar?"]},
-    {"texto": "a academia ta lotada, nao tem um banco livre", "esperado": ["aparelho-ocupado"]},
-    {"texto": "o cara ta no cross ha 20 min mexendo no celular e nao sai", "esperado": ["aparelho-ocupado"]},
-    {"texto": "minha academia nao tem hack", "esperado": ["aparelho-falta", "ex-trocar"]},
-    {"texto": "a polia quebrou", "esperado": ["aparelho-falta", "ex-trocar"]},
-    {"texto": "tive q levar meu filho no medico, nao vai dar pra treinar hoje", "esperado": ["treino-perdido"]},
-    {"texto": "meu filho ta doente e fiquei em casa com ele", "esperado": ["treino-perdido"]},
-    {"texto": "semana de prova na facul, nao to conseguindo ir de jeito nenhum", "esperado": ["treino-perdido", "semana", "mudar-plano"]},
-    {"texto": "so consigo ir 3x essa semana", "esperado": ["semana", "mudar-plano", "faq:Quantas vezes por semana devo treinar?"]},
-    {"texto": "como fica minha semana se eu faltar sexta", "esperado": ["semana", "treino-perdido"]},
-    {"texto": "ontem faltei", "esperado": ["faq:Perdi um treino. Faço no dia seguinte?", "treino-perdido"]},
-    {"texto": "faltei segunda e terça por causa do trabalho", "esperado": ["faq:Perdi um treino. Faço no dia seguinte?", "treino-perdido", "semana"]},
-    {"texto": "quanto tempo vai levar o treino de hj? to com hora marcada no dentista", "esperado": ["duracao", "pouco-tempo"]},
-    {"texto": "tenho 40 min antes de buscar as crianças na escola", "esperado": ["pouco-tempo"]},
-    {"texto": "vou treinar em casa hj, so tenho elastico", "esperado": ["aparelho-falta", "ex-trocar", "mudar-plano"]},
-    {"texto": "minha esposa ta gravida e minha rotina virou de cabeça pra baixo, agora so consigo bem cedo antes do trabalho", "esperado": ["mudar-plano", "semana"]},
-    {"texto": "mudei de turno no serviço, agora so consigo de noite e nos fds", "esperado": ["mudar-plano", "semana", "faq:Posso escolher os dias em que não treino?"]},
-    {"texto": "to treinando a 4 meses e a balança nao mexe", "esperado": ["sem-resultado", "faq:Qual é o melhor treino para emagrecer?"]},
-    {"texto": "meu braço continua igualzinho desde q comecei", "esperado": ["sem-resultado", "recomendar"]},
-    {"texto": "o supino nao sobe de 40kg de jeito nenhum", "esperado": ["sem-resultado", "faq:Quando e quanto aumentar a carga?"]},
-    {"texto": "dormi mal, insonia de novo", "esperado": ["dormi-mal"]},
-    {"texto": "virei a noite trabalhando", "esperado": ["dormi-mal"]},
-    {"texto": "to morto hoje, trabalhei 12h direto", "esperado": ["desanimo", "treino-perdido"]},
-    {"texto": "hj nao vou nao", "esperado": ["treino-perdido"]},
-    {"texto": "ta mt calor, suei horrores e ja to meio tonto", "esperado": ["agua-treino", "saude-fora-treino"]},
-    {"texto": "esqueci a garrafinha", "esperado": ["agua-treino"]},
-    {"texto": "bebi so meio litro de agua o dia todo", "esperado": ["agua-treino"]},
-    {"texto": "o professor da academia falou pra eu fazer outro treino, diferente do q ta no app", "esperado": ["mudar-plano", "explicar"]},
-    {"texto": "achei meu treino muito puxado", "esperado": ["mudar-plano", "explicar", "carga"]},
-    {"texto": "o treino ta mt facil, terminei sem nem suar", "esperado": ["carga", "faq:Quando e quanto aumentar a carga?", "mudar-plano"]},
-    {"texto": "a carga do leg ta leve demais pra mim", "esperado": ["carga", "faq:Quando e quanto aumentar a carga?"]},
-    {"texto": "nao consegui fazer as 12 reps do supino, parei na 8", "esperado": ["carga", "faq:Quando e quanto aumentar a carga?", "faq:Preciso treinar até a falha?"]},
-    {"texto": "comecei dieta essa semana e to me sentindo fraco no treino", "esperado": ["recomendar", "carga"]},
-    {"texto": "voltei hoje depois de 2 meses parada pq fiz cirurgia", "esperado": ["faq:Fiquei um tempo parado. Como voltar?", "saude-fora-treino"]},
-    {"texto": "fiquei 1 mes sem treinar por causa de viagem, hoje volto", "esperado": ["faq:Fiquei um tempo parado. Como voltar?"]},
-    {"texto": "to com 65 anos e meu medico liberou a academia", "esperado": ["faq:Tenho mais de 60 anos. Posso fazer musculação?"]},
-    {"texto": "minhas costas tao doendo de dormir de mal jeito", "esperado": ["saude-fora-treino", "faq:Sinto dor nas costas. Devo parar de treinar?"]},
-    {"texto": "sinto dor no joelho qdo subo escada, e hj tem perna", "esperado": ["faq:Tenho dor no joelho. Quais exercícios adaptar?", "ex-seguro", "dor-treino"]},
-    {"texto": "o banco do supino inclinado ta quebrado", "esperado": ["aparelho-falta", "ex-trocar"]},
-    {"texto": "nao tem barra W aqui", "esperado": ["aparelho-falta", "ex-trocar"]},
-    {"texto": "o smith ta ocupado e o rack tb", "esperado": ["aparelho-ocupado", "ex-trocar"]},
-    {"texto": "acho q fiz o treino de hoje ontem sem querer", "esperado": ["qual-treino", "antecipar"]},
-    {"texto": "quero treinar sabado tb pra compensar a falta", "esperado": ["faq:Perdi um treino. Faço no dia seguinte?", "semana", "faq:Posso escolher os dias em que não treino?"]},
-    {"texto": "domingo é o unico dia q tenho livre de vdd", "esperado": ["faq:Posso escolher os dias em que não treino?", "semana"]},
-    {"texto": "to com o ombro meio estranho hj", "esperado": ["dor-treino", "faq:Como proteger os ombros na musculação?"]},
-    {"texto": "meu pulso doi na rosca", "esperado": ["dor-treino", "ex-trocar"]},
-    {"texto": "to na casa da minha mae no interior, nao tem academia aqui perto", "esperado": ["aparelho-falta", "treino-perdido", "mudar-plano"]},
-    {"texto": "a academia fechou por causa do feriado", "esperado": ["treino-perdido", "aparelho-falta"]},
-    {"texto": "cheguei e acabou a luz na academia", "esperado": ["treino-perdido", "pouco-tempo"]},
-    {"texto": "to sem animo desde q terminei o namoro", "esperado": ["desanimo"]},
-    {"texto": "sei la, cansei de academia", "esperado": ["desanimo"]},
-    {"texto": "nao to vendo mais graça em treinar, parece q nao muda nada", "esperado": ["desanimo", "sem-resultado"]},
-    {"texto": "hoje é aniversario do meu filho, festa a tarde toda", "esperado": ["treino-perdido", "pouco-tempo"]},
-    {"texto": "tenho reuniao as 8 e so da pra treinar 6:30", "esperado": ["pouco-tempo", "duracao"]},
-    {"texto": "o treino de hj ta mt longo, tenho so 1h", "esperado": ["duracao", "pouco-tempo"]},
-    {"texto": "domingo tenho meia maratona, faço perna hoje ou nao?", "esperado": ["juntar-treino", "faq:Corro e faço musculação: uma atrapalha a outra?", "semana"]},
-    {"texto": "pedalei 40km ontem, as pernas tao acabadas", "esperado": ["faq:Estou com dor muscular depois do treino. Posso treinar?", "juntar-treino", "faq:Corro e faço musculação: uma atrapalha a outra?"]},
-    {"texto": "ta todo mundo no supino, segunda feira ne", "esperado": ["aparelho-ocupado"]},
-    {"texto": "a academia do condominio so tem esteira e dois halteres", "esperado": ["aparelho-falta", "mudar-plano", "ex-trocar"]},
-    {"texto": "nao entendi pq meu treino tem tanto agachamento", "esperado": ["explicar"]},
-    {"texto": "troquei de academia e a nova nao tem cadeira flexora", "esperado": ["aparelho-falta", "ex-trocar"]},
-    {"texto": "tomei vacina hoje, braço doendo", "esperado": ["saude-fora-treino"]},
-    {"texto": "ressaca braba hoje", "esperado": ["saude-fora-treino", "dormi-mal"]},
-    {"texto": "to de plantao 24h, amanha nao rola", "esperado": ["treino-perdido", "dormi-mal"]},
-    {"texto": "torci o tornozelo no futebol ontem", "esperado": ["saude-fora-treino"]},
-    {"texto": "torci o pe na corrida de domingo", "esperado": ["saude-fora-treino", "dor-treino"]},
-    {"texto": "sentindo uma dorzinha no cotovelo no triceps testa", "esperado": ["dor-treino", "ex-trocar", "ex-seguro"]},
-    {"texto": "hj tava com pressa e fiz so metade do treino", "esperado": ["pouco-tempo", "treino-perdido"]},
-    {"texto": "pulei o aquecimento hoje e senti a coxa puxar", "esperado": ["faq:Preciso aquecer e alongar antes do treino?", "dor-treino"]},
-    {"texto": "minha amiga disse q agachamento acaba com o joelho", "esperado": ["ex-seguro", "faq:Tenho dor no joelho. Quais exercícios adaptar?"]},
-    {"texto": "meu personal antigo falava pra ir sempre ate a falha", "esperado": ["faq:Preciso treinar até a falha?", "explicar"]},
-    {"texto": "o pessoal da academia ficou rindo do peso q eu uso", "esperado": ["desanimo"]},
-    {"texto": "no app ta 4 series mas eu so aguentei 2", "esperado": ["carga", "mudar-plano"]},
-    {"texto": "machuquei o dedao do pe, consigo fazer superior?", "esperado": ["saude-fora-treino"]},
-    {"texto": "to menstruada, colica forte hj", "esperado": ["saude-fora-treino"]},
-    {"texto": "fim de mes no trabalho, to saindo 21h todo dia essa semana", "esperado": ["pouco-tempo", "semana", "treino-perdido"]},
-    {"texto": "a mochila com as coisas da academia ficou no carro do meu marido", "esperado": ["treino-perdido"]},
-    {"texto": "academia lotada, abdutora com 3 pessoas esperando", "esperado": ["aparelho-ocupado"]},
-    {"texto": "acordei com o pescoço travado", "esperado": ["saude-fora-treino"]},
-    {"texto": "hoje to animado, quero fazer mais do q o treino manda", "esperado": ["carga", "recomendar"]},
-    {"texto": "fiz peito ontem, posso fazer ombro hoje?", "esperado": ["seguidos", "faq:Como proteger os ombros na musculação?"]},
-    {"texto": "semana q vem to de ferias na praia, uma semana inteira sem academia", "esperado": ["treino-perdido", "semana", "faq:O que é um “deload” e quando fazer?"]},
-    {"texto": "a semana passada foi uma bagunca, treinei 1 vez so", "esperado": ["semana", "faq:Perdi um treino. Faço no dia seguinte?", "desanimo"]},
-    {"texto": "o halter de 20 sumiu da academia, tem so 18 e 22", "esperado": ["aparelho-falta", "carga"]},
-    {"texto": "nao achei o aparelho q ta no treino, nem sei qual é", "esperado": ["aparelho-falta", "ex-como", "ex-trocar"]},
-    {"texto": "quem vc acha q ganha a eleicao", "esperado": ["nenhum"]},
-    {"texto": "vou no show do fim de semana, ja comprei ingresso", "esperado": ["nenhum"]},
-    {"texto": "me indica uma serie boa pra ver hj a noite", "esperado": ["nenhum"]},
-    {"texto": "comeco num emprego novo segunda, acho q so vou conseguir treinar 3x", "esperado": ["semana", "mudar-plano", "faq:Quantas vezes por semana devo treinar?"]}
-  ]
+ "dicas": [
+  {
+   "texto": "como eu faco pra crescer o peito? sinto q ta travado faz meses",
+   "esperado": [
+    "recomendar",
+    "sem-resultado",
+    "faq:Dá para dar prioridade a um músculo?"
+   ]
+  },
+  {
+   "texto": "dica pra melhorar o agachamento",
+   "esperado": [
+    "ex-como",
+    "recomendar"
+   ]
+  },
+  {
+   "texto": "qual a forma certa de fazer terra sem detonar a lombar",
+   "esperado": [
+    "ex-como",
+    "ex-seguro",
+    "faq:Sinto dor nas costas. Devo parar de treinar?"
+   ]
+  },
+  {
+   "texto": "vale a pena alongar antes de treinar ou é mito?",
+   "esperado": [
+    "faq:Preciso aquecer e alongar antes do treino?"
+   ]
+  },
+  {
+   "texto": "qnto tempo de descanso entre uma serie e outra",
+   "esperado": [
+    "faq:Quanto tempo devo descansar entre as séries?",
+    "carga"
+   ]
+  },
+  {
+   "texto": "preciso ir ate a falha em toda serie??",
+   "esperado": [
+    "faq:Preciso treinar até a falha?"
+   ]
+  },
+  {
+   "texto": "como eu sei a hora de colocar mais peso",
+   "esperado": [
+    "faq:Quando e quanto aumentar a carga?",
+    "carga"
+   ]
+  },
+  {
+   "texto": "quantos dias na semana é o ideal pra quem ta comecando agora",
+   "esperado": [
+    "faq:Quantas vezes por semana devo treinar?"
+   ]
+  },
+  {
+   "texto": "cardio depois da musculacao atrapalha ganhar massa?",
+   "esperado": [
+    "faq:Fazer cardio atrapalha o ganho de músculo?",
+    "juntar-treino"
+   ]
+  },
+  {
+   "texto": "o q é esse tal de deload q o pessoal fala tanto",
+   "esperado": [
+    "faq:O que é um “deload” e quando fazer?"
+   ]
+  },
+  {
+   "texto": "fiquei uns 3 meses parado por causa do trampo, como recomeço sem me machucar?",
+   "esperado": [
+    "faq:Fiquei um tempo parado. Como voltar?"
+   ]
+  },
+  {
+   "texto": "minha perna nao cresce de jeito nenhum, oq vc sugere",
+   "esperado": [
+    "recomendar",
+    "sem-resultado",
+    "faq:Dá para dar prioridade a um músculo?"
+   ]
+  },
+  {
+   "texto": "da pra focar mais no gluteo sem largar o resto?",
+   "esperado": [
+    "faq:Dá para dar prioridade a um músculo?",
+    "recomendar"
+   ]
+  },
+  {
+   "texto": "quantas series por exercicio vc indica",
+   "esperado": [
+    "faq:Quantas séries e repetições devo fazer?",
+    "carga"
+   ]
+  },
+  {
+   "texto": "8 ou 12 repeticoes, qual melhor pra hipertrofia",
+   "esperado": [
+    "faq:Quantas séries e repetições devo fazer?",
+    "carga"
+   ]
+  },
+  {
+   "texto": "descer ate embaixo no agacho faz diferenca mesmo ou tanto faz",
+   "esperado": [
+    "faq:A amplitude do movimento importa?",
+    "ex-como"
+   ]
+  },
+  {
+   "texto": "meio movimento no supino vale ou é roubo?",
+   "esperado": [
+    "faq:A amplitude do movimento importa?",
+    "ex-como"
+   ]
+  },
+  {
+   "texto": "de quanto em quanto tempo eu troco a ficha",
+   "esperado": [
+    "faq:De quanto em quanto tempo devo trocar os exercícios?",
+    "mudar-plano"
+   ]
+  },
+  {
+   "texto": "tenho 63 anos, ainda da tempo de começar musculação?",
+   "esperado": [
+    "faq:Tenho mais de 60 anos. Posso fazer musculação?",
+    "ex-seguro"
+   ]
+  },
+  {
+   "texto": "minha mae tem 67 e quer treinar comigo, é seguro pra ela?",
+   "esperado": [
+    "faq:Tenho mais de 60 anos. Posso fazer musculação?",
+    "ex-seguro"
+   ]
+  },
+  {
+   "texto": "como protejo o ombro no desenvolvimento",
+   "esperado": [
+    "faq:Como proteger os ombros na musculação?",
+    "ex-seguro",
+    "ex-como"
+   ]
+  },
+  {
+   "texto": "sempre sinto o ombro no supino, alguma dica pra nao machucar?",
+   "esperado": [
+    "faq:Como proteger os ombros na musculação?",
+    "dor-treino",
+    "ex-como"
+   ]
+  },
+  {
+   "texto": "tenho condromalacia, que exercicio de perna posso fazer sem piorar",
+   "esperado": [
+    "faq:Tenho dor no joelho. Quais exercícios adaptar?",
+    "ex-seguro"
+   ]
+  },
+  {
+   "texto": "joelho estala no agachamento, troco por oq?",
+   "esperado": [
+    "faq:Tenho dor no joelho. Quais exercícios adaptar?",
+    "ex-trocar",
+    "ex-seguro"
+   ]
+  },
+  {
+   "texto": "correr 3x na semana estraga o ganho de musculo?",
+   "esperado": [
+    "faq:Corro e faço musculação: uma atrapalha a outra?",
+    "faq:Fazer cardio atrapalha o ganho de músculo?"
+   ]
+  },
+  {
+   "texto": "faço corrida e academia, como encaixo os dois sem um matar o outro",
+   "esperado": [
+    "faq:Corro e faço musculação: uma atrapalha a outra?",
+    "juntar-treino"
+   ]
+  },
+  {
+   "texto": "melhor treino pra secar barriga",
+   "esperado": [
+    "faq:Qual é o melhor treino para emagrecer?"
+   ]
+  },
+  {
+   "texto": "quero emagrecer, foco em cardio ou em peso?",
+   "esperado": [
+    "faq:Qual é o melhor treino para emagrecer?",
+    "faq:Fazer cardio atrapalha o ganho de músculo?"
+   ]
+  },
+  {
+   "texto": "pq meu treino tem tanto exercicio de costas?",
+   "esperado": [
+    "explicar"
+   ]
+  },
+  {
+   "texto": "qual musculo a remada baixa pega",
+   "esperado": [
+    "ex-musculo"
+   ]
+  },
+  {
+   "texto": "stiff trabalha posterior ou gluteo? fiquei na duvida",
+   "esperado": [
+    "ex-musculo"
+   ]
+  },
+  {
+   "texto": "como faz puxada frente direito, so sinto o braço",
+   "esperado": [
+    "ex-como"
+   ]
+  },
+  {
+   "texto": "sinto mais o biceps q as costas na remada, oq to fazendo errado",
+   "esperado": [
+    "ex-como",
+    "recomendar"
+   ]
+  },
+  {
+   "texto": "alguma dica pra subir carga no supino",
+   "esperado": [
+    "faq:Quando e quanto aumentar a carga?",
+    "recomendar",
+    "carga"
+   ]
+  },
+  {
+   "texto": "estagnei no supino em 60kg faz uns 2 meses, como destravar",
+   "esperado": [
+    "sem-resultado",
+    "faq:Quando e quanto aumentar a carga?",
+    "recomendar"
+   ]
+  },
+  {
+   "texto": "como melhorar a pegada pro levantamento terra",
+   "esperado": [
+    "recomendar",
+    "ex-como"
+   ]
+  },
+  {
+   "texto": "precisa aquecer qnto tempo antes",
+   "esperado": [
+    "faq:Preciso aquecer e alongar antes do treino?"
+   ]
+  },
+  {
+   "texto": "aquecimento na esteira serve ou tem q ser no proprio exercicio com pouco peso?",
+   "esperado": [
+    "faq:Preciso aquecer e alongar antes do treino?"
+   ]
+  },
+  {
+   "texto": "treinar todo dia faz mal?",
+   "esperado": [
+    "faq:Quantas vezes por semana devo treinar?",
+    "seguidos"
+   ]
+  },
+  {
+   "texto": "posso treinar o mesmo musculo dois dias seguidos",
+   "esperado": [
+    "seguidos"
+   ]
+  },
+  {
+   "texto": "posso escolher folga sabado e domingo?",
+   "esperado": [
+    "faq:Posso escolher os dias em que não treino?",
+    "semana"
+   ]
+  },
+  {
+   "texto": "da pra deixar quarta como meu dia de descanso fixo",
+   "esperado": [
+    "faq:Posso escolher os dias em que não treino?",
+    "semana"
+   ]
+  },
+  {
+   "texto": "se eu perder o treino de segunda faço na terca ou pulo?",
+   "esperado": [
+    "faq:Perdi um treino. Faço no dia seguinte?",
+    "treino-perdido"
+   ]
+  },
+  {
+   "texto": "como sei se to treinando pesado o suficiente",
+   "esperado": [
+    "faq:Preciso treinar até a falha?",
+    "carga",
+    "recomendar"
+   ]
+  },
+  {
+   "texto": "drop set vale a pena?",
+   "esperado": [
+    "recomendar",
+    "faq:Preciso treinar até a falha?",
+    "faq:O drop set funciona?"
+   ]
+  },
+  {
+   "texto": "qual a melhor forma de crescer braço",
+   "esperado": [
+    "recomendar",
+    "faq:Dá para dar prioridade a um músculo?"
+   ]
+  },
+  {
+   "texto": "biceps fino, dicas?",
+   "esperado": [
+    "recomendar",
+    "faq:Dá para dar prioridade a um músculo?"
+   ]
+  },
+  {
+   "texto": "panturrilha nao cresce nem a pau, ja tentei de tudo",
+   "esperado": [
+    "recomendar",
+    "sem-resultado",
+    "faq:Dá para dar prioridade a um músculo?"
+   ]
+  },
+  {
+   "texto": "quanto de agua devo beber durante o treino",
+   "esperado": [
+    "agua-treino"
+   ]
+  },
+  {
+   "texto": "pode beber agua gelada entre as series?",
+   "esperado": [
+    "agua-treino"
+   ]
+  },
+  {
+   "texto": "to com dor nas costas, paro de treinar?",
+   "esperado": [
+    "faq:Sinto dor nas costas. Devo parar de treinar?",
+    "dor-treino"
+   ]
+  },
+  {
+   "texto": "lombar doendo de leve, posso fazer perna msm assim?",
+   "esperado": [
+    "faq:Sinto dor nas costas. Devo parar de treinar?",
+    "dor-treino",
+    "ex-seguro"
+   ]
+  },
+  {
+   "texto": "dor muscular de dois dias depois, treino assim mesmo ou espero passar",
+   "esperado": [
+    "faq:Estou com dor muscular depois do treino. Posso treinar?",
+    "dor-treino"
+   ]
+  },
+  {
+   "texto": "quanto tempo deveria durar um treino",
+   "esperado": [
+    "duracao"
+   ]
+  },
+  {
+   "texto": "treino de 1h30 é demais?",
+   "esperado": [
+    "duracao",
+    "explicar"
+   ]
+  },
+  {
+   "texto": "agachamento livre ou smith, qual é melhor?",
+   "esperado": [
+    "ex-trocar",
+    "recomendar",
+    "faq:Peso livre ou máquina: qual é melhor?"
+   ]
+  },
+  {
+   "texto": "leg press substitui agachamento?",
+   "esperado": [
+    "ex-trocar",
+    "faq:Peso livre ou máquina: qual é melhor?"
+   ]
+  },
+  {
+   "texto": "posso trocar o supino reto de barra por halter",
+   "esperado": [
+    "ex-trocar"
+   ]
+  },
+  {
+   "texto": "terra é perigoso pra quem tem hernia de disco?",
+   "esperado": [
+    "ex-seguro",
+    "faq:Sinto dor nas costas. Devo parar de treinar?"
+   ]
+  },
+  {
+   "texto": "como respirar durante o exercicio? sempre prendo o ar",
+   "esperado": [
+    "ex-como",
+    "faq:Posso prender o ar no exercício?"
+   ]
+  },
+  {
+   "texto": "fazer a descida bem devagar ajuda a crescer?",
+   "esperado": [
+    "recomendar",
+    "ex-como",
+    "carga",
+    "faq:Descer devagar faz diferença?"
+   ]
+  },
+  {
+   "texto": "descanso pra força é diferente do de hipertrofia?",
+   "esperado": [
+    "faq:Quanto tempo devo descansar entre as séries?"
+   ]
+  },
+  {
+   "texto": "1 minuto de intervalo é pouco?",
+   "esperado": [
+    "faq:Quanto tempo devo descansar entre as séries?",
+    "carga"
+   ]
+  },
+  {
+   "texto": "quero mudar meu treino pq enjoei dele",
+   "esperado": [
+    "mudar-plano",
+    "faq:De quanto em quanto tempo devo trocar os exercícios?"
+   ]
+  },
+  {
+   "texto": "me monta um treino novo de perna",
+   "esperado": [
+    "mudar-plano",
+    "recomendar"
+   ]
+  },
+  {
+   "texto": "pq tenho q fazer deload se nem to cansado",
+   "esperado": [
+    "faq:O que é um “deload” e quando fazer?",
+    "explicar"
+   ]
+  },
+  {
+   "texto": "a cada quantas semanas faço uma semana mais leve",
+   "esperado": [
+    "faq:O que é um “deload” e quando fazer?"
+   ]
+  },
+  {
+   "texto": "como volto depois de uma gripe de 2 semanas sem treinar",
+   "esperado": [
+    "faq:Fiquei um tempo parado. Como voltar?"
+   ]
+  },
+  {
+   "texto": "voltei das ferias, pego leve por quanto tempo?",
+   "esperado": [
+    "faq:Fiquei um tempo parado. Como voltar?"
+   ]
+  },
+  {
+   "texto": "abdominal todo dia ajuda a perder barriga?",
+   "esperado": [
+    "faq:Qual é o melhor treino para emagrecer?",
+    "recomendar",
+    "faq:Abdominal todo dia ajuda a perder barriga?"
+   ]
+  },
+  {
+   "texto": "da pra melhorar a postura com musculacao? trabalho sentado o dia todo e fico todo curvado",
+   "esperado": [
+    "recomendar"
+   ]
+  },
+  {
+   "texto": "qual musculo o crucifixo inverso trabalha",
+   "esperado": [
+    "ex-musculo"
+   ]
+  },
+  {
+   "texto": "elevacao lateral pega qual parte do ombro",
+   "esperado": [
+    "ex-musculo"
+   ]
+  },
+  {
+   "texto": "hip thrust, como posiciono o banco e a barra?",
+   "esperado": [
+    "ex-como"
+   ]
+  },
+  {
+   "texto": "nao consigo fazer nenhuma barra fixa, como evoluo ate conseguir",
+   "esperado": [
+    "recomendar",
+    "ex-como",
+    "ex-trocar"
+   ]
+  },
+  {
+   "texto": "flexao de braço conta como treino de peito?",
+   "esperado": [
+    "ex-musculo",
+    "recomendar"
+   ]
+  },
+  {
+   "texto": "cardio antes ou depois do treino",
+   "esperado": [
+    "faq:Fazer cardio atrapalha o ganho de músculo?",
+    "juntar-treino"
+   ]
+  },
+  {
+   "texto": "corrida longa no mesmo dia do treino de perna, pode?",
+   "esperado": [
+    "juntar-treino",
+    "faq:Corro e faço musculação: uma atrapalha a outra?"
+   ]
+  },
+  {
+   "texto": "quanto peso eu deveria usar no leg",
+   "esperado": [
+    "carga"
+   ]
+  },
+  {
+   "texto": "quantas repetições no stiff",
+   "esperado": [
+    "carga",
+    "faq:Quantas séries e repetições devo fazer?"
+   ]
+  },
+  {
+   "texto": "como evitar dor no punho no supino",
+   "esperado": [
+    "ex-como",
+    "dor-treino"
+   ]
+  },
+  {
+   "texto": "e melhor treinar de manha ou a noite",
+   "esperado": [
+    "recomendar",
+    "faq:Qual o melhor horário para treinar: manhã ou noite?"
+   ]
+  },
+  {
+   "texto": "dicas pra ter mais energia durante o treino, sempre chego na metade morto",
+   "esperado": [
+    "recomendar",
+    "desanimo"
+   ]
+  },
+  {
+   "texto": "como manter a constancia? sempre desisto depois de 1 mes",
+   "esperado": [
+    "desanimo"
+   ]
+  },
+  {
+   "texto": "tem alguma dica pra nao perder a vontade de ir na academia",
+   "esperado": [
+    "desanimo"
+   ]
+  },
+  {
+   "texto": "treino ha 6 meses e nao vejo mudanca nenhuma no espelho, o q faço",
+   "esperado": [
+    "sem-resultado"
+   ]
+  },
+  {
+   "texto": "como saber se to evoluindo de verdade",
+   "esperado": [
+    "sem-resultado",
+    "faq:Quando e quanto aumentar a carga?"
+   ]
+  },
+  {
+   "texto": "rosca direta ou alternada",
+   "esperado": [
+    "ex-trocar",
+    "recomendar"
+   ]
+  },
+  {
+   "texto": "pq a ficha tem só 3 series em cada exercicio",
+   "esperado": [
+    "explicar",
+    "faq:Quantas séries e repetições devo fazer?"
+   ]
+  },
+  {
+   "texto": "pq tem tanto descanso no meu treino? acho q perco tempo",
+   "esperado": [
+    "explicar",
+    "faq:Quanto tempo devo descansar entre as séries?"
+   ]
+  },
+  {
+   "texto": "ABC ou fullbody pra quem tem pouco tempo na semana",
+   "esperado": [
+    "mudar-plano",
+    "recomendar",
+    "faq:Quantas vezes por semana devo treinar?"
+   ]
+  },
+  {
+   "texto": "falha concentrica, excentrica... qual eu devo buscar afinal",
+   "esperado": [
+    "faq:Preciso treinar até a falha?"
+   ]
+  },
+  {
+   "texto": "subir a carga toda semana é bom?",
+   "esperado": [
+    "faq:Quando e quanto aumentar a carga?"
+   ]
+  },
+  {
+   "texto": "progressao de carga como funciona",
+   "esperado": [
+    "faq:Quando e quanto aumentar a carga?"
+   ]
+  },
+  {
+   "texto": "alongar depois do treino ajuda na recuperacao?",
+   "esperado": [
+    "faq:Preciso aquecer e alongar antes do treino?"
+   ]
+  },
+  {
+   "texto": "mobilidade de quadril, oq fazer antes do agachamento",
+   "esperado": [
+    "faq:Preciso aquecer e alongar antes do treino?",
+    "recomendar",
+    "ex-como"
+   ]
+  },
+  {
+   "texto": "como proteger o joelho no afundo",
+   "esperado": [
+    "faq:Tenho dor no joelho. Quais exercícios adaptar?",
+    "ex-como",
+    "ex-seguro"
+   ]
+  },
+  {
+   "texto": "pessoa de idade pode fazer agachamento?",
+   "esperado": [
+    "faq:Tenho mais de 60 anos. Posso fazer musculação?",
+    "ex-seguro"
+   ]
+  },
+  {
+   "texto": "como fazer remada curvada sem doer a lombar",
+   "esperado": [
+    "ex-como",
+    "faq:Sinto dor nas costas. Devo parar de treinar?",
+    "ex-seguro"
+   ]
+  },
+  {
+   "texto": "abrir mais a pegada no supino muda alguma coisa?",
+   "esperado": [
+    "ex-musculo",
+    "ex-como"
+   ]
+  },
+  {
+   "texto": "queria priorizar ombro esse mes, tem como",
+   "esperado": [
+    "faq:Dá para dar prioridade a um músculo?",
+    "recomendar"
+   ]
+  },
+  {
+   "texto": "qual melhor exercicio pra peitoral superior",
+   "esperado": [
+    "recomendar",
+    "ex-musculo"
+   ]
+  },
+  {
+   "texto": "vale treinar costas e biceps no mesmo dia?",
+   "esperado": [
+    "explicar",
+    "recomendar",
+    "mudar-plano"
+   ]
+  },
+  {
+   "texto": "academia 2x por semana da resultado ou é perda de tempo",
+   "esperado": [
+    "faq:Quantas vezes por semana devo treinar?"
+   ]
+  },
+  {
+   "texto": "posso fazer 5 dias seguidos?",
+   "esperado": [
+    "seguidos",
+    "faq:Quantas vezes por semana devo treinar?"
+   ]
+  },
+  {
+   "texto": "quantos dias de folga entre um treino de perna e outro",
+   "esperado": [
+    "faq:Quantas vezes por semana devo treinar?",
+    "seguidos"
+   ]
+  },
+  {
+   "texto": "melhor jeito de queimar gordura sem perder musculo",
+   "esperado": [
+    "faq:Qual é o melhor treino para emagrecer?",
+    "faq:Fazer cardio atrapalha o ganho de músculo?"
+   ]
+  },
+  {
+   "texto": "tem como trocar a ordem dos exercicios ou tem q seguir certinho",
+   "esperado": [
+    "mudar-plano",
+    "explicar"
+   ]
+  },
+  {
+   "texto": "qual seu time do coracao?",
+   "esperado": [
+    "nenhum"
+   ]
+  },
+  {
+   "texto": "vc viu o filme novo do batman? vale a pena?",
+   "esperado": [
+    "nenhum"
+   ]
+  }
+ ],
+ "casos": [
+  {
+   "texto": "cheguei na academia e o leg ta em manutencao",
+   "esperado": [
+    "aparelho-falta",
+    "ex-trocar"
+   ]
+  },
+  {
+   "texto": "meu chefe me segurou e so tenho 25 min",
+   "esperado": [
+    "pouco-tempo"
+   ]
+  },
+  {
+   "texto": "ontem fiz perna e hoje to travado",
+   "esperado": [
+    "faq:Estou com dor muscular depois do treino. Posso treinar?",
+    "dor-treino"
+   ]
+  },
+  {
+   "texto": "to num hotel so com halter de 10kg",
+   "esperado": [
+    "aparelho-falta",
+    "ex-trocar",
+    "mudar-plano"
+   ]
+  },
+  {
+   "texto": "choveu mt aqui e nao consegui sair de casa",
+   "esperado": [
+    "treino-perdido"
+   ]
+  },
+  {
+   "texto": "o supino ta todo ocupado, tem ate fila",
+   "esperado": [
+    "aparelho-ocupado"
+   ]
+  },
+  {
+   "texto": "dormi umas 4h so, a bebe chorou a noite toda",
+   "esperado": [
+    "dormi-mal"
+   ]
+  },
+  {
+   "texto": "esqueci o tenis em casa",
+   "esperado": [
+    "treino-perdido",
+    "pouco-tempo"
+   ]
+  },
+  {
+   "texto": "transito parado na marginal, vou chegar uns 40 min atrasado e a academia fecha as 22h",
+   "esperado": [
+    "pouco-tempo"
+   ]
+  },
+  {
+   "texto": "to sem vontade nenhuma hj",
+   "esperado": [
+    "desanimo"
+   ]
+  },
+  {
+   "texto": "hoje é dia de que mesmo",
+   "esperado": [
+    "qual-treino"
+   ]
+  },
+  {
+   "texto": "abri o app e nao achei o treino de hj",
+   "esperado": [
+    "qual-treino"
+   ]
+  },
+  {
+   "texto": "amanha vou viajar cedo, queria adiantar o treino de quinta pra hoje",
+   "esperado": [
+    "antecipar"
+   ]
+  },
+  {
+   "texto": "fiz costas ontem e hoje caiu costas de novo??",
+   "esperado": [
+    "seguidos",
+    "qual-treino",
+    "explicar"
+   ]
+  },
+  {
+   "texto": "corri 10km de manha e de noite ainda tem treino de perna",
+   "esperado": [
+    "juntar-treino",
+    "faq:Corro e faço musculação: uma atrapalha a outra?"
+   ]
+  },
+  {
+   "texto": "acordei com febre",
+   "esperado": [
+    "saude-fora-treino"
+   ]
+  },
+  {
+   "texto": "cortei o dedo cozinhando, ta todo enfaixado",
+   "esperado": [
+    "saude-fora-treino"
+   ]
+  },
+  {
+   "texto": "to gripado, nariz escorrendo e corpo mole",
+   "esperado": [
+    "saude-fora-treino"
+   ]
+  },
+  {
+   "texto": "dor de cabeça desde cedo",
+   "esperado": [
+    "saude-fora-treino"
+   ]
+  },
+  {
+   "texto": "senti uma fisgada no ombro no desenvolvimento e parei na hora",
+   "esperado": [
+    "dor-treino",
+    "faq:Como proteger os ombros na musculação?"
+   ]
+  },
+  {
+   "texto": "joelho doendo depois do agachamento de ontem",
+   "esperado": [
+    "dor-treino",
+    "faq:Tenho dor no joelho. Quais exercícios adaptar?"
+   ]
+  },
+  {
+   "texto": "minha lombar ta doendo desde o terra de sexta",
+   "esperado": [
+    "dor-treino",
+    "faq:Sinto dor nas costas. Devo parar de treinar?"
+   ]
+  },
+  {
+   "texto": "a academia ta lotada, nao tem um banco livre",
+   "esperado": [
+    "aparelho-ocupado"
+   ]
+  },
+  {
+   "texto": "o cara ta no cross ha 20 min mexendo no celular e nao sai",
+   "esperado": [
+    "aparelho-ocupado"
+   ]
+  },
+  {
+   "texto": "minha academia nao tem hack",
+   "esperado": [
+    "aparelho-falta",
+    "ex-trocar"
+   ]
+  },
+  {
+   "texto": "a polia quebrou",
+   "esperado": [
+    "aparelho-falta",
+    "ex-trocar"
+   ]
+  },
+  {
+   "texto": "tive q levar meu filho no medico, nao vai dar pra treinar hoje",
+   "esperado": [
+    "treino-perdido"
+   ]
+  },
+  {
+   "texto": "meu filho ta doente e fiquei em casa com ele",
+   "esperado": [
+    "treino-perdido"
+   ]
+  },
+  {
+   "texto": "semana de prova na facul, nao to conseguindo ir de jeito nenhum",
+   "esperado": [
+    "treino-perdido",
+    "semana",
+    "mudar-plano"
+   ]
+  },
+  {
+   "texto": "so consigo ir 3x essa semana",
+   "esperado": [
+    "semana",
+    "mudar-plano",
+    "faq:Quantas vezes por semana devo treinar?"
+   ]
+  },
+  {
+   "texto": "como fica minha semana se eu faltar sexta",
+   "esperado": [
+    "semana",
+    "treino-perdido"
+   ]
+  },
+  {
+   "texto": "ontem faltei",
+   "esperado": [
+    "faq:Perdi um treino. Faço no dia seguinte?",
+    "treino-perdido"
+   ]
+  },
+  {
+   "texto": "faltei segunda e terça por causa do trabalho",
+   "esperado": [
+    "faq:Perdi um treino. Faço no dia seguinte?",
+    "treino-perdido",
+    "semana"
+   ]
+  },
+  {
+   "texto": "quanto tempo vai levar o treino de hj? to com hora marcada no dentista",
+   "esperado": [
+    "duracao",
+    "pouco-tempo"
+   ]
+  },
+  {
+   "texto": "tenho 40 min antes de buscar as crianças na escola",
+   "esperado": [
+    "pouco-tempo"
+   ]
+  },
+  {
+   "texto": "vou treinar em casa hj, so tenho elastico",
+   "esperado": [
+    "aparelho-falta",
+    "ex-trocar",
+    "mudar-plano"
+   ]
+  },
+  {
+   "texto": "minha esposa ta gravida e minha rotina virou de cabeça pra baixo, agora so consigo bem cedo antes do trabalho",
+   "esperado": [
+    "mudar-plano",
+    "semana"
+   ]
+  },
+  {
+   "texto": "mudei de turno no serviço, agora so consigo de noite e nos fds",
+   "esperado": [
+    "mudar-plano",
+    "semana",
+    "faq:Posso escolher os dias em que não treino?"
+   ]
+  },
+  {
+   "texto": "to treinando a 4 meses e a balança nao mexe",
+   "esperado": [
+    "sem-resultado",
+    "faq:Qual é o melhor treino para emagrecer?"
+   ]
+  },
+  {
+   "texto": "meu braço continua igualzinho desde q comecei",
+   "esperado": [
+    "sem-resultado",
+    "recomendar"
+   ]
+  },
+  {
+   "texto": "o supino nao sobe de 40kg de jeito nenhum",
+   "esperado": [
+    "sem-resultado",
+    "faq:Quando e quanto aumentar a carga?"
+   ]
+  },
+  {
+   "texto": "dormi mal, insonia de novo",
+   "esperado": [
+    "dormi-mal"
+   ]
+  },
+  {
+   "texto": "virei a noite trabalhando",
+   "esperado": [
+    "dormi-mal"
+   ]
+  },
+  {
+   "texto": "to morto hoje, trabalhei 12h direto",
+   "esperado": [
+    "desanimo",
+    "treino-perdido"
+   ]
+  },
+  {
+   "texto": "hj nao vou nao",
+   "esperado": [
+    "treino-perdido"
+   ]
+  },
+  {
+   "texto": "ta mt calor, suei horrores e ja to meio tonto",
+   "esperado": [
+    "agua-treino",
+    "saude-fora-treino"
+   ]
+  },
+  {
+   "texto": "esqueci a garrafinha",
+   "esperado": [
+    "agua-treino"
+   ]
+  },
+  {
+   "texto": "bebi so meio litro de agua o dia todo",
+   "esperado": [
+    "agua-treino"
+   ]
+  },
+  {
+   "texto": "o professor da academia falou pra eu fazer outro treino, diferente do q ta no app",
+   "esperado": [
+    "mudar-plano",
+    "explicar"
+   ]
+  },
+  {
+   "texto": "achei meu treino muito puxado",
+   "esperado": [
+    "mudar-plano",
+    "explicar",
+    "carga"
+   ]
+  },
+  {
+   "texto": "o treino ta mt facil, terminei sem nem suar",
+   "esperado": [
+    "carga",
+    "faq:Quando e quanto aumentar a carga?",
+    "mudar-plano"
+   ]
+  },
+  {
+   "texto": "a carga do leg ta leve demais pra mim",
+   "esperado": [
+    "carga",
+    "faq:Quando e quanto aumentar a carga?"
+   ]
+  },
+  {
+   "texto": "nao consegui fazer as 12 reps do supino, parei na 8",
+   "esperado": [
+    "carga",
+    "faq:Quando e quanto aumentar a carga?",
+    "faq:Preciso treinar até a falha?"
+   ]
+  },
+  {
+   "texto": "comecei dieta essa semana e to me sentindo fraco no treino",
+   "esperado": [
+    "recomendar",
+    "carga"
+   ]
+  },
+  {
+   "texto": "voltei hoje depois de 2 meses parada pq fiz cirurgia",
+   "esperado": [
+    "faq:Fiquei um tempo parado. Como voltar?",
+    "saude-fora-treino"
+   ]
+  },
+  {
+   "texto": "fiquei 1 mes sem treinar por causa de viagem, hoje volto",
+   "esperado": [
+    "faq:Fiquei um tempo parado. Como voltar?"
+   ]
+  },
+  {
+   "texto": "to com 65 anos e meu medico liberou a academia",
+   "esperado": [
+    "faq:Tenho mais de 60 anos. Posso fazer musculação?"
+   ]
+  },
+  {
+   "texto": "minhas costas tao doendo de dormir de mal jeito",
+   "esperado": [
+    "saude-fora-treino",
+    "faq:Sinto dor nas costas. Devo parar de treinar?"
+   ]
+  },
+  {
+   "texto": "sinto dor no joelho qdo subo escada, e hj tem perna",
+   "esperado": [
+    "faq:Tenho dor no joelho. Quais exercícios adaptar?",
+    "ex-seguro",
+    "dor-treino"
+   ]
+  },
+  {
+   "texto": "o banco do supino inclinado ta quebrado",
+   "esperado": [
+    "aparelho-falta",
+    "ex-trocar"
+   ]
+  },
+  {
+   "texto": "nao tem barra W aqui",
+   "esperado": [
+    "aparelho-falta",
+    "ex-trocar"
+   ]
+  },
+  {
+   "texto": "o smith ta ocupado e o rack tb",
+   "esperado": [
+    "aparelho-ocupado",
+    "ex-trocar"
+   ]
+  },
+  {
+   "texto": "acho q fiz o treino de hoje ontem sem querer",
+   "esperado": [
+    "qual-treino",
+    "antecipar"
+   ]
+  },
+  {
+   "texto": "quero treinar sabado tb pra compensar a falta",
+   "esperado": [
+    "faq:Perdi um treino. Faço no dia seguinte?",
+    "semana",
+    "faq:Posso escolher os dias em que não treino?"
+   ]
+  },
+  {
+   "texto": "domingo é o unico dia q tenho livre de vdd",
+   "esperado": [
+    "faq:Posso escolher os dias em que não treino?",
+    "semana"
+   ]
+  },
+  {
+   "texto": "to com o ombro meio estranho hj",
+   "esperado": [
+    "dor-treino",
+    "faq:Como proteger os ombros na musculação?"
+   ]
+  },
+  {
+   "texto": "meu pulso doi na rosca",
+   "esperado": [
+    "dor-treino",
+    "ex-trocar"
+   ]
+  },
+  {
+   "texto": "to na casa da minha mae no interior, nao tem academia aqui perto",
+   "esperado": [
+    "aparelho-falta",
+    "treino-perdido",
+    "mudar-plano"
+   ]
+  },
+  {
+   "texto": "a academia fechou por causa do feriado",
+   "esperado": [
+    "treino-perdido",
+    "aparelho-falta"
+   ]
+  },
+  {
+   "texto": "cheguei e acabou a luz na academia",
+   "esperado": [
+    "treino-perdido",
+    "pouco-tempo"
+   ]
+  },
+  {
+   "texto": "to sem animo desde q terminei o namoro",
+   "esperado": [
+    "desanimo"
+   ]
+  },
+  {
+   "texto": "sei la, cansei de academia",
+   "esperado": [
+    "desanimo"
+   ]
+  },
+  {
+   "texto": "nao to vendo mais graça em treinar, parece q nao muda nada",
+   "esperado": [
+    "desanimo",
+    "sem-resultado"
+   ]
+  },
+  {
+   "texto": "hoje é aniversario do meu filho, festa a tarde toda",
+   "esperado": [
+    "treino-perdido",
+    "pouco-tempo"
+   ]
+  },
+  {
+   "texto": "tenho reuniao as 8 e so da pra treinar 6:30",
+   "esperado": [
+    "pouco-tempo",
+    "duracao"
+   ]
+  },
+  {
+   "texto": "o treino de hj ta mt longo, tenho so 1h",
+   "esperado": [
+    "duracao",
+    "pouco-tempo"
+   ]
+  },
+  {
+   "texto": "domingo tenho meia maratona, faço perna hoje ou nao?",
+   "esperado": [
+    "juntar-treino",
+    "faq:Corro e faço musculação: uma atrapalha a outra?",
+    "semana"
+   ]
+  },
+  {
+   "texto": "pedalei 40km ontem, as pernas tao acabadas",
+   "esperado": [
+    "faq:Estou com dor muscular depois do treino. Posso treinar?",
+    "juntar-treino",
+    "faq:Corro e faço musculação: uma atrapalha a outra?"
+   ]
+  },
+  {
+   "texto": "ta todo mundo no supino, segunda feira ne",
+   "esperado": [
+    "aparelho-ocupado"
+   ]
+  },
+  {
+   "texto": "a academia do condominio so tem esteira e dois halteres",
+   "esperado": [
+    "aparelho-falta",
+    "mudar-plano",
+    "ex-trocar"
+   ]
+  },
+  {
+   "texto": "nao entendi pq meu treino tem tanto agachamento",
+   "esperado": [
+    "explicar"
+   ]
+  },
+  {
+   "texto": "troquei de academia e a nova nao tem cadeira flexora",
+   "esperado": [
+    "aparelho-falta",
+    "ex-trocar"
+   ]
+  },
+  {
+   "texto": "tomei vacina hoje, braço doendo",
+   "esperado": [
+    "saude-fora-treino"
+   ]
+  },
+  {
+   "texto": "ressaca braba hoje",
+   "esperado": [
+    "saude-fora-treino",
+    "dormi-mal"
+   ]
+  },
+  {
+   "texto": "to de plantao 24h, amanha nao rola",
+   "esperado": [
+    "treino-perdido",
+    "dormi-mal"
+   ]
+  },
+  {
+   "texto": "torci o tornozelo no futebol ontem",
+   "esperado": [
+    "saude-fora-treino"
+   ]
+  },
+  {
+   "texto": "torci o pe na corrida de domingo",
+   "esperado": [
+    "saude-fora-treino",
+    "dor-treino"
+   ]
+  },
+  {
+   "texto": "sentindo uma dorzinha no cotovelo no triceps testa",
+   "esperado": [
+    "dor-treino",
+    "ex-trocar",
+    "ex-seguro"
+   ]
+  },
+  {
+   "texto": "hj tava com pressa e fiz so metade do treino",
+   "esperado": [
+    "pouco-tempo",
+    "treino-perdido"
+   ]
+  },
+  {
+   "texto": "pulei o aquecimento hoje e senti a coxa puxar",
+   "esperado": [
+    "faq:Preciso aquecer e alongar antes do treino?",
+    "dor-treino"
+   ]
+  },
+  {
+   "texto": "minha amiga disse q agachamento acaba com o joelho",
+   "esperado": [
+    "ex-seguro",
+    "faq:Tenho dor no joelho. Quais exercícios adaptar?"
+   ]
+  },
+  {
+   "texto": "meu personal antigo falava pra ir sempre ate a falha",
+   "esperado": [
+    "faq:Preciso treinar até a falha?",
+    "explicar"
+   ]
+  },
+  {
+   "texto": "o pessoal da academia ficou rindo do peso q eu uso",
+   "esperado": [
+    "desanimo"
+   ]
+  },
+  {
+   "texto": "no app ta 4 series mas eu so aguentei 2",
+   "esperado": [
+    "carga",
+    "mudar-plano"
+   ]
+  },
+  {
+   "texto": "machuquei o dedao do pe, consigo fazer superior?",
+   "esperado": [
+    "saude-fora-treino"
+   ]
+  },
+  {
+   "texto": "to menstruada, colica forte hj",
+   "esperado": [
+    "saude-fora-treino"
+   ]
+  },
+  {
+   "texto": "fim de mes no trabalho, to saindo 21h todo dia essa semana",
+   "esperado": [
+    "pouco-tempo",
+    "semana",
+    "treino-perdido"
+   ]
+  },
+  {
+   "texto": "a mochila com as coisas da academia ficou no carro do meu marido",
+   "esperado": [
+    "treino-perdido"
+   ]
+  },
+  {
+   "texto": "academia lotada, abdutora com 3 pessoas esperando",
+   "esperado": [
+    "aparelho-ocupado"
+   ]
+  },
+  {
+   "texto": "acordei com o pescoço travado",
+   "esperado": [
+    "saude-fora-treino"
+   ]
+  },
+  {
+   "texto": "hoje to animado, quero fazer mais do q o treino manda",
+   "esperado": [
+    "carga",
+    "recomendar"
+   ]
+  },
+  {
+   "texto": "fiz peito ontem, posso fazer ombro hoje?",
+   "esperado": [
+    "seguidos",
+    "faq:Como proteger os ombros na musculação?"
+   ]
+  },
+  {
+   "texto": "semana q vem to de ferias na praia, uma semana inteira sem academia",
+   "esperado": [
+    "treino-perdido",
+    "semana",
+    "faq:O que é um “deload” e quando fazer?"
+   ]
+  },
+  {
+   "texto": "a semana passada foi uma bagunca, treinei 1 vez so",
+   "esperado": [
+    "semana",
+    "faq:Perdi um treino. Faço no dia seguinte?",
+    "desanimo"
+   ]
+  },
+  {
+   "texto": "o halter de 20 sumiu da academia, tem so 18 e 22",
+   "esperado": [
+    "aparelho-falta",
+    "carga"
+   ]
+  },
+  {
+   "texto": "nao achei o aparelho q ta no treino, nem sei qual é",
+   "esperado": [
+    "aparelho-falta",
+    "ex-como",
+    "ex-trocar"
+   ]
+  },
+  {
+   "texto": "quem vc acha q ganha a eleicao",
+   "esperado": [
+    "nenhum"
+   ]
+  },
+  {
+   "texto": "vou no show do fim de semana, ja comprei ingresso",
+   "esperado": [
+    "nenhum"
+   ]
+  },
+  {
+   "texto": "me indica uma serie boa pra ver hj a noite",
+   "esperado": [
+    "nenhum"
+   ]
+  },
+  {
+   "texto": "comeco num emprego novo segunda, acho q so vou conseguir treinar 3x",
+   "esperado": [
+    "semana",
+    "mudar-plano",
+    "faq:Quantas vezes por semana devo treinar?"
+   ]
+  }
+ ]
 }

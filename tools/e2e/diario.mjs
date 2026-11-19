@@ -53,7 +53,8 @@ export default async (page) => {
   const passo = (delta) => page.eval(`const b = document.querySelector('.sheet .stepper button[aria-label^="${delta < 0 ? 'Diminuir' : 'Aumentar'}"]'); for (let i = 0; i < ${Math.abs(delta)}; i++) b.click(); return document.querySelector('.sheet .stepper input').value;`);
   const conta = () => page.eval(`const e = document.getElementById('diario-conta'); return e ? e.textContent : '';`);
   const campo = (rotulo, v) => page.eval(`const i = document.querySelector('.sheet input[aria-label="${rotulo}"]'); if (!i) return false; i.value = ${JSON.stringify(v)}; i.dispatchEvent(new Event('input', { bubbles: true })); return true;`);
-  const tocarItem = async (trecho) => { const achou = await page.eval(`const b = [...document.querySelectorAll('#conteudo .diario-item')].filter((e) => !e.closest('#diario-passado')).find((e) => e.textContent.includes(${JSON.stringify(trecho)})); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true;`); return achou && (await comFolhas(1)); };
+  // `ref`: só dentro desta refeição (o mesmo alimento pode estar em duas refeições do dia, como a tapioca no café e no lanche)
+  const tocarItem = async (trecho, ref = '') => { const achou = await page.eval(`const b = [...document.querySelectorAll('#conteudo ${ref ? `.refeicao[data-ref="${ref}"] ` : ''}.diario-item')].filter((e) => !e.closest('#diario-passado')).find((e) => e.textContent.includes(${JSON.stringify(trecho)})); if (!b) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true;`); return achou && (await comFolhas(1)); };
   // o botão de baixo da sugestão de uma refeição: "Comi tudo isso" ou "Desmarcar tudo"; o resumo de uma linha do título do card
   const botoesDe = (ref) => page.eval(`const a = document.querySelector('.diario-acoes-sug[data-ref="${ref}"]'); return a ? [...a.querySelectorAll('.btn')].map((b) => b.textContent.trim()).join('|') : '';`);
   const resumoDe = (ref) => page.eval(`const e = document.querySelector('.refeicao[data-ref="${ref}"] .ref-resumo'); return e ? e.textContent : '';`);
@@ -177,15 +178,15 @@ export default async (page) => {
   await ver('.refeicao[data-ref="lanche-tarde"]'); await foto('4c-biscoito-e-um-item');
   // desfazer: tocar no alimento em "Já comi" e apagar; ele volta para a sugestão
   const nomeAl1 = await page.eval(`return (await import('/js/data/foods.js')).ALIMENTOS.find((x) => x.id === '${al1}').nome;`);
-  ok(await tocarItem(nomeAl1), 'tocar no alimento em "Já comi" abre a correção');
+  ok(await tocarItem(nomeAl1, 'lanche-tarde'), 'tocar no alimento em "Já comi" abre a correção');
   await naFolha('Apagar'); await comFolhas(2); await naFolha('Apagar'); await comFolhas(0);
   ok(Math.abs((await totalDeHoje()) - (k0 + kB)) < 0.01 && (await page.eval(`return !!document.querySelector('.refeicao[data-ref="lanche-tarde"] .itens .kv[data-al="${al1}"]');`)), 'apagado em "Já comi": o total volta a ser só o biscoito e o alimento volta para a sugestão');
   // corrigir a quantidade do biscoito e apagar
-  ok(await tocarItem('Biscoito cream cracker'), 'tocar no biscoito abre a correção');
+  ok(await tocarItem('Biscoito cream cracker', 'lanche-tarde'), 'tocar no biscoito abre a correção');
   ok((await passo(1)) === '1,5' && (await conta()).startsWith('45 g'), 'passa para 1,5 porção (45 g)');
   await naFolha('Salvar'); await comFolhas(0);
   ok(Math.abs((await totalDeHoje()) - (k0 + 1.5 * kB)) < 0.01 && (await hoje()).filter((x) => x.al === 'biscoito-cream-cracker').length === 1, 'corrigido: conta 45 g, uma vez só');
-  await tocarItem('Biscoito cream cracker'); await naFolha('Apagar'); await comFolhas(2); await naFolha('Apagar'); await comFolhas(0);
+  await tocarItem('Biscoito cream cracker', 'lanche-tarde'); await naFolha('Apagar'); await comFolhas(2); await naFolha('Apagar'); await comFolhas(0);
   ok(Math.abs((await totalDeHoje()) - k0) < 0.01 && (await botoesDe('lanche-tarde')) === 'Comi tudo isso' && (await resumoDe('lanche-tarde')) === 'ainda não', 'apagado: o total volta ao de antes e o lanche volta a oferecer "Comi tudo isso"');
 
   console.log('5. Alimento que não está na lista (calorias só em número inteiro)');
@@ -440,8 +441,9 @@ export default async (page) => {
   await page.eval(`window.scrollTo(0, 0); return true;`);
   // 1.14.0: suplementos e vitaminas, Semana e compras e Tenho em casa ficam abaixo das refeições
   ok(await page.eval(`const b = document.querySelector('#card-suplementos .sup-dia'); if (!b) return false; return b.textContent.includes('nenhum hoje');`), 'a linha "Suplementos e vitaminas · nenhum hoje" fica no card próprio');
-  ok(await page.eval(`const refs = [...document.querySelectorAll('.refeicao')]; const ult = refs[refs.length - 1]; const sup = document.getElementById('card-suplementos'); const fer = document.getElementById('ferramentas-cardapio'); const div = document.getElementById('divisor-consulta'); const depois = (a, b) => !!(a && b && (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)); return depois(ult, sup) && depois(sup, fer) && depois(fer, div) && !document.querySelector('#hoje-nutri .sup-dia');`), 'ordem: refeições → suplementos e vitaminas → Semana e compras / Tenho em casa → "Para consultar"');
-  await page.eval(`document.querySelector('#hoje-nutri .sup-dia').click(); return true;`); await comFolhas(1);
+  const ordem = await page.eval(`return [...document.querySelectorAll('#conteudo > *')].map((e) => e.id || (e.classList.contains('card') ? 'card' : e.className.split(' ')[0])).join(' > ');`);
+  ok(/^hoje-nutri > (card > )+card-suplementos > ferramentas-cardapio > divisor-consulta/.test(ordem), 'ordem: hoje → refeições → suplementos e vitaminas → Semana e compras / Tenho em casa → "Para consultar": ' + ordem.slice(0, 160));
+  await page.eval(`document.querySelector('#card-suplementos .sup-dia').click(); return true;`); await comFolhas(1);
   ok((await texto()).includes('Nada marcado hoje.') && (await rodape()) === 'Fechar', 'a folha abre com a lista vazia e os tipos para marcar');
   await tocarNaFolha('#sup-tipos [data-tipo="creatina"]');
   ok((await page.eval(`return document.querySelector('.sheet input[aria-label="Quantidade"]').value;`)) === '' && (await rodape()) === 'Voltar|Salvar', 'creatina: a quantidade vem vazia (o app não sugere dose)');
@@ -461,12 +463,12 @@ export default async (page) => {
   ok((await page.eval(`return document.querySelector('.sheet #sup-tipos [data-tipo="whey"]').getAttribute('aria-pressed');`)) === 'true', 'o tipo já marcado aparece ligado (tocar abre o registro dele)');
   await foto('14-sup');
   await page.eval(`document.querySelector('.sheet .iconbtn[aria-label="Fechar"]').click(); return true;`); await comFolhas(0);
-  ok(await page.eval(`return document.querySelector('#hoje-nutri .sup-dia .sup-dia-r').textContent === 'Creatina, Whey';`), 'a linha do card mostra "Creatina, Whey"');
+  ok(await page.eval(`return document.querySelector('#card-suplementos .sup-dia .sup-dia-r').textContent === 'Creatina, Whey';`), 'a linha do card mostra "Creatina, Whey"');
   await page.reload(1500); await page.goto(B + '#/nutricao', 700);
   ok((await estado(`(s.diario.dias.find((d) => d.data === '${hojeKey}') || {}).sup.length`)) === 2, 'recarregar: os suplementos continuam');
   // dias anteriores também têm a linha; tirar pelo ×
   ok(await page.eval(`return !!document.querySelector('#diario-passado .sup-dia[data-dia="${diaMenos(1)}"]');`), '"Dias anteriores" mostra os suplementos daquele dia');
-  await page.eval(`document.querySelector('#hoje-nutri .sup-dia').click(); return true;`); await comFolhas(1);
+  await page.eval(`document.querySelector('#card-suplementos .sup-dia').click(); return true;`); await comFolhas(1);
   await tocarNaFolha('.sup-item[data-tipo="creatina"] .iconbtn');
   ok((await estado(`s.diario.dias.find((d) => d.data === '${hojeKey}').sup.map((x) => x.tipo).join()`)) === 'whey', 'tirar a creatina (×)');
   await page.eval(`document.querySelector('.sheet .iconbtn[aria-label="Fechar"]').click(); return true;`); await comFolhas(0);
