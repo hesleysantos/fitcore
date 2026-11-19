@@ -1288,6 +1288,11 @@ test('teste de ritmo marcado pelo plano: só sem resultado e com como medir a di
   assert.equal(t.length, 1);
   assert.equal(t[0].n, 2);
   assert.ok(t[0].d.automatico && /5 km/.test(t[0].d.nome) && /marque o tipo “Teste de ritmo”/.test(t[0].d.detalhe));
+  // quem ainda não corre 5 km com folga (corrida mais longa de 4 km): teste de 3 km, dentro dos 10% sobre a mais longa
+  const curto = testes({ ...base, resultado: 'nao', longoAtual: 4 });
+  assert.equal(curto.length, 1);
+  assert.ok(/Teste de 3 km/.test(curto[0].d.nome) && curto[0].d.distKm === 3, curto[0].d.nome);
+  assert.ok(/5 km/.test(testes({ ...base, resultado: 'nao', longoAtual: 5 })[0].d.nome));
   // com resultado, sem GPS, com cautela ou menor de 16: nenhum teste automático
   assert.equal(testes({ ...base, resultado: '5', resultadoMin: 25 }).length, 0);
   assert.equal(testes({ ...base, resultado: 'nao', aparelho: 'tempo' }).length, 0);

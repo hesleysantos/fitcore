@@ -1011,7 +1011,9 @@ function provaSuave(d, dist, detalhe) {
 }
 function tEvento(pf, c, cfg) {
   const { dist, evento } = cfg;
-  const km = DIST[dist];
+  // cfg.km: outra distância de teste (3 km), fora das distâncias de prova
+  const km = cfg.km || DIST[dist];
+  const nomeDist = cfg.km ? fmtKm(cfg.km) : ROTULO.distancia[dist];
   const P = c.P;
   const previsto = P ? previstoDe(P, dist) : km * c.est.leve * 0.93;
   // Ritmo da meta só com resultado recente e meta ao alcance (até 5% mais rápida que a previsão): os ritmos seguem o
@@ -1024,14 +1026,14 @@ function tEvento(pf, c, cfg) {
   const d = treino(evento, blocos, c, { ritmo });
   d.distKm = r1(km);
   d.durMin = Math.round((usarAlvo ? pf.alvoSeg : previsto) / 60 + (dist <= 10 ? 10 : 0));
-  d.nome = evento === 'teste' ? `Teste de ${ROTULO.distancia[dist]}` : pf.objetivo === 'distancia' ? `Desafio: ${ROTULO.distancia[dist]}` : `Prova: ${ROTULO.distancia[dist]}`;
-  d.resumo = `${ROTULO.distancia[dist]}${ritmo ? ' · ritmo de ' + fmtFaixa(ritmo, c.modo) : ''}`;
+  d.nome = evento === 'teste' ? `Teste de ${nomeDist}` : pf.objetivo === 'distancia' ? `Desafio: ${ROTULO.distancia[dist]}` : `Prova: ${ROTULO.distancia[dist]}`;
+  d.resumo = `${nomeDist}${ritmo ? ' · ritmo de ' + fmtFaixa(ritmo, c.modo) : ''}`;
   if (pf.cautela || pf.idade < 14) return provaSuave(d, dist, 'Complete a distância em ritmo leve, sem disputar tempo. Pode caminhar quando precisar.');
   d.detalhe = dist >= 21
     ? 'Comece um pouco mais devagar do que o ritmo planejado e segure até a metade. A maioria das quebras no fim vem de sair rápido demais. Beba água e coma como treinou nos longos.'
     : 'Aqueça bem. Largue controlado no primeiro quilômetro e aumente na segunda metade.';
   // sem GPS: a distância precisa ser conhecida (pista de atletismo, 400 m por volta, ou um percurso medido)
-  if (c.modo === 'tempo' && evento === 'teste') d.detalhe += ` Sem GPS, faça numa pista de atletismo (400 m por volta: ${ROTULO.distancia[dist]} = ${Math.round(km * 1000 / 400 * 10) / 10} voltas) ou num percurso de distância conhecida, e anote o tempo.`;
+  if (c.modo === 'tempo' && evento === 'teste') d.detalhe += ` Sem GPS, faça numa pista de atletismo (400 m por volta: ${nomeDist} = ${Math.round(km * 1000 / 400 * 10) / 10} voltas) ou num percurso de distância conhecida, e anote o tempo.`;
   return d;
 }
 
@@ -2127,7 +2129,7 @@ export function gerarPlano(respostas, opcoes) {
   aparar(semanas, c);
 
   // ----- teste de ritmo marcado pelo plano: sem um resultado recente (entrevista, prova ou teste das últimas 12 semanas),
-  // todos os treinos vão só pelo esforço. Para quem mede a distância (GPS, esteira ou pista), o plano marca um teste de 5 km
+  // todos os treinos vão só pelo esforço. Para quem mede a distância (GPS, esteira ou pista), o plano marca um teste de 3 ou 5 km
   // na semana seguinte (a 2ª, para quem está começando), no lugar do treino forte ou de uma rodagem, até ele ser registrado.
   // Fora: cautela de saúde, menores de 16, dor que muda o treino e volta de pausa. O dia e a distância são escolha do
   // aplicativo; o teste em si é o mesmo "Teste de ritmo" de sempre (o resultado atualiza os ritmos: vdoto2_ajuste).
@@ -2144,11 +2146,15 @@ export function gerarPlano(respostas, opcoes) {
       : sem.dias.find((d) => d.intensidade === 'forte' && pode(d)) || sem.dias.find((d) => (d.tipo === 'leve' || d.tipo === 'regenerativo') && !perto(d) && pode(d));
     if (alvo) {
       const j = sem.dias.indexOf(alvo);
-      const ev = tEvento(pf, c, { dist: 5, evento: 'teste' });
+      // 5 km só para quem já corre mais de cerca de 4,5 km (5 km fica dentro dos 10% sobre a corrida mais longa do último
+      // mês: frandsen2025); senão, 3 km. Vale a maior entre a da entrevista e as registradas nos últimos 30 dias.
+      const maisLonga = Math.max(pf.longoAtual || 0, ...corridas.filter((r) => r.distKm && diasEntre(r.data, op.hoje) <= 30).map((r) => r.distKm));
+      const kmTeste = maisLonga * 1.1 >= 5 ? 5 : 3;
+      const ev = tEvento(pf, c, kmTeste === 5 ? { dist: 5, evento: 'teste' } : { dist: 5, km: 3, evento: 'teste' });
       ev.detalhe = 'Sem um resultado recente, este teste calcula o ritmo de todos os treinos. ' + ev.detalhe + ' No registro, marque o tipo “Teste de ritmo”, com a distância e o tempo só do trecho do teste.';
       ev.automatico = true;
       sem.dias[j] = { wd: alvo.wd, ...ev };
-      ajustes.push({ texto: `Teste de ritmo de 5 km marcado para ${fmtDia(dataDe(alvo.wd))}.`, motivo: 'Sem um resultado recente de prova ou de teste, os treinos vão só pelo esforço. O resultado do teste calcula o ritmo de cada treino; depois, os ritmos sobem sozinhos conforme você treina.', refs: ['vdoto2_ajuste'] });
+      ajustes.push({ texto: `Teste de ritmo de ${kmTeste} km marcado para ${fmtDia(dataDe(alvo.wd))}.`, motivo: 'Sem um resultado recente de prova ou de teste, os treinos vão só pelo esforço. O resultado do teste calcula o ritmo de cada treino; depois, os ritmos sobem sozinhos conforme você treina.', refs: ['vdoto2_ajuste'] });
     }
   }
 
