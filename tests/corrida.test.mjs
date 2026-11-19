@@ -1,7 +1,7 @@
 // Regras do Treinador de corrida: perfil, plano, segurança e ajuste pelos registros.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PERGUNTAS, respostasCompletas, perfil, gerarPlano, motivoBloqueio, avisosBloqueio, ritmosDe, vdotDe, riegel, zonasDe, expandirBlocos, textoBloco, efeitoDaDor, orientacaoDor, planoDaSemana, treinoDoDia, resumoParaNutricao, inicioPara, diasDeForca, evolucao, alertas, dicas, limparRegistro, limparRegistros, MAX_REGISTROS, limparCorrida, retomarPlano, recordeSeg, resultadoValido, planoAtual, planoDaSemanaEm, efeitoDoFoco, planejadoDe, analiseDoRegistro, analiseRecente, guardarDoDia, diaLocal, fmtRitmo, fmtFaixa, fmtDuracao, somaDias, diaDaSemana, ETAPAS_CC, etapasDe } from '../www/js/logic/corrida.js';
+import { minutosEquivalentes, PERGUNTAS, respostasCompletas, perfil, gerarPlano, motivoBloqueio, avisosBloqueio, ritmosDe, vdotDe, riegel, zonasDe, expandirBlocos, textoBloco, efeitoDaDor, orientacaoDor, planoDaSemana, treinoDoDia, resumoParaNutricao, inicioPara, diasDeForca, evolucao, alertas, dicas, limparRegistro, limparRegistros, MAX_REGISTROS, limparCorrida, retomarPlano, recordeSeg, resultadoValido, planoAtual, planoDaSemanaEm, efeitoDoFoco, planejadoDe, analiseDoRegistro, analiseRecente, guardarDoDia, diaLocal, fmtRitmo, fmtFaixa, fmtDuracao, somaDias, diaDaSemana, ETAPAS_CC, etapasDe } from '../www/js/logic/corrida.js';
 import { REFS_CORRIDA, FAQ_CORRIDA, TIPOS_TREINO } from '../www/js/data/corrida.js';
 import * as store from '../www/js/store.js';
 
@@ -75,7 +75,10 @@ test('iniciante: corrida e caminhada por tempo, 3 vezes por semana, em dias alte
   assert.equal(p.tipo, 'adaptacao'); assert.equal(p.modo, 'tempo'); assert.equal(p.totalSemanas, ETAPAS_CC - 3);
   assert.ok(p.semanas.every((s) => s.fase === 'adaptacao' && tipos(s).every((t) => t === 'corrida_caminhada')));
   const s1 = p.semanas[0].dias[0];
-  assert.deepEqual(s1.blocos.map((b) => [b.tipo, b.seg, b.repeticoes || 1]), [['aquecer', 300, 1], ['correr', 60, 10], ['desaquecer', 300, 1]], '1ª semana: 10 × (1 min correndo + 1 min caminhando), com 5 min de caminhada antes e depois');
+  // + a caminhada que completa os 150 minutos da OMS na semana (no fim, depois da caminhada de desacelerar)
+  const cam = s1.caminhadaMin || 0;
+  assert.ok(cam >= 10 && p.semanas[0].dias.reduce((t, d) => t + minutosEquivalentes(d), 0) >= 140, 'a semana chega perto dos 150 minutos da OMS');
+  assert.deepEqual(s1.blocos.map((b) => [b.tipo, b.seg, b.repeticoes || 1]), [['aquecer', 300, 1], ['correr', 60, 10], ['desaquecer', 300 + cam * 60, 1]], '1ª semana: 10 × (1 min correndo + 1 min caminhando), com 5 min de caminhada antes e depois');
   assert.equal(p.semanas[0].corridaMin, 30);
   const ultimo = p.semanas[p.totalSemanas - 1].dias[2];
   assert.ok(ultimo.blocos.some((b) => b.tipo === 'correr' && b.seg === 1800), 'o programa termina em 30 minutos seguidos');
@@ -87,7 +90,7 @@ test('iniciante: corrida e caminhada por tempo, 3 vezes por semana, em dias alte
   assert.equal(tipos(juntos.semanas[0]).filter((t) => t === 'corrida_caminhada').length, 2);
   // cronômetro guiado: a lista de passos alterna corrida e caminhada
   const passos = expandirBlocos(s1.blocos);
-  assert.equal(passos.length, 22); assert.equal(passos[1].tipo, 'correr'); assert.equal(passos[2].tipo, 'caminhar'); assert.equal(passos.reduce((x, y) => x + y.seg, 0), 300 + 20 * 60 + 300);
+  assert.equal(passos.length, 22); assert.equal(passos[1].tipo, 'correr'); assert.equal(passos[2].tipo, 'caminhar'); assert.equal(passos.reduce((x, y) => x + y.seg, 0), 300 + 20 * 60 + 300 + cam * 60);
   assert.match(textoBloco(s1.blocos[1], 'tempo'), /10 × 1 min, com 1 min de caminhada/);
   // quem já alterna corrida e caminhada entra mais adiante
   assert.ok(gerarPlano({ ...novato, experiencia: 'caminha' }).totalSemanas < p.totalSemanas);

@@ -194,7 +194,7 @@ export default async (page) => {
   // a dor anotada na corrida (joelho) também sai do plano quando a pessoa marca “Melhorou”
   ok((await texto()).includes('Joelho:'), 'o ajuste pela dor no joelho continua enquanto ela está registrada');
   await page.eval(`const b = [...document.querySelectorAll('.dor')].find((e) => e.textContent.includes('Joelho')).querySelector('button'); b.click(); return true;`); await page.sleep(500);
-  ok(!(await texto()).includes('Joelho:') && !(await texto()).includes('O que ajustei no plano'), '“Melhorou” no joelho tira o ajuste, mesmo com a dor anotada na corrida');
+  ok(!(await texto()).includes('Joelho:') && !/joelho/i.test(await page.eval(`return (document.querySelector('[data-ajustes]') || {}).innerText || '';`)), '“Melhorou” no joelho tira o ajuste, mesmo com a dor anotada na corrida');
 
   console.log('5. Recarregar: tudo persiste');
   await page.reload(1800); await page.goto(B + '#/corrida', 900);

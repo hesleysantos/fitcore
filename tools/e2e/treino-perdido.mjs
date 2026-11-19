@@ -103,10 +103,11 @@ export default async (page) => {
     ok(await page.click('Desfazer', '#inicio-nao-treinado button'), 'tocou em Desfazer');
     await page.sleep(500);
     ok((await st()).length === 0, 'marca desfeita');
-    ok(await page.eval(`return [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Iniciar treino') && [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Não treinei');`), 'o treino de hoje voltou, com "Iniciar treino" e "Não treinei"');
+    ok(await page.eval(`return [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Iniciar treino') && !!document.getElementById('inicio-musculacao');`), 'o treino de hoje voltou ao resumo do Início, com "Iniciar treino"');
 
-    console.log('5. Pelo Início, "Cansaço": o treinador propõe não repor');
-    ok(await page.click('Não treinei', 'button'), 'tocou em "Não treinei" no Início');
+    console.log('5. Na aba Treinos, "Cansaço": o treinador propõe não repor (o cartão completo do dia fica lá)');
+    await page.click('Musculação: Treino A'); await page.sleep(700);
+    ok(await page.click('Não treinei', '.card.dia.hl button'), 'tocou em "Não treinei" no cartão de hoje');
     ok(await espera('#folha-nao-treinei'), 'a folha abriu');
     ok(await motivo('cansaco'), 'escolheu "Cansaço ou dormi mal"');
     f = await folhaTxt();
@@ -118,6 +119,7 @@ export default async (page) => {
     await page.sleep(500);
     const q = await st();
     ok(q.length === 1 && q[0].movs.length === 0 && q[0].motivo === 'cansaco', 'marca sem mudança de dia, com o motivo');
+    await page.goto(B + '#/', 900); await espera('#inicio-nao-treinado');
     ok(/Cansaço · Volta n[ao] próxim[ao]/.test(await page.eval(`return document.querySelector('#inicio-nao-treinado').innerText;`)), 'Início diz o motivo e quando o treino volta');
     ok(await semRolagem(), 'sem rolagem para o lado no Início');
 
@@ -203,9 +205,9 @@ export default async (page) => {
         await page.click('Correr na esteira', '.sheet button'); await page.sleep(600);
         ok(await page.eval(`const m = await import('/js/store.js'); return (m.state.run.esteira || []).includes(${JSON.stringify(dk(hoje))}) && m.state.perdidos.length === 0;`), 'a corrida de hoje ficou na esteira, sem marca de falta');
       }
-      console.log('11. Início: "Não corri" com "Cansaço" marca como não feita');
-      await page.goto(B + '#/', 1000);
-      ok(await page.click('Não corri', 'button'), '"Não corri" no Início');
+      console.log('11. Aba Treinos: "Não corri" com "Cansaço" marca como não feita; o Início mostra');
+      await page.goto(B + '#/treinos', 1000);
+      ok(await page.click('Não corri', '.card.dia.hl button'), '"Não corri" no cartão de hoje');
       ok(await espera('#folha-nao-corri'), 'a folha abriu');
       await motivo('cansaco');
       f = await folhaTxt();
@@ -213,6 +215,7 @@ export default async (page) => {
       await page.click('Marcar como não feita', '.sheet button'); await page.sleep(600);
       const r = await page.eval(`const m = await import('/js/store.js'); return JSON.stringify({ p: m.state.perdidos, runs: m.state.runs.length });`).then(JSON.parse);
       ok(r.p.length === 1 && r.p[0].tipo === 'corrida' && !r.p[0].para && r.p[0].motivo === 'cansaco' && r.runs === 0, 'marca gravada, sem corrida inventada: ' + JSON.stringify(r));
+      await page.goto(B + '#/', 1000);
       ok(/Não feita/.test(await page.eval(`return document.body.innerText;`)) && /Cansaço/.test(await page.eval(`return document.body.innerText;`)), 'Início mostra a corrida como não feita, com o motivo');
       await page.click('Desfazer', 'button'); await page.sleep(500);
       ok((await st()).length === 0, 'desfeito');

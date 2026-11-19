@@ -353,6 +353,8 @@ function painel() {
   // perguntas frequentes → pausar, refazer a entrevista, encerrar.
   // 1. hoje, com a semana do plano em uma linha e a barra de progresso
   const feitas = sem.dias.filter((d) => d && d.feito).length, previstas = sem.dias.filter((d) => d && d.tipo !== 'descanso').length;
+  // corridas além do plano (esteira a mais, segunda corrida no dia): contam à parte
+  const nExtras = Array.isArray(sem.extras) ? sem.extras.reduce((t, l) => t + (Array.isArray(l) ? l.length : 0), 0) : 0;
   const pct = Math.min(100, Math.round(((sem.concluido ? p.totalSemanas : sem.semana - 1) / p.totalSemanas) * 10) * 10);
   const barra = h('div', { class: 'barra-plano', role: 'progressbar', 'aria-label': 'Progresso do plano', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': pct }, h('i', { class: 'w' + pct }));
   const provaTxt = p.prova && p.prova.data >= hoje ? h('p', { class: 'small', text: `${p.prova.tipo === 'teste' ? 'Teste' : pf.objetivo === 'prova' ? 'Prova' : 'Desafio'} de ${ROTULO.distancia[pf.dist]}: ${fmtDia(p.prova.data)}, ${quando(diasEntre(hoje, p.prova.data))}.` }) : null;
@@ -377,7 +379,7 @@ function painel() {
       proxTxt = prox ? `Próximo treino: ${DIAS_LONGO[prox.wd].toLowerCase().replace('-feira', '')}, ${prox.nome.toLowerCase()}.` : seg ? `Próximo treino: na semana que vem, ${DIAS_LONGO[seg.wd].toLowerCase().replace('-feira', '')}.` : '';
     }
     body.push(h('div', { class: 'card hl col gap-s', id: 'corrida-hoje', dataset: { hoje: treinoHoje ? (dHoje.feito ? 'feito' : 'treino') : 'descanso' } },
-      h('div', { class: 'row between' }, h('div', { class: 'tiny accent bold', text: `Semana ${sem.semana} de ${sem.totalSemanas} · ${sem.fase}` }), previstas ? h('span', { class: 'tiny muted nowrap', text: `${feitas} de ${previstas} feitos` }) : null),
+      h('div', { class: 'row between' }, h('div', { class: 'tiny accent bold', text: `Semana ${sem.semana} de ${sem.totalSemanas} · ${sem.fase}` }), previstas ? h('span', { class: 'tiny muted nowrap', text: `${feitas} de ${previstas} feitos${nExtras ? ` + ${nExtras} extra` : ''}` }) : null),
       barra,
       h('div', { class: 'row between' }, h('h2', { text: treinoHoje ? `Hoje: ${dHoje.nome}` : 'Hoje: descanso' }), treinoHoje && dHoje.feito ? badge('Feita', 'ok') : null),
       treinoHoje ? h('p', { class: 'small muted', text: dHoje.resumo + (naEsteira(state, hoje) ? ' · na esteira' : '') }) : proxTxt ? h('p', { class: 'small muted', text: proxTxt }) : null,
@@ -418,6 +420,11 @@ function painel() {
       if (d) lista.appendChild(linhaDia(d, d.data, hoje, d.feito));
       // corrida que mudou de dia (pelo chat): o dia de origem só lembra para onde ela foi
       else if (sem.movidas && sem.movidas[wd]) lista.appendChild(h('div', { class: 'item passou' }, h('div', { class: 'dia-wd', text: DIAS_CURTO[wd] }), h('div', { class: 'grow' }, h('div', { class: 's', text: `${sem.movidas[wd].nome}: passou para ${DIAS_LONGO[new Date(sem.movidas[wd].para + 'T12:00:00').getDay()].toLowerCase().replace('-feira', '')}` }))));
+      // feita fora do plano (esteira a mais, segunda corrida no dia, dia sem treino): entra na semana
+      for (const x of Array.isArray(sem.extras) && Array.isArray(sem.extras[wd]) ? sem.extras[wd] : []) {
+        const partes = [x.distKm ? String(x.distKm).replace('.', ',') + ' km' : '', x.durMin ? Math.round(x.durMin) + ' min' : ''].filter(Boolean).join(' · ');
+        lista.appendChild(h('div', { class: 'item', 'data-extra': String(x.id || '') }, h('div', { class: 'dia-wd', text: DIAS_CURTO[wd] }), h('div', { class: 'grow' }, h('div', { class: 't', text: x.local === 'esteira' ? 'Esteira fora do plano' : 'Corrida fora do plano' }), h('div', { class: 's', text: partes || 'Registrada neste dia' })), badge('Extra', 'ok')));
+      }
     }
     body.push(lista);
     const prox = p.semanas[sem.semana];

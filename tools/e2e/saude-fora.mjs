@@ -43,12 +43,12 @@ export default async (page) => {
     const dados = await estado(tema);
     await page.eval(`const m = await import('/js/store.js'); m.importData(${JSON.stringify(JSON.stringify({ app: 'fitcore', v: 1, dados }))}); await new Promise((r) => setTimeout(r, 300)); await m.flush();`);
     await page.goto(B + '#/', 300); await page.reload(1400);
-    const corridaHoje = /CORRIDA DE HOJE/.test(await texto());
+    const corridaHoje = !!(await page.eval(`return !!document.getElementById('inicio-corrida');`));
 
     console.log('1. Início: caminho discreto para contar; pancada forte no joelho');
-    ok(await page.eval(`return !!document.querySelector('.menu-item[data-acao="contar-saude"]');`), 'atalho "Contar um problema de saúde" no Início');
+    ok(await page.eval(`return !!document.querySelector('.atalho[data-acao="contar-saude"]');`), 'atalho "Contar um problema de saúde" no Início');
     ok(!(await page.eval(`return !!document.querySelector('#saude-fora');`)), 'sem problema anotado, nenhum cartão a mais');
-    await clicar('.menu-item[data-acao="contar-saude"]');
+    await clicar('.atalho[data-acao="contar-saude"]');
     ok(await espera('#saude-folha'), 'a folha abriu');
     ok(await page.eval(`return document.querySelectorAll('#saude-folha [data-tipo]').length === 9;`), 'os 9 tipos aparecem');
     ok(await semRolagem(), 'folha sem rolagem para o lado em 360 px');

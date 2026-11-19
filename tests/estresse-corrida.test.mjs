@@ -76,6 +76,8 @@ const pos = (wd) => (wd + 6) % 7;
 const viz = (a, b) => { const d = Math.abs(pos(a) - pos(b)); return d === 1 || d === 6; };
 const TIPOS_BLOCO = new Set(['aquecer', 'correr', 'caminhar', 'trote', 'forte', 'desaquecer']);
 const numOk = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+// minutos correndo: a caminhada que o plano soma no fim dos treinos para a meta de aeróbico (caminhadaMin) não é carga de corrida
+const corMin = (d) => d.durMin - (d.caminhadaMin || 0);
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const ritmoOk = (f) => f && numOk(f.de) && numOk(f.ate) && f.de >= 137 && f.ate <= 600 && f.de <= f.ate;
 
@@ -151,7 +153,7 @@ function conferir(p, a, rot, F, adaptado = false) {
     if (pf.foco === 'musculacao' || pf.foco === 'equilibrio') {
       if (s.dias.filter(ehCorr).length > (pf.foco === 'musculacao' ? 3 : 4)) F.add('foco: corridas demais na semana', `${rot} sem ${w}`);
       if (s.dias.filter((d) => d.intensidade === 'forte' && !ehEv(d)).length > 1) F.add('foco: mais de 1 treino forte', `${rot} sem ${w}`);
-      if (pf.foco === 'musculacao' && s.dias.some((d) => !ehEv(d) && d.durMin > 42)) F.add('foco na musculação: corrida de mais de 40 min', `${rot} sem ${w}`);
+      if (pf.foco === 'musculacao' && s.dias.some((d) => !ehEv(d) && corMin(d) > 42)) F.add('foco na musculação: corrida de mais de 40 min', `${rot} sem ${w}`);
     }
     if ((pf.jovem || pf.idoso) && fortes.length > 1 && !s.dias.some((d) => d.tipo === 'prova' || d.tipo === 'teste')) F.add('menor de 18 ou 60+ com mais de 1 treino forte', `${rot} sem ${w}`);
     if (pf.nivel === 0 && s.fase === 'adaptacao') {
@@ -161,11 +163,11 @@ function conferir(p, a, rot, F, adaptado = false) {
     }
     // o longão é o treino mais longo da semana (dentro e fora da janela de ajuste por dor, cada grupo por si)
     const lg = s.dias.find((d) => d.tipo === 'longo');
-    if (lg) for (const d of s.dias) if ((d.tipo === 'leve' || d.tipo === 'regenerativo') && !!d.ajustado === !!lg.ajustado && d.durMin > lg.durMin) F.add('rodagem mais longa que o longão', `${rot} sem ${w}: ${d.tipo} ${d.durMin} min > longo ${lg.durMin} min`);
-    if (lg && lg.durMin > 152) F.add('treino longo acima de 2h30', `${rot} sem ${w}: ${lg.durMin} min`);
+    if (lg) for (const d of s.dias) if ((d.tipo === 'leve' || d.tipo === 'regenerativo') && !!d.ajustado === !!lg.ajustado && corMin(d) > corMin(lg)) F.add('rodagem mais longa que o longão', `${rot} sem ${w}: ${d.tipo} ${corMin(d)} min > longo ${corMin(lg)} min`);
+    if (lg && corMin(lg) > 152) F.add('treino longo acima de 2h30', `${rot} sem ${w}: ${corMin(lg)} min`);
     // nenhum treino forte dura mais que o longão da mesma semana; regenerativo de até 40 min
-    if (lg) for (const d of s.dias) if (d.intensidade !== 'leve' && !ehEv(d) && d.tipo !== 'longo' && !!d.ajustado === !!lg.ajustado && d.durMin > lg.durMin) F.add('treino forte mais longo que o longão', `${rot} sem ${w}: ${d.tipo} ${d.durMin} min > longo ${lg.durMin} min`);
-    for (const d of s.dias) if (d.tipo === 'regenerativo' && d.durMin > 41) F.add('regenerativo acima de 40 min', `${rot} sem ${w}: ${d.durMin} min`);
+    if (lg) for (const d of s.dias) if (d.intensidade !== 'leve' && !ehEv(d) && d.tipo !== 'longo' && !!d.ajustado === !!lg.ajustado && corMin(d) > corMin(lg)) F.add('treino forte mais longo que o longão', `${rot} sem ${w}: ${d.tipo} ${corMin(d)} min > longo ${corMin(lg)} min`);
+    for (const d of s.dias) if (d.tipo === 'regenerativo' && corMin(d) > 41) F.add('regenerativo acima de 40 min', `${rot} sem ${w}: ${corMin(d)} min`);
     // 2 treinos fortes só em semana com 5 ou mais corridas
     if (s.dias.filter((d) => d.intensidade === 'forte' && !ehEv(d)).length > 1 && s.dias.filter(ehCorr).length < 5) F.add('2 treinos fortes em semana com menos de 5 corridas', `${rot} sem ${w}`);
     // volta de pausa informada: sem acelerações e sem treino forte enquanto durar a volta
@@ -178,9 +180,9 @@ function conferir(p, a, rot, F, adaptado = false) {
     // (por distância, a regra vale em quilômetros: está mais abaixo)
     if (!adaptado && lg && s.fase !== 'polimento' && p.modo === 'tempo') {
       const m = Math.max(0, ...longosMin.slice(-4));
-      if (m > 0 && lg.durMin > Math.max(m * 1.1, m + (0.75 * lg.durMin) / Math.max(1, lg.distKm)) + 1) F.add('duração do longão cresceu mais de 10%', `${rot} sem ${w}: ${lg.durMin} min > ${m} min`);
+      if (m > 0 && corMin(lg) > Math.max(m * 1.1, m + (0.75 * corMin(lg)) / Math.max(1, lg.distKm)) + 1) F.add('duração do longão cresceu mais de 10%', `${rot} sem ${w}: ${corMin(lg)} min > ${m} min`);
     }
-    longosMin.push(lg ? lg.durMin : 0);
+    longosMin.push(lg ? corMin(lg) : 0);
     const semEvento = !s.dias.some((d) => d.tipo === 'prova' || d.tipo === 'teste');
     if (semEvento && s.fase !== 'polimento') picoKm = Math.max(picoKm, s.volumeKm);
   });
@@ -203,7 +205,7 @@ function conferir(p, a, rot, F, adaptado = false) {
         const teto = Math.max(m * 1.1, m + 1.5) + passo + 0.4;
         void corr;
         // (com todas as rodagens já no piso de 20 minutos, não há o que encurtar: o que passa é o piso, não um salto)
-        if (s.volumeKm > teto && corr.some((d) => (d.tipo === 'leve' || d.tipo === 'regenerativo') && d.durMin > 24)) F.add('volume semanal cresceu acima do limite', `${rot} sem ${i + 1}: ${s.volumeKm} > ${teto.toFixed(1)} (${ant.map((x) => x.volumeKm)})`);
+        if (s.volumeKm > teto && corr.some((d) => (d.tipo === 'leve' || d.tipo === 'regenerativo') && corMin(d) > 24)) F.add('volume semanal cresceu acima do limite', `${rot} sem ${i + 1}: ${s.volumeKm} > ${teto.toFixed(1)} (${ant.map((x) => x.volumeKm)})`);
       }
     }
     // treino longo: no máximo 10% (+1 km) acima do maior das 4 semanas anteriores
@@ -541,7 +543,7 @@ test('base de conhecimento: toda fonte citada existe e toda fonte é usada', () 
   const r = semente(8);
   for (let i = 0; i < 1500; i++) {
     const a = respostas(r);
-    const p = gerarPlano(a, { inicio: '2026-10-05', hoje: '2026-11-12', registros: [{ id: 'x', data: '2026-10-06', tipo: 'leve', distKm: 4, durMin: 30, pse: 7 }, { id: 'y', data: '2026-10-08', tipo: 'teste', distKm: 5, durMin: 28, pse: 9 }], dores: [{ onde: um(r, Object.keys(LOCAIS_DOR)), nivel: inteiro(r, 1, 10), tipo: um(r, Object.keys(TIPOS_DOR)), quando: 'durante', dias: inteiro(r, 0, 10) }] });
+    const p = gerarPlano(a, { emagrecer: i % 3 === 0, inicio: '2026-10-05', hoje: '2026-11-12', registros: [{ id: 'x', data: '2026-10-06', tipo: 'leve', distKm: 4, durMin: 30, pse: 7 }, { id: 'y', data: '2026-10-08', tipo: 'teste', distKm: 5, durMin: 28, pse: 9 }], dores: [{ onde: um(r, Object.keys(LOCAIS_DOR)), nivel: inteiro(r, 1, 10), tipo: um(r, Object.keys(TIPOS_DOR)), quando: 'durante', dias: inteiro(r, 0, 10) }] });
     for (const x of avisosBloqueio(a)) marca(x.refs);
     for (const d of dicas(a)) marca(d.refs);
     if (!p) continue;

@@ -463,7 +463,7 @@ export default async (page) => {
   ok(r.n === 7 && r.iguais === 1 && /B{7}/.test(r.letras), 'todos os dias com o mesmo treino: agenda com 7 dias iguais (o mesmo treino no cartão de cada dia)', r);
   await ir('');
   r = await ev(`const { metaSemanal } = await import('/js/views/history.js'); return { t: texto(), meta: metaSemanal() };`);
-  ok(r.t.includes('TREINO DE HOJE') && r.t.includes(tp.dias[1].nome) && r.t.includes('Iniciar treino'), 'tela inicial mostra o "treino de hoje" agendado');
+  ok(r.t.includes('Musculação: ' + tp.dias[1].nome) && r.t.includes('Iniciar treino'), 'tela inicial mostra o "treino de hoje" agendado');
   ok(r.meta === 7 && r.t.includes('0 de 7 treinos'), 'meta semanal acompanha a agenda: 0 de 7 treinos', r.meta);
   await recarregar();
   ok(await E('Object.keys(s.plans[0].agenda).length === 7'), 'agenda continua depois de recarregar');
@@ -476,13 +476,13 @@ export default async (page) => {
   ok(tudo && await E('Object.keys(s.plans[0].agenda).length === 0'), 'tirar o treino de cada dia deixa a agenda vazia', diag);
   await ir('');
   r = await ev(`const { metaSemanal } = await import('/js/views/history.js'); return { t: texto(), meta: metaSemanal() };`);
-  ok(r.t.includes('Dia de descanso') && r.t.includes('Nenhum treino agendado') && !r.t.includes('TREINO DE HOJE'), 'sem nenhum dia agendado, a tela inicial mostra "Dia de descanso" e avisa que não há agenda');
+  ok(r.t.includes('Dia de descanso') && r.t.includes('Nenhum treino agendado') && !r.t.includes('Musculação: '), 'sem nenhum dia agendado, a tela inicial mostra "Dia de descanso" e avisa que não há agenda');
   ok(r.meta === 4 && r.t.includes('0 de 4 treinos'), 'sem agenda, a meta usa os dias informados ao Treinador (4)', r.meta);
   await ir('treinos');
   await agendar(hoje, tp.dias[0].nome);
   await ir('');
   r = await ev(`const { metaSemanal } = await import('/js/views/history.js'); return { t: texto(), meta: metaSemanal() };`);
-  ok(r.t.includes('TREINO DE HOJE') && r.t.includes(tp.dias[0].nome) && r.meta === 1 && r.t.includes('0 de 1 treino'), 'agendando só hoje: "treino de hoje" e meta de 1 treino', r.meta);
+  ok(r.t.includes('Musculação: ' + tp.dias[0].nome) && r.meta === 1 && r.t.includes('0 de 1 treino'), 'agendando só hoje: "treino de hoje" e meta de 1 treino', r.meta);
   await clicar('Iniciar treino'); await page.sleep(400);
   r = await ev(`return { hash: location.hash, dia: S.state.current && S.state.current.diaId };`);
   ok(r.hash === '#/sessao' && r.dia === tp.dias[0].id, '"Iniciar treino" na tela inicial abre a sessão do treino de hoje', r);
@@ -653,7 +653,7 @@ export default async (page) => {
   ok(r.hash === '#/treinos' && r.t && r.cont && r.cur, 'voltar da sessão não perde o treino: a aba Treinos mostra "Treino em andamento"', r);
   await ir('');
   t = await texto();
-  ok(t.includes('Treino em andamento') && t.includes('Continuar treino') && !t.includes('TREINO DE HOJE'), 'a tela inicial também oferece "Continuar treino"');
+  ok(t.includes('Treino em andamento') && t.includes('Continuar treino') && !t.includes('Musculação: '), 'a tela inicial também oferece "Continuar treino"');
   await clicar('Continuar treino'); await page.sleep(350);
   ok((await hash()) === '#/sessao' && (await cur('c.id')) === antes.id, '"Continuar treino" volta para a mesma sessão');
   // iniciar outro com este em andamento
@@ -702,8 +702,8 @@ export default async (page) => {
   await ir('exercicio/supino-reto-barra', 500);
   ok((await texto()).includes('Melhor marca: 40 kg × 10'), 'a tela do exercício mostra a melhor marca registrada');
   await ir('');
-  r = await ev(`const { metaSemanal } = await import('/js/views/history.js'); return { t: texto(), meta: metaSemanal() };`);
-  ok(r.t.includes('TREINO DE HOJE · FEITO') && r.t.includes('Treinar de novo') && r.t.includes(`1 de ${r.meta} treino`), 'tela inicial marca o treino de hoje como feito e conta 1 treino na semana', r.meta);
+  r = await ev(`const { metaSemanal } = await import('/js/views/history.js'); return { t: texto(), meta: metaSemanal(), musc: (document.getElementById('inicio-musculacao') || {}).innerText || '' };`);
+  ok(/Feito/.test(r.musc) && r.t.includes('Treinar de novo') && r.t.includes(`1 de ${r.meta} treino`), 'tela inicial marca o treino de hoje como feito e conta 1 treino na semana', r.meta);
   // segunda sessão no mesmo dia: cargas sugeridas e recorde
   await clicar('Treinar de novo'); await page.sleep(400);
   r = await ev(`const c = S.state.current; return { hash: location.hash, id: c && c.id, sup: c && c.itens[0].sets.map((x) => [x.kg, x.reps]), flex: c && c.itens[1].sets.map((x) => x.reps), pr: c && c.itens[2].sets.map((x) => x.seg), cam: c && c.itens[3].sets.map((x) => x.seg), dica: cart(0).querySelector('p.small.muted').textContent, valor: campo(0, 'carga da série 1').value };`);

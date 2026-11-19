@@ -30,7 +30,7 @@ export const LETRAS = ['normal', 'grande', 'muito']; // tamanhos de letra de Aju
 const defaults = () => ({
   v: VERSAO,
   // letra: tamanho do texto ('normal' | 'grande' | 'muito'); contraste: cores mais fortes (views/more.js, main.js)
-  settings: { tema: 'auto', descanso: 90, som: true, somAlerta: 'equilibrado', vibrar: true, telaLigada: true, animar: true, avisoFundo: false, letra: 'normal', contraste: false, voz: true },
+  settings: { tema: 'auto', descanso: 90, som: true, somAlerta: 'equilibrado', vibrar: true, telaLigada: true, animar: true, avisoFundo: false, letra: 'normal', contraste: false, voz: true, nome: '', trato: '' },
   gym: { all: true, has: {} },
   plans: [],
   activePlan: '',
@@ -77,6 +77,8 @@ let aoFalhar = null;
 // ---------- validação (usada ao carregar e ao importar backup) ----------
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const str = (v, max, def = '') => (typeof v === 'string' ? v.slice(0, max) : def);
+// nome digitado pela pessoa: sem caracteres de controle nem sinais de código, espaços simples, até 24 caracteres
+export const limparNome = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f<>{}[\]\\/`"=;]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24).trim() : '');
 const num = (v, min, max, def) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : def);
 const numOrNull = (v, min, max) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : null);
 const bool = (v, def) => (typeof v === 'boolean' ? v : def);
@@ -203,6 +205,8 @@ export function sanitize(raw, { doAparelho = false } = {}) {
     descanso: Math.round(num(s.descanso, 15, 600, 90)),
     som: bool(s.som, true), somAlerta: ['equilibrado', 'sino', 'alto', 'longo', 'discreto'].includes(s.somAlerta) ? s.somAlerta : 'equilibrado', vibrar: bool(s.vibrar, true), telaLigada: bool(s.telaLigada, true), animar: bool(s.animar, true), avisoFundo: bool(s.avisoFundo, false), voz: bool(s.voz, true),
     letra: oneOf(s.letra, LETRAS, 'normal'), contraste: bool(s.contraste, false),
+    // saudação do Início: o nome (texto simples, até 24 letras) e o trato (bem-vindo, bem-vinda ou neutro)
+    nome: limparNome(s.nome), trato: oneOf(s.trato, ['', 'o', 'a', 'n'], ''),
   };
   const g = isObj(raw.gym) ? raw.gym : {};
   d.gym.all = bool(g.all, true);

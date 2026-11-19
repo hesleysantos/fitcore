@@ -130,6 +130,9 @@ export function guardarCorridaMostrada() {
   } catch { /* segue sem guardar */ }
 }
 export function mostrarSemana(n) { semanaVista = Math.max(-12, Math.min(52, Math.round(Number(n) || 0))); semanaBase = dateKey(segundaDe(new Date())); }
+// o resumo do Início abre a aba já no cartão de hoje (o cartão completo do treino fica aqui)
+let rolarParaHoje = false;
+export function abrirHoje() { mostrarSemana(0); rolarParaHoje = true; go('treinos'); }
 // Corrida da semana que começa em `segunda` (Date). Devolve { dias[wd], antesDoInicio?, ... } ou null.
 function corridaDaSemana(segunda, n) {
   try {
@@ -292,7 +295,7 @@ export function plansView() {
     else if (c) { card.appendChild(blocoCorrida(c)); if (c.estimado && !c.feito) card.appendChild(h('div', { class: 'tiny muted', text: 'Previsão de hoje para esse dia (o que foi mostrado na época não ficou guardado).' })); }
     for (const x of extras) {
       const partes = [x.distKm ? String(x.distKm).replace('.', ',') + ' km' : '', x.durMin ? Math.round(x.durMin) + ' min' : ''].filter(Boolean).join(' · ');
-      card.appendChild(h('div', { class: 'treino row', 'data-extra': String(x.id || '') }, h('div', { class: 'grow' }, h('div', { class: 'bold', text: 'Corrida feita fora do plano' }), h('div', { class: 'small muted', text: partes || 'Registrada neste dia' })), btn('Ver', () => go('corrida/dia/' + x.data), 'sm ghost')));
+      card.appendChild(h('div', { class: 'treino row', 'data-extra': String(x.id || '') }, h('div', { class: 'grow' }, h('div', { class: 'bold', text: x.local === 'esteira' ? 'Esteira feita fora do plano' : 'Corrida feita fora do plano' }), h('div', { class: 'small muted', text: partes || 'Registrada neste dia' })), btn('Ver', () => go('corrida/dia/' + x.data), 'sm ghost')));
     }
     if (plan) {
       const perdido = ef && ef.perdido ? plan.dias.find((x) => x.id === ef.perdido.diaId) : null;
@@ -354,6 +357,10 @@ export function plansView() {
     btn('Modelos prontos', modelsSheet, 'block', 'copy'),
     btn('Montar do zero', novoDoZero, 'block', 'plus'),
     btn('Treino livre agora', startFree, 'block', 'bolt')));
+  if (rolarParaHoje) {
+    rolarParaHoje = false;
+    setTimeout(() => { const c = document.querySelector('.card.dia.hl'); if (c && c.scrollIntoView) c.scrollIntoView({ block: 'start' }); }, 80);
+  }
   return { title: 'Treinos', body };
 }
 

@@ -5,6 +5,7 @@ import { EX_POR_ID } from '../data/exercises.js';
 import { GRUPOS, MUSCULOS } from '../data/muscles.js';
 import { pesosDoExercicio } from './trainer.js';
 import { nivelPausa, duracaoTxt } from './pausa.js';
+import { dicaCardio } from './cardio.js';
 
 const DIA = 86400000;
 const SEMANA = 7 * DIA;
@@ -312,8 +313,13 @@ export function analisar(st, agora = Date.now()) {
   const ret = retomadaDe(ss, agora);
   const resumo = { treinos: nSess, constancia: c, series: vol.porGrupo, tendencias: tend, recordes: recs, retomada: ret };
 
+  // aeróbico da semana pelo perfil (logic/cardio.js): conta a musculação, a corrida e a caminhada, com ou sem 3 treinos
+  let cardio = null;
+  try { cardio = dicaCardio(st, agora); } catch { cardio = null; }
   if (nSess < 3) {
-    add({ id: 'inicio', tom: 'ideia', icone: 'chart', p: 0, titulo: nSess ? `Faltam ${3 - nSess} ${3 - nSess === 1 ? 'treino' : 'treinos'} para a análise` : 'Registre os seus treinos', texto: 'Com 3 treinos concluídos, o FitCore mostra onde você está evoluindo e o que ajustar.' });
+    if (cardio) add(cardio);
+    // quem só corre (sem plano de musculação) não recebe o convite para registrar treinos de musculação
+    if (nSess || lista(st && st.plans).length || !lista(st && st.runs).length) add({ id: 'inicio', tom: 'ideia', icone: 'chart', p: 0, titulo: nSess ? `Faltam ${3 - nSess} ${3 - nSess === 1 ? 'treino' : 'treinos'} para a análise` : 'Registre os seus treinos', texto: 'Com 3 treinos concluídos, o FitCore mostra onde você está evoluindo e o que ajustar.' });
     return { suficiente: false, dicas, resumo };
   }
 
@@ -407,10 +413,7 @@ export function analisar(st, agora = Date.now()) {
   if (feito != null && feito < 0.75) add({ id: 'incompleto', tom: 'ideia', icone: 'timer', p: 5, titulo: 'Séries ficando para trás', texto: `Você concluiu ${Math.round(feito * 100)}% das séries nos últimos treinos. Um plano mais curto pode servir melhor.`, porque: 'Um treino que cabe na rotina e é feito por inteiro rende mais do que um treino longo feito pela metade.', refs: ['acsm2026'], acao: { rotulo: 'Abrir o Treinador', rota: 'treinador' } });
   const dur = duracaoDe(ss);
   if (dur != null && dur > 90) add({ id: 'duracao', tom: 'ideia', icone: 'timer', p: 6, titulo: 'Treinos longos', texto: `Média de ${dur} min. Descansos de 1 a 3 minutos entre as séries costumam bastar.`, porque: 'Para ganhar massa, descansar mais de 90 segundos não traz ganho apreciável; para força, 2 a 3 minutos nos exercícios principais bastam.', refs: ['singer2024', 'grgic2018', 'acsm2009'] });
-  if (['saude', 'emagrecimento', 'resistencia'].includes(objetivo)) {
-    const cardio = cardioDe(ss, agora);
-    if (cardio < 75) add({ id: 'cardio', tom: 'ideia', icone: 'heart', p: 7, titulo: 'Pouco aeróbico registrado', texto: `${cardio} min por semana. A OMS recomenda de 150 a 300 min de atividade moderada.`, porque: 'Caminhada, bicicleta e outras atividades feitas fora do app também contam para essa meta.', refs: ['oms2020'] });
-  }
+  if (cardio) add(cardio);
 
   // peso corporal x objetivo da alimentação
   const alvo = respostas(st, 'nutri').objetivo || (objetivo === 'emagrecimento' ? 'emagrecer' : objetivo === 'hipertrofia' ? 'ganhar' : '');

@@ -754,6 +754,93 @@ function diasFortes(corrida, longo, q, pernas) {
 const PICO = { 5: [0, 20, 32, 50], 10: [0, 26, 40, 60], 21: [0, 32, 48, 68], 42: [0, 42, 58, 80] };
 // sem prova em vista (saúde): minutos por semana da recomendação da OMS, de 150 a 300 (oms2020)
 const PICO_SAUDE_MIN = [0, 150, 225, 300];
+// ----- aeróbico da semana nos planos sem prova (saúde e começar a correr) -----
+// A corrida cresce aos poucos (o corpo se adapta ao impacto), mas a semana já fica na meta da OMS com caminhada em passo
+// firme no fim dos treinos, até o tempo que a pessoa disse ter. Fontes lidas em texto completo:
+//  • OMS 2020 (ref oms2020): "Adults should do at least 150–300 min of moderate-intensity aerobic physical activity; or at
+//    least 75–150 min of vigorous-intensity aerobic physical activity; or an equivalent combination" — 1 min vigoroso vale 2
+//    moderados. Moderado é "between 3 and <6 times the intensity of rest (METs)"; vigoroso, "6.0 or more METs". Para quem
+//    está abaixo da meta: "Start with small amounts of physical activity and gradually increase frequency, intensity and
+//    duration over time."
+//  • Compendium 2024 (ref compendio2024; a mesma tabela de logic/gasto.js): caminhada a 4,8–5,5 km/h, 3,8 METs (moderada);
+//    corrida, 8,0 METs (vigorosa). Na corrida e caminhada, só os minutos correndo contam como vigorosos.
+//  • Emagrecer (objetivo no Treinador ou na Nutrição): Swift 2014 (ref swift2014): "exercise programs need to exceed 225
+//    min/per week in order to possibly induce clinically significant weight loss"; Oppert 2021 (ref oppert2021), perda de
+//    peso "based on 150 to 200 min of aerobic exercise at least at moderate intensity" e, para manter o peso perdido,
+//    "200 to 300 min/week of moderate-intensity exercise". Como esses estudos contam minutos de exercício (moderado ou mais),
+//    a meta de quem quer emagrecer é de 225 minutos de relógio, a partir da 5ª semana (antes, os 150 da OMS: começar aos poucos).
+export const META_OMS_MIN = 150, META_EMAGRECER_MIN = 225;
+const CAMINHADA_MAX_MIN = 30;
+// minutos de um treino do plano em "moderado equivalente": caminhada 1 por 1; corrida 2 por 1 (a caminhada somada no fim
+// conta 1 por 1); corrida e caminhada, o total mais os minutos correndo
+export const minutosEquivalentes = (d) => {
+  if (!d || d.tipo === 'descanso') return 0;
+  const dur = d.durMin || 0;
+  if (d.tipo === 'caminhada') return dur;
+  if (d.tipo === 'corrida_caminhada') return dur + Math.min(dur, d.corridaMin || 0);
+  const cam = Math.min(dur, d.caminhadaMin || 0);
+  return (dur - cam) * 2 + cam;
+};
+// o mesmo para uma corrida registrada (logic/cardio.js): usa o que o plano mostrava no dia (corrida e caminhada: a parte
+// correndo; caminhada somada no fim); corrida e caminhada sem o plano do dia conta tudo como moderado
+export function minutosDoRegistro(r) {
+  const dur = r && Number.isFinite(r.durMin) ? Math.max(0, r.durMin) : 0;
+  if (!dur) return { relogio: 0, equivalente: 0 };
+  const p = r.plan || null;
+  if (r.tipo === 'caminhada') return { relogio: dur, equivalente: dur };
+  if (r.tipo === 'corrida_caminhada' || (p && p.tipo === 'corrida_caminhada')) {
+    const fr = p && p.corridaMin && p.durMin ? Math.min(1, p.corridaMin / p.durMin) : 0;
+    return { relogio: dur, equivalente: Math.round(dur * (1 + fr)) };
+  }
+  const cam = p && p.caminhadaMin ? Math.min(dur, p.caminhadaMin) : 0;
+  return { relogio: dur, equivalente: (dur - cam) * 2 + cam };
+}
+// Soma caminhada no fim dos treinos da semana até a meta; devolve quantos minutos entraram no plano todo.
+function completarComCaminhada(semanas, pf) {
+  let total = 0;
+  for (const s of semanas) {
+    // semana com treino reduzido por dor: não soma nada (a dor manda)
+    if (s.dias.some((d) => d && d.ajustado)) continue;
+    const dias = s.dias.filter((d) => d && d.tipo !== 'descanso' && !ehEventoDia(d) && !d.caminhadaMin);
+    const emagrecer = pf.emagrecer && s.n >= 5;
+    const relogio = s.dias.reduce((t, d) => t + (d && d.tipo !== 'descanso' ? d.durMin || 0 : 0), 0);
+    let falta = emagrecer ? Math.max(META_EMAGRECER_MIN - relogio, META_OMS_MIN - s.dias.reduce((t, d) => t + minutosEquivalentes(d), 0)) : META_OMS_MIN - s.dias.reduce((t, d) => t + minutosEquivalentes(d), 0);
+    if (falta <= 0 || !dias.length) continue;
+    // reparte a falta entre os treinos, em voltas: cada um ganha no máximo 30 min e não passa do tempo que a pessoa tem;
+    // caminhada de menos de 10 min não entra (curta demais para valer a troca de roupa e de ritmo)
+    const cabe = (d) => Math.max(0, Math.min(CAMINHADA_MAX_MIN, Math.floor((d.tipo === 'longo' ? pf.tempoLongo : pf.tempo) - (d.durMin || 0))));
+    const soma = new Map(dias.map((d) => [d, 0]));
+    for (let volta = 0; volta < 8 && falta > 0; volta++) {
+      const abertos = dias.filter((d) => cabe(d) - soma.get(d) > 0);
+      if (!abertos.length) break;
+      for (const d of abertos) {
+        if (falta <= 0) break;
+        const q = Math.min(cabe(d) - soma.get(d), Math.max(soma.get(d) ? 1 : 10, Math.ceil(falta / abertos.length / 5) * 5));
+        soma.set(d, soma.get(d) + q); falta -= q;
+      }
+    }
+    for (const [d, add] of soma) {
+      if (add < 10) continue;
+      if (d.tipo === 'caminhada') {
+        d.blocos = d.blocos.map((b, k) => (k === 0 ? { ...b, seg: b.seg + add * 60 } : b));
+        d.durMin += add;
+        d.resumo = `${d.durMin} min de caminhada em passo firme`;
+      } else if (d.blocos && d.blocos.length && d.blocos[d.blocos.length - 1].tipo === 'desaquecer') {
+        // corrida e caminhada: a caminhada do fim fica mais longa (é a mesma caminhada)
+        d.blocos = d.blocos.map((b, k) => (k === d.blocos.length - 1 ? { ...b, rotulo: 'Caminhada em passo firme', seg: b.seg + add * 60 } : b));
+        d.durMin = (d.durMin || 0) + add;
+        d.resumo = `${d.resumo} + ${add} min de caminhada`;
+      } else {
+        d.blocos = [...(d.blocos || []), bl('Caminhada em passo firme', 'caminhar', { seg: add * 60 })];
+        d.durMin = (d.durMin || 0) + add;
+        d.resumo = `${d.resumo} + ${add} min de caminhada`;
+      }
+      d.caminhadaMin = add;
+      total += add;
+    }
+  }
+  return total;
+}
 // Maior treino longo (km): maratona 28 a 32 km (fokkema2020: abaixo de 25 km, pior; acima de 35, sem ganho; knopp2024: 30 a 32);
 // meia 17 a 22 km (fokkema2020). Nas outras distâncias o limite é a proporção do longo no volume e os 150 minutos (vdoto2_definicoes).
 const LONGO = { 21: [0, 17, 19, 22], 42: [0, 28, 30, 32] };
@@ -1380,7 +1467,9 @@ function limparPlanejado(p) {
   if (!isObj(p) || typeof p.tipo !== 'string' || !Object.prototype.hasOwnProperty.call(TIPOS_TREINO, p.tipo)) return null;
   const kc = num1(p.kmCorrendo, 120);
   const tr = trechoOk(p.trecho);
-  return { tipo: p.tipo, durMin: num1(p.durMin, 900), distKm: num1(p.distKm, 120), ritmo: parDe(p.ritmo, 100, 1300), pse: parDe(p.pse, 0, 10), un: p.un === 'd' ? 'd' : 't', ...(kc && p.distKm && kc < p.distKm ? { kmCorrendo: kc } : {}), ...(tr ? { trecho: tr } : {}) };
+  // corridaMin e caminhadaMin: para contar o aeróbico da semana (minutosDoRegistro)
+  const cm = num1(p.corridaMin, 900), wm = num1(p.caminhadaMin, 900);
+  return { tipo: p.tipo, durMin: num1(p.durMin, 900), distKm: num1(p.distKm, 120), ritmo: parDe(p.ritmo, 100, 1300), pse: parDe(p.pse, 0, 10), un: p.un === 'd' ? 'd' : 't', ...(kc && p.distKm && kc < p.distKm ? { kmCorrendo: kc } : {}), ...(cm && p.durMin && cm <= p.durMin ? { corridaMin: cm } : {}), ...(wm && p.durMin && wm <= p.durMin ? { caminhadaMin: wm } : {}), ...(tr ? { trecho: tr } : {}) };
 }
 // O trecho principal de um treino com partes (aquecimento, tiros, acelerações, caminhada): o bloco de corrida com faixa de
 // ritmo mais rápida. É o pace que o corredor olha no relógio durante o treino; a média da sessão inclui o resto.
@@ -1401,7 +1490,7 @@ export function trechoDe(t) {
 const trechoOk = (x) => (isObj(x) && typeof x.rotulo === 'string' && x.rotulo ? { rotulo: x.rotulo.slice(0, 60), ritmo: parDe(x.ritmo, 100, 1300) } : null);
 const unidadeDe = (t) => (t.un === 'd' || (Array.isArray(t.blocos) && t.blocos.some((b) => b.m > 0 && !b.seg)) ? 'd' : 't');
 const parRitmo = (r) => (Array.isArray(r) ? r : r ? [Math.round(r.de), Math.round(r.ate)] : null);
-export const planejadoDe = (t) => (t && typeof t.tipo === 'string' && t.tipo ? limparPlanejado({ tipo: t.tipo, durMin: t.durMin, distKm: t.distKm, kmCorrendo: t.kmCorrendo, trecho: t.trecho || trechoDe(t), ritmo: parRitmo(t.ritmo), pse: Array.isArray(t.pse) ? t.pse.map((x) => Math.round(x)) : null, un: unidadeDe(t) }) : null);
+export const planejadoDe = (t) => (t && typeof t.tipo === 'string' && t.tipo ? limparPlanejado({ tipo: t.tipo, durMin: t.durMin, distKm: t.distKm, kmCorrendo: t.kmCorrendo, corridaMin: t.corridaMin, caminhadaMin: t.caminhadaMin, trecho: t.trecho || trechoDe(t), ritmo: parRitmo(t.ritmo), pse: Array.isArray(t.pse) ? t.pse.map((x) => Math.round(x)) : null, un: unidadeDe(t) }) : null);
 
 // O treino que o plano MOSTROU em cada dia (state.run.mostrados): os ajustes do plano só valem de hoje em diante, então o
 // que foi mostrado em um dia que já passou tem de ficar guardado para a análise, as faltas e a semana passada baterem com
@@ -1665,6 +1754,7 @@ function opcoesLimpas(o) {
     hoje, inicio, desde: diaValido(op.desde) ? op.desde : '', registros: limparRegistros(op.registros), adiado: op.adiado === true, paradas,
     mostrados: limparMostrados(op.mostrados), degrau: limparDegrau(op.degrau), carga: limparCarga(op.carga),
     foco: FOCOS_CORRIDA.includes(op.foco) ? op.foco : '', // prioridade entre corrida e musculação ('' = sem escolha: o plano não muda)
+    emagrecer: op.emagrecer === true, // objetivo de emagrecer no Treinador ou na Nutrição
     diasForca: dias(op.diasForca), diasPernas: dias(op.diasPernas), bloqueados: dias(op.bloqueados).slice(0, 5),
     // (problemas fora do treino podem não ter região: valem pelo efeito pronto em `fora`)
     dores: (Array.isArray(op.dores) ? op.dores : []).filter((d) => isObj(d) && (isObj(d.fora) || (typeof d.onde === 'string' && Object.prototype.hasOwnProperty.call(LOCAIS_DOR, d.onde))) && Number.isFinite(d.nivel)).slice(0, 30),
@@ -1851,6 +1941,7 @@ export function gerarPlano(respostas, opcoes) {
   // "Em quantas semanas é a prova?" conta a semana da entrevista; se o plano só começa na segunda seguinte, sobra uma a menos
   if (pf.semanasProva && op.adiado) pf = { ...pf, semanasProva: Math.max(1, pf.semanasProva - 1) };
   // corrida e musculação: a prioridade escolhida muda quantas corridas, quanto tempo e quantos treinos fortes (aplicarFoco)
+  if (op.emagrecer) pf = { ...pf, emagrecer: true }; // meta de aeróbico maior (completarComCaminhada)
   if (op.foco) {
     pf = aplicarFoco(pf, op.foco, op.diasPernas);
     if (op.foco === 'musculacao') ajustes.push({ texto: 'Corrida como complemento da musculação: até 3 corridas por semana, de até 40 minutos, e no máximo 1 treino forte.', motivo: 'Você escolheu a musculação como prioridade. A corrida atrapalha o ganho de força e de massa das pernas quando é frequente e longa (acima de 3 dias por semana e de 20 a 30 minutos por sessão); com 2 a 3 corridas curtas, não. O fôlego se mantém por semanas com menos corrida, desde que um treino forte continue. No dia dos dois treinos, faça a musculação primeiro e corra 6 horas depois (3, no mínimo).', refs: REFS_FOCO.musculacao });
@@ -2233,6 +2324,17 @@ export function gerarPlano(respostas, opcoes) {
     }
   }
 
+  // ----- sem prova em vista: caminhada no fim dos treinos até a meta de aeróbico da semana (completarComCaminhada) -----
+  // (os dias que já passaram valem como foram mostrados: state.run.mostrados; fora gestação, que já tem plano de caminhada,
+  // e menores de 18, cuja meta da OMS é outra: 60 min por dia, com atividades variadas)
+  if (!pf.dist && !pf.gestante && pf.idade >= 18) {
+    const somados = completarComCaminhada(semanas, pf);
+    if (somados) ajustes.push({ texto: pf.emagrecer ? 'Caminhada no fim de alguns treinos, para somar aeróbico na semana: 150 minutos e, para emagrecer, 225 da 5ª semana em diante.' : 'Caminhada no fim de alguns treinos: a semana já soma os 150 minutos de aeróbico da OMS.', motivo: (pf.emagrecer ? 'Para emagrecer, os estudos pedem mais de 225 minutos de exercício por semana; a alimentação continua sendo o principal. ' : 'A OMS recomenda pelo menos 150 minutos de atividade moderada por semana (1 minuto correndo vale 2). ') + 'A corrida cresce aos poucos, para o corpo se adaptar ao impacto; a caminhada em passo firme completa a semana sem impacto e cabe no tempo que você disse ter.', refs: pf.emagrecer ? ['swift2014', 'oppert2021', 'oms2020', 'compendio2024'] : ['oms2020', 'compendio2024'], aerobico: true });
+    // para emagrecer, o tempo que a pessoa tem pode não chegar aos 225 minutos: diz quanto o plano chega e o que muda
+    const maxRelogio = Math.max(0, ...semanas.filter((s) => s.n >= 5).map((s) => s.dias.reduce((t, d) => t + (d && d.tipo !== 'descanso' ? d.durMin || 0 : 0), 0)));
+    if (pf.emagrecer && maxRelogio && maxRelogio < META_EMAGRECER_MIN - 15) ajustes.push({ texto: `Para emagrecer, o ideal é passar de 225 minutos por semana. Com os dias e o tempo que você tem, o plano chega a cerca de ${Math.round(maxRelogio / 5) * 5}.`, motivo: 'Mais um dia de caminhada, ou mais tempo em cada treino, completa a semana. Caminhadas fora do plano também contam: registre-as como caminhada.', refs: ['swift2014', 'oppert2021'], aerobico: true });
+  }
+
   // ----- totais de cada semana -----
   for (const s of semanas) {
     s.volumeKm = r1(s.dias.filter(ehCorridaDia).reduce((x, d) => x + d.distKm, 0));
@@ -2395,6 +2497,11 @@ function suspensoes(dores, hoje, pf) {
   return out;
 }
 // opções do plano a partir do estado
+// emagrecer como objetivo em outra entrevista (Treinador de musculação ou Nutrição)
+export function querEmagrecer(st) {
+  const r = (k) => (st && isObj(st[k]) && isObj(st[k].answers) ? st[k].answers : {});
+  return r('trainer').objetivo === 'emagrecimento' || r('nutri').objetivo === 'emagrecer';
+}
 function opcoesDoEstado(st, hoje) {
   const run = st.run;
   const { forca, pernas } = diasDeForca(st);
@@ -2406,6 +2513,7 @@ function opcoesDoEstado(st, hoje) {
     inicio: run.inicio, hoje, registros: Array.isArray(st.runs) ? st.runs : [], diasForca: forca, diasPernas: pernas, dores: [...doresAtivas(st, hoje), ...(() => { try { return doresForaDaCorrida(st, hoje); } catch { return []; } })()], desde,
     bloqueados: diasBloqueados(st), // dias em que a pessoa não treina (logic/dias-livres.js)
     foco: comboAtual(st).foco, mostrados: run.mostrados, degrau: run.degrau, carga: run.carga,
+    emagrecer: querEmagrecer(st),
     // o plano começou na segunda-feira seguinte ao aceite? (as pausas adiam o início guardado: desconta)
     adiado: !!desde && segundaDe(desde) < somaDias(run.inicio, -7 * pausas.reduce((s, p) => s + (p && Number.isInteger(p.semanas) ? p.semanas : 0), 0)),
     encerradas: dores.filter((d) => isObj(d) && d.fim), paradas: [...pausas.map((p) => ({ ...p, motivo: 'pausa' })), ...suspensoes(dores, hoje, (() => { try { return perfil(run.answers); } catch { return null; } })())],
@@ -2433,6 +2541,10 @@ export function retomarPlano(run, hoje) {
   return { ...r, inicio: somaDias(r.inicio, semanas * 7), pausadoEm: '', pausas: [...r.pausas, { de, ate: hoje, semanas }].slice(-MAX_PAUSAS) };
 }
 const melhorRegistro = (l) => (l.length ? l.slice().sort((a, b) => (b.distKm || 0) - (a.distKm || 0) || b.durMin - a.durMin)[0] : null);
+// o registro que cumpre o treino do dia: o feito a partir do plano (guarda o que estava planejado); sem ele, o maior do dia
+const registroDoPlano = (l) => { const doPlano = l.filter((r) => r.plan || r.planejado); return melhorRegistro(doPlano.length ? doPlano : l); };
+// corrida registrada além do treino do plano (esteira a mais, segunda corrida no dia, dia sem treino): conta na semana
+const comoExtra = (r) => ({ id: r.id, data: r.data, tipo: r.tipo, ...(r.local ? { local: r.local } : {}), distKm: r.distKm || 0, durMin: r.durMin || 0 });
 // treino de um dia que já passou, como o plano o mostrou naquele dia (sem os blocos: só o que a tela resumia)
 const diaGuardado = (m, p) => ({
   tipo: m.tipo, nome: m.nome || TIPOS_TREINO[m.tipo].nome, resumo: m.resumo, detalhe: '', distKm: m.distKm, durMin: m.durMin, intensidade: INTENS[m.tipo],
@@ -2442,7 +2554,7 @@ const diaGuardado = (m, p) => ({
 // forte = intensidade alta (ou a prova); chave = forte ou o longão (os dois pedem distância do treino pesado de pernas);
 // diaLongo = dia da semana do longão (ou null). Nos dias que já passaram vale o treino que o plano MOSTROU no dia
 // (`guardado: true`); sem ele, o treino previsto pelo plano de hoje, marcado `estimado: true`.
-// extras[wd] = corridas registradas em dia sem treino do plano: [{ id, data, tipo, distKm, durMin }].
+// extras[wd] = corridas registradas além do treino do plano (em dia sem treino, ou a mais no dia): [{ id, data, tipo, local?, distKm, durMin }].
 function semanaDoPlano(p, st, n, ini, hoje) {
   const s = p.semanas[n - 1];
   const dias = new Array(7).fill(null), extras = Array.from({ length: 7 }, () => []), movidas = new Array(7).fill(null);
@@ -2454,10 +2566,12 @@ function semanaDoPlano(p, st, n, ini, hoje) {
     const m = data < hoje ? mostradoEm(st, data) : null;
     const d = m ? (m.tipo ? diaGuardado(m, p) : null) : doPlano ? (data < hoje ? { ...doPlano, estimado: true } : doPlano) : null;
     const doDia = runs.filter((r) => r.data === data);
-    if (!d) { extras[wd] = doDia.map((r) => ({ id: r.id, data: r.data, tipo: r.tipo, distKm: r.distKm || 0, durMin: r.durMin || 0 })); continue; }
+    if (!d) { extras[wd] = doDia.map(comoExtra); continue; }
     const forte = d.intensidade === 'forte';
     if (d.tipo === 'longo') diaLongo = wd;
-    dias[wd] = { ...d, wd, data, forte, chave: forte || d.tipo === 'longo', feito: melhorRegistro(doDia) };
+    const feito = registroDoPlano(doDia);
+    dias[wd] = { ...d, wd, data, forte, chave: forte || d.tipo === 'longo', feito };
+    extras[wd] = doDia.filter((r) => r !== feito).map(comoExtra);
   }
   // corrida que mudou de dia pelo chat (marca "corrida" com `para`, logic/perdido.js): aparece no dia novo (`movidaDe`); o
   // dia de origem fica SEM corrida (não é previsto, não conta como falta), e `movidas[wd]` diz para onde ela foi
@@ -2465,10 +2579,12 @@ function semanaDoPlano(p, st, n, ini, hoje) {
     if (!isObj(e) || e.tipo !== 'corrida' || !diaValido(e.para) || !diaValido(e.data) || segundaDe(e.data) !== ini || segundaDe(e.para) !== ini) continue;
     const wd0 = diaDaSemana(e.data), wd = diaDaSemana(e.para), de = dias[wd0];
     if (!de || de.movidaPara || de.movidaDe || dias[wd]) continue;
-    dias[wd] = { ...de, wd, data: e.para, movidaDe: e.data, feito: melhorRegistro(runs.filter((r) => r.data === e.para)) };
+    const noDia = runs.filter((r) => r.data === e.para), feito = registroDoPlano(noDia);
+    dias[wd] = { ...de, wd, data: e.para, movidaDe: e.data, feito };
     dias[wd0] = null;
     movidas[wd0] = { para: e.para, nome: de.nome };
-    extras[wd] = [];
+    extras[wd] = noDia.filter((r) => r !== feito).map(comoExtra);
+    extras[wd0] = runs.filter((r) => r.data === e.data).map(comoExtra);
     if (de.tipo === 'longo' && diaLongo === wd0) diaLongo = wd;
   }
   return { semana: n, totalSemanas: p.totalSemanas, semanaAtual: p.semanaAtual, fase: ROTULO.fase[s.fase] + (s.descarga ? ' · semana leve' : ''), foco: s.foco, descarga: s.descarga, dias, extras, movidas, diaLongo, inicioDaSemana: ini };
@@ -2494,7 +2610,7 @@ export function planoDaSemanaEm(st, hoje, segunda) {
   const seg = segundaDe(segunda), primeira = p.inicios[0];
   const runs = Array.isArray(st.runs) ? st.runs.filter((r) => isObj(r)) : [];
   // fora das semanas do plano, toda corrida registrada é um extra
-  const vazio = (extra) => { const v = semTreinos(); for (let k = 0; k < 7; k++) { const data = somaDias(seg, k); v.extras[diaDaSemana(data)] = runs.filter((r) => r.data === data).map((r) => ({ id: r.id, data: r.data, tipo: r.tipo, distKm: r.distKm || 0, durMin: r.durMin || 0 })); } return { totalSemanas: p.totalSemanas, semanaAtual: p.semanaAtual, ...v, inicioDaSemana: seg, ...extra }; };
+  const vazio = (extra) => { const v = semTreinos(); for (let k = 0; k < 7; k++) { const data = somaDias(seg, k); v.extras[diaDaSemana(data)] = runs.filter((r) => r.data === data).map(comoExtra); } return { totalSemanas: p.totalSemanas, semanaAtual: p.semanaAtual, ...v, inicioDaSemana: seg, ...extra }; };
   const n = p.inicios.indexOf(seg) + 1;
   if (n) { const w = semanaDoPlano(p, st, n, seg, hoje); return hoje < primeira ? { ...w, antesDoInicio: true, comecaEm: primeira } : w; }
   if (seg < primeira) return vazio({ semana: 1, fase: `Começa na ${fmtDia(primeira)}`, antesDoInicio: true, comecaEm: primeira });

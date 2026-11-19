@@ -1,14 +1,11 @@
-// Tela inicial: o treino de hoje, a semana e os atalhos.
-import { h, btn, icon, iconBtn, badge, sectionTitle, DIAS_CURTO, DIAS_LONGO, dateKey, plural, fmtInt } from '../ui.js';
-import { state, activePlan, update } from '../store.js';
+// Tela inicial: a saudação com o nome, o resumo de hoje (o cartão completo fica na aba Treinos), a semana e os atalhos.
+import { h, btn, icon, iconBtn, badge, sheet, DIAS_CURTO, DIAS_LONGO, dateKey, plural, fmtInt } from '../ui.js';
+import { state, activePlan, update, limparNome } from '../store.js';
 import { go, refresh } from '../router.js';
-import { EX_POR_ID } from '../data/exercises.js';
-import { thumb } from '../figure.js';
 import { semanaAtual, sequenciaSemanas, inicioSemana } from '../logic/progress.js';
-import { duracaoEstimada, alvoTexto } from './common.js';
+import { duracaoEstimada } from './common.js';
 import { startSession } from './session.js';
-import { botaoChat } from './chat.js';
-import { mostrarSemana, guardarCorridaMostrada } from './plans.js';
+import { mostrarSemana, guardarCorridaMostrada, abrirHoje } from './plans.js';
 import { cartaoCombinado } from './combinado.js';
 import { faltaPerguntar } from '../logic/combinado.js';
 import { installCard } from '../install.js';
@@ -19,16 +16,60 @@ import { calcular, respostasCompletas as nutriOk, contextoDasEntrevistas } from 
 import { planoDaSemana, resumoParaNutricao } from '../logic/corrida.js';
 import { cartaoSono } from './sono.js';
 import { resumoDeHoje } from '../logic/diario.js';
-import { semanaEfetiva, segundaDe, podeMarcar, podeMarcarCorrida, corridaPerdidaEm, nomeDoDia } from '../logic/perdido.js';
-import { botaoNaoTreinei, botaoNaoCorri, linhaNaoTreinado, linhaNaoCorrida } from './perdido.js';
+import { semanaEfetiva, segundaDe, corridaPerdidaEm, nomeDoDia } from '../logic/perdido.js';
+import { linhaNaoTreinado, linhaNaoCorrida } from './perdido.js';
 import { cartaoSaude, avisoDoTreino, contarProblema } from './saude-fora.js';
 import { semTreinoHoje } from '../logic/saude-fora.js';
 import { itensDoDia } from '../logic/ajuste-semana.js';
 import { linhaCargaInicio } from './corrida.js';
 
-function saudacao() {
-  const hora = new Date().getHours();
+function saudacao(hora = new Date().getHours()) {
   return hora < 5 ? 'Boa noite' : hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
+}
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+// "Seja bem-vindo/bem-vinda": o trato escolhido pela pessoa; sem escolha, o sexo informado na Nutrição; sem nada, neutro
+function boasVindas() {
+  const t = state.settings.trato || (state.nutri && state.nutri.answers && state.nutri.answers.sexo === 'f' ? 'a' : state.nutri && state.nutri.answers && state.nutri.answers.sexo === 'm' ? 'o' : 'n');
+  return t === 'a' ? 'Seja bem-vinda!' : t === 'o' ? 'Seja bem-vindo!' : 'Boas-vindas!';
+}
+
+// nome e trato da saudação (também em Ajustes)
+export function folhaDoNome() {
+  const campo = h('input', { type: 'text', class: 'input', id: 'campo-nome', maxlength: '24', autocomplete: 'given-name', 'aria-label': 'Seu nome', placeholder: 'Seu nome', value: state.settings.nome || '' });
+  let trato = state.settings.trato || '';
+  const chips = h('div', { class: 'chips wrap', role: 'group', 'aria-label': 'Como saudar' });
+  const OPC = [['o', 'Bem-vindo'], ['a', 'Bem-vinda'], ['n', 'Boas-vindas']];
+  const desenhar = () => { chips.replaceChildren(...OPC.map(([v, t]) => h('button', { class: 'chip' + (trato === v ? ' on' : ''), type: 'button', 'aria-pressed': String(trato === v), onClick: () => { trato = v; desenhar(); } }, t))); };
+  desenhar();
+  const salvar = () => {
+    const nome = limparNome(campo.value);
+    update((s) => { s.settings.nome = nome; s.settings.trato = trato; });
+    sh.close(); refresh();
+  };
+  campo.addEventListener('keydown', (e) => { if (e.key === 'Enter') salvar(); });
+  const sh = sheet({ title: 'Como quer ser chamado?', body: h('div', { class: 'col gap-s' }, campo, h('div', { class: 'small muted', text: 'Na saudação:' }), chips, h('p', { class: 'tiny muted', text: 'Fica só neste aparelho.' })),
+    footer: btn('Salvar', salvar, 'primary block') });
+  setTimeout(() => { try { campo.focus(); } catch { /* sem foco */ } }, 50);
+}
+
+function cabecalho(hoje) {
+  const nome = state.settings.nome;
+  return h('div', { class: 'hero', id: 'inicio-saudacao' },
+    h('div', { class: 'grow' },
+      h('div', { class: 'hero-data', text: `${DIAS_LONGO[hoje.getDay()]}, ${hoje.getDate()} de ${MESES[hoje.getMonth()]}` }),
+      h('h1', { text: nome ? `${saudacao()}, ${nome}!` : `${saudacao()}!` }),
+      h('p', { class: 'hero-sub', text: boasVindas() }),
+      nome ? null : btn('Dizer meu nome', folhaDoNome, 'plain sm hero-nome')),
+    h('button', { class: 'hero-av', type: 'button', 'aria-label': nome ? 'Mudar o seu nome' : 'Dizer o seu nome', onClick: folhaDoNome }, nome ? nome[0].toUpperCase() : icon('user')));
+}
+
+// linha do resumo de hoje: ícone, o quê, detalhe e a situação; toca e abre o cartão completo
+function itemHoje({ ic, titulo, sub, selo, aoTocar, id }) {
+  return h('button', { class: 'hoje-item', type: 'button', onClick: aoTocar, ...(id ? { id } : {}) },
+    h('span', { class: 'hoje-ic' }, icon(ic, 's')),
+    h('span', { class: 'grow col hoje-txt' }, h('span', { class: 'bold ellipsis', text: titulo }), sub ? h('span', { class: 'small muted', text: sub }) : null),
+    selo || icon('right', 's muted'));
 }
 
 export function homeView() {
@@ -37,7 +78,7 @@ export function homeView() {
   const plan = activePlan();
   const hoje = new Date();
   const wd = hoje.getDay();
-  body.push(h('div', null, h('h1', { text: saudacao() + '!' }), h('p', { class: 'muted', text: `${DIAS_LONGO[wd]}, ${hoje.getDate()}/${hoje.getMonth() + 1}` })));
+  body.push(cabecalho(hoje));
 
   const inst = installCard();
   if (inst) body.push(inst);
@@ -52,7 +93,7 @@ export function homeView() {
     body.push(h('div', { class: 'card hl col' }, h('div', { class: 'row' }, icon('timer', 'accent'), h('div', { class: 'grow' }, h('h3', { text: 'Treino em andamento' }), h('div', { class: 'small muted', text: state.current.nome }))), btn('Continuar treino', () => go('sessao'), 'primary lg block', 'play')));
   }
 
-  // corrida de hoje (Treinador de corrida): cartão próprio, separado da musculação
+  // corrida de hoje (Treinador de corrida)
   let corridaSem = null;
   try { corridaSem = planoDaSemana(state, dateKey(hoje)); } catch { corridaSem = null; }
   const corridaHoje = corridaSem && Array.isArray(corridaSem.dias) ? corridaSem.dias[wd] : null;
@@ -64,29 +105,64 @@ export function homeView() {
   }
   const hojeK = dateKey(hoje);
   const corridaNaoFeita = corridaHoje && !corridaHoje.feito ? corridaPerdidaEm(state, corridaHoje.data) : null;
-  // a corrida de hoje mudou de dia pelo chat: hoje fica sem corrida, com "Mudou de dia" e o "Desfazer"
   const movidaHoje = !corridaHoje && corridaSem && Array.isArray(corridaSem.movidas) ? corridaSem.movidas[wd] : null;
   const marcaMovidaHoje = movidaHoje ? corridaPerdidaEm(state, dateKey(hoje)) : null;
-  if (marcaMovidaHoje) {
-    body.push(h('div', { class: 'card col' }, h('div', { class: 'tiny muted bold', text: 'CORRIDA DE HOJE' }), linhaNaoCorrida(marcaMovidaHoje, String(movidaHoje.nome || 'Corrida'), refresh)));
-  } else if (corridaNaoFeita) {
-    body.push(h('div', { class: 'card col' }, h('div', { class: 'tiny muted bold', text: 'CORRIDA DE HOJE' }), linhaNaoCorrida(corridaNaoFeita, String(corridaHoje.nome || 'Corrida'), refresh)));
-  } else if (corridaHoje) {
-    body.push(h('div', { class: 'card hl col' },
-      h('div', { class: 'row between' }, h('div', null, h('div', { class: 'tiny accent bold', text: corridaHoje.feito ? 'CORRIDA DE HOJE · FEITA' : 'CORRIDA DE HOJE' }), h('h2', { text: String(corridaHoje.nome || 'Corrida') })), corridaHoje.feito ? badge('Concluída', 'ok') : null),
-      corridaHoje.resumo ? h('p', { class: 'small muted', text: String(corridaHoje.resumo) }) : null,
-      btn(corridaHoje.feito ? 'Ver corrida' : 'Abrir corrida', () => go('corrida/dia/' + corridaHoje.data), (corridaHoje.feito ? '' : 'primary ') + 'lg block', 'run'),
-      !corridaHoje.feito && podeMarcarCorrida(state, corridaHoje.data, hojeK) ? h('div', { class: 'perdido-acoes' }, botaoNaoCorri(corridaHoje.data, refresh)) : null));
+  // corrida feita hoje fora do plano (esteira, rua...): também aparece no resumo
+  const extrasHoje = corridaSem && Array.isArray(corridaSem.extras) && Array.isArray(corridaSem.extras[wd]) ? corridaSem.extras[wd] : [];
+
+  // ---------- resumo de hoje: o que tem e a situação; o cartão completo fica na aba Treinos ----------
+  const linhas = [];
+  const acoes = [];
+  const treinosDeHoje = state.sessions.filter((s) => dateKey(new Date(s.inicio)) === hojeK);
+  const treinouHoje = treinosDeHoje.length > 0;
+  if (plan && !state.current) {
+    const semEf = semanaEfetiva(plan, state.perdidos, segundaDe(hojeK));
+    const efHoje = semEf[(wd + 6) % 7];
+    const diaPlano = plan.dias.find((d) => d.id === efHoje.diaId);
+    const dia = diaPlano ? { ...diaPlano, itens: itensDoDia(state, plan.id, diaPlano.id, hojeK) } : null;
+    const perdidoHoje = efHoje.perdido ? plan.dias.find((d) => d.id === efHoje.perdido.diaId) : null;
+    if (perdidoHoje) {
+      const prox = proximoTreino(plan, wd, semEf);
+      linhas.push(h('div', { class: 'col gap-s', id: 'inicio-nao-treinado' }, linhaNaoTreinado(efHoje, perdidoHoje.nome, refresh),
+        prox ? h('p', { class: 'small muted', text: `Próximo treino: ${prox.dia.nome}, ${prox.quando}.` }) : null));
+    } else if (dia) {
+      const feitoHoje = treinosDeHoje.some((x) => x.planId === plan.id && x.diaId === dia.id);
+      linhas.push(itemHoje({ ic: 'dumbbell', id: 'inicio-musculacao', titulo: `Musculação: ${dia.nome}`, sub: `${plural(dia.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(dia)} min`, selo: feitoHoje ? badge('Feito', 'ok') : null, aoTocar: abrirHoje }));
+      if (efHoje.veioDe) linhas.push(h('p', { class: 'small', id: 'inicio-movido', text: `Veio de ${nomeDoDia(efHoje.veioDe, hojeK)}.` }));
+      if (!feitoHoje && treinouHoje) linhas.push(h('p', { class: 'small muted', text: 'Você já fez outro treino hoje; este é o agendado para o dia.' }));
+      const av = (() => { try { return avisoDoTreino(); } catch { return null; } })();
+      if (av) linhas.push(av);
+      if (!semTreino) acoes.push(btn(feitoHoje ? 'Treinar de novo' : 'Iniciar treino', () => startSession(plan.id, dia.id), feitoHoje ? 'sm grow' : 'primary grow', 'play'));
+    } else if (!corridaHoje && !marcaMovidaHoje) {
+      const prox = proximoTreino(plan, wd, semEf);
+      const saiu = efHoje.foiPara ? plan.dias.find((d) => d.id === plan.agenda[wd]) : null;
+      linhas.push(itemHoje({ ic: 'moon', id: 'inicio-descanso', titulo: 'Dia de descanso', sub: (saiu ? `${saiu.nome} passou para ${nomeDoDia(efHoje.foiPara, hojeK)}. ` : '') + (prox ? `Próximo treino: ${prox.dia.nome}, ${prox.quando}.` : 'Nenhum treino agendado. Escolha os dias na aba Treinos.'), aoTocar: abrirHoje }));
+    }
   }
+  if (marcaMovidaHoje) linhas.push(linhaNaoCorrida(marcaMovidaHoje, String(movidaHoje.nome || 'Corrida'), refresh));
+  else if (corridaNaoFeita) linhas.push(linhaNaoCorrida(corridaNaoFeita, String(corridaHoje.nome || 'Corrida'), refresh));
+  else if (corridaHoje) {
+    linhas.push(itemHoje({ ic: 'run', id: 'inicio-corrida', titulo: `Corrida: ${String(corridaHoje.nome || 'Corrida')}`, sub: corridaHoje.resumo ? String(corridaHoje.resumo) : '', selo: corridaHoje.feito ? badge('Feita', 'ok') : null, aoTocar: () => go('corrida/dia/' + corridaHoje.data) }));
+    if (!corridaHoje.feito) acoes.push(btn('Abrir corrida', () => go('corrida/dia/' + corridaHoje.data), (acoes.some((b) => b.classList.contains('primary')) ? '' : 'primary ') + 'grow', 'run'));
+  }
+  for (const x of extrasHoje) {
+    const partes = [x.distKm ? String(x.distKm).replace('.', ',') + ' km' : '', x.durMin ? Math.round(x.durMin) + ' min' : ''].filter(Boolean).join(' · ');
+    linhas.push(itemHoje({ ic: 'run', titulo: x.local === 'esteira' ? 'Esteira fora do plano' : 'Corrida fora do plano', sub: partes, selo: badge('Feita', 'ok'), aoTocar: () => go('corrida') }));
+  }
+  if (linhas.length) {
+    const temAlgo = (plan && !state.current) || corridaHoje || extrasHoje.length;
+    body.push(h('div', { class: 'card col gap-s hoje', id: 'inicio-hoje' },
+      h('div', { class: 'row between' }, h('h2', { text: 'Hoje' }), temAlgo ? btn('Ver semana', abrirHoje, 'plain sm') : null),
+      ...linhas,
+      acoes.length ? h('div', { class: 'row hoje-acoes' }, ...acoes) : null));
+  }
+  const posSemana = body.length; // "Sua semana" entra logo depois do resumo de hoje
   // semana puxada (logic/carga-corrida.js): a corrida de hoje ou de amanhã fica mais leve ou muda de dia
   if (corridaSem) { const lc = linhaCargaInicio(hojeK); if (lc) body.push(lc); }
 
   // corrida + musculação: enquanto falta dizer o que priorizar (ou se quer fortalecimento), a pergunta aparece aqui
   try { const f = faltaPerguntar(state); if (f.foco || f.fortalecimento) { const cc = cartaoCombinado({ aoMudar: () => refresh() }); if (cc) body.push(cc); } } catch { /* segue sem o cartão */ }
 
-  // treino de hoje
-  const treinosDeHoje = state.sessions.filter((s) => dateKey(new Date(s.inicio)) === dateKey(hoje));
-  const treinouHoje = treinosDeHoje.length > 0;
   if (!plan) {
     if (corridaSem) {
       // já tem plano de corrida: a musculação é um convite discreto
@@ -109,51 +185,9 @@ export function homeView() {
         passo(2, 'Na academia, toque em Iniciar e marque cada série'),
         passo(3, 'Acompanhe a sua evolução e as dicas')));
     }
-  } else if (!state.current) {
-    // o treino de hoje já com as marcas da semana ("Não treinei" e treinos que mudaram de dia: logic/perdido.js)
-    const semEf = semanaEfetiva(plan, state.perdidos, segundaDe(hojeK));
-    const efHoje = semEf[(wd + 6) % 7];
-    const diaPlano = plan.dias.find((d) => d.id === efHoje.diaId);
-    // mudado só nesta semana (logic/ajuste-semana.js): mostra a versão da semana
-    const dia = diaPlano ? { ...diaPlano, itens: itensDoDia(state, plan.id, diaPlano.id, hojeK) } : null;
-    const perdidoHoje = efHoje.perdido ? plan.dias.find((d) => d.id === efHoje.perdido.diaId) : null;
-    if (perdidoHoje) {
-      const prox = proximoTreino(plan, wd, semEf);
-      body.push(h('div', { class: 'card col', id: 'inicio-nao-treinado' },
-        h('div', { class: 'tiny muted bold', text: 'TREINO DE HOJE' }),
-        linhaNaoTreinado(efHoje, perdidoHoje.nome, refresh),
-        prox ? h('p', { class: 'small muted', text: `Próximo treino: ${prox.dia.nome}, ${prox.quando}.` } ) : null));
-    } else if (dia) {
-      const thumbs = h('div', { class: 'row gap-s' });
-      for (const it of dia.itens.slice(0, 4)) { const ex = EX_POR_ID.get(it.ex); if (ex) thumbs.appendChild(h('div', { class: 'thumb mini' }, thumb(ex))); }
-      const lista = h('div', { class: 'col gap-s' });
-      for (const it of dia.itens.slice(0, 5)) { const ex = EX_POR_ID.get(it.ex); if (ex) lista.appendChild(h('div', { class: 'row between small' }, h('span', { class: 'ellipsis grow', text: ex.nome }), h('span', { class: 'muted nowrap', text: alvoTexto(it) }))); }
-      if (dia.itens.length > 5) lista.appendChild(h('div', { class: 'tiny muted', text: `e mais ${dia.itens.length - 5}` }));
-      const feitoHoje = treinosDeHoje.some((x) => x.planId === plan.id && x.diaId === dia.id);
-      body.push(h('div', { class: 'card hl col' },
-        h('div', { class: 'row between' }, h('div', null, h('div', { class: 'tiny accent bold', text: feitoHoje ? 'TREINO DE HOJE · FEITO' : 'TREINO DE HOJE' }), h('h2', { text: dia.nome })), feitoHoje ? badge('Concluído', 'ok') : null),
-        !feitoHoje && treinouHoje ? h('p', { class: 'small muted', text: 'Você já fez outro treino hoje; este é o agendado para o dia.' }) : null,
-        efHoje.veioDe ? h('p', { class: 'small', id: 'inicio-movido', text: `Veio de ${nomeDoDia(efHoje.veioDe, hojeK)}.` }) : null,
-        dia.foco ? h('p', { class: 'small muted', text: dia.foco }) : null,
-        thumbs, lista,
-        h('p', { class: 'tiny muted', text: `${plural(dia.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(dia)} min` }),
-        (() => { try { return avisoDoTreino(); } catch { return null; } })(),
-        semTreino ? null : btn(feitoHoje ? 'Treinar de novo' : 'Iniciar treino', () => startSession(plan.id, dia.id), (feitoHoje ? '' : 'primary ') + 'lg block', 'play'),
-        // imprevisto ou dúvida: "Não treinei" e o chat do Treinador, discretos, na mesma linha
-        h('div', { class: 'perdido-acoes' }, podeMarcar(state, hojeK, hojeK).pode ? botaoNaoTreinei(hojeK, refresh) : null, botaoChat('treinador', 'Dúvida? Pergunte', 'sm plain'))));
-    } else {
-      const prox = proximoTreino(plan, wd, semEf);
-      const saiu = efHoje.foiPara ? plan.dias.find((d) => d.id === plan.agenda[wd]) : null;
-      body.push(h('div', { class: 'card col' },
-        h('div', { class: 'tiny muted bold', text: 'HOJE' }),
-        h('h2', { text: 'Dia de descanso' }),
-        saiu ? h('p', { class: 'small', text: `${saiu.nome} passou para ${nomeDoDia(efHoje.foiPara, hojeK)}.` }) : null,
-        h('p', { class: 'muted small', text: prox ? `Próximo treino: ${prox.dia.nome}, ${prox.quando}.` : 'Nenhum treino agendado. Escolha os dias na aba Treinos.' }),
-        btn('Ver treinos e agenda', () => go('treinos'), 'block')));
-    }
   }
 
-  // lembrete de backup: os dados ficam só neste aparelho; depois de alguns treinos, sugere guardar uma cópia (no máximo a cada 30 dias)
+// lembrete de backup: os dados ficam só neste aparelho; depois de alguns treinos, sugere guardar uma cópia (no máximo a cada 30 dias)
   {
     const DIA = 86400000;
     const registros = state.sessions.length + state.runs.length;
@@ -176,9 +210,14 @@ export function homeView() {
   // corridas da semana: marca pequena embaixo de cada dia (só aparece para quem tem plano de corrida ou correu na semana)
   const corridasPlan = corridaSem && Array.isArray(corridaSem.dias) ? corridaSem.dias : [];
   const diasDaSemana = new Set(); for (let i = 0; i < 7; i++) { const d = new Date(ini); d.setDate(d.getDate() + i); diasDaSemana.add(dateKey(d)); }
-  const corridos = new Set(state.runs.filter((r) => diasDaSemana.has(r.data)).map((r) => r.data));
+  const corridasDaSemana = state.runs.filter((r) => diasDaSemana.has(r.data));
+  const corridos = new Set(corridasDaSemana.map((r) => r.data));
   const nCorridas = corridasPlan.filter(Boolean).length;
   const comCorrida = nCorridas > 0 || corridos.size > 0;
+  // cada registro conta: os do plano (um por dia planejado) e os de fora dele (esteira extra, segunda corrida no dia...)
+  const feitasDoPlano = corridasPlan.filter((c) => c && c.feito).length;
+  const extrasDaSemana = Math.max(0, corridasDaSemana.length - feitasDoPlano);
+  const contaCorrida = nCorridas ? `Corrida ${feitasDoPlano}/${nCorridas}${extrasDaSemana ? ` + ${extrasDaSemana} extra` : ''}` : `Corrida ${corridasDaSemana.length}`;
   for (let i = 0; i < 7; i++) {
     const d = new Date(ini); d.setDate(d.getDate() + i);
     const key = dateKey(d);
@@ -194,18 +233,19 @@ export function homeView() {
   const comMeta = temAgenda() || Number(state.trainer.answers.dias) > 0;
   const seq = comMeta ? sequenciaSemanas(meta) : 0;
   const feitosTxt = `${feitos.size} ${feitos.size === 1 ? 'treino' : 'treinos'}`;
-  body.push(h('div', { class: 'card col' },
-    h('div', { class: 'row between' }, h('h2', { text: 'Sua semana' }), h('span', { class: 'small muted', id: 'semana-contagem', text: comCorrida ? `Musculação ${comMeta ? `${feitos.size}/${meta}` : feitos.size} · Corrida ${corridos.size}/${Math.max(nCorridas, corridos.size)}` : comMeta ? `${feitos.size} de ${meta} ${meta === 1 ? 'treino' : 'treinos'}` : `${feitosTxt} nesta semana` })),
+  body.splice(posSemana, 0, h('div', { class: 'card col', id: 'inicio-semana' },
+    h('div', null, h('h2', { text: 'Sua semana' }), h('div', { class: 'small muted', id: 'semana-contagem', text: comCorrida ? `Musculação ${comMeta ? `${feitos.size}/${meta}` : feitos.size} · ${contaCorrida}` : comMeta ? `${feitos.size} de ${meta} ${meta === 1 ? 'treino' : 'treinos'}` : `${feitosTxt} nesta semana` })),
     week,
     seq > 0 ? h('div', { class: 'row small' }, icon('flame', 's accent'), h('span', { text: seq === 1 ? '1 semana com a meta cumprida' : `${seq} semanas seguidas com a meta cumprida` })) : null));
 
   // evolução: as dicas mais importantes da análise dos treinos
-  if (state.sessions.length) {
+  // (quem só corre também: a análise do aeróbico da semana usa as corridas)
+  if (state.sessions.length || state.runs.length) {
     const an = analisar(state);
     const card = h('div', { class: 'card col' }, h('div', { class: 'row between' }, h('h2', { text: 'Sua evolução' }), an.suficiente ? h('span', { class: 'small muted', text: plural(an.dicas.length, 'dica', 'dicas') }) : null));
     for (const d of destaques(an.dicas, 2)) card.appendChild(dicaCard(d, true));
     card.appendChild(btn('Ver análise completa', () => go('progresso'), 'block', 'chart'));
-    body.push(card);
+    if (state.sessions.length || an.dicas.length) body.push(card);
   }
 
   // nutrição do dia
@@ -233,15 +273,17 @@ export function homeView() {
   try { sono = cartaoSono(); } catch { sono = null; }
   if (sono) body.push(sono);
 
-  // atalhos
-  body.push(sectionTitle('Atalhos'));
-  const atalhos = h('div', { class: 'card tight' });
-  for (const [ic, label, path] of [['chart', 'Evolução e peso corporal', 'progresso'], ['history', 'Histórico de treinos', 'historico'], ['building', 'Minha academia (aparelhos)', 'academia'], ['settings', 'Ajustes e backup', 'ajustes'], ['book', 'Sobre, privacidade e referências', 'sobre']]) {
-    atalhos.appendChild(h('button', { class: 'menu-item', type: 'button', onClick: () => go(path) }, icon(ic), h('span', { class: 'grow', text: label }), icon('right', 's muted')));
-  }
-  // febre, pancada, corte, dor de cabeça...: o treinador avalia se muda o treino (views/saude-fora.js)
-  atalhos.appendChild(h('button', { class: 'menu-item', type: 'button', 'data-acao': 'contar-saude', onClick: () => contarProblema() }, icon('heart'), h('span', { class: 'grow', text: 'Contar um problema de saúde' }), icon('right', 's muted')));
-  body.push(atalhos);
+  // atalhos: blocos pequenos, dois ou três por linha
+  body.push(h('h2', { class: 'atalhos-tit', text: 'Atalhos' }));
+  const atalho = (ic, label, aoTocar, extra = {}) => h('button', { class: 'atalho', type: 'button', onClick: aoTocar, ...extra }, h('span', { class: 'atalho-ic' }, icon(ic)), h('span', { text: label }));
+  body.push(h('div', { class: 'atalhos' },
+    atalho('chart', 'Evolução e peso', () => go('progresso')),
+    atalho('history', 'Histórico', () => go('historico')),
+    atalho('building', 'Minha academia', () => go('academia')),
+    // febre, pancada, corte, dor de cabeça...: o treinador avalia se muda o treino (views/saude-fora.js)
+    atalho('heart', 'Problema de saúde', () => contarProblema(), { 'data-acao': 'contar-saude' }),
+    atalho('settings', 'Ajustes e backup', () => go('ajustes')),
+    atalho('book', 'Sobre', () => go('sobre'))));
   return { title: 'FitCore', actions: [iconBtn('settings', 'Ajustes', () => go('ajustes'))], body };
 }
 

@@ -12,8 +12,9 @@ import { canSuggestInstall, openInstall, isIos } from '../install.js';
 import { entregarArquivo } from './arquivo.js';
 import { abrirExportar } from './exportar.js';
 import { abrirPrivacidade, abrirTermos, blocoPrivacidade, blocoTermos } from './termos.js';
+import { folhaDoNome } from './home.js';
 
-export const APP_VERSAO = '1.16.3';
+export const APP_VERSAO = '1.17.0';
 
 // ---------- Minha academia ----------
 export function gymView() {
@@ -148,6 +149,9 @@ export function settingsView() {
   const set = (k, v) => { update((s) => { s.settings[k] = v; }); };
   const linha = (titulo, sub, ctrl) => h('div', { class: 'row between menu-item' }, h('div', { class: 'grow' }, h('div', { class: 'bold', text: titulo }), sub ? h('div', { class: 'small muted', text: sub }) : null), ctrl);
   const body = [];
+  // nome da saudação do Início (views/home.js)
+  body.push(h('button', { class: 'card row click', type: 'button', id: 'ajuste-nome', onClick: () => folhaDoNome() }, icon('user', 'accent'),
+    h('div', { class: 'grow' }, h('div', { class: 'bold', text: 'Seu nome' }), h('div', { class: 'small muted', text: st.nome || 'Para a saudação do Início' })), icon('right', 's muted')));
   body.push(sectionTitle('Aparência'));
   body.push(h('div', { class: 'card col' }, h('div', { class: 'bold', text: 'Tema' }), seg([['auto', 'Automático'], ['escuro', 'Escuro'], ['claro', 'Claro']], st.tema, (v) => { set('tema', v); refresh(); }),
     // letra: 125% e 150% do tamanho do navegador (css/app.css); o zoom do aparelho continua valendo por cima

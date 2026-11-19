@@ -406,14 +406,16 @@ test('cardio por semana e séries planejadas', () => {
   st.trainer.answers = { objetivo: 'saude' };
   for (const d of [6, 5, 4, 3, 2, 1, 0.2]) { const s = sessao(d, [['bicicleta-ergometrica', null, null, 1]]); s.itens[0].sets[0].seg = 20; st.sessions.push(s); }
   assert.equal(cardioPorSemana(st, AGORA), 140);
-  assert.ok(!ids(analisar(st, AGORA)).includes('cardio'), '140 min por semana não é "pouco aeróbico"');
+  // bicicleta ergométrica: 6,8 METs, vigorosa (vale 2): 140 min = 280, acima dos 150 da OMS
+  const d140 = analisar(st, AGORA).dicas.find((x) => x.id === 'cardio');
+  assert.ok(d140 && d140.tom === 'bom', '140 min por semana não é "pouco aeróbico"');
   // duas semanas completas: média das duas
   const st2 = vazio();
   for (const d of [13.5, 10, 6, 2]) { const s = sessao(d, [['bicicleta-ergometrica', null, null, 1]]); s.itens[0].sets[0].seg = 30; st2.sessions.push(s); }
   assert.ok(Math.abs(cardioPorSemana(st2, AGORA) - 62) <= 2);
   st2.trainer.answers = { objetivo: 'emagrecimento' };
   const dc = analisar(st2, AGORA).dicas.find((x) => x.id === 'cardio');
-  assert.ok(dc && /150 a 300 min/.test(dc.texto));
+  assert.ok(dc && dc.tom === 'ideia' && /de 150 minutos por semana/.test(dc.texto) && /225/.test(dc.porque), dc && dc.texto);
   // séries planejadas: o histórico só guarda as séries feitas; com `planejadas` dá para ver o que ficou para trás
   const st3 = vazio();
   for (const d of [9, 6, 3, 1]) { const s = sessao(d, [['supino-reto-barra', 40, 10, 2], ['remada-curvada-barra-pronada', 40, 10, 2]]); st3.sessions.push(s); }
