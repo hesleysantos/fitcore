@@ -45,7 +45,7 @@ export default async (page) => {
 
   await page.send('Emulation.setDeviceMetricsOverride', { width: 360, height: 780, deviceScaleFactor: 1, mobile: true });
   await page.goto(B, 1200);
-  await page.eval(`const m = await import('/js/store.js'); m.importData(${JSON.stringify(JSON.stringify({ app: 'fitcore', v: 1, dados: estado() }))}); await new Promise((r) => setTimeout(r, 900)); return true;`);
+  await page.eval(`const m = await import('/js/store.js'); m.importData(${JSON.stringify(JSON.stringify({ app: 'fitcore', v: 1, dados: estado() }))}); await new Promise((r) => setTimeout(r, 300)); await m.flush(); return true;`);
   await page.goto(B + '#/nutricao', 500); await page.reload(1500);
 
   console.log('1. Hoje: musculação e corrida num bloco só, no alto');

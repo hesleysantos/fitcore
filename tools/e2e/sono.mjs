@@ -59,8 +59,12 @@ export default async (page) => {
   }
 
   console.log('1. Tela inicial sem meta: o cartão convida a definir');
-  await page.goto(B, 2500);
-  await page.click('Agora não');
+  await page.goto(B, 1500);
+  // a folha de instalar aparece cerca de 2 s depois de abrir (mais, com a máquina ocupada): espera ela e fecha, para
+  // não abrir no meio do teste por cima das folhas do sono
+  // (o "Agora não" da folha, não o do cartão de instalar do Início)
+  for (let i = 0; i < 80 && !(await page.click('Agora não', '.sheet button')); i++) await page.sleep(100);
+  for (let i = 0; i < 30 && (await page.eval(`return document.querySelectorAll('.sheet').length;`)); i++) await page.sleep(100);
   await espiar();
   let t = await texto();
   ok(await page.eval(`const c = document.getElementById('cartao-sono'); return !!c && c.tagName === 'A' && c.getAttribute('href') === '#/sono' && c.textContent.includes('Quantas horas você precisa dormir?');`), 'cartão do Início convida a definir a meta (é um link para a tela)');

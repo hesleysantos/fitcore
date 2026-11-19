@@ -12,6 +12,8 @@ const PERFIS = {
   },
 };
 
+// este roteiro testa o modo offline: usa o service worker (tools/e2e/navegador.mjs)
+export const comServiceWorker = true;
 export default async (page) => {
   const perfil = PERFIS[process.env.PERFIL || '1'];
   const falhas = [];

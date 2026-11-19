@@ -57,7 +57,9 @@ const page = {
   sleep,
   send,
   async goto(url, espera = 1500) { await send('Page.navigate', { url }); await sleep(espera); await page.pronto(); },
-  async reload(espera = 1500) { await send('Page.reload', { ignoreCache: false }); await sleep(espera); await page.pronto(); },
+  // antes de recarregar, espera a gravação dos dados terminar (o app grava no banco do navegador uns 200 ms depois de cada
+  // mudança; com a máquina ocupada, recarregar antes disso fazia o roteiro ler dados antigos)
+  async reload(espera = 1500) { try { await page.eval(`try { const m = await import('/js/store.js'); await m.flush(); } catch { /* sem app */ } return 1;`); } catch { /* página sem app */ } await send('Page.reload', { ignoreCache: false }); await sleep(espera); await page.pronto(); },
   // espera o app terminar de abrir (a tela de carregamento sair)
   async pronto() {
     for (let i = 0; i < 60; i++) {
@@ -91,6 +93,9 @@ const page = {
 let code = 0;
 try {
   const mod = await import(pathToFileURL(path.resolve(process.argv[2])).href);
+  // O service worker (modo offline) se instala no meio do roteiro num navegador limpo: baixa os arquivos e assume a página,
+  // o que deixava roteiros instáveis. Só quem testa o modo offline (export const comServiceWorker = true) o usa.
+  if (!mod.comServiceWorker) await send('Network.setBypassServiceWorker', { bypass: true });
   await mod.default(page);
 } catch (e) {
   console.log('FALHOU: ' + (e && e.stack || e));

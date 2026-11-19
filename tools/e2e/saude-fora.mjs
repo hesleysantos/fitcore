@@ -41,7 +41,7 @@ export default async (page) => {
     console.log(`\n== Tema ${tema} ==`);
     await page.goto(B, 1000);
     const dados = await estado(tema);
-    await page.eval(`const m = await import('/js/store.js'); m.importData(${JSON.stringify(JSON.stringify({ app: 'fitcore', v: 1, dados }))}); await new Promise((r) => setTimeout(r, 700));`);
+    await page.eval(`const m = await import('/js/store.js'); m.importData(${JSON.stringify(JSON.stringify({ app: 'fitcore', v: 1, dados }))}); await new Promise((r) => setTimeout(r, 300)); await m.flush();`);
     await page.goto(B + '#/', 300); await page.reload(1400);
     const corridaHoje = /CORRIDA DE HOJE/.test(await texto());
 
@@ -87,7 +87,7 @@ export default async (page) => {
     ok(/Pancada no joelho: pule este exercício até melhorar\./.test(sess), 'o exercício que usa o joelho pede para pular');
     ok(await semRolagem(), 'treino sem rolagem para o lado');
     await foto(`saude-fora/treino-pancada-${tema}`);
-    await page.eval(`const m = await import('/js/store.js'); m.update((x) => { x.current = null; }); await new Promise((r) => setTimeout(r, 300));`);
+    await page.eval(`const m = await import('/js/store.js'); m.update((x) => { x.current = null; }); await m.flush();`);
 
     console.log('3. "Melhorou": volta aos poucos');
     await page.goto(B + '#/', 300); await page.reload(1200);
