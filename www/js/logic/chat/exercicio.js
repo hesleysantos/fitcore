@@ -447,14 +447,14 @@ const comEx = (i) => !!(i.ent && i.ent.exercicio);
 export const INTENCOES = [
   {
     id: 'ex-como', coach: 'treinador', titulo: 'Como fazer um exercício', resumo: 'como fazer um exercício', exige: 'exercicio',
-    palavras: ['como faz', 'como fazer', 'como faco', 'como executa', 'como executar', '!execucao', 'executar', 'forma certa', 'jeito certo', 'postura certa', 'tecnica', 'explica como', 'me ensina', 'ensina', 'passo passo', 'como se faz', 'fazer direito', 'fazer certo', 'posicao certa', 'como e', 'faz como'],
+    palavras: ['respirar', 'respiracao', 'prendo ar', 'prender ar', 'melhorar execucao', 'melhorar meu', 'como faz', 'como fazer', 'como faco', 'como executa', 'como executar', '!execucao', 'executar', 'forma certa', 'jeito certo', 'postura certa', 'tecnica', 'explica como', 'me ensina', 'ensina', 'passo passo', 'como se faz', 'fazer direito', 'fazer certo', 'posicao certa', 'como e', 'faz como'],
     bonus: (i) => (comEx(i) && /\b(como|tecnica|execu\w*|ensina|postura|forma|jeito)\b/.test(i.texto) ? 2 : 0),
     disponivel: temPlano,
     inicio: comExercicio(passoComoFaz, 'Qual exercício?'),
   },
   {
     id: 'ex-musculo', coach: 'treinador', titulo: 'Que músculo um exercício trabalha', resumo: 'que músculo um exercício trabalha', exige: 'exercicio',
-    palavras: ['qual musculo', 'que musculo', 'quais musculo', 'trabalha', 'trabalha que', 'serve que', 'pra que serve', 'para que serve', 'pega', 'pega que', 'ativa', 'foca', 'exercita', 'musculo trabalha', 'que parte', 'qual parte', 'trabalha qual'],
+    palavras: ['pegada', 'abrir pegada', 'pegada aberta', 'pegada fechada', 'muda pegada', 'qual musculo', 'que musculo', 'quais musculo', 'trabalha', 'trabalha que', 'serve que', 'pra que serve', 'para que serve', 'pega', 'pega que', 'ativa', 'foca', 'exercita', 'musculo trabalha', 'que parte', 'qual parte', 'trabalha qual'],
     bonus: (i) => (comEx(i) && /\b(musculo\w*|trabalha\w*|serve|pega|ativa|foca|exercita|parte)\b/.test(i.texto) ? 2 : 0),
     disponivel: temPlano,
     inicio: comExercicio(passoMusculo, 'Qual exercício?'),
@@ -475,14 +475,14 @@ export const INTENCOES = [
   },
   {
     id: 'explicar', coach: 'treinador', titulo: 'Por que o meu treino é assim', resumo: 'entender o porquê do seu treino',
-    palavras: ['!explica', 'explicar', 'motivo treino', 'razao treino', 'nao entendi treino', 'entender treino', 'porque treino', 'porque mudou', 'porque series', 'porque mais leve', 'porque assim', 'porque exercicio', 'porque tenho', 'porque esta', 'porque ta'],
+    palavras: ['abc', 'fullbody', 'full body', 'divisao treino', 'mesmo dia', 'costas biceps', 'peito triceps', '!explica', 'explicar', 'motivo treino', 'razao treino', 'nao entendi treino', 'entender treino', 'porque treino', 'porque mudou', 'porque series', 'porque mais leve', 'porque assim', 'porque exercicio', 'porque tenho', 'porque esta', 'porque ta'],
     bonus: (i) => (perguntaPorQue(i) ? 2.5 : 0),
     disponivel: temPlano,
     inicio: passoPorQue,
   },
   {
     id: 'recomendar', coach: 'treinador', titulo: 'O que você recomenda?', resumo: 'uma recomendação para o seu treino',
-    palavras: ['recomenda+treino', 'recomendacao+treino', 'sugere+treino', 'sugestao+treino', 'voce acha treino', 'treino bom', 'treino esta bom', 'treino ta bom', 'treino certo', 'treino equilibrado', 'treino completo', 'treino fraco', 'falta treino', 'falta algo treino', 'melhorar treino', 'avaliar treino', 'avalia treino', 'avaliacao treino', 'dica treino', 'conselho treino', 'plano bom', 'plano ta bom'],
+    palavras: ['fazer mais que treino', 'fazer mais', 'to animado', 'treinar mais hoje', 'quero mais treino', 'recomenda+treino', 'recomendacao+treino', 'sugere+treino', 'sugestao+treino', 'voce acha treino', 'treino bom', 'treino esta bom', 'treino ta bom', 'treino certo', 'treino equilibrado', 'treino completo', 'treino fraco', 'falta treino', 'falta algo treino', 'melhorar treino', 'avaliar treino', 'avalia treino', 'avaliacao treino', 'dica treino', 'conselho treino', 'plano bom', 'plano ta bom'],
     // um músculo e um pedido de melhora ("o que você recomenda para melhorar o glúteo?")
     bonus: (i) => ((i.ent && i.ent.musculos.length && /\b(melhor\w*|cresc\w*|desenvolv\w*|aument\w*|ganhar|definir|evolu\w*|focar|recomend\w*|suger\w*|dica|forte|fortalec\w*|indic\w*|deixar|durinh\w*|empinad\w*|maior|afinar|tonific\w*)\b/.test(i.texto) && !/\b(dor|doi|doendo|machuc\w*)\b/.test(i.texto)) ? 2.5 : 0),
     disponivel: temPlano,

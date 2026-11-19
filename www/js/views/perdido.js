@@ -31,7 +31,7 @@ const porQue = (linhas, refs) => h('details', { class: 'pq perdido-pq' }, h('sum
   ...linhas.map((t) => h('p', { class: 'small', text: t })), fontes(refs));
 
 // os botões do motivo (o mesmo conjunto nos dois; "Chuva" só na corrida)
-const MOTIVOS_MUSC = ['tempo', 'cansaco', 'dor', 'doente', 'viagem', 'outro'];
+const MOTIVOS_MUSC = ['tempo', 'cansaco', 'dor', 'doente', 'viagem', 'feriado', 'outro'];
 const MOTIVOS_CORRIDA = ['tempo', 'chuva', 'cansaco', 'dor', 'doente', 'viagem', 'outro'];
 function perguntaMotivo(corpo, lista, escolher) {
   corpo.appendChild(h('p', { class: 'bold', text: 'O que aconteceu?' }));
@@ -104,12 +104,15 @@ function doMotivo(m, hoje, corpo, redesenhar, corrida) {
 // Folha "Não treinei" do treino de musculação de `data`. `aoMudar` redesenha a tela.
 export function folhaNaoTreinei(data, aoMudar, opc = {}) {
   const hoje = hojeK();
-  if (!P.podeMarcar(state, data, hoje).pode) { toast('Este treino não pode ser marcado agora.'); return; }
+  // `opc.futuro`: um dia desta semana que ainda não chegou (feriado marcado antes)
+  const fut = { futuro: !!opc.futuro };
+  if (!P.podeMarcar(state, data, hoje, fut).pode) { toast('Este treino não pode ser marcado agora.'); return; }
   const r = { motivo: P.MOTIVOS[opc.motivo] ? opc.motivo : '', alvo: '', escolheu: false };
   const corpo = h('div', { class: 'col gap-s', id: 'folha-nao-treinei' });
-  const s = folha({ title: data === hoje ? 'Não vai treinar hoje?' : `Não treinou ${P.DIAS[P.diaDaSemana(data)]}?`, body: corpo });
+  const titulo = r.motivo === 'feriado' ? `Feriado ${data === hoje ? 'hoje' : P.DIAS[P.diaDaSemana(data)]}: a academia não abre` : data === hoje ? 'Não vai treinar hoje?' : data > hoje ? `Não vai treinar ${P.DIAS[P.diaDaSemana(data)]}?` : `Não treinou ${P.DIAS[P.diaDaSemana(data)]}?`;
+  const s = folha({ title: titulo, body: corpo });
   const gravar = (escolha) => {
-    const m = P.novaMarca(state, data, hoje, escolha, new Date().toISOString(), { para: escolha === 'mover' ? r.alvo : '', motivo: r.motivo });
+    const m = P.novaMarca(state, data, hoje, escolha, new Date().toISOString(), { ...fut, para: escolha === 'mover' ? r.alvo : '', motivo: r.motivo });
     s.close();
     if (!m || (escolha === 'mover' && !m.movs.length)) { toast('Não foi possível marcar este treino.'); return; }
     update((st) => { st.perdidos = P.limparPerdidos([...(st.perdidos || []), m]); });
@@ -127,7 +130,7 @@ export function folhaNaoTreinei(data, aoMudar, opc = {}) {
     if (!corpo.isConnected) return;
     clear(corpo);
     if (!r.motivo) { perguntaMotivo(corpo, MOTIVOS_MUSC, escolherMotivo); return; }
-    const o = P.opcoesDeDia(state, data, hoje);
+    const o = P.opcoesDeDia(state, data, hoje, fut);
     if (!o.pode) { s.close(); toast('Este treino não pode ser marcado agora.'); return; }
     // doente sem o problema contado: não propõe repor (o app não sabe quando ele passa)
     const possiveis = r.motivo === 'doente' && !temSaude(hoje) ? [] : o.dias.filter((d) => d.pode);
@@ -147,7 +150,7 @@ export function folhaNaoTreinei(data, aoMudar, opc = {}) {
     if (amanha && !amanha.pode && possiveis.length) corpo.appendChild(h('p', { class: 'small muted', id: 'perdido-amanha', text: P.porQueNaoDia(amanha, hoje, o.alternado) }));
     if (sel) {
       if (sel.movs.length > 1) corpo.appendChild(h('p', { class: 'small muted', text: sel.texto }));
-      const m = P.novaMarca(state, data, hoje, 'mover', new Date().toISOString(), { para: sel.data, motivo: r.motivo });
+      const m = P.novaMarca(state, data, hoje, 'mover', new Date().toISOString(), { ...fut, para: sel.data, motivo: r.motivo });
       const linha = P.linhaDaSemana(P.comMarca(state, m), hoje, 'musc');
       corpo.appendChild(h('p', { class: 'small', id: 'perdido-semana' }, h('b', { text: 'Como fica: ' }), linha || 'sem mais musculação nesta semana.'));
     }

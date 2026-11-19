@@ -19,7 +19,7 @@ export const impedimento = (t) => (IMPEDE.test(t) || doencaDeOutro(t)) && !/\b(d
 // Cansou de algo ("enjoado da mesma coisa", "enjoei do frango"): não é enjoo de estômago
 export const cansouDe = (t) => /\b(enjoad[oa]|enjoei|cansad[oa]|cansei|saturad[oa]) (d[aeo]s? |de ficar |de fazer )?(mesm[ao]|msm|ficha|treino|rotina|cardapio|comida|frango|dieta|isso|so isso)\b|\b(mesm[ao]|msm) coisa\b.*\benjo|\benjo\w* (d[aeo]s? )?(mesm[ao]|msm) coisa\b/.test(t);
 // Pouco tempo contado como situação: "entro no trabalho daqui a 40 min", "tenho que estar no serviço às 6h30"
-export const tempoApertado = (t) => /\b(daqui|em) (a )?(\d+|meia|uma|dez|vinte|trinta|quarenta) ?(min|minuto|minutos|hora|horas|h)\b/.test(t) || /\b(tenho|preciso) (que|de) (estar|ta|tar|chegar|entrar|sair)\b.*\b\d+ ?h/.test(t) || /\bfecha (daqui|em|as|logo)\b/.test(t);
+export const tempoApertado = (t) => /\bso (tenho|tem|da|sobrou|sobraram) (uns |umas |tipo )?\d+ ?(min|minuto|minutos)\b/.test(t) || /\b(daqui|em) (a )?(\d+|meia|uma|dez|vinte|trinta|quarenta) ?(min|minuto|minutos|hora|horas|h)\b/.test(t) || /\b(tenho|preciso) (que|de) (estar|ta|tar|chegar|entrar|sair)\b.*\b\d+ ?h/.test(t) || /\bfecha (daqui|em|as|logo)\b/.test(t);
 
 // Um item das perguntas frequentes no formato do Passo (resposta inteira, com as fontes): null se não achar a pergunta.
 export function faqDe(lista, comeco) {

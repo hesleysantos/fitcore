@@ -16,6 +16,8 @@ export default async (page) => {
       createGain() { return { gain: param(), connect() {} }; }
       createDynamicsCompressor() { window.__compressor = (window.__compressor || 0) + 1; return { threshold: param(), knee: param(), ratio: param(), attack: param(), release: param(), connect() {} }; } }
     window.AudioContext = AC; window.webkitAudioContext = AC;
+    // sem a gravação em WAV (roteiro som-musica.mjs): aqui o som sai pelo contexto de mentira, que conta os osciladores
+    window.OfflineAudioContext = undefined; window.webkitOfflineAudioContext = undefined;
   })();` });
   await page.send('Emulation.setDeviceMetricsOverride', { width: 360, height: 780, deviceScaleFactor: 1, mobile: true });
   await page.goto(B, 1500);

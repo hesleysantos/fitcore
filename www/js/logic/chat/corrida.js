@@ -83,6 +83,24 @@ export function passoCorridaDoDia(ctx) {
   }
   return out;
 }
+// "Qual o tempo das acelerações?", "como faço os tiros?": cada parte do treino do dia, na ordem, e o que é cada uma
+const ACEL_GERAL = 'As acelerações são trechos de 15 segundos, rápidos e soltos, com 1 minuto de caminhada entre eles, no fim de uma rodagem leve.';
+export function passoComoFazer(ctx) {
+  const data = diaDe(ctx), hoje = ctx.hoje;
+  const d = corridaNoDia(ctx, data);
+  const perguntaAcel = /\bacelerac/.test(String(ctx.texto || ''));
+  if (!d || correuEm(ctx, data) || P.corridaPerdidaEm(ctx.st, data)) {
+    if (perguntaAcel) return { texto: [ACEL_GERAL, 'Quando o plano tem acelerações, elas aparecem no resumo da rodagem.'], refs: ['haugen2022'] };
+    return semCorridaNoDia(ctx, data);
+  }
+  const blocos = Array.isArray(d.blocos) ? d.blocos : [];
+  const texto = [`${cap(noDia(data, hoje))} é dia de ${nomeMin(d)}. Faça nesta ordem:`, ...blocos.map((b, k) => `${k + 1}. ${textoBloco(b, d.modo)}`)];
+  const temAcel = blocos.some((b) => /acelera/i.test(b.rotulo || ''));
+  if (temAcel) texto.push('Acelerações: 15 segundos rápidos e soltos, com 1 minuto caminhando entre elas.');
+  // perguntou das acelerações num dia sem elas: a resposta vem primeiro, depois o treino do dia
+  else if (perguntaAcel) return { texto: [ACEL_GERAL, `${cap(noDia(data, hoje))} é dia de ${nomeMin(d)}, sem acelerações.`], detalhes: [d.detalhe].filter(Boolean), refs: ['haugen2022'], data, ir: [abrirDia(data)] };
+  return { texto, detalhes: [d.detalhe].filter(Boolean), refs: temAcel || perguntaAcel ? ['haugen2022'] : [], data, ir: [abrirDia(data)] };
+}
 export function passoRitmo(ctx) {
   const data = diaDe(ctx), hoje = ctx.hoje;
   const d = corridaNoDia(ctx, data);
@@ -96,7 +114,8 @@ export function passoRitmo(ctx) {
     if (d.pse) texto.push(`Vai pelo esforço: ${d.pse[0]} a ${d.pse[1]} em 10${d.fala ? ` (${String(d.fala).toLowerCase()})` : ''}.`);
     const z = pl && pl.zonas && Array.isArray(pl.zonas.lista) ? pl.zonas.lista.find((x) => x.id === (d.intensidade === 'forte' ? 'forte' : d.intensidade === 'moderado' ? 'moderado' : 'leve')) : null;
     if (z && z.fc && d.modo === 'fc') texto.push(`Pela frequência cardíaca: de ${z.fc[0]} a ${z.fc[1]} batimentos por minuto.`);
-    if (pl && !pl.ritmos) texto.push('Para ter o ritmo calculado, registre um “Teste de ritmo” de 3 ou 5 km.');
+    // sem GPS (treino por tempo): o ritmo não é preciso; o teste só faz sentido onde dá para medir a distância
+    if (pl && !pl.ritmos) texto.push(d.modo === 'tempo' ? 'Sem GPS, o treino vai pelo tempo e pelo esforço: não precisa de ritmo. Se correr numa pista ou esteira, dá para registrar um “Teste de ritmo” de 3 ou 5 km.' : 'Para ter o ritmo calculado, registre um “Teste de ritmo” de 3 ou 5 km.');
   }
   const f = faqDe(FAQ_CORRIDA, 'Como os ritmos dos treinos são calculados');
   const g = faqDe(FAQ_CORRIDA, 'Devo treinar por ritmo');
@@ -395,6 +414,13 @@ export const INTENCOES = [
     palavras: ['!esteira', 'correr esteira', 'inclinacao', 'inclinacao esteira', 'esteira inclinacao', 'esteira igual rua', 'esteira vale', 'velocidade esteira', 'esteira+velocidade', 'adaptar+esteira', 'adapto+esteira', 'esteira casa', 'tenho esteira', '!correr parado', 'correr no lugar', 'correr dentro casa', 'na academia correr', 'correr academia', 'treadmill'],
     disponivel: comPlano,
     inicio: passoEsteira,
+  },
+  {
+    id: 'corrida-como', coach: 'corrida', titulo: 'Como fazer o treino de hoje', resumo: 'como fazer cada parte do treino', resumoNoDia: 'como fazer o treino', data: true,
+    palavras: ['!aceleracao', '!aceleracoes', 'tempo aceleracoes', 'tempo cada aceleracao', 'quanto tempo cada', 'como faco treino', 'como fazer treino', 'como funciona treino', 'como faco tiros', 'como fazer tiros', 'tiro quanto tempo',
+      'parte treino', 'etapas treino', 'ordem treino', 'como e o treino', 'o que e fartlek', 'como faco fartlek', 'como faco o intervalado', 'aquecimento quanto', 'volta calma', 'desaquecimento', 'educativo', 'educativos'],
+    disponivel: comPlano,
+    inicio: passoComoFazer,
   },
   {
     id: 'corrida-dia', coach: 'corrida', titulo: 'Qual é a minha corrida', resumo: 'a corrida de hoje', resumoNoDia: 'a corrida', data: true,

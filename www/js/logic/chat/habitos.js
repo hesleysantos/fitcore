@@ -187,16 +187,16 @@ function passoAgua(ctx, coach) {
 }
 
 // ---------- palavras ----------
-const DESANIMO = ['!desanimo', 'sem animo', 'sem vontade', 'sem motivacao', 'falta motivacao', 'perdi pique', 'perdi animo', 'perdi vontade',
+const DESANIMO = ['cansei academia', 'cansei treinar', 'enjoei academia', 'perder vontade', 'nao perder vontade', 'manter vontade', 'vontade ir academia', 'vergonha', 'vergonha academia', 'rindo de mim', 'ficou rindo', 'me julgam', 'olhando pra mim', '!desanimo', 'sem animo', 'sem vontade', 'sem motivacao', 'falta motivacao', 'perdi pique', 'perdi animo', 'perdi vontade',
   'nao tenho vontade', 'nao tenho animo', 'nao tenho motivacao', 'preguica', 'preguica treinar', 'vontade desistir', 'pensando desistir', 'quero desistir', 'largar academia', 'largar tudo', 'nao consigo manter', 'manter rotina', 'manter habito',
   'criar habito', 'disciplina', 'constancia', 'sem foco', 'nao tenho disciplina', 'motivacao', 'motivar', 'animo'];
-const SEM_RESULTADO = ['!estagnei', '!estagnado', '!estagnada', 'nao vejo resultado', 'sem resultado', 'nao tenho resultado', 'resultado nenhum', 'nao evoluo', 'nao estou evoluir', 'parei evoluir', 'nao saio lugar', 'nao ganho massa',
-  'nao ganho musculo', 'nao ganho forca', 'nao cresco', 'nao cresce', 'corpo nao muda', 'nada muda', 'nao muda nada', 'nao melhoro', 'travado', 'treino nao funciona', 'continuo igual', 'tudo igual', 'nao aparece resultado'];
+const SEM_RESULTADO = ['nao sai lugar', 'mesmo peso semanas', 'semanas mesmo peso', 'travei no', 'nao vejo mudanca', 'mudanca nenhuma', 'nao vejo diferenca', 'nao sobe', 'carga nao sobe', 'peso nao sobe', 'nao passa de', 'destravar', 'to evoluindo', 'estou evoluindo', 'evoluindo de verdade', 'saber se evoluo', '!estagnei', '!estagnado', '!estagnada', 'nao vejo resultado', 'sem resultado', 'nao tenho resultado', 'resultado nenhum', 'nao evoluo', 'nao estou evoluir', 'parei evoluir', 'nao saio lugar', 'nao ganho massa',
+  'nao ganho musculo', 'nao ganho forca', 'nao cresco', 'nao cresce', 'corpo nao muda', 'nada muda', 'nao muda nada', 'nao melhoro', 'treino nao funciona', 'continuo igual', 'tudo igual', 'nao aparece resultado'];
 const NAO_EMAGRECO = ['nao emagreco', 'nao estou emagrecendo', 'nao to emagrecendo', 'nao emagrecendo', 'nao ando emagrecendo', 'nao emagrecer', 'nao estou emagrecer', 'nao to emagrecer', 'nao consigo emagrecer', 'parei emagrecer', 'nao perco peso', 'nao perdi peso', 'nao perder peso', 'peso nao desce', 'peso nao baixa', 'peso nao cai',
   'peso nao muda', 'peso parado', 'peso travado', 'peso subiu', 'engordei', '!engordando', 'balanca nao mexe', 'balanca nao desce', 'balanca nao baixa', 'balanca', 'sem resultado', 'nao vejo resultado', '!estagnei', 'nao muda nada'];
 const DORMI = ['dormi mal', 'dormi pouco', 'dormir mal', 'dormir pouco', 'mal dormir', 'nao dormi', 'quase nao dormi', 'dormi nada', 'noite mal dormida', 'noite ruim', 'noite pessima', 'virei noite', 'perdi noite',
   'sono ruim', 'pouco sono', 'muito sono', 'com sono', 'to com sono', 'estou com sono'];
-const AGUA = ['!hidratacao', '!hidratar', '!hidratado', '!desidratado', '!desidratada', '!desidratar', '!desidratacao', '!isotonico', '!isotonicos', '!gatorade', 'bebida esportiva', 'beber agua treino', 'agua treino', 'beber durante',
+const AGUA = ['bebi pouca agua', 'pouca agua', 'litro agua', 'bebo pouca agua', '!hidratacao', '!hidratar', '!hidratado', '!desidratado', '!desidratada', '!desidratar', '!desidratacao', '!isotonico', '!isotonicos', '!gatorade', 'bebida esportiva', 'beber agua treino', 'agua treino', 'beber durante',
   'beber treino', 'agua durante', 'agua antes', 'agua depois', 'garrafinha', 'quanto beber treino', 'repor liquido', 'suei muito', 'perco muito suor', 'muito suor', 'agua demais', 'beber muita agua', 'hiponatremia'];
 const AGUA_CORRIDA = [...AGUA, 'agua corrida', 'beber correndo', 'beber corrida', 'agua correr', 'beber longao', 'agua longao'];
 

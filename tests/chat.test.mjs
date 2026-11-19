@@ -647,7 +647,7 @@ const LEVA4 = {
 for (const l of [LEVA2, LEVA3, LEVA4]) for (const [coach, lista] of Object.entries(l)) CORPUS[coach].push(...lista);
 // fora do assunto: nunca um assunto com confiança (nem direto, nem "Entendi que...")
 const FORA = ['qual a capital da França?', 'me conta uma piada', 'quanto custa um iPhone', 'quem ganhou o jogo de futebol ontem', 'que horas são', 'quem é você', 'me ajuda com matemática',
-  'qual a melhor série da netflix', 'comprei um carro novo', 'amanhã é feriado', 'qual o preço da gasolina', 'me recomenda um filme', 'como faço um bolo de chocolate', 'asdfgh qwerty', 'vou ao cinema sexta',
+  'qual a melhor série da netflix', 'comprei um carro novo', 'qual o preço da gasolina', 'me recomenda um filme', 'como faço um bolo de chocolate', 'asdfgh qwerty', 'vou ao cinema sexta',
   'meu time perdeu de novo', 'quanto é dois mais dois', 'escreve um poema', 'previsão do tempo pra semana', 'kkkkkk'];
 
 test('corpus: frases reais (gíria, erro de digitação, sem acento, com data) levam ao assunto certo; mede o acerto', () => {

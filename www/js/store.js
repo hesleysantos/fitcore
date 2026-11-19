@@ -12,7 +12,7 @@ import { limparSono, sonoPadrao } from './logic/sono.js';
 import { limparCombo, comboPadrao, chaveValida } from './logic/combinado.js';
 import { limparDiario, diarioPadrao } from './logic/diario.js';
 import { diaValido } from './logic/saude.js';
-import { limparPerdidos } from './logic/perdido.js';
+import { limparPerdidos, limparFeriados } from './logic/perdido.js';
 import { limparAjustesSemana } from './logic/ajuste-semana.js';
 import { limparEsteira } from './logic/esteira.js';
 
@@ -30,7 +30,7 @@ export const LETRAS = ['normal', 'grande', 'muito']; // tamanhos de letra de Aju
 const defaults = () => ({
   v: VERSAO,
   // letra: tamanho do texto ('normal' | 'grande' | 'muito'); contraste: cores mais fortes (views/more.js, main.js)
-  settings: { tema: 'auto', descanso: 90, som: true, somAlerta: 'equilibrado', vibrar: true, telaLigada: true, animar: true, avisoFundo: false, letra: 'normal', contraste: false },
+  settings: { tema: 'auto', descanso: 90, som: true, somAlerta: 'equilibrado', vibrar: true, telaLigada: true, animar: true, avisoFundo: false, letra: 'normal', contraste: false, voz: true },
   gym: { all: true, has: {} },
   plans: [],
   activePlan: '',
@@ -51,6 +51,7 @@ const defaults = () => ({
   combo: comboPadrao(), // corrida + musculação: foco e fortalecimento (logic/combinado.js)
   diario: diarioPadrao(), // diário alimentar: o que a pessoa comeu de fato (logic/diario.js)
   perdidos: [], // "Não treinei" e "Não corri": dias marcados e para onde o treino foi (logic/perdido.js)
+  feriados: [], // dias de feriado ('AAAA-MM-DD'): a academia não abre (logic/perdido.js)
   ajustesSemana: [], // treino mudado só numa semana: a versão do treino para aquela semana (logic/ajuste-semana.js)
   // objetivosOk: par "treino|alimentação" que o usuário escolheu manter diferente (logic/objetivos.js)
   // backupAdiadoEm: quando a pessoa tocou em "Depois" no lembrete de backup da tela inicial
@@ -200,7 +201,7 @@ export function sanitize(raw, { doAparelho = false } = {}) {
   d.settings = {
     tema: oneOf(s.tema, ['auto', 'escuro', 'claro'], 'auto'),
     descanso: Math.round(num(s.descanso, 15, 600, 90)),
-    som: bool(s.som, true), somAlerta: ['equilibrado', 'sino', 'alto', 'longo', 'discreto'].includes(s.somAlerta) ? s.somAlerta : 'equilibrado', vibrar: bool(s.vibrar, true), telaLigada: bool(s.telaLigada, true), animar: bool(s.animar, true), avisoFundo: bool(s.avisoFundo, false),
+    som: bool(s.som, true), somAlerta: ['equilibrado', 'sino', 'alto', 'longo', 'discreto'].includes(s.somAlerta) ? s.somAlerta : 'equilibrado', vibrar: bool(s.vibrar, true), telaLigada: bool(s.telaLigada, true), animar: bool(s.animar, true), avisoFundo: bool(s.avisoFundo, false), voz: bool(s.voz, true),
     letra: oneOf(s.letra, LETRAS, 'normal'), contraste: bool(s.contraste, false),
   };
   const g = isObj(raw.gym) ? raw.gym : {};
@@ -232,6 +233,7 @@ export function sanitize(raw, { doAparelho = false } = {}) {
   d.run.esteira = limparEsteira(isObj(raw.run) ? raw.run.esteira : null); // só datas válidas e recentes (logic/esteira.js)
   d.runs = limparRegistros(raw.runs); // até 3000 registros, sem id repetido
   d.perdidos = limparPerdidos(raw.perdidos);
+  d.feriados = limparFeriados(raw.feriados);
   // só versões de treinos que ainda existem no plano
   d.ajustesSemana = limparAjustesSemana(raw.ajustesSemana).filter((x) => d.plans.some((p) => p.id === x.planId && p.dias.some((dd) => dd.id === x.diaId)));
   const u = isObj(raw.ui) ? raw.ui : {};

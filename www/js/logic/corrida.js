@@ -474,23 +474,28 @@ const FALA = { caminhada: 'Conversa normal', corrida_caminhada: 'Dá para conver
 const INTENS = { caminhada: 'leve', corrida_caminhada: 'leve', leve: 'leve', regenerativo: 'leve', longo: 'leve', progressivo: 'moderada', ritmo: 'moderada', fartlek: 'forte', tempo: 'forte', intervalado: 'forte', tiros: 'forte', teste: 'forte', prova: 'forte', descanso: 'leve' };
 const FORTES = new Set(['fartlek', 'tempo', 'intervalado', 'tiros', 'progressivo', 'ritmo', 'teste', 'prova']);
 
-// soma os blocos: duração (min) e distância (km) aproximadas
+// soma os blocos: duração (min) e distância (km) aproximadas. kmCorrendo: só os trechos de corrida (sem a caminhada
+// entre as acelerações ou entre os trechos de corrida): é o que a pessoa lê no treino ("3 km + 6 acelerações") e o que
+// a análise usa para dizer que a distância ficou abaixo do plano.
 function totais(blocos, c) {
-  let seg = 0, km = 0;
+  let seg = 0, km = 0, kmCaminhando = 0;
   const ritmoDe = (tipo, r) => (r ? media(r) : tipo === 'caminhar' ? RITMO_CAMINHADA : tipo === 'forte' ? c.est.forte : tipo === 'trote' ? c.est.trote : c.est.leve);
   for (const b of blocos) {
     const n = Math.max(1, b.repeticoes || 1), p = ritmoDe(b.tipo, b.ritmo);
     const s = b.seg ? b.seg : (b.m / 1000) * p, k = b.seg ? b.seg / p : b.m / 1000;
     seg += n * s; km += n * k;
-    if (b.pausa) { const np = b.pausaFinal ? n : n - 1; seg += np * b.pausa.seg; km += (np * b.pausa.seg) / ritmoDe(b.pausa.tipo); }
+    if (b.tipo === 'caminhar') kmCaminhando += n * k;
+    if (b.pausa) { const np = b.pausaFinal ? n : n - 1; const kp = (np * b.pausa.seg) / ritmoDe(b.pausa.tipo); seg += np * b.pausa.seg; km += kp; if (b.pausa.tipo === 'caminhar') kmCaminhando += kp; }
   }
-  return { durMin: Math.max(1, Math.round(seg / 60)), distKm: r1(km) };
+  return { durMin: Math.max(1, Math.round(seg / 60)), distKm: r1(km), kmCorrendo: r1(km - kmCaminhando) };
 }
 function treino(tipo, blocos, c, extra = {}) {
   const t = totais(blocos, c);
   const corrida = tipo !== 'caminhada' && tipo !== 'descanso';
   return {
     tipo, nome: TIPOS_TREINO[tipo].nome, resumo: '', detalhe: '', distKm: corrida || tipo === 'caminhada' ? t.distKm : 0, durMin: t.durMin, intensidade: INTENS[tipo],
+    // com caminhada no meio (acelerações, corrida e caminhada): os km só correndo
+    ...(corrida && t.kmCorrendo > 0 && t.distKm - t.kmCorrendo >= 0.1 ? { kmCorrendo: t.kmCorrendo } : {}),
     ritmo: null, blocos, pse: PSE[tipo], fala: FALA[tipo], modo: c.modo, ...extra,
   };
 }
@@ -509,7 +514,7 @@ function tLeve(km, c, { strides = false, curto = false } = {}) {
   // acelerações: 5 a 15 segundos rápidos e soltos, com recuperação completa, depois da rodagem (haugen2022)
   if (strides) blocos.push(bl('Acelerações', 'forte', { seg: 15, repeticoes: 6, pausa: { tipo: 'caminhar', seg: 60 } }));
   const d = treino('leve', blocos, c, { ritmo: P ? P.leve : null });
-  d.resumo = `${c.porDist ? fmtKm(blocos[0].m / 1000) : fmtDuracao(blocos[0].seg)} em ritmo leve${strides ? ' + 6 acelerações' : ''}${c.porDist ? ' · ' + aprox(d) : ''}`;
+  d.resumo = `${c.porDist ? fmtKm(blocos[0].m / 1000) : fmtDuracao(blocos[0].seg)} em ritmo leve${strides ? ' + 6 acelerações de 15 s' : ''}${c.porDist ? ' · ' + aprox(d) : ''}`;
   d.detalhe = curto ? 'Bem leve, só para soltar as pernas antes do dia importante.' : 'Ritmo confortável do começo ao fim. Se não der para falar frases inteiras, diminua.' + (strides ? ' No final, 6 acelerações de 15 segundos, rápidas e soltas, caminhando 1 minuto entre elas.' : '');
   return d;
 }
@@ -687,6 +692,7 @@ function tCC(etapa, i, c) {
   const corrida = partes.reduce((s, [a, , n]) => s + a * n, 0);
   d.corridaMin = Math.round(corrida / 60);
   d.corridaKm = r1(corrida / c.est.leve); // só a parte corrida
+  d.kmCorrendo = d.corridaKm;
   const txt = partes.map(([a, b, n]) => (n > 1 ? `${n} × (${fmtDuracao(a)} correndo + ${fmtDuracao(b)} caminhando)` : b ? `${fmtDuracao(a)} correndo + ${fmtDuracao(b)} caminhando` : `${fmtDuracao(a)} correndo sem parar`)).join(', depois ');
   d.resumo = `${txt} · ${d.durMin} min com aquecimento`;
   d.detalhe = `Comece e termine com ${cam / 60} minutos de caminhada. Corra devagar, em ritmo que dê para conversar; se faltar fôlego, diminua o passo. Pode repetir esta semana se achar pesado.`;
@@ -1057,6 +1063,9 @@ function limparDoresDoRegistro(raw) {
 // Dor muscular comum depois do treino: só dores musculares, todas leves (até 3 de 10). A tela tranquiliza e diz o
 // que é esperado (começa em horas, piora em 1 a 3 dias e melhora em até uma semana — zondi2015, mizumura2024).
 export const soDorMuscularLeve = (dores) => Array.isArray(dores) && dores.length > 0 && dores.every((d) => d.tipo === 'muscular' && d.nivel <= 3);
+const etapasOk = (e) => isObj(e) && Number.isFinite(e.de) && Number.isFinite(e.feitas) && Math.round(e.de) >= 1 && Math.round(e.de) <= 60 && Math.round(e.feitas) >= 0 && Math.round(e.feitas) <= Math.round(e.de);
+// etapas de corrida de um treino de corrida e caminhada (cada repetição de "Corrida leve" é uma etapa)
+export const etapasDe = (t) => (t && Array.isArray(t.blocos) ? t.blocos.filter((b) => b.tipo === 'correr').reduce((n, b) => n + Math.max(1, b.repeticoes || 1), 0) : 0);
 export function limparRegistro(raw) {
   if (!isObj(raw) || !idOk(raw.id) || !diaValido(raw.data)) return null;
   const ano = Number(raw.data.slice(0, 4));
@@ -1075,6 +1084,10 @@ export function limparRegistro(raw) {
     ...(limparPlanejado(raw.plan) ? { plan: limparPlanejado(raw.plan) } : {}),
     // corrida feita na esteira (logic/esteira.js): a chave só existe nesse caso; conta igual no volume da semana
     ...(raw.local === 'esteira' ? { local: 'esteira' } : {}),
+    // tempo que veio do plano (a pessoa não mediu): não entra em ritmo nem em teste
+    ...(raw.durEst === true && !distKm ? { durEst: true } : {}),
+    // corrida e caminhada: quantas etapas de corrida foram feitas
+    ...(etapasOk(raw.etapas) ? { etapas: { feitas: Math.round(raw.etapas.feitas), de: Math.round(raw.etapas.de) } } : {}),
   };
 }
 export const MAX_REGISTROS = 3000;
@@ -1240,7 +1253,7 @@ function refazer(t, c) {
   t.durMin = tot.durMin; t.distKm = tot.distKm;
   const b = t.blocos[0], st = t.blocos.some((x) => x.rotulo === 'Acelerações');
   const med = b.m ? fmtKm(b.m / 1000) : fmtDuracao(b.seg);
-  if (t.tipo === 'leve') t.resumo = `${med} em ritmo leve${st ? ' + 6 acelerações' : ''}${b.m ? ' · ' + aprox(t) : ''}`;
+  if (t.tipo === 'leve') t.resumo = `${med} em ritmo leve${st ? ' + 6 acelerações de 15 s' : ''}${b.m ? ' · ' + aprox(t) : ''}`;
   else if (t.tipo === 'regenerativo') t.resumo = `${med} bem leve`;
   else if (t.tipo === 'longo' && t.blocos.length === 1) t.resumo = `${med} em ritmo leve${b.m ? ' · ' + aprox(t) : ''}`;
   return t;
@@ -1357,11 +1370,12 @@ const num1 = (v, max) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ?
 // { tipo, durMin, distKm, ritmo: [de, ate] | null, pse: [de, ate] | null, un: 't' (treino prescrito por tempo) | 'd' (por distância) }
 function limparPlanejado(p) {
   if (!isObj(p) || typeof p.tipo !== 'string' || !Object.prototype.hasOwnProperty.call(TIPOS_TREINO, p.tipo)) return null;
-  return { tipo: p.tipo, durMin: num1(p.durMin, 900), distKm: num1(p.distKm, 120), ritmo: parDe(p.ritmo, 100, 1300), pse: parDe(p.pse, 0, 10), un: p.un === 'd' ? 'd' : 't' };
+  const kc = num1(p.kmCorrendo, 120);
+  return { tipo: p.tipo, durMin: num1(p.durMin, 900), distKm: num1(p.distKm, 120), ritmo: parDe(p.ritmo, 100, 1300), pse: parDe(p.pse, 0, 10), un: p.un === 'd' ? 'd' : 't', ...(kc && p.distKm && kc < p.distKm ? { kmCorrendo: kc } : {}) };
 }
 const unidadeDe = (t) => (t.un === 'd' || (Array.isArray(t.blocos) && t.blocos.some((b) => b.m > 0 && !b.seg)) ? 'd' : 't');
 const parRitmo = (r) => (Array.isArray(r) ? r : r ? [Math.round(r.de), Math.round(r.ate)] : null);
-export const planejadoDe = (t) => (t && typeof t.tipo === 'string' && t.tipo ? limparPlanejado({ tipo: t.tipo, durMin: t.durMin, distKm: t.distKm, ritmo: parRitmo(t.ritmo), pse: Array.isArray(t.pse) ? t.pse.map((x) => Math.round(x)) : null, un: unidadeDe(t) }) : null);
+export const planejadoDe = (t) => (t && typeof t.tipo === 'string' && t.tipo ? limparPlanejado({ tipo: t.tipo, durMin: t.durMin, distKm: t.distKm, kmCorrendo: t.kmCorrendo, ritmo: parRitmo(t.ritmo), pse: Array.isArray(t.pse) ? t.pse.map((x) => Math.round(x)) : null, un: unidadeDe(t) }) : null);
 
 // O treino que o plano MOSTROU em cada dia (state.run.mostrados): os ajustes do plano só valem de hoje em diante, então o
 // que foi mostrado em um dia que já passou tem de ficar guardado para a análise, as faltas e a semana passada baterem com
@@ -1465,7 +1479,13 @@ function analisar(plan, r, ctx) {
     planos.push('O plano não repõe o treino forte: segue no próximo.');
   }
   // 2) quantidade, na unidade em que o treino foi prescrito (sem ela, nada de comparar por estimativa)
+  // corrida e caminhada: as etapas feitas; tempo que veio do plano (não medido) não é comparado
+  if (r.etapas) {
+    if (r.etapas.feitas >= r.etapas.de) it('ok', 'ok', `Todas as ${r.etapas.de} etapas de corrida feitas.`);
+    else it('info', 'menos', `Você fez ${r.etapas.feitas} de ${r.etapas.de} etapas de corrida. Treino encurtado não precisa ser reposto; se ficou pesado, dá para repetir esta semana.`, 'feely2023', 'pollock1998');
+  }
   const porTempo = plan.un !== 'd';
+  const semQuantidade = !!r.etapas || (r.durEst && porTempo);
   const feito = porTempo ? r.durMin : r.distKm, previsto = porTempo ? plan.durMin : plan.distKm;
   const txtPrevisto = porTempo ? Math.round(previsto) + ' min' : fmtKm(previsto);
   if (ehProva) {
@@ -1473,10 +1493,13 @@ function analisar(plan, r, ctx) {
       if (r.distKm < plan.distKm * 0.9) it('info', 'menos', `O dia era de ${TIPOS_TREINO[plan.tipo].nome.toLowerCase()} de ${fmtKm(plan.distKm)}, e o registro tem ${fmtKm(r.distKm)}: a distância não foi completada.`);
       else it('ok', 'ok', 'Distância completada.');
     } else it('info', '', 'Sem a distância no registro, não dá para conferir se a distância foi completada.');
-  } else if (!previsto) { /* sem quantidade planejada: nada a comparar */ }
+  } else if (!previsto || semQuantidade) { /* sem quantidade planejada (ou só as etapas, ou tempo do plano): nada a comparar */ }
   else if (!feito) it('info', '', porTempo ? `O treino era por tempo (${txtPrevisto}) e o registro não tem o tempo: sem como comparar a duração.` : `O treino era por distância (${txtPrevisto}) e o registro não tem a distância: sem como comparar.`);
   else {
-    const dif = feito - previsto, pct = Math.round((dif / previsto) * 100), un = porTempo ? `${Math.round(Math.abs(dif))} min` : fmtKm(Math.abs(dif));
+    // por distância, com caminhada no meio: abaixo, compara com os km só correndo; acima, com o total
+    const base = !porTempo && plan.kmCorrendo && feito < previsto ? plan.kmCorrendo : previsto;
+    const txtBase = base !== previsto ? `${fmtKm(base)} de corrida` : txtPrevisto;
+    const dif = feito - base, pct = Math.round((dif / base) * 100), un = porTempo ? `${Math.round(Math.abs(dif))} min` : fmtKm(Math.abs(dif));
     const grande = Math.abs(dif) >= (porTempo ? 5 : 0.6) && Math.abs(pct) >= 15;
     if (grande && dif > 0) {
       it('info', 'mais', `Você fez ${un} a mais que o planejado (${txtPrevisto}): +${pct}%.`);
@@ -1486,7 +1509,7 @@ function analisar(plan, r, ctx) {
       if (!leve) it('info', '', 'Treino forte esticado soma mais cansaço do que ganho: o tamanho da parte forte tem limite.', 'vdoto2_definicoes');
       planos.push('O plano não acompanha o excesso: a próxima semana parte do que estava previsto.');
     } else if (grande && dif < 0) {
-      it('info', 'menos', `Você fez ${un} a menos que o planejado (${txtPrevisto}): ${pct}%. Treino encurtado não precisa ser reposto.`, 'feely2023', 'pollock1998');
+      it('info', 'menos', `Você fez ${un} a menos que o planejado (${txtBase}): ${pct}%. Treino encurtado não precisa ser reposto.`, 'feely2023', 'pollock1998');
       planos.push('O plano não repõe. Se a semana inteira ficar bem abaixo, a próxima parte do que você fez.');
     } else it('ok', 'ok', porTempo ? 'Duração dentro do planejado.' : 'Distância dentro do planejado.');
   }
@@ -2212,7 +2235,7 @@ function avisos(pf, P, { semanas, limitado }) {
   if (pf.resultadoInvalido) av('warn', 'O resultado que você informou não parece possível (mais rápido que o recorde mundial da distância, ou lento demais para uma corrida contínua): desconsiderei. Os treinos vão pelo esforço; confira o tempo em “Mudar respostas”.', ['wa_recordes', 'smyth2022']);
   if (pf.alvoInvalido) av('warn', 'O tempo-alvo que você informou não parece possível para a distância: desconsiderei. Confira em “Mudar respostas”.', ['wa_recordes']);
   if (pf.lento) av('info', 'Pelo seu resultado, o ritmo leve calculado ficaria mais lento que uma caminhada rápida. Por isso os treinos vão por tempo e esforço: corra em ritmo de conversa e caminhe quando precisar.', ['hreljac2005', 'abe2019', 'foster2020']);
-  else if (pf.nivel >= 2 && !P) av('info', 'Sem um resultado recente, os treinos vão pelo esforço. Para ter ritmos calculados, registre uma corrida forte de 3 km ou 5 km como “Teste de ritmo”.', ['smyth2022', 'foster2020']);
+  else if (pf.nivel >= 2 && !P) av('info', pf.modo === 'tempo' ? 'Sem GPS, os treinos vão pelo tempo e pelo esforço, sem ritmo. Se um dia correr numa pista ou esteira, registre uma corrida forte de 3 km ou 5 km como “Teste de ritmo” para ter ritmos calculados.' : 'Sem um resultado recente, os treinos vão pelo esforço. Para ter ritmos calculados, registre uma corrida forte de 3 km ou 5 km como “Teste de ritmo”.', ['smyth2022', 'foster2020']);
   if (pf.alvoSeg && !P && pf.dist) av('info', `Sem um resultado recente, não dá para saber se a meta de ${fmtTempo(pf.alvoSeg)} está ao alcance: os treinos e a prova vão pelo esforço. Os ritmos seguem o condicionamento de hoje, não o desejado; registre um “Teste de ritmo” para calcular.`, ['vdoto2_ajuste', 'smyth2022']);
   // prazo e alcance
   if (pf.dist) {

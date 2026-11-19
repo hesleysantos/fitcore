@@ -12,6 +12,10 @@ export default async (page) => {
   const estado = (expr) => page.eval(`const s = (await import('/js/store.js')).state; return ${expr};`);
   const foto = async (nome) => { if (process.env.FOTOS_ESTEIRA) await page.shot('esteira/' + nome); };
   const semRolagem = () => page.eval(`return document.documentElement.scrollWidth <= innerWidth + 1;`);
+  // registro da corrida (1.14.0): distância só com números (a vírgula entra sozinha) e tempo em minutos e segundos
+  const km = (digitos) => preencher('Distância em quilômetros', String(digitos));
+  const tempo = async (min, seg = '') => { const a = await preencher('Tempo: minutos', String(min)); const b = await preencher('Tempo: segundos', String(seg)); return a && b; };
+  const modoDoRegistro = () => page.eval(`const m = document.getElementById('registro-medidas'); return m ? m.dataset.modo : '';`);
   const preencher = (rotulo, valor) => page.eval(`const i = document.querySelector('input[aria-label="${rotulo}"]'); if (!i) return false; i.value = ${JSON.stringify(valor)}; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); return true;`);
 
   console.log('1. Plano de corrida aceito há 6 semanas, com corrida hoje');
@@ -82,7 +86,7 @@ export default async (page) => {
 
   console.log('5. Registrar a corrida de hoje na esteira e recarregar');
   await page.goto(B + '#/corrida/dia/' + hoje, 900);
-  await preencher('Distância em quilômetros', '6'); await preencher('Tempo em minutos, ou minutos e segundos', '38:30');
+  await km('600'); await tempo('38', '30');
   await page.click('Esforço 3: Moderado', 'button');
   await page.click('Registrar corrida'); await page.sleep(600);
   const r = await estado(`s.runs.find((x) => x.data === ${JSON.stringify(hoje)})`);

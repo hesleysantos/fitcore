@@ -1,7 +1,7 @@
 // Regras do Treinador de corrida: perfil, plano, segurança e ajuste pelos registros.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PERGUNTAS, respostasCompletas, perfil, gerarPlano, motivoBloqueio, avisosBloqueio, ritmosDe, vdotDe, riegel, zonasDe, expandirBlocos, textoBloco, efeitoDaDor, orientacaoDor, planoDaSemana, treinoDoDia, resumoParaNutricao, inicioPara, diasDeForca, evolucao, alertas, dicas, limparRegistro, limparRegistros, MAX_REGISTROS, limparCorrida, retomarPlano, recordeSeg, resultadoValido, planoAtual, planoDaSemanaEm, efeitoDoFoco, planejadoDe, analiseDoRegistro, analiseRecente, guardarDoDia, diaLocal, fmtRitmo, fmtFaixa, fmtDuracao, somaDias, diaDaSemana, ETAPAS_CC } from '../www/js/logic/corrida.js';
+import { PERGUNTAS, respostasCompletas, perfil, gerarPlano, motivoBloqueio, avisosBloqueio, ritmosDe, vdotDe, riegel, zonasDe, expandirBlocos, textoBloco, efeitoDaDor, orientacaoDor, planoDaSemana, treinoDoDia, resumoParaNutricao, inicioPara, diasDeForca, evolucao, alertas, dicas, limparRegistro, limparRegistros, MAX_REGISTROS, limparCorrida, retomarPlano, recordeSeg, resultadoValido, planoAtual, planoDaSemanaEm, efeitoDoFoco, planejadoDe, analiseDoRegistro, analiseRecente, guardarDoDia, diaLocal, fmtRitmo, fmtFaixa, fmtDuracao, somaDias, diaDaSemana, ETAPAS_CC, etapasDe } from '../www/js/logic/corrida.js';
 import { REFS_CORRIDA, FAQ_CORRIDA, TIPOS_TREINO } from '../www/js/data/corrida.js';
 import * as store from '../www/js/store.js';
 
@@ -809,7 +809,8 @@ test('análise do treino feito: mais longo, mais rápido, esforço alto, forte t
   const dia = (pred) => { for (const s of p.semanas.slice(0, 3)) for (const d of s.dias) if (pred(d)) return { d, data: somaDias(inicio, (s.n - 1) * 7 + ((d.wd + 6) % 7)) }; throw new Error('dia não encontrado'); };
   const leve = dia((d) => d.tipo === 'leve' && d.ritmo);
   const plan = planejadoDe(leve.d);
-  assert.deepEqual(Object.keys(plan).sort(), ['distKm', 'durMin', 'pse', 'ritmo', 'tipo', 'un']);
+  // kmCorrendo só existe quando o treino tem caminhada no meio (acelerações)
+  assert.deepEqual(Object.keys(plan).filter((k) => k !== 'kmCorrendo').sort(), ['distKm', 'durMin', 'pse', 'ritmo', 'tipo', 'un']);
   const feito = (extra) => ({ ...reg('a1', leve.data, 'leve', leve.d.distKm, leve.d.durMin, 3), plan, ...extra });
   const an = (r, runs = []) => analiseDoRegistro({ ...st, runs: [...runs, r] }, leve.data, r);
   // dentro do plano
@@ -1195,4 +1196,35 @@ test('zonas: com remédio que segura o pulso, nada de frequência cardíaca (só
   assert.ok(zonasDe(perfil(base), null).lista[0].fc[0] > 0);
   const p = gerarPlano({ ...base, remedios: ['pulso'] });
   assert.ok(p.orientacoes.find((o) => o[0] === 'Como sentir o esforço')[1].includes('não use os batimentos'));
+});
+
+// ---------- 1.14.0: acelerações, km só correndo, etapas e tempo do plano ----------
+test('rodagem com acelerações: o resumo diz 15 s, o "planejado" separa os km correndo e 3 km não é "20% a menos"', () => {
+  const inicio = '2026-11-02';
+  const base = { experiencia: 'regular', kmSemana: 25, longoAtual: 10, provas: '5a10', pausa: 'treinando', objetivo: 'saude', dias: ['1', '2', '4', '6'], diaLongo: 'auto', tempo: '60', tempoLongo: '120', aparelho: 'gps', local: 'rua', idade: 31, peso: 78, altura: 176, lesao12m: 'nao', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'], resultado: '5', resultadoMin: 25 };
+  const st = estado(base, inicio, inicio);
+  const p = planoAtual(st, inicio);
+  let achado = null;
+  for (const s of p.semanas) for (const d of s.dias) if (!achado && d.tipo === 'leve' && /acelera/.test(d.resumo || '')) achado = { d, data: somaDias(inicio, (s.n - 1) * 7 + ((d.wd + 6) % 7)) };
+  assert.ok(achado, 'plano com uma rodagem com acelerações');
+  const { d, data } = achado;
+  assert.match(d.resumo, /6 acelerações de 15 s/);
+  assert.ok(d.kmCorrendo && d.kmCorrendo < d.distKm, `km correndo ${d.kmCorrendo} < total ${d.distKm}`);
+  const plan = planejadoDe(d);
+  assert.equal(plan.kmCorrendo, d.kmCorrendo);
+  const correu = d.blocos[0].m / 1000; // os km da rodagem, como o resumo diz
+  const r = { ...reg('ac1', data, 'leve', correu, d.durMin - 1, 3), plan };
+  const an = analiseDoRegistro({ ...st, runs: [r] }, data, r);
+  const txt = an.itens.map((x) => x.texto).join(' | ');
+  assert.ok(!/a menos que o planejado/.test(txt), txt);
+});
+test('corrida e caminhada: as etapas de corrida contam; registro sem tempo usa o do plano, marcado como estimado', () => {
+  const t = { tipo: 'corrida_caminhada', blocos: [{ tipo: 'aquecer', seg: 300 }, { tipo: 'correr', seg: 180, repeticoes: 4, pausa: { tipo: 'caminhar', seg: 120 }, pausaFinal: true }, { tipo: 'desaquecer', seg: 300 }] };
+  assert.equal(etapasDe(t), 4);
+  const r = limparRegistro({ id: 'cc1', data: '2026-11-10', tipo: 'corrida_caminhada', durMin: 25, durEst: true, etapas: { feitas: 3, de: 4 } });
+  assert.deepEqual(r.etapas, { feitas: 3, de: 4 });
+  assert.equal(r.durEst, true);
+  // etapas impossíveis saem; tempo estimado com distância não vale
+  assert.equal(limparRegistro({ id: 'cc2', data: '2026-11-10', durMin: 25, etapas: { feitas: 5, de: 4 } }).etapas, undefined);
+  assert.equal(limparRegistro({ id: 'cc3', data: '2026-11-10', durMin: 25, distKm: 3, durEst: true }).durEst, undefined);
 });

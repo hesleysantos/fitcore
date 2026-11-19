@@ -14,7 +14,7 @@ import {
   PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, planoAtual, planoDaSemana, treinoDoDia, avisosBloqueio, inicioPara, diasDeForca, evolucao, alertas, dicas,
   efeitoDaDor, orientacaoDor, expandirBlocos, textoBloco, limparRegistro, MAX_REGISTROS, fmtRitmo, fmtFaixa, fmtKm, fmtTempo, fmtDia, somaDias, diaValido, diasEntre,
   retomarPlano, diaLocal, segundaDe, planejadoDe, analiseDoRegistro, analiseRecente, guardarDoDia, perfil, saudeDaCorrida,
-  MAX_DORES_REGISTRO, MUSCULO_CORRIDA, soDorMuscularLeve,
+  MAX_DORES_REGISTRO, MUSCULO_CORRIDA, soDorMuscularLeve, etapasDe,
 } from '../logic/corrida.js';
 import { faltaPerguntar } from '../logic/combinado.js';
 import { cartaoCombinado, perguntarCombinado } from './combinado.js';
@@ -545,7 +545,8 @@ function guiaDorMuscular() {
 function resumoRegistro(r) {
   const partes = [];
   if (r.distKm) partes.push(fmtKm(r.distKm));
-  if (r.durMin) partes.push(fmtTempo(r.durMin * 60));
+  if (r.etapas) partes.push(`${r.etapas.feitas} de ${r.etapas.de} etapas`);
+  if (r.durMin) partes.push((r.durEst ? 'cerca de ' : '') + fmtTempo(r.durMin * 60));
   if (r.distKm && r.durMin && r.tipo !== 'caminhada') partes.push(`${fmtRitmo((r.durMin * 60) / r.distKm)} por km`);
   if (r.pse) partes.push(`esforço ${r.pse}`);
   if (r.local === 'esteira') partes.push('na esteira');
@@ -671,7 +672,7 @@ function formulario(data, planejado, existente, aoFechar) {
   {
     // o tipo vem do treino do dia, mas dá para mudar (fez um treino forte no dia leve, trocou por caminhada...)
     const chips = h('div', { class: 'chips wrap', role: 'radiogroup', 'aria-label': 'Tipo de corrida' });
-    const draw = () => { while (chips.firstChild) chips.removeChild(chips.firstChild); for (const t of TIPOS_LIVRES) chips.appendChild(h('button', { type: 'button', class: 'chip' + (r.tipo === t ? ' on' : ''), role: 'radio', 'aria-checked': r.tipo === t ? 'true' : 'false', onClick: () => { r.tipo = t; draw(); } }, TIPOS_TREINO[t].nome)); };
+    const draw = () => { while (chips.firstChild) chips.removeChild(chips.firstChild); for (const t of TIPOS_LIVRES) chips.appendChild(h('button', { type: 'button', class: 'chip' + (r.tipo === t ? ' on' : ''), role: 'radio', 'aria-checked': r.tipo === t ? 'true' : 'false', onClick: () => { r.tipo = t; draw(); if (typeof drawMedidas === 'function') drawMedidas(); } }, TIPOS_TREINO[t].nome)); };
     draw();
     card.appendChild(h('div', { class: 'col gap-s' }, h('div', { class: 'small bold muted', text: 'Tipo' }), chips, h('p', { class: 'tiny muted', text: 'Marque “Teste de ritmo” ou “Dia da prova” em uma corrida forte e contínua: o resultado atualiza os seus ritmos.' })));
   }
@@ -679,16 +680,69 @@ function formulario(data, planejado, existente, aoFechar) {
   {
     if (!existente) r.local = naEsteira(state, data) || (planejado && planejado.modo === 'esteira') || (perfilAtual() || {}).local === 'esteira' ? 'esteira' : '';
     const locais = h('div', { class: 'chips wrap', role: 'radiogroup', 'aria-label': 'Onde você correu' });
-    const drawLocal = () => { while (locais.firstChild) locais.removeChild(locais.firstChild); for (const [v, nome] of [['', 'Rua ou pista'], ['esteira', 'Esteira']]) locais.appendChild(h('button', { type: 'button', class: 'chip' + ((r.local || '') === v ? ' on' : ''), role: 'radio', 'aria-checked': (r.local || '') === v ? 'true' : 'false', 'data-local': v || 'rua', onClick: () => { r.local = v; drawLocal(); } }, nome)); };
+    const drawLocal = () => { while (locais.firstChild) locais.removeChild(locais.firstChild); for (const [v, nome] of [['', 'Rua ou pista'], ['esteira', 'Esteira']]) locais.appendChild(h('button', { type: 'button', class: 'chip' + ((r.local || '') === v ? ' on' : ''), role: 'radio', 'aria-checked': (r.local || '') === v ? 'true' : 'false', 'data-local': v || 'rua', onClick: () => { r.local = v; drawLocal(); if (typeof drawMedidas === 'function') drawMedidas(); } }, nome)); };
     drawLocal();
     card.appendChild(h('div', { class: 'col gap-s', id: 'registro-local' }, h('div', { class: 'small bold muted', text: 'Onde' }), locais));
   }
-  const dist = h('input', { class: 'input', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: r.distKm ? virgula(r.distKm) : '', placeholder: 'Ex.: 5,2', 'aria-label': 'Distância em quilômetros' });
-  const dur = h('input', { class: 'input', type: 'text', inputmode: 'text', autocomplete: 'off', value: tempoTxt(r.durMin), placeholder: 'Ex.: 32 ou 32:30', 'aria-label': 'Tempo em minutos, ou minutos e segundos' });
-  card.appendChild(h('div', { class: 'row top' }, h('label', { class: 'field grow' }, h('span', { text: 'Distância (km)' }), dist), h('label', { class: 'field grow' }, h('span', { text: 'Tempo (min ou min:seg)' }), dur)));
-  card.appendChild(h('p', { class: 'tiny muted', text: 'Tempo: 32 (minutos), 32:30 (minutos e segundos) ou 1:05:20 (horas, minutos e segundos).' }));
+  // O que medir depende do treino e de como a pessoa mede (logic/corrida.js, aparelho):
+  //  • caminhada: só o tempo (ninguém conta a distância da caminhada);
+  //  • corrida e caminhada (etapas): quantas etapas de corrida foram feitas, e o tempo, se quiser;
+  //  • teste de ritmo e prova: distância e tempo do trecho do teste (sem o aquecimento), os dois;
+  //  • treino do plano por minutos: só os minutos; treino do plano por km: distância e tempo;
+  //  • corrida fora do plano: com GPS, relógio ou esteira, distância e tempo; sem GPS, só o tempo (a distância fica
+  //    escondida em "Tenho a distância").
+  // Sem tempo nem distância, com um treino do plano, vale o tempo do plano (durEst: estimado, não entra no ritmo).
+  const pf = perfilAtual() || {};
+  const etapasDoPlano = planejado && planejado.tipo === 'corrida_caminhada' ? etapasDe(planejado) : 0;
+  const unPlano = r.plan ? r.plan.un : '';
+  const medeDistancia = () => r.tipo === 'teste' || r.tipo === 'prova' || (unPlano ? unPlano === 'd' : r.local === 'esteira' || pf.aparelho === 'gps' || pf.aparelho === 'esteira' || !!r.distKm);
+  const modoDeMedir = () => (r.tipo === 'caminhada' ? 'tempo'
+    : r.tipo === 'corrida_caminhada' && etapasDoPlano > 1 ? 'etapas'
+      : medeDistancia() ? 'completo' : 'tempo');
+  if (!existente && etapasDoPlano > 1 && r.tipo === 'corrida_caminhada') r.etapas = { feitas: etapasDoPlano, de: etapasDoPlano };
+  // distância: só números, a vírgula entra sozinha (3, 0, 4 → 3,04)
+  const kmTxt = (km) => (km ? (Math.round(km * 100) / 100).toFixed(2).replace('.', ',') : '');
+  const dist = h('input', { class: 'input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'off', value: kmTxt(r.distKm), placeholder: '0,00', 'aria-label': 'Distância em quilômetros' });
+  dist.addEventListener('input', () => {
+    const dig = dist.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 5);
+    dist.value = dig ? (Number(dig) / 100).toFixed(2).replace('.', ',') : '';
+  });
+  // tempo: minutos e segundos em dois campos, só números
+  const seg0 = Math.round((r.durMin || 0) * 60);
+  const durMinI = h('input', { class: 'input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'off', maxlength: '3', value: seg0 ? String(Math.floor(seg0 / 60)) : '', placeholder: 'min', 'aria-label': 'Tempo: minutos' });
+  const durSegI = h('input', { class: 'input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'off', maxlength: '2', value: seg0 % 60 ? String(seg0 % 60).padStart(2, '0') : '', placeholder: 'seg', 'aria-label': 'Tempo: segundos' });
+  for (const el of [durMinI, durSegI]) el.addEventListener('input', () => { el.value = el.value.replace(/\D/g, ''); });
+  durMinI.addEventListener('input', () => { if (durMinI.value.length >= 3) durSegI.focus(); });
+  const campoTempo = h('div', { class: 'field grow' }, h('span', { text: 'Tempo' }), h('div', { class: 'row gap-s tempo-campos' }, durMinI, h('span', { class: 'muted', text: 'min' }), durSegI, h('span', { class: 'muted', text: 's' })));
+  const campoDist = h('label', { class: 'field grow' }, h('span', { text: 'Distância (km)' }), dist);
+  let comDistancia = false; // sem GPS: a pessoa pode abrir o campo da distância
+  const medidas = h('div', { class: 'col gap-s', id: 'registro-medidas' });
+  const drawMedidas = () => {
+    while (medidas.firstChild) medidas.removeChild(medidas.firstChild);
+    const modo = modoDeMedir();
+    medidas.dataset.modo = modo;
+    if (modo === 'etapas') {
+      if (!r.etapas) r.etapas = { feitas: etapasDoPlano, de: etapasDoPlano };
+      medidas.appendChild(h('div', { class: 'row between' }, h('div', { class: 'col' }, h('span', { class: 'bold', text: 'Etapas de corrida feitas' }), h('span', { class: 'tiny muted', text: `O treino tinha ${etapasDoPlano}.` })),
+        stepper({ value: r.etapas.feitas, min: 0, max: etapasDoPlano, step: 1, label: 'Etapas de corrida feitas', onChange: (v) => { r.etapas = { feitas: v, de: etapasDoPlano }; } })));
+      medidas.appendChild(h('div', { class: 'row top' }, campoTempo));
+      medidas.appendChild(h('p', { class: 'tiny muted', text: 'O tempo é opcional: o cronômetro guiado preenche sozinho.' }));
+      return;
+    }
+    if (modo === 'tempo') {
+      const mostraDist = comDistancia || !!r.distKm;
+      medidas.appendChild(h('div', { class: 'row top' }, campoTempo, mostraDist && r.tipo !== 'caminhada' ? campoDist : null));
+      if (r.tipo === 'caminhada') medidas.appendChild(h('p', { class: 'tiny muted', text: 'Na caminhada, basta o tempo.' }));
+      else if (unPlano === 't') medidas.appendChild(h('p', { class: 'tiny muted', text: 'Este treino é por tempo: basta o tempo.' }));
+      else if (!mostraDist) medidas.appendChild(h('div', { class: 'row between' }, h('span', { class: 'tiny muted grow', text: 'Sem GPS, basta o tempo.' }), btn('Tenho a distância', () => { comDistancia = true; drawMedidas(); dist.focus(); }, 'plain sm')));
+      return;
+    }
+    medidas.appendChild(h('div', { class: 'row top' }, campoDist, campoTempo));
+    medidas.appendChild(h('p', { class: 'tiny muted', text: r.tipo === 'teste' || r.tipo === 'prova' ? 'Só o trecho do teste ou da prova, sem o aquecimento: é o que atualiza os seus ritmos.' : 'Digite só os números: 3, 0, 4 vira 3,04 km.' }));
+  };
+  drawMedidas();
+  card.appendChild(medidas);
   if (planejado && planejado.estimado && !existente) card.appendChild(note('info', 'O que o plano mostrava neste dia não ficou guardado: a corrida entra no volume da semana, sem comparação com o planejado.'));
-  card.appendChild(h('p', { class: 'tiny muted', text: 'Sem GPS aqui: digite a distância do relógio, do aplicativo de corrida ou da esteira. Se não souber, informe só o tempo.' }));
   // esforço percebido
   // esforço: nada vem marcado; o que aparece escolhido é o que fica gravado
   const pseTxt = h('div', { class: 'small muted center' });
@@ -750,15 +804,26 @@ function formulario(data, planejado, existente, aoFechar) {
   card.appendChild(h('div', { class: 'row' },
     aoFechar ? btn('Cancelar', aoFechar, 'ghost') : null,
     btn(existente ? 'Salvar alterações' : 'Registrar corrida', () => {
-      const d = dist.value.trim() ? parseNum(dist.value) : 0, t = lerTempo(dur.value);
+      const modo = modoDeMedir();
+      const d = modo === 'completo' || (modo === 'tempo' && (comDistancia || r.distKm) && r.tipo !== 'caminhada') ? (dist.value.trim() ? parseNum(dist.value) : 0) : 0;
+      const mm = durMinI.value ? Number(durMinI.value) : 0, ss = durSegI.value ? Number(durSegI.value) : 0;
+      if (ss > 59) { toast('Os segundos vão de 0 a 59.'); durSegI.focus(); return; }
+      let t = emMin(mm * 60 + ss), durEst = false;
       if (!Number.isFinite(d) || d < 0 || d > 120) { toast('Confira a distância, em quilômetros.'); dist.focus(); return; }
-      if (!Number.isFinite(t) || t < 0 || t > 900) { toast('Confira o tempo: minutos (32) ou minutos:segundos (32:30).'); dur.focus(); return; }
-      if (!d && !t) { toast('Informe a distância ou o tempo.'); dist.focus(); return; }
+      if (t > 900) { toast('Confira o tempo, em minutos.'); durMinI.focus(); return; }
+      if ((r.tipo === 'teste' || r.tipo === 'prova') && (!d || !t)) { toast('No teste e na prova, informe a distância e o tempo do trecho.'); (d ? durMinI : dist).focus(); return; }
+      // sem medir nada: vale o tempo do plano (proporcional às etapas feitas), marcado como estimado
+      if (!d && !t) {
+        const prev = r.plan && r.plan.durMin ? r.plan.durMin : 0;
+        if (!prev) { toast(modo === 'completo' ? 'Informe a distância ou o tempo.' : 'Informe o tempo.'); (modo === 'completo' ? dist : durMinI).focus(); return; }
+        const fr = modo === 'etapas' && r.etapas && r.etapas.de ? r.etapas.feitas / r.etapas.de : 1;
+        t = Math.max(1, Math.round(prev * fr)); durEst = true;
+      }
       if (comDor && !r.dores.length) { toast('Marque onde doeu, ou desligue “Senti dor”.'); return; }
       const semTipo = r.dores.find((x) => !x.tipo);
       if (semTipo) { toast(`Diga como foi a dor em ${LOCAIS_DOR[semTipo.onde].toLowerCase()}.`); const el = dorBox.querySelector(`[data-onde="${semTipo.onde}"]`); if (el) el.scrollIntoView({ block: 'center' }); return; }
       // "não sei dizer" vale como dor em um ponto (articulação, osso ou tendão), o lado mais cauteloso
-      const limpo = limparRegistro({ ...r, dores: r.dores.map((x) => ({ ...x, tipo: x.tipo === 'naosei' ? 'articular' : x.tipo })), distKm: d, durMin: t, nota: nota.value, local: r.local === 'esteira' ? 'esteira' : '' });
+      const limpo = limparRegistro({ ...r, dores: r.dores.map((x) => ({ ...x, tipo: x.tipo === 'naosei' ? 'articular' : x.tipo })), distKm: d, durMin: t, durEst, etapas: modo === 'etapas' ? r.etapas : null, nota: nota.value, local: r.local === 'esteira' ? 'esteira' : '' });
       if (!limpo) { toast('Esse ritmo não parece possível. Confira a distância e o tempo.'); return; }
       update((s) => {
         const i = s.runs.findIndex((x) => x.id === limpo.id);
@@ -787,7 +852,7 @@ function formulario(data, planejado, existente, aoFechar) {
         : existente ? 'Registro atualizado.' : 'Corrida registrada! O plano leva em conta.');
       refresh();
     }, 'primary grow', 'check')));
-  return { card, definirTempo: (min) => { if (!dur.value.trim()) dur.value = String(min); } };
+  return { card, definirTempo: (min) => { if (!durMinI.value.trim() && !durSegI.value.trim()) durMinI.value = String(min); } };
 }
 
 // Fazer na esteira / Voltar para a rua. Marcado: o que muda na esteira (poucas linhas), os cuidados de segurança e o
@@ -846,7 +911,7 @@ export function corridaDiaView(data) {
         h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Teste da fala' }), h('span', { text: planejado.fala })),
         planejado.ritmo ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: planejado.modo === 'esteira' || ves ? 'Velocidade' : 'Ritmo' }), h('span', { text: fmtFaixa(planejado.ritmo, ves ? 'esteira' : planejado.modo) })) : null,
         ves ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Inclinação' }), h('span', { text: ves.inclinacao })) : null,
-        h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Duração' }), h('span', { text: `cerca de ${planejado.durMin} min` + (planejado.distKm && planejado.tipo !== 'caminhada' ? ` · ${fmtKm(planejado.distKm)}` : '') }))));
+        h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Duração' }), h('span', { text: `cerca de ${planejado.durMin} min` + (planejado.distKm && planejado.tipo !== 'caminhada' ? ` · ${planejado.kmCorrendo ? fmtKm(planejado.kmCorrendo) + ' correndo' : fmtKm(planejado.distKm)}` : '') }))));
       if (t && t.paraQue) card.appendChild(porQue(t.paraQue + (t.sentir ? ' Como sentir: ' + t.sentir : ''), t.f, 'Para que serve este treino'));
       if (planejado.ajustado) card.appendChild(note('info', planejado.carga ? 'Este treino ficou mais leve por causa da sua semana puxada. Para voltar ao plano, use “Desfazer” em “Sua semana”.' : 'Este treino foi ajustado por causa de uma dor que você contou.'));
       if (planejado.guardado) card.appendChild(h('p', { class: 'tiny muted', text: 'É o treino que o plano mostrava neste dia.' }));

@@ -69,6 +69,7 @@ export function expandir(t) {
 // Expressões do dia a dia que querem dizer uma palavra que o app já conhece (o mesmo assunto, dito de outro jeito)
 const CONCEITOS = [
   [/\bpor que\b/g, 'porque'], [/\bpor qual motivo\b/g, 'porque'],
+  [/\bperda de tempo\b/g, 'inutil'],
   [/\b(perder|queimar|tirar|eliminar) (a |essa |minha )?(barriga|gordura|pochete|peso)\b/g, 'emagrecer'],
   [/\b(secar|sequinho|sequinha)\b/g, 'emagrecer'],
   [/\b(ganhar|pegar|botar) (massa|musculo|corpo)\b/g, 'ganhar massa'],

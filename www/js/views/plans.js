@@ -11,8 +11,8 @@ import { novoItem, alvoTexto, duracaoEstimada, pickExercises, subtitulo, folha }
 import { startSession, startFree } from './session.js';
 import { cartaoCombinado } from './combinado.js';
 import { cartaoAvaliacaoDoDia, cartaoAvaliacaoDoPlano } from './avaliacao.js';
-import { semanaEfetiva, podeMarcar, podeMarcarCorrida, corridaPerdidaEm, nomeDoDia } from '../logic/perdido.js';
-import { botaoNaoTreinei, botaoNaoCorri, linhaNaoTreinado, linhaNaoCorrida } from './perdido.js';
+import { semanaEfetiva, podeMarcar, podeMarcarCorrida, corridaPerdidaEm, nomeDoDia, ehFeriado } from '../logic/perdido.js';
+import { botaoNaoTreinei, botaoNaoCorri, linhaNaoTreinado, linhaNaoCorrida, folhaNaoTreinei } from './perdido.js';
 import { situacaoDoPlano, cartaoVariacao } from './variacao.js';
 import { registrarTrocaManual } from '../logic/variacao.js';
 import { diasBloqueados } from '../logic/dias-livres.js';
@@ -251,13 +251,29 @@ export function plansView() {
       c.feito ? badge('Feita', 'ok') : null),
     btn(c.feito ? 'Ver corrida' : 'Abrir corrida', () => go('corrida/dia/' + c.data), c.feito ? 'ghost block' : 'block', 'run'),
     !c.feito && semanaVista === 0 && podeMarcarCorrida(state, c.data, hojeK) ? acoesPerdido(botaoNaoCorri(c.data, refresh)) : null);
+  // Feriado: a academia não abre (logic/perdido.js). Marcar guarda o dia (nenhum treino vem para ele) e, se o dia tem
+  // musculação, abre o "Não treinei" com o motivo feriado: o treinador propõe outro dia com as regras de sempre.
+  const linhaFeriado = (data, efComTreino) => {
+    if (!ehFeriado(state, data)) {
+      return h('div', { class: 'row feriado-acao' }, h('span', { class: 'grow' }), btn('É feriado?', () => {
+        update((st) => { st.feriados = [...(st.feriados || []), data]; });
+        refresh();
+        if (efComTreino && podeMarcar(state, data, hojeK, { futuro: true }).pode) folhaNaoTreinei(data, refresh, { motivo: 'feriado', futuro: true });
+        else toast('Feriado marcado. Nenhum treino vai para este dia.');
+      }, 'plain sm'));
+    }
+    return h('div', { class: 'col gap-s feriado-linha' },
+      h('div', { class: 'row between' }, h('span', { class: 'small' }, icon('calendar', 's'), ' Feriado: a academia não abre.'),
+        btn('Desfazer', () => { update((st) => { st.feriados = (st.feriados || []).filter((x) => x !== data); }); refresh(); }, 'plain sm')),
+      efComTreino && podeMarcar(state, data, hojeK, { futuro: true }).pode ? btn('Mudar o treino deste dia', () => folhaNaoTreinei(data, refresh, { motivo: 'feriado', futuro: true }), 'sm block', 'calendar') : null);
+  };
   const semana = h('div', { class: 'col semana' });
   for (const wd of ORDEM_SEMANA) {
     const ef = efetiva ? efetiva[(wd + 6) % 7] : null;
     const d = plan && ef ? plan.dias.find((x) => x.id === ef.diaId) : null;
     const c = corrida && Array.isArray(corrida.dias) ? corrida.dias[wd] : null;
     const card = h('div', { class: 'card col dia' + (wd === hojeWd ? ' hl' : ''), 'data-wd': String(wd) },
-      h('div', { class: 'row between' }, h('div', { class: 'dia-nome' }, DIAS_LONGO[wd], h('span', { class: 'small muted', text: ' · ' + diaMes(dataDe(wd)) })), wd === hojeWd ? badge('Hoje', 'acc') : d && feitoEm(d, wd) ? badge('Feito', 'ok') : null));
+      h('div', { class: 'row between' }, h('div', { class: 'dia-nome' }, DIAS_LONGO[wd], h('span', { class: 'small muted', text: ' · ' + diaMes(dataDe(wd)) })), h('div', { class: 'row gap-s' }, wd === hojeWd ? badge('Hoje', 'acc') : null, d && feitoEm(d, wd) ? badge('Feito', 'ok') : null)));
     const extras = corrida && Array.isArray(corrida.extras) && Array.isArray(corrida.extras[wd]) ? corrida.extras[wd] : [];
     // corrida que mudou de dia pelo chat: o dia de origem fica sem corrida, só com a linha "Mudou de dia" e o "Desfazer"
     const movida = !c && corrida && Array.isArray(corrida.movidas) && corrida.movidas[wd] ? corrida.movidas[wd] : null;
@@ -278,6 +294,9 @@ export function plansView() {
       if (perdido) card.appendChild(linhaNaoTreinado(ef, perdido.nome, refresh, semanaVista === 0));
       else card.appendChild(d ? blocoTreino(d, wd, ef) : h('div', { class: 'small muted', text: saiu ? `${saiu.nome} passou para ${nomeDoDia(ef.foiPara, hojeK)}.` : c || extras.length ? 'Sem musculação neste dia.' : 'Descanso.' }));
     } else if (!c && !extras.length) card.appendChild(h('div', { class: 'small muted', text: 'Descanso.' }));
+    // feriado (só nesta semana, de hoje em diante): botão discreto; marcado, a linha com "Desfazer"
+    const dataDia = dateKey(dataDe(wd));
+    if (plan && semanaVista === 0 && dataDia >= hojeK) card.appendChild(linhaFeriado(dataDia, d && !(ef && ef.perdido) && !feitoEm(d, wd) ? ef : null));
     semana.appendChild(card);
   }
   body.push(semana);

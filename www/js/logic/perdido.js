@@ -53,8 +53,19 @@ export const PESADO = 3; // séries do grupo como músculo principal a partir da
 export const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
 // o motivo de não ter treinado (o mesmo para musculação e corrida; 'chuva' só aparece na corrida)
-export const MOTIVOS = { tempo: 'Sem tempo', cansaco: 'Cansaço ou dormi mal', dor: 'Dor', doente: 'Doente ou machucado', viagem: 'Viagem', chuva: 'Chuva', outro: 'Outro' };
-export const MOTIVO_CURTO = { tempo: 'sem tempo', cansaco: 'cansaço', dor: 'dor', doente: 'doente', viagem: 'viagem', chuva: 'chuva', outro: '' };
+export const MOTIVOS = { tempo: 'Sem tempo', cansaco: 'Cansaço ou dormi mal', dor: 'Dor', doente: 'Doente ou machucado', viagem: 'Viagem', chuva: 'Chuva', feriado: 'Feriado (academia fechada)', outro: 'Outro' };
+export const MOTIVO_CURTO = { tempo: 'sem tempo', cansaco: 'cansaço', dor: 'dor', doente: 'doente', viagem: 'viagem', chuva: 'chuva', feriado: 'feriado', outro: '' };
+// Feriados (state.feriados, 'AAAA-MM-DD'): a academia não abre. O dia não recebe treino mudado de outro dia; o treino
+// que estava nele é marcado como "Não treinei" com o motivo 'feriado', e o treinador propõe o dia com as mesmas regras
+// de sempre (descanso entre os músculos, corrida, dias em que a pessoa não treina), para o plano do Treinador e para o
+// plano montado pela pessoa. Só a semana atual (a marca de "Não treinei" vale nesta semana).
+export const MAX_FERIADOS = 60;
+export function limparFeriados(raw) {
+  const out = [...new Set((Array.isArray(raw) ? raw : []).filter((d) => diaOk(d)))].sort();
+  return out.slice(-MAX_FERIADOS);
+}
+export const feriadosDe = (st) => new Set(limparFeriados(st && st.feriados));
+export const ehFeriado = (st, data) => feriadosDe(st).has(data);
 export const REFS_CANSACO = ['saw2016', 'meeusen2013'];
 const motivoOk = (v) => (typeof v === 'string' && Object.prototype.hasOwnProperty.call(MOTIVOS, v) ? v : '');
 const DIA_MS = 86400000;
@@ -313,7 +324,8 @@ export function propor(st, data, hoje, opc = {}) {
   // os dias que podem receber: de hoje (ou de amanhã, se o perdido é o de hoje) até domingo, sem treino feito nem marca,
   // e fora dos dias em que a pessoa não treina (a não ser o treino que já estava lá, que pode ficar)
   const bloq = new Set(diasBloqueados(st));
-  const bloqueado = (k) => bloq.has(sem[k].wd);
+  const fer = feriadosDe(st);
+  const bloqueado = (k) => bloq.has(sem[k].wd) || fer.has(sem[k].data);
   const saude = diasDeSaude(st, hoje, 'musc');
   const alvo = opc && diaOk(opc.para) ? opc.para : '';
   const vagas = [];
@@ -418,6 +430,7 @@ export function opcoesDeDia(st, data, hoje, opc = {}) {
     const ocupadoPor = d.diaId ? nomeDe(d.diaId) : '';
     const nao = (motivo) => dias.push({ data: d.data, pode: false, motivo, movs: [], titulo: '', texto: '', ocupadoPor });
     if (bloq.has(d.wd)) { nao('bloqueado'); continue; }
+    if (feriadosDe(st).has(d.data)) { nao('feriado'); continue; }
     if (saude.has(d.data)) { nao('saude'); continue; }
     if (sessoes.some((s) => diaLocal(s.inicio) === d.data)) { nao('treinou'); continue; }
     if (d.perdido) { nao('marcado'); continue; }
@@ -433,6 +446,7 @@ export function porQueNaoDia(o, hoje, alternado = false) {
   const q = capi(nomeDoDia(o.data, hoje));
   switch (o.motivo) {
     case 'bloqueado': return `${q} é um dia em que você não treina.`;
+    case 'feriado': return `${q} é feriado: a academia não abre.`;
     case 'saude': return `${q}, o problema de saúde que você contou ainda muda o treino.`;
     case 'treinou': return `${q} já tem treino feito.`;
     case 'marcado': return `${q} também está marcado como não treinado.`;

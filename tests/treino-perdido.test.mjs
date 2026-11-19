@@ -438,3 +438,25 @@ test('perdido: corrida — opções de dia, a marca com o motivo e o porquê', (
   assert.equal(sc[k0].corrida.motivo, 'chuva');
 });
 
+
+// ---------- 1.14.0: feriado (a academia não abre) ----------
+test('feriado: o treino do dia é marcado antes (futuro) e vai para outro dia; nenhum treino vai para um feriado', () => {
+  // seg A (sup), ter B (inf), qui A, sex B; hoje é segunda; quinta é feriado
+  const base = estado([dia('a', SUP), dia('b', INF)], { 1: 'a', 2: 'b', 4: 'a', 5: 'b' }, { feriados: [D(3)] });
+  assert.deepEqual(base.feriados, [D(3)]);
+  assert.ok(P.ehFeriado(base, D(3)));
+  // sem "futuro", a quinta não pode ser marcada; com ele, pode, com o motivo feriado
+  assert.equal(P.podeMarcar(base, D(3), D(0)).pode, false);
+  assert.equal(P.podeMarcar(base, D(3), D(0), { futuro: true }).pode, true);
+  const o = P.opcoesDeDia(base, D(3), D(0), { futuro: true });
+  assert.ok(o.pode);
+  const m = P.novaMarca(base, D(3), D(0), 'mover', '2026-11-16T09:00:00.000Z', { futuro: true, para: o.melhor, motivo: 'feriado' });
+  assert.ok(m && m.motivo === 'feriado' && m.movs.length && m.movs[0].para !== D(3));
+  // o treino de terça perdido não pode ir para a quinta (feriado)
+  const o2 = P.opcoesDeDia(base, D(1), D(1));
+  const qui = o2.dias.find((x) => x.data === D(3));
+  assert.ok(qui && !qui.pode && qui.motivo === 'feriado', JSON.stringify(qui));
+  assert.match(P.porQueNaoDia(qui, D(1)), /feriado: a academia não abre/);
+  // datas inválidas saem; repetidas ficam uma vez
+  assert.deepEqual(P.limparFeriados(['2026-11-20', 'x', '2026-11-20', '2026-13-40']), ['2026-11-20']);
+});

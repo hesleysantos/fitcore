@@ -192,3 +192,37 @@ export const JEITOS = {
   'nutri-sem-resultado': ['Não estou emagrecendo', 'A balança não mexe'],
   'nutri-agua-treino': ['Água no treino', 'Isotônico vale a pena?'],
 };
+
+// Outras palavras que as pessoas usam para as perguntas frequentes do Treinador (data/knowledge.js, FAQ_TREINO): entram
+// como etiquetas na busca das perguntas (logic/chat/motor.js, faqBusca). Chave: o começo da pergunta.
+export const FAQ_PALAVRAS = {
+  'Quantas vezes por semana': 'frequencia dias semana vezes semana treinar todo dia quantos dias academia ideal comecando 2x 3x 4x 5x resultado iniciante minimo bastam suficiente quantos treinos por semana',
+  'Quantas séries e repetições': 'series repeticoes reps quantas series volume quantas reps hipertrofia forca 8 12 serie por musculo semana muito pouco volume ideal',
+  'Preciso treinar até a falha': 'falha exaustao ate nao aguentar drop set rest pause ultima repeticao levar ao limite tecnica avancada piramide forcada intensidade',
+  'Quanto tempo devo descansar': 'descanso intervalo pausa entre series minutos descansar segundos esperar entre uma serie e outra',
+  'Quando e quanto aumentar a carga': 'subir carga aumentar peso progressao colocar mais peso evoluir carga toda semana sobrecarga progressiva quando subir quilos anilha',
+  'Dá para dar prioridade': 'prioridade focar musculo atrasado crescer mais um musculo ponto fraco destacar desenvolver mais',
+  'Perdi um treino': 'perdi faltei pulei repor treino perdido dia seguinte compensar recuperar treino que perdi',
+  'Posso escolher os dias': 'escolher dias folga dias livres nao treinar domingo fim de semana descanso dia de folga',
+  'De quanto em quanto tempo devo trocar': 'trocar exercicios mudar ficha variar treino enjoar mesmo treino quanto tempo periodizacao nova ficha mudar treino quando',
+  'Fiquei um tempo parado': 'parado voltar retomar volta ferias depois de muito tempo recomecar pegar leve sem treinar meses semanas parada voltando',
+  'Preciso aquecer e alongar': 'aquecer aquecimento alongar alongamento antes do treino mobilidade esquentar preparar serie leve depois do treino alongar depois',
+  'Fazer cardio atrapalha': 'cardio aerobico corrida correr esteira bike bicicleta pedalar natacao estraga atrapalha perde massa ganho musculo hipertrofia queima musculo',
+  'Corro e faço musculação': 'correr corrida musculacao interfere atrapalha os dois juntos mesmo dia combinar',
+  'Quem corre precisa de fortalecimento': 'fortalecimento corredor correr musculacao para correr perna forte para corrida',
+  'Qual é o melhor treino para emagrecer': 'emagrecer secar perder barriga gordura queimar treino para emagrecer abdominal localizada definir definicao cutting perder peso',
+  'O que é um “deload”': 'deload semana leve descanso cansaco acumulado pausa treino leve semana de descanso recuperar corpo exausto',
+  'Tenho mais de 60 anos': 'idoso idosa terceira idade 60 anos 70 anos velho mae pai avo seguro para ela para ele',
+  'Tenho pressão alta': 'pressao alta hipertensao hipertenso pressao',
+  'Tenho diabetes': 'diabetes diabetico glicose acucar no sangue insulina',
+  'Estou grávida': 'gravida gestante gravidez gestacao bebe barriga gestante treinar',
+  'Sinto dor nas costas': 'costas lombar coluna dor costas hernia lombalgia',
+  'Tenho dor no joelho': 'joelho dor joelho agachamento joelho menisco condromalacia',
+  'Como proteger os ombros': 'ombro ombros proteger ombro dor ombro supino desenvolvimento manguito',
+  'Estou com dor muscular depois do treino': 'dor muscular dolorido travado acabado acabadas dia seguinte dor tardia pernas doendo do treino de ontem',
+  'Sinto dor numa articulação': 'articulacao tendao tendinite cotovelo punho pulso dor articular estalo',
+  'Quando a dor pede médico': 'medico fisioterapeuta fisio procurar medico dor nao passa',
+  'A amplitude do movimento importa': 'amplitude meia repeticao descer tudo movimento completo parcial embaixo fundo profundo agacho tanto faz ate embaixo',
+  'Adolescente pode fazer musculação': 'adolescente jovem crianca filho 14 anos 15 anos 16 anos menor crescer altura',
+  'Quando devo procurar um médico antes de começar': 'avaliacao medica exame antes de comecar liberacao medica check up',
+};

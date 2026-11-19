@@ -15,7 +15,7 @@ import { REFS } from '../data/knowledge.js';
 import { barrarSemTreino, avisoDoTreino } from './saude-fora.js';
 import { efeitoDeHoje } from '../logic/saude-fora.js';
 import { itensDoDia as itensDaSemana } from '../logic/ajuste-semana.js';
-import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate, agendarAviso, cancelarAviso, fimDoDescanso } from '../device.js';
+import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate, agendarAviso, cancelarAviso, fimDoDescanso, alertaDoDescanso } from '../device.js';
 
 // ---------- carga recomendada ----------
 // Perfil para a carga inicial (logic/carga.js): as respostas do Treinador (com a proteção das outras entrevistas), o sexo
@@ -583,7 +583,7 @@ export function sessionView() {
     if (c.restEnd) {
       const rem = (c.restEnd - now) / 1000;
       if (rem <= 0) {
-        if (!alarmed) { alarmed = true; if (rem > -8) { tocarAlerta(); vibrate(); } doneUntil = now + 6000; }
+        if (!alarmed) { alarmed = true; alertaDoDescanso(c.restEnd); doneUntil = now + 6000; } // toca uma vez (o relógio do app também vigia: device.js)
         mutCur((x) => { x.restEnd = 0; x.restTotal = 0; });
         fimDoDescanso();
         drawBar();

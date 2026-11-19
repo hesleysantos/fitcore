@@ -438,7 +438,9 @@ export default async (page) => {
 
   console.log('14. Suplementos e vitaminas do dia');
   await page.eval(`window.scrollTo(0, 0); return true;`);
-  ok(await page.eval(`const b = document.querySelector('#hoje-nutri .sup-dia'); if (!b) return false; return b.textContent.includes('nenhum hoje');`), 'a linha "Suplementos e vitaminas · nenhum hoje" fica no card de hoje');
+  // 1.14.0: suplementos e vitaminas, Semana e compras e Tenho em casa ficam abaixo das refeições
+  ok(await page.eval(`const b = document.querySelector('#card-suplementos .sup-dia'); if (!b) return false; return b.textContent.includes('nenhum hoje');`), 'a linha "Suplementos e vitaminas · nenhum hoje" fica no card próprio');
+  ok(await page.eval(`const refs = [...document.querySelectorAll('.refeicao')]; const ult = refs[refs.length - 1]; const sup = document.getElementById('card-suplementos'); const fer = document.getElementById('ferramentas-cardapio'); const div = document.getElementById('divisor-consulta'); const depois = (a, b) => !!(a && b && (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)); return depois(ult, sup) && depois(sup, fer) && depois(fer, div) && !document.querySelector('#hoje-nutri .sup-dia');`), 'ordem: refeições → suplementos e vitaminas → Semana e compras / Tenho em casa → "Para consultar"');
   await page.eval(`document.querySelector('#hoje-nutri .sup-dia').click(); return true;`); await comFolhas(1);
   ok((await texto()).includes('Nada marcado hoje.') && (await rodape()) === 'Fechar', 'a folha abre com a lista vazia e os tipos para marcar');
   await tocarNaFolha('#sup-tipos [data-tipo="creatina"]');

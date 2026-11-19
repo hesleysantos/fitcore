@@ -1,8 +1,9 @@
 // Tela da Nutricionista virtual.
-// Ordem da tela: o dia de hoje (comido x meta, água, o que comer em volta do treino) → [Semana e compras] [Tenho em
-// casa] → um card por refeição, com o "Já comi" em cima (com o próprio "+ Adicionar outro alimento") e a "Sugestão"
-// embaixo, mais leve ("Comi" discreto em cada alimento e "Comi tudo isso"); cada card recolhe ao toque no título →
-// fora das refeições (só se houver) → a linha "Para consultar" → dias anteriores → suas metas e o total do cardápio →
+// Ordem da tela: o dia de hoje (comido x meta, água, o que comer em volta do treino) → um card por refeição, com o
+// "Já comi" em cima (com o próprio "+ Adicionar outro alimento") e a "Sugestão" embaixo, mais leve ("Comi" discreto em
+// cada alimento e "Comi tudo isso"); cada card recolhe ao toque no título → fora das refeições (só se houver) →
+// suplementos e vitaminas do dia → [Semana e compras] [Tenho em casa] → a linha "Para consultar" → dias anteriores →
+// suas metas e o total do cardápio →
 // "Saiba mais" (tudo o que é só leitura) → refazer a entrevista → o aviso educativo, uma linha.
 import { h, btn, chip, seg, sheet, icon, note, toast, norm, fmtInt, dateKey, DIAS_LONGO } from '../ui.js';
 import { state, update } from '../store.js';
@@ -105,9 +106,6 @@ function cartaoDeHoje(r, treinos) {
   const resumo = r.modo !== 'educativo' ? resumoDoDiario(r) : null;
   if (resumo) card.appendChild(resumo);
   if (r.agua) card.appendChild(h('p', { class: 'small muted', id: 'hoje-agua' }, icon('water', 's'), ` Água: ${dec(r.agua)} L no dia (${dec(r.aguaBebidas)} L em bebidas).`));
-  // suplementos e vitaminas do dia: uma linha; o toque abre a folha de marcar (views/diario.js)
-  const sup = linhaDeSuplementos(r);
-  if (sup) card.appendChild(sup);
   if (o.antes) {
     // o que comer e beber em volta do treino: fecha ao toque, para o cardápio aparecer logo
     const corpo = [h('p', { class: 'small', text: o.resumo }),
@@ -284,18 +282,6 @@ function blocoCardapio(r) {
   const ajuste = limparAjustes(state.nutri.ajustes)[hoje] || null;
   const c = cardapioDoDia(r, hoje, ajuste, opcoes);
   if (!c) return { out, c };
-  out.push(h('div', { class: 'row par-de-botoes', id: 'ferramentas-cardapio' }, btn('Semana e compras', () => abrirSemana(r), 'sm alvo grow', 'calendar'), btn('Tenho em casa', () => opcoesDoCardapio(r, c), 'sm alvo grow', 'building')));
-  if (soCasa) {
-    out.push(h('div', { class: 'row between' },
-      h('span', { class: 'small muted grow', text: `Só com os ${emCasa.length} alimentos que você tem em casa.` }),
-      btn('Mudar', () => opcoesDoCardapio(r, c), 'ghost sm alvo', 'edit')));
-    // o que falta para o dia fechar, com a opção mais barata para completar
-    if (c.faltas.length) {
-      out.push(h('div', { class: 'note warn' }, icon('warn'), h('div', { class: 'col gap-s' },
-        h('div', { class: 'bold', text: c.faltas.length === 1 ? 'Falta um item para fechar o dia' : 'O que falta para fechar o dia' }),
-        lista(c.faltas.map((f) => f.texto + (f.sugestoes.length ? ' Mais barato: ' + f.sugestoes.map((s) => s.nome.split(' (')[0].toLowerCase()).join(' ou ') + '.' : ''))))));
-    }
-  }
   if (!c.refeicoes.length) out.push(h('p', { class: 'small muted', text: 'Com o que está marcado não dá para montar uma refeição. Marque mais alimentos.' }));
   // a refeição do horário (ou a próxima); tarde da noite, depois da última do cardápio, a última fica aberta
   const ids = c.refeicoes.map((x) => idDaRefeicao(x.nome));
@@ -305,7 +291,21 @@ function blocoCardapio(r) {
   // o que foi comido em horário fora do cardápio (só se existir)
   const fora = foraDasRefeicoes(r, c.refeicoes.map((x) => idDaRefeicao(x.nome)));
   if (fora) out.push(fora);
-  return { out, c };
+  // depois das refeições: [Semana e compras] [Tenho em casa] (com a linha do "só com o que tem em casa")
+  const ferramentas = [];
+  ferramentas.push(h('div', { class: 'row par-de-botoes', id: 'ferramentas-cardapio' }, btn('Semana e compras', () => abrirSemana(r), 'sm alvo grow', 'calendar'), btn('Tenho em casa', () => opcoesDoCardapio(r, c), 'sm alvo grow', 'building')));
+  if (soCasa) {
+    ferramentas.push(h('div', { class: 'row between' },
+      h('span', { class: 'small muted grow', text: `Só com os ${emCasa.length} alimentos que você tem em casa.` }),
+      btn('Mudar', () => opcoesDoCardapio(r, c), 'ghost sm alvo', 'edit')));
+    // o que falta para o dia fechar, com a opção mais barata para completar
+    if (c.faltas.length) {
+      ferramentas.push(h('div', { class: 'note warn' }, icon('warn'), h('div', { class: 'col gap-s' },
+        h('div', { class: 'bold', text: c.faltas.length === 1 ? 'Falta um item para fechar o dia' : 'O que falta para fechar o dia' }),
+        lista(c.faltas.map((f) => f.texto + (f.sugestoes.length ? ' Mais barato: ' + f.sugestoes.map((s) => s.nome.split(' (')[0].toLowerCase()).join(' ou ') + '.' : ''))))));
+    }
+  }
+  return { out, c, ferramentas };
 }
 // o total do cardápio sugerido (vai para dentro de "Suas metas": é a soma da sugestão, não do que foi comido)
 function totalDoCardapio(r, c) {
@@ -451,12 +451,17 @@ function resultado() {
   // avisos que mudam o que a pessoa deve fazer ficam no alto; os demais cuidados vão para "Saiba mais"
   for (const av of r.avisos) if (av.tipo !== 'info') body.push(note(av.tipo, av.texto));
 
-  // 1. hoje  2. [Semana e compras] [Tenho em casa]  3. as refeições (sugestão + o que comeu)  4. fora das refeições
+  // 1. hoje  2. as refeições  3. fora das refeições  4. suplementos e vitaminas  5. [Semana e compras] [Tenho em casa]
   body.push(cartaoDeHoje(r, treinos));
-  const { out: cardapioDeHoje, c } = blocoCardapio(r);
+  const { out: cardapioDeHoje, c, ferramentas = [] } = blocoCardapio(r);
   body.push(...cardapioDeHoje);
   // sem cardápio (perfis sem números): o diário completo, como antes
   if (!c) body.push(...blocoDiario(r));
+  // depois das refeições: suplementos e vitaminas do dia (o toque abre a folha de marcar, views/diario.js) e as
+  // ferramentas do cardápio
+  const sup = linhaDeSuplementos(r);
+  if (sup) body.push(h('div', { class: 'card col', id: 'card-suplementos' }, sup));
+  body.push(...ferramentas);
 
   // daqui para baixo, só consulta: uma linha separa das refeições
   body.push(h('div', { class: 'divisor', role: 'separator', id: 'divisor-consulta' }, h('span', { text: 'Para consultar' })));

@@ -44,7 +44,7 @@ import { FAQ_CORRIDA } from '../../data/corrida.js';
 import { expandir, conceitos, radical, idfDe, oracoes } from './nlu.js';
 import { exercicioDoTexto, corpoDoTexto, musculosDoTexto, numerosDoTexto } from './entidades.js';
 import { planoAtivo } from '../perdido.js';
-import { EXEMPLOS as FRASES_EX, JEITOS } from './exemplos.js';
+import { EXEMPLOS as FRASES_EX, JEITOS, FAQ_PALAVRAS } from './exemplos.js';
 import { INTENCOES as I_HABITOS } from './habitos.js';
 
 // Problemas de saúde fora do treino (pancada, corte, febre...): outro módulo, usado se existir
@@ -59,6 +59,16 @@ export const DIRETO = 2;     // vantagem a partir da qual o treinador responde d
 // outro assunto caíram de 13 para 6, e 8 respostas certas passaram a confirmar antes.
 export const DIRETO_CONTADA = 3;
 const PERGUNTA_FIM = /\?\s*$/;
+// a frase fala do assunto de outro treinador? (correr, comer...): sem isso, o chat não manda a pessoa para lá
+const DOMINIO = {
+  corrida: /\b(corr\w*|km|quilometro\w*|pace|ritmo|longao|prova|maratona|meia maratona|trote|tiros?|rodagem|5k|10k)\b/,
+  nutri: /\b(com[eio]\w*|dieta|refeic\w*|cardapio|agua|beb\w*|proteina|caloria\w*|kcal|suplement\w*|whey|creatina|fome|almoc\w*|jant\w*|lanche|cafe|peso|balanca|emagre\w*|engord\w*|aliment\w*|fruta\w*|doce\w*|vitamina\w*)\b/,
+  treinador: /./,
+};
+const falaDoTreinador = (coach, t) => (DOMINIO[coach] || DOMINIO.treinador).test(String(t || ''));
+// jeito de pedir dica ou opinião geral sobre treino; e um dia citado (aí é sobre o treino do dia, não uma dica geral)
+const DICA = /\b(vale a pena|vale|e bom|e ruim|faz mal|faz diferenca|ajuda|ajudam|devo|preciso|precisa|dica|dicas|o que e|qual a diferenca|funciona|estraga|atrapalha|prejudica|compensa|e melhor|qual e melhor|quantas vezes|quanto tempo de|e normal|tem problema|pode ser)\b/;
+const DIA_DITO = /\b(hoje|agora|amanha|ontem|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b/;
 const FAQ_DO = { treinador: FAQ_TREINO, corrida: FAQ_CORRIDA, nutri: FAQ_NUTRI };
 // ordem dos assuntos nos botões da abertura (os que não estão aqui vêm depois, na ordem dos módulos)
 const ORDEM_MENU = {
@@ -118,7 +128,7 @@ const GRUPOS = {
   desanimo: 'desanimo desanimado desanimada desanimei desmotivado desmotivada desmotivacao preguica preguicoso preguicosa',
   dormir: 'dormir dormi dormiu durmo sono insonia',
   peito: 'peito peitoral peitorais',
-  dor: 'dor dores doendo doi doem doiam doia doeu doer dolorido dolorida doloridos doloridas latejando lateja latejou machuquei machucado machucada machucou lesao lesionei lesionado lesionada incomodo incomodando incomoda',
+  dor: 'dor dores dorzinha dorzinhas doendo doi doem doiam doia doeu doer dolorido dolorida doloridos doloridas latejando lateja latejou machuquei machucado machucada machucou lesao lesionei lesionado lesionada incomodo incomodando incomoda',
   // torção e contusão são lesões agudas (pancada, queda): assunto de saúde fora do treino (logic/chat/saude.js)
   torci: 'torci torceu torcao entorse contusao contundi',
   doente: 'doente gripe gripado gripada resfriado resfriada febre virose covid enjoado enjoada',
@@ -474,7 +484,7 @@ export function entender(texto, coach, ctx) {
   if (!confiante) {
     const outros = rank(Object.keys(COACHES).filter((c) => c !== coach).flatMap((c) => assuntos(c, ctx)));
     // (com um assunto razoável aqui, a pergunta de volta mostra este; o outro treinador só quando o daqui é fraco)
-    if (claro(outros[0], outros[1]) && (!a || a.pontos < 2 || outros[0].pontos >= a.pontos + 2 * FOLGA)) deOutro = outros[0];
+    if (claro(outros[0], outros[1]) && (!a || a.pontos < 2 || outros[0].pontos >= a.pontos + 2 * FOLGA) && falaDoTreinador(outros[0].intencao.coach, info.texto)) deOutro = outros[0];
   }
   return { alerta, ranking, melhor: a || null, confiante, direto, deOutro, datas, ent };
 }
@@ -519,7 +529,9 @@ const indiceFaq = new Map();
 function faqIndice(coach) {
   if (indiceFaq.has(coach)) return indiceFaq.get(coach);
   const lista = FAQ_DO[coach] || [];
-  const docs = lista.map((it) => ({ it, q: new Set(termosDe(it.q)), tg: new Set(termosDe(it.tags || '')) }));
+  // etiquetas da pergunta + as outras palavras que as pessoas usam (logic/chat/exemplos.js, FAQ_PALAVRAS)
+  const extra = (q) => { for (const [k, v] of Object.entries(FAQ_PALAVRAS)) if (String(q).startsWith(k)) return ' ' + v; return ''; };
+  const docs = lista.map((it) => ({ it, q: new Set(termosDe(it.q)), tg: new Set(termosDe((it.tags || '') + (coach === 'treinador' ? extra(it.q) : ''))) }));
   const idf = idfDe(docs.map((d) => new Set([...d.q, ...d.tg])));
   const out = { docs, idf };
   indiceFaq.set(coach, out);
@@ -1091,6 +1103,10 @@ export function responder(texto, coach, ctx) {
   const segura = !r.melhor || (prioridade(r.melhor.intencao) < 2 && !(r.ent && r.ent.exercicio && DE_EXERCICIO.has(r.melhor.intencao.id)));
   // (um assunto claro responde com os dados da pessoa: a pergunta frequente só ganha quando ele não é direto e ela é quase igual)
   if (fb && fb.forte && faqOk(fb.it) && segura && !pedido && (!r.confiante || (!r.direto && coach !== 'nutri' && fb.cobre >= 0.9 && fb.nq >= 2))) return comoFaq(fb.it);
+  // pedido de dica, sem falar de um dia ("vale a pena…?", "cardio atrapalha…?", "devo alongar?"): a pergunta frequente
+  // que casa bem responde, em vez de um assunto do treino do dia
+  const dica = coach === 'treinador' && DICA.test(c.texto) && !DIA_DITO.test(c.texto);
+  if (dica && fb && fb.boa && faqOk(fb.it) && segura && !pedido && fb.cobre >= (globalThis.__DC2 ?? 0.55)) return comoFaq(fb.it);
   // 6. o assunto: direto quando é bem claro; senão, confirma
   if (r.confiante) {
     const i = r.melhor.intencao;

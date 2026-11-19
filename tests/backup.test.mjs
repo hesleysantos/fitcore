@@ -36,7 +36,7 @@ function estadoCheio() {
   const corrida = responder(P_CORRIDA, 1);
   return {
     v: store.VERSAO,
-    settings: { tema: 'claro', descanso: 75, som: false, somAlerta: 'sino', vibrar: false, telaLigada: false, animar: false, avisoFundo: true, letra: 'muito', contraste: true },
+    settings: { tema: 'claro', descanso: 75, som: false, somAlerta: 'sino', vibrar: false, telaLigada: false, animar: false, avisoFundo: true, voz: false, letra: 'muito', contraste: true },
     gym: { all: false, has: Object.fromEntries(Object.keys(EQUIPAMENTOS).slice(0, 3).map((k) => [k, true])) },
     plans: [plano],
     activePlan: 'p1',
@@ -65,6 +65,7 @@ function estadoCheio() {
       { data: '2026-11-14', itens: [], sup: [{ id: 's1', tipo: 'vitd', qtd: 2, un: 'gota' }] },
     ] },
     // "Não treinei" (com o treino passado para outro dia) e "Não corri"
+    feriados: ['2026-11-20'],
     perdidos: [
       { tipo: 'musculacao', data: '2026-11-03', planId: 'p1', diaId: plano.dias[0].id, movs: [{ diaId: plano.dias[0].id, de: '2026-11-03', para: '2026-11-05' }], em: '2026-11-03T21:00:00.000Z' },
       { tipo: 'corrida', data: '2026-11-04', em: '2026-11-04T21:00:00.000Z' },

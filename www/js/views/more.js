@@ -7,13 +7,13 @@ import { EQUIPAMENTOS, CATEGORIAS_EQUIP } from '../data/equipment.js';
 import { REFS } from '../data/knowledge.js';
 import { REFS_CORRIDA } from '../data/corrida.js';
 import { REFS_SONO } from '../data/sono.js';
-import { cancelarAviso, avisoDisponivel, avisoPermitido, pedirPermissaoDeAviso, telaLigadaDisponivel, SONS_ALERTA, SOM_PADRAO, tocarAlerta, unlockAudio } from '../device.js';
+import { cancelarAviso, avisoDisponivel, avisoPermitido, pedirPermissaoDeAviso, telaLigadaDisponivel, SONS_ALERTA, SOM_PADRAO, tocarAlerta, unlockAudio, prepararSom } from '../device.js';
 import { canSuggestInstall, openInstall, isIos } from '../install.js';
 import { entregarArquivo } from './arquivo.js';
 import { abrirExportar } from './exportar.js';
 import { abrirPrivacidade, abrirTermos, blocoPrivacidade, blocoTermos } from './termos.js';
 
-export const APP_VERSAO = '1.13.0';
+export const APP_VERSAO = '1.14.0';
 
 // ---------- Minha academia ----------
 export function gymView() {
@@ -133,9 +133,9 @@ function escolhaDeSom(atual) {
       onClick: () => {
         escolhido = id;
         update((s) => { s.settings.som = id !== 'silencioso'; if (id !== 'silencioso') s.settings.somAlerta = id; });
-        unlockAudio(); tocarAlerta(id); desenhar();
+        unlockAudio(); prepararSom(id); tocarAlerta(id); desenhar();
       } }, nome));
-    sub.textContent = SONS_ALERTA[escolhido][1] + '.' + (escolhido === 'alto' ? ' Com fone de ouvido, prefira Equilibrado ou Discreto.' : '') + (isIos() && escolhido !== 'silencioso' ? ' No iPhone, não toca com o modo silencioso do aparelho ligado.' : '');
+    sub.textContent = SONS_ALERTA[escolhido][1] + '.' + (escolhido === 'alto' ? ' Com fone de ouvido, prefira Equilibrado ou Discreto.' : '') + (isIos() && escolhido !== 'silencioso' ? ' No iPhone, o som toca por cima da música e não toca com o modo silencioso ligado.' : ' A música abaixa enquanto o aviso toca.');
     ouvir.style.visibility = escolhido === 'silencioso' ? 'hidden' : '';
   };
   desenhar();
@@ -159,6 +159,8 @@ export function settingsView() {
   body.push(h('div', { class: 'card tight' },
     telaLigadaDisponivel() ? linha('Manter a tela ligada', 'Durante o treino ou a corrida, a tela não apaga sozinha. Depois volta ao normal.' + (isIos() ? ' Em iPhones com sistema mais antigo pode não funcionar.' : ''), toggle(st.telaLigada, (v) => set('telaLigada', v), 'Manter a tela ligada')) : linha('Manter a tela ligada', 'Este navegador não oferece esse recurso. Aumente o tempo de bloqueio da tela nas configurações do aparelho.', h('span', { class: 'small muted', text: 'Indisponível' })),
     escolhaDeSom(st.som ? st.somAlerta : 'silencioso'),
+    // fala do fim do descanso: no iPhone, é a fala que baixa a música um instante (device.js)
+    linha('Falar “Descanso terminado”', isIos() ? 'Junto do som. No iPhone, a música abaixa enquanto a voz fala.' : 'Junto do som, no fim do descanso.', toggle(st.voz !== false, (v) => { set('voz', v); if (v) { unlockAudio(); tocarAlerta(st.somAlerta, 'Descanso terminado'); } }, 'Falar “Descanso terminado”')),
     linha('Vibrar ao fim do descanso', isIos() ? 'O iPhone não deixa páginas vibrarem: o aviso é o som e a tela.' : 'Só no Android.', toggle(st.vibrar, (v) => set('vibrar', v), 'Vibrar ao fim do descanso')),
     // aviso por notificação quando a pessoa troca de aplicativo durante o descanso (só onde o navegador oferece)
     avisoDisponivel() ? linha('Avisar com o aplicativo em segundo plano', isIos() ? 'Se você sair do aplicativo no descanso, a notificação mostra quanto falta e avisa no fim. No iPhone o sistema pausa o aplicativo: a contagem pode parar e o aviso pode atrasar.' : 'Se você sair do aplicativo no descanso, a notificação mostra quanto falta e avisa no fim.', toggle(!!st.avisoFundo && avisoPermitido(), async (v) => {

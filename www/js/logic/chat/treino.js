@@ -805,6 +805,13 @@ function passoPerdidoInicio(ctx) {
   if (!pode.pode) return semTreinoNoDia(pode.motivo, data, ctx.hoje);
   // o dia que a pessoa pediu na frase ("não vou treinar hoje, posso fazer amanhã?"): a data seguinte, nesta semana
   const quer = (Array.isArray(ctx.datas) ? ctx.datas : []).filter((x) => x && !x.semana && diaValido(x.data) && x.data > data).map((x) => x.data).sort()[0] || '';
+  // feriado ("amanhã é feriado, a academia não abre"): o motivo já está dito; o treinador propõe outro dia
+  if (FERIADO.test(String(ctx.texto || ''))) {
+    const p = passoPerdido({ ...ctx, data, motivo: 'feriado', quer }, ['Feriado: a academia não abre.']);
+    // a ação também guarda o feriado: nenhum outro treino vai para esse dia
+    if (p && Array.isArray(p.acoes)) p.acoes = p.acoes.map((a) => (typeof a.aplicar !== 'function' ? a : { ...a, aplicar: (s, c) => { const r = a.aplicar(s, c); if (r !== false) s.feriados = P.limparFeriados([...(s.feriados || []), data]); return r; } }));
+    return p;
+  }
   // outro dia desta semana (ontem, sexta...): direto à proposta, sem perguntar o motivo
   if (data !== ctx.hoje) return passoPerdido({ ...ctx, quer }, ['Tudo bem.']);
   const com = (c, motivo) => ({ ...c, data, motivo, quer });
@@ -856,12 +863,18 @@ const perguntaDoDia = (i) => i.datas.some((d) => !d.semana && d.data !== i.hoje)
 const faltaDe = (i) => /\b(nao|nem)\b( \w+){0,4} (treinar|treino|malhar|ir|academia|rola|rolar|vai dar|da)\b/.test(i.texto) && !/\b(aparelho|maquina|tem|tenho|sei|dor|doi)\b/.test(i.texto);
 // "dá para fazer o de sexta amanhã?": dois dias, o treino do dia mais adiante feito no mais perto
 const doisDias = (i) => i.datas.filter((d) => !d.semana).length >= 2 && /\b(fazer|faco|treinar|adiantar|antecipar|trazer|puxar|passar)\b/.test(i.texto) && !/\b(nao|nem)\b/.test(i.texto);
+// não é faltar ao treino: pulou só uma parte ("pulei o aquecimento") ou está voltando ("viajei um mês, hoje volto")
+const NAO_E_FALTA = /\b((pulei|pular|perdi|esqueci) (o |a |uma |um )?(aquecimento|serie|series|exercicio|repeticao|alongamento)|hoje volto|volto hoje|estou voltando|to voltando|voltei|voltando a treinar|retomar|retomando)\b/;
+// feriado: a academia não abre (logic/perdido.js, feriados); com "adiantar", o pedido é fazer o treino antes
+const ANTECIPA = /\b(adiantar|adianto|antecipar|antecipo|trazer|puxar)\b/;
+const FERIADO = /\b(feriado|academia (fechou|fechada|nao abre|nao vai abrir))\b/;
 export const INTENCOES = [
   {
     id: 'treino-perdido', coach: 'treinador', titulo: 'Não vou conseguir treinar hoje', resumo: 'faltar ao treino de hoje', resumoNoDia: 'faltar ao treino', data: true, prioridade: 1,
     // "hoje não dá, passa pra amanhã": negação, hoje e outro dia, e um verbo de mudar de dia
-    bonus: (i) => (temHojeEFutura(i) && /\b(nao|nem)\b/.test(i.texto) && /\b(passa\w*|troca\w*|muda\w*|deixa\w*|remarca\w*)\b/.test(i.texto) ? 2.5 : 0) + (faltaDe(i) ? 1.5 : 0) + (impedimento(i.texto) ? 2.5 : 0),
-    palavras: ['furei treino', 'furei academia', 'nao tem como treinar', 'nao tem como ir', 'nao tem como+treinar', 'furar treino', 'vou furar', 'sem treino', '!viagem', 'so po', 'to morto', 'nao rola', 'nao to afim', 'nao estou afim', 'sem pique', 'nao vou dar conta', 'trabalhar ate tarde', 'trabalho ate tarde', 'nao vou treinar', 'nao vou conseguir treinar', 'nao consigo treinar', 'nao posso treinar', 'nao vou poder treinar', 'nao da treinar', 'nao deu treinar',
+    bonus: (i) => (temHojeEFutura(i) && /\b(nao|nem)\b/.test(i.texto) && /\b(passa\w*|troca\w*|muda\w*|deixa\w*|remarca\w*)\b/.test(i.texto) ? 2.5 : 0) + (faltaDe(i) ? 1.5 : 0) + (impedimento(i.texto) && !tempoApertado(i.texto) ? 2.5 : 0) + (FERIADO.test(i.texto) && !ANTECIPA.test(i.texto) ? 2.5 : 0),
+    anula: (i) => NAO_E_FALTA.test(i.texto) && !/\b(nao|nem)\b/.test(i.texto),
+    palavras: ['esqueci tenis', 'esqueci roupa', 'esqueci mochila', 'mochila ficou', 'sem tenis', 'sem roupa treinar', 'faltei treino', 'faltei academia', 'nao consegui sair', 'nao consegui ir', 'feriado', 'e feriado', 'vai ser feriado', 'academia fechou', 'academia fechada', 'academia nao abre', 'furei treino', 'furei academia', 'nao tem como treinar', 'nao tem como ir', 'nao tem como+treinar', 'furar treino', 'vou furar', 'sem treino', '!viagem', 'so po', 'to morto', 'nao rola', 'nao to afim', 'nao estou afim', 'sem pique', 'nao vou dar conta', 'trabalhar ate tarde', 'trabalho ate tarde', 'nao vou treinar', 'nao vou conseguir treinar', 'nao consigo treinar', 'nao posso treinar', 'nao vou poder treinar', 'nao da treinar', 'nao deu treinar',
       'trocar treino amanha', 'mudar treino amanha', 'treinar amanha lugar', 'trocar dia amanha',
       'nao vou academia', 'nao vou poder ir academia', 'nao posso ir academia', 'nao quero ir academia', 'nao quero treinar', 'nao vou conseguir ir academia', 'nao consigo ir academia', 'faltar treino', 'faltar academia', 'perder treino', 'perdi treino', 'pular treino',
       'nao treinei', 'nao vou malhar', 'faltar', 'remarcar treino', 'adiar treino', 'deixar treino amanha', 'deixar treino outro dia', 'imprevisto', 'nao posso ir', 'nao vou poder ir', 'nao consigo ir', 'nao vou conseguir ir', 'nao vou ir', 'nao vai dar', 'nao vai dar ir', 'nao da ir', 'nao fui', 'vou faltar', 'compromisso', 'nao vai rolar',
@@ -872,7 +885,7 @@ export const INTENCOES = [
   {
     id: 'pouco-tempo', coach: 'treinador', titulo: 'Tenho pouco tempo hoje', resumo: 'um treino mais curto hoje',
     bonus: (i) => (tempoApertado(i.texto) ? 2.5 : 0),
-    palavras: ['!relampago', 'treino relampago', 'versao enxuta', '!enxuta', 'contra relogio', 'agenda apertada', '!rapidinho', 'algo rapido', 'treino rapidinho', 'pouco tempo treino', 'chego tarde', 'tempo curto treino', 'pouco tempo', 'sem tempo', 'nao tenho tempo', 'tempo curto', '!pressa', '!correria', 'treino curto', 'treino rapido', 'versao curta', 'minuto', 'meia hora',
+    palavras: ['fechar mais cedo', 'fecha mais cedo', 'fechar cedo', 'vai fechar cedo', '!relampago', 'treino relampago', 'versao enxuta', '!enxuta', 'contra relogio', 'agenda apertada', '!rapidinho', 'algo rapido', 'treino rapidinho', 'pouco tempo treino', 'chego tarde', 'tempo curto treino', 'pouco tempo', 'sem tempo', 'nao tenho tempo', 'tempo curto', '!pressa', '!correria', 'treino curto', 'treino rapido', 'versao curta', 'minuto', 'meia hora',
       'so tenho minuto', 'so minuto', 'tenho minuto', 'encurtar treino', 'reduzir treino', 'diminuir treino', 'treino menor', 'tempo apertado', 'dia corrido', 'curto', 'treino mais curto', 'tempo contado'],
     disponivel: (ctx) => !!treinoDeHoje(ctx),
     inicio: passoTempo,
@@ -886,7 +899,7 @@ export const INTENCOES = [
   },
   {
     id: 'duracao', coach: 'treinador', titulo: 'Quanto tempo dura o treino', resumo: 'quanto tempo dura o treino', resumoNoDia: 'quanto tempo dura o treino', data: true,
-    palavras: ['treino longo', 'longo', 'demorado', 'gastar academia', 'quanto tempo gastar', 'quanto tempo dura', 'quanto tempo leva', 'quanto dura', 'quanto demora', 'demora quanto', 'dura quanto', '!duracao', '!demora', '!demorar', 'quanto tempo treino', 'quantos minuto', 'tempo de treino', 'leva quanto tempo', 'vai demorar', 'termina que horas', 'quantos minuto treino', 'minuto treino', 'quanto tempo vou ficar'],
+    palavras: ['quanto tempo vai levar', 'vai levar treino', 'quanto tempo leva', 'treino muito longo', 'treino longo demais', 'demora demais', 'hora e meia', 'tempo demais academia', 'treino longo', 'longo', 'demorado', 'gastar academia', 'quanto tempo gastar', 'quanto tempo dura', 'quanto tempo leva', 'quanto dura', 'quanto demora', 'demora quanto', 'dura quanto', '!duracao', '!demora', '!demorar', 'quanto tempo treino', 'quantos minuto', 'tempo de treino', 'leva quanto tempo', 'vai demorar', 'termina que horas', 'quantos minuto treino', 'minuto treino', 'quanto tempo vou ficar'],
     disponivel: temPlano,
     inicio: passoDuracao,
   },
@@ -905,13 +918,13 @@ export const INTENCOES = [
   },
   {
     id: 'seguidos', coach: 'treinador', titulo: 'Treinar dois dias seguidos', resumo: 'treinar em dias seguidos',
-    palavras: ['dias na linha', 'sem folga', 'dias direto', 'treinei ontem', 'treinar de novo', 'treino de novo', 'entre um treino', 'treino e outro', 'descansar um dia', 'dia de descanso', 'dois dia seguido', 'dia seguido', 'treinar seguido', 'treino seguido', 'treinar todo dia', 'todo dia', 'todos dia', 'dia sim dia nao', 'dia consecutivo', '!consecutivo', '!consecutivos', 'treinar de novo amanha', 'treinar dois dia', 'mesmo musculo', 'descansar entre treinos', 'quantos dia descanso', 'descanso entre treinos', 'precisa descansar'],
+    palavras: ['ontem fiz', 'fiz ontem', 'mesmo musculo', 'mesmo grupo', 'repetir musculo', 'dias na linha', 'sem folga', 'dias direto', 'treinei ontem', 'treinar de novo', 'treino de novo', 'entre um treino', 'treino e outro', 'descansar um dia', 'dia de descanso', 'dois dia seguido', 'dia seguido', 'treinar seguido', 'treino seguido', 'treinar todo dia', 'todo dia', 'todos dia', 'dia sim dia nao', 'dia consecutivo', '!consecutivo', '!consecutivos', 'treinar de novo amanha', 'treinar dois dia', 'mesmo musculo', 'descansar entre treinos', 'quantos dia descanso', 'descanso entre treinos', 'precisa descansar'],
     disponivel: temPlano,
     inicio: passoSeguidos,
   },
   {
     id: 'juntar-treino', coach: 'treinador', titulo: 'Corrida e musculação no mesmo dia', resumo: 'fazer corrida e musculação no mesmo dia',
-    palavras: ['!leg day', 'tiro+leg day', 'correr+leg day', 'correr+musculacao', 'correr+exercicio', 'correr+treino', 'correr+treino+juntar', 'correr+treino+mesmo dia', '!intervalo entre', 'correr+intervalo', 'correr+horas entre', 'correr+seguida', 'correr+colado', 'correr+logo depois', 'mesmo dia', 'juntar', 'juntar outro', 'juntar treino', 'correr depois', 'correr antes',
+    palavras: ['cardio antes', 'cardio depois', 'cardio antes depois', 'aerobico antes', 'aerobico depois', 'esteira antes', 'esteira depois', '!leg day', 'tiro+leg day', 'correr+leg day', 'correr+musculacao', 'correr+exercicio', 'correr+treino', 'correr+treino+juntar', 'correr+treino+mesmo dia', '!intervalo entre', 'correr+intervalo', 'correr+horas entre', 'correr+seguida', 'correr+colado', 'correr+logo depois', 'mesmo dia', 'juntar', 'juntar outro', 'juntar treino', 'correr depois', 'correr antes',
       'depois musculacao', 'antes musculacao', 'qual primeiro', 'ordem', 'prioridade', 'correr+academia'],
     disponivel: (ctx) => temOsDois(ctx.st),
     inicio: (ctx) => passoJuntar(ctx),
@@ -935,18 +948,18 @@ export const INTENCOES = [
   },
   {
     id: 'mudar-plano', coach: 'treinador', titulo: 'Mudar ou refazer o treino', resumo: 'mudar ou refazer o seu treino',
-    palavras: ['vezes semana', 'treinar vezes', 'mais dias', 'menos dias', 'mudei academia', 'nao tenho halteres', 'sem halteres', 'treinar sem aparelho', 'treino sem aparelho', 'mudar plano', 'mudar treino', 'mudar dia', 'mudar dias', 'trocar dia', 'outro treino', 'treino novo', 'novo treino', 'refazer treino', 'refazer entrevista', 'refazer plano',
+    palavras: ['mudei turno', 'mudei de horario', 'agora so consigo', 'so consigo noite', 'nova rotina', 'rotina mudou', 'mudou rotina', 'vezes semana', 'treinar vezes', 'mais dias', 'menos dias', 'mudei academia', 'nao tenho halteres', 'sem halteres', 'treinar sem aparelho', 'treino sem aparelho', 'mudar plano', 'mudar treino', 'mudar dia', 'mudar dias', 'trocar dia', 'outro treino', 'treino novo', 'novo treino', 'refazer treino', 'refazer entrevista', 'refazer plano',
       'treinar casa', 'treino casa', 'trocar exercicio', 'mudar exercicio', 'enjoei treino', 'cansei treino', 'treino chato', 'treino diferente', 'algo diferente', 'mudar academia', 'mudar horario', 'plano novo', 'mudar', 'novo plano', 'posso mudar', 'mudar algo', 'alterar treino', 'mudar ordem', 'trocar ordem', 'ordem exercicio', '!enjoei', 'enjoei plano', 'treino enjoativo', 'cansei plano'],
     inicio: passoMudar,
   },
   {
     id: 'dor-treino', coach: 'treinador', titulo: 'Estou com dor', resumo: 'uma dor', prioridade: 3,
-    palavras: ['estalou', 'estalando', 'estalo', 'latejando', 'pontada', 'corpo dolorido', 'corpo moido', 'moido treino', 'dor', 'dor depois treino', 'dor muscular', 'machucar', 'lesao', 'tendinite', 'inflamado', 'inchado', 'inchaco', 'joelho dor', 'ombro dor', 'costas dor', 'dor joelho', 'dor ombro', 'dor costas', 'dor lombar', 'dor punho', 'dor cotovelo', 'dor tornozelo', 'dor quadril', 'lombar', 'torcer', 'dor articulacao', 'dor tendao', 'estou dor', 'to dor', 'tou dor', 'sinto dor', 'senti dor', '!travou', 'travado', 'lombar travou', 'costas travou', '!fisgada', 'estou dolorido', 'todo dolorido', 'todo dor', 'joelho dor', 'dor joelho', 'ombro dor', 'dor ombro', 'costas dor', 'dor costas', 'lombar dor', 'dor lombar', 'punho dor', 'dor punho', 'cotovelo dor', 'dor cotovelo', 'tornozelo dor', 'dor tornozelo', 'quadril dor', 'dor quadril', 'panturrilha dor', 'dor panturrilha', 'canela dor', 'dor canela', 'pe dor', 'dor pe', 'coxa dor', 'dor coxa', 'perna dor', 'dor perna', 'pescoco dor', 'dor pescoco', 'braco dor', 'dor braco', 'gluteo dor', 'dor gluteo', 'virilha dor', 'dor virilha'],
+    palavras: ['to travado', 'todo travado', 'toda travada', 'perna travada', 'braco travado', 'nao consigo andar direito', 'estalou', 'estalando', 'estalo', 'latejando', 'pontada', 'corpo dolorido', 'corpo moido', 'moido treino', 'dor', 'dor depois treino', 'dor muscular', 'machucar', 'lesao', 'tendinite', 'inflamado', 'inchado', 'inchaco', 'joelho dor', 'ombro dor', 'costas dor', 'dor joelho', 'dor ombro', 'dor costas', 'dor lombar', 'dor punho', 'dor cotovelo', 'dor tornozelo', 'dor quadril', 'lombar', 'torcer', 'dor articulacao', 'dor tendao', 'estou dor', 'to dor', 'tou dor', 'sinto dor', 'senti dor', '!travou', 'travado', 'lombar travou', 'costas travou', '!fisgada', 'estou dolorido', 'todo dolorido', 'todo dor', 'joelho dor', 'dor joelho', 'ombro dor', 'dor ombro', 'costas dor', 'dor costas', 'lombar dor', 'dor lombar', 'punho dor', 'dor punho', 'cotovelo dor', 'dor cotovelo', 'tornozelo dor', 'dor tornozelo', 'quadril dor', 'dor quadril', 'panturrilha dor', 'dor panturrilha', 'canela dor', 'dor canela', 'pe dor', 'dor pe', 'coxa dor', 'dor coxa', 'perna dor', 'dor perna', 'pescoco dor', 'dor pescoco', 'braco dor', 'dor braco', 'gluteo dor', 'dor gluteo', 'virilha dor', 'dor virilha'],
     inicio: (ctx) => passoDor(ctx, 'treinador'),
   },
   {
     id: 'aparelho-ocupado', coach: 'treinador', titulo: 'O aparelho está ocupado', resumo: 'um aparelho ocupado na academia',
-    palavras: ['parado no aparelho', 'nao sai do aparelho', 'preciso dela', 'preciso dele', 'aparelho ocupado', '!ocupado', '!tomado', 'ta tomado', 'cheio de gente', 'gente usando', 'alguem usando', 'aparelho', 'esperar aparelho', 'trocar aparelho', 'academia cheia', 'academia lotada', 'fila', 'aparelho usando', 'tem gente', 'tem fila', 'esperando aparelho'],
+    palavras: ['todo mundo no', 'todo mundo usando', 'ta todo mundo', 'disputado', 'parado no aparelho', 'nao sai do aparelho', 'preciso dela', 'preciso dele', 'aparelho ocupado', '!ocupado', '!tomado', 'ta tomado', 'cheio de gente', 'gente usando', 'alguem usando', 'aparelho', 'esperar aparelho', 'trocar aparelho', 'academia cheia', 'academia lotada', 'fila', 'aparelho usando', 'tem gente', 'tem fila', 'esperando aparelho'],
     disponivel: temPlano,
     inicio: (ctx) => {
       const b = bloqueio(ctx);

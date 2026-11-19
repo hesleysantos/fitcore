@@ -39,7 +39,7 @@ test('sanitize: dados inválidos ou maliciosos são descartados', () => {
   const s = store.sanitize(sujo);
   assert.equal({}.polluted, undefined, 'protótipo global poluído!');
   assert.equal(Object.prototype.hasOwnProperty.call(s, 'extra'), false);
-  assert.deepEqual(Object.keys(s).sort(), ['activePlan', 'ajustesSemana', 'body', 'combo', 'current', 'diario', 'dores', 'gym', 'nutri', 'perdidos', 'plans', 'run', 'runs', 'saudeFora', 'sessions', 'settings', 'sono', 'trainer', 'ui', 'v'].sort());
+  assert.deepEqual(Object.keys(s).sort(), ['activePlan', 'ajustesSemana', 'body', 'combo', 'current', 'diario', 'dores', 'feriados', 'gym', 'nutri', 'perdidos', 'plans', 'run', 'runs', 'saudeFora', 'sessions', 'settings', 'sono', 'trainer', 'ui', 'v'].sort());
   assert.equal(s.settings.tema, 'auto');
   assert.equal(s.settings.descanso, 600);
   assert.equal(s.settings.som, true);

@@ -49,6 +49,10 @@ export default async (page) => {
       await page.sleep(200);
     }
   }
+  // registro da corrida (1.14.0): distância só com números (a vírgula entra sozinha) e tempo em minutos e segundos
+  const km = (digitos) => preencher('Distância em quilômetros', String(digitos));
+  const tempo = async (min, seg = '') => { const a = await preencher('Tempo: minutos', String(min)); const b = await preencher('Tempo: segundos', String(seg)); return a && b; };
+  const modoDoRegistro = () => page.eval(`const m = document.getElementById('registro-medidas'); return m ? m.dataset.modo : '';`);
   const preencher = (rotulo, valor) => page.eval(`const i = document.querySelector('input[aria-label="${rotulo}"]'); if (!i) return false; i.value = ${JSON.stringify(valor)}; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); return true;`);
 
   // depois de aceitar o plano, o aplicativo pergunta sobre o fortalecimento (e, com musculação, sobre a prioridade)
@@ -129,8 +133,9 @@ export default async (page) => {
   await page.click('Registrar corrida'); await page.sleep(300);
   ok((await estado('s.runs.length')) === 1 || (await texto()).includes('Informe'), 'registro só com o tempo do cronômetro é aceito (ou pede os dados)');
   if ((await estado('s.runs.length')) === 1) { await page.click('Editar'); await page.sleep(300); }
-  await preencher('Distância em quilômetros', '2,6');
-  await preencher('Tempo em minutos, ou minutos e segundos', '28:30');
+  // corrida e caminhada: pede as etapas feitas (e o tempo), não a distância
+  ok((await modoDoRegistro()) === 'etapas' && !(await page.eval(`return !!document.querySelector('input[aria-label="Distância em quilômetros"]');`)) && !!(await page.eval(`return !!document.querySelector('#registro-medidas input[aria-label="Etapas de corrida feitas"]');`)), 'corrida e caminhada: o registro pede as etapas, sem a distância (' + (await modoDoRegistro()) + ')');
+  await tempo('28', '30');
   ok(await page.eval(`return !!document.querySelector('[aria-label="Tipo de corrida"] .chip.on') && !document.querySelector('[aria-label="Esforço percebido"] .chip.on');`), 'o formulário oferece o tipo da corrida, e o esforço começa sem nada marcado');
   await page.eval(`document.querySelector('[aria-label="Esforço percebido"] .chip:nth-child(5)').click(); return true;`); await page.sleep(100);
   await page.eval(`const sw = document.querySelector('input[aria-label="Senti dor"]'); sw.click(); return true;`); await page.sleep(200);
@@ -150,12 +155,12 @@ export default async (page) => {
   await preencher('Observação', 'Primeira corrida <b>do plano</b>');
   await page.eval(`const b = [...document.querySelectorAll('#registro .btn.primary')][0]; b.click(); return true;`); await page.sleep(600);
   const r1 = await estado(`{ n: s.runs.length, r: s.runs[0], dores: s.dores.map((d) => [d.onde, d.nivel, d.tipo]) }`);
-  ok(r1.n === 1 && r1.r.distKm === 2.6 && r1.r.durMin === 28.5 && r1.r.pse === 5 && JSON.stringify(r1.r.dores) === JSON.stringify([{ onde: 'joelho', nivel: 4, tipo: 'articular' }, { onde: 'coxa-tras', nivel: 2, tipo: 'muscular' }]), 'corrida gravada com distância, tempo, esforço e as duas dores: ' + JSON.stringify(r1.r).slice(0, 220));
+  ok(r1.n === 1 && !r1.r.distKm && r1.r.etapas && r1.r.durMin === 28.5 && r1.r.pse === 5 && JSON.stringify(r1.r.dores) === JSON.stringify([{ onde: 'joelho', nivel: 4, tipo: 'articular' }, { onde: 'coxa-tras', nivel: 2, tipo: 'muscular' }]), 'corrida gravada com distância, tempo, esforço e as duas dores: ' + JSON.stringify(r1.r).slice(0, 220));
   ok(JSON.stringify(r1.dores) === JSON.stringify([['joelho', 4, 'articular'], ['coxa-tras', 2, 'muscular']]), 'cada dor vira um relato de dor, com o tipo certo: ' + JSON.stringify(r1.dores));
   ok(r1.r.tipo === 'corrida_caminhada' && r1.r.planejado.includes('Corrida e caminhada'), 'registro guarda o tipo e o que estava no plano');
   ok((await estado('s.run.cron')) === null, 'corrida registrada: o cronômetro do dia não fica guardado');
   t = await texto();
-  ok(t.includes('registrada') && t.includes('2,6 km') && t.includes('Primeira corrida <b>do plano</b>') && !(await page.eval(`return !!document.querySelector('main b:not(.stat b)') && [...document.querySelectorAll('main b')].some((b) => b.textContent === 'do plano');`)), 'registro aparece na tela e o texto digitado não vira HTML');
+  ok(t.includes('registrada') && /\d+ de \d+ etapas/.test(t) && t.includes('Primeira corrida <b>do plano</b>') && !(await page.eval(`return !!document.querySelector('main b:not(.stat b)') && [...document.querySelectorAll('main b')].some((b) => b.textContent === 'do plano');`)), 'registro aparece na tela e o texto digitado não vira HTML');
   await foto('6-registrado');
   t = await texto();
   ok(t.includes('Análise do treino') && (t.includes('Acima do plano') || t.includes('Abaixo do plano') || t.includes('Dentro do plano')) && t.includes('O plano:'), 'a corrida registrada vem com a análise contra o treino do dia');
@@ -199,11 +204,10 @@ export default async (page) => {
   // editar e apagar o registro
   await page.eval(`[...document.querySelectorAll('.item')].find((e) => e.textContent.includes('Feita')).click(); return true;`); await page.sleep(600);
   await page.click('Editar'); await page.sleep(300);
-  await preencher('Distância em quilômetros', '3');
-  await preencher('Tempo em minutos, ou minutos e segundos', '28.30');
+  await tempo('28', '30');
   await page.click('Salvar alterações'); await page.sleep(500);
-  ok((await estado('s.runs[0].distKm')) === 3 && (await estado('s.runs.length')) === 1, 'registro editado sem duplicar');
-  ok((await estado('s.runs[0].durMin')) === 28.5 && (await estado('s.runs[0].pse')) === 5, '“28.30” é lido como 28 min 30 s, e o esforço gravado é o que estava marcado');
+  ok((await estado('s.runs.length')) === 1 && !!(await estado('s.runs[0].etapas')), 'registro editado sem duplicar, com as etapas: ' + JSON.stringify(await estado('s.runs[0].etapas')));
+  ok((await estado('s.runs[0].durMin')) === 28.5 && (await estado('s.runs[0].pse')) === 5, '28 min e 30 s nos dois campos, e o esforço gravado é o que estava marcado');
   ok((await estado('s.run.mostrados.length')) >= 1 && (await estado(`s.run.mostrados.some((m) => m.tipo === 'corrida_caminhada')`)), 'o treino mostrado em cada dia fica guardado para a análise das semanas passadas');
   await page.click('Apagar'); await page.sleep(300);
   ok((await texto()).includes('Apagar este registro?'), 'apagar pede confirmação');
@@ -323,12 +327,13 @@ export default async (page) => {
   t = await texto();
   ok(/Ritmo/.test(t) && /por km/.test(t) && t.includes('Como foi a corrida?'), 'treino de hoje do avançado mostra o ritmo e o formulário');
   await foto('10-dia-avancado');
-  await preencher('Distância em quilômetros', '8'); await preencher('Tempo em minutos, ou minutos e segundos', '46');
+  ok((await km('800')) && (await page.eval(`return document.querySelector('input[aria-label="Distância em quilômetros"]').value;`)) === '8,00', 'distância só com números: 8, 0, 0 vira 8,00');
+  await tempo('46');
   await page.click('Registrar corrida'); await page.sleep(500);
   ok((await estado('s.runs.length')) === 1, 'corrida do avançado registrada');
   // registro impossível é recusado
   await page.click('Registrar outra corrida neste dia'); await page.sleep(300);
-  await preencher('Distância em quilômetros', '10'); await preencher('Tempo em minutos, ou minutos e segundos', '9');
+  await km('1000'); await tempo('9');
   await page.eval(`[...document.querySelectorAll('#registro .btn.primary')].pop().click(); return true;`); await page.sleep(400);
   ok((await estado('s.runs.length')) === 1, 'ritmo impossível (10 km em 9 min) não é gravado');
 

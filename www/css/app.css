@@ -653,3 +653,6 @@ details.pq.perdido-pq > summary { min-height: 44px; }
 .divisor { display: flex; align-items: center; gap: 10px; margin: 18px 0 2px; color: var(--muted); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 .divisor::before, .divisor::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 #divisor-consulta ~ details.acc, #divisor-consulta ~ .card { background: transparent; box-shadow: none; }
+/* feriado (aba Treinos): botão discreto, alvo de toque de 44 px */
+.feriado-acao .btn.plain, .feriado-linha .btn.plain { min-height: 44px; color: var(--muted); font-weight: 500; }
+.feriado-linha { border-top: 1px dashed var(--border); padding-top: 6px; }
