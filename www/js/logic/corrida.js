@@ -1090,6 +1090,8 @@ export function limparRegistro(raw) {
     ...(raw.local === 'esteira' ? { local: 'esteira' } : {}),
     // tempo que veio do plano (a pessoa não mediu): não entra em ritmo nem em teste
     ...(raw.durEst === true && !distKm ? { durEst: true } : {}),
+    // o pace do trecho principal, que o relógio mostra durante o treino (segundos por km, de 2:00 a 20:00)
+    ...(Number.isFinite(raw.paceTrecho) && raw.paceTrecho >= 120 && raw.paceTrecho <= 1200 ? { paceTrecho: Math.round(raw.paceTrecho) } : {}),
     // corrida e caminhada: quantas etapas de corrida foram feitas
     ...(etapasOk(raw.etapas) ? { etapas: { feitas: Math.round(raw.etapas.feitas), de: Math.round(raw.etapas.de) } } : {}),
   };
@@ -1375,11 +1377,29 @@ const num1 = (v, max) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ?
 function limparPlanejado(p) {
   if (!isObj(p) || typeof p.tipo !== 'string' || !Object.prototype.hasOwnProperty.call(TIPOS_TREINO, p.tipo)) return null;
   const kc = num1(p.kmCorrendo, 120);
-  return { tipo: p.tipo, durMin: num1(p.durMin, 900), distKm: num1(p.distKm, 120), ritmo: parDe(p.ritmo, 100, 1300), pse: parDe(p.pse, 0, 10), un: p.un === 'd' ? 'd' : 't', ...(kc && p.distKm && kc < p.distKm ? { kmCorrendo: kc } : {}) };
+  const tr = trechoOk(p.trecho);
+  return { tipo: p.tipo, durMin: num1(p.durMin, 900), distKm: num1(p.distKm, 120), ritmo: parDe(p.ritmo, 100, 1300), pse: parDe(p.pse, 0, 10), un: p.un === 'd' ? 'd' : 't', ...(kc && p.distKm && kc < p.distKm ? { kmCorrendo: kc } : {}), ...(tr ? { trecho: tr } : {}) };
 }
+// O trecho principal de um treino com partes (aquecimento, tiros, acelerações, caminhada): o bloco de corrida com faixa de
+// ritmo mais rápida. É o pace que o corredor olha no relógio durante o treino; a média da sessão inclui o resto.
+const PARTES_FORA = new Set(['aquecer', 'desaquecer', 'caminhar', 'trote']);
+export function trechoDe(t) {
+  const blocos = t && Array.isArray(t.blocos) ? t.blocos : [];
+  const comPartes = blocos.length > 1 || blocos.some((b) => (b.repeticoes || 1) > 1);
+  if (!comPartes) return null;
+  // (as acelerações de 15 s não entram: curtas demais para medir o pace)
+  const cands = blocos.filter((b) => !PARTES_FORA.has(b.tipo) && !(b.seg && b.seg < 30));
+  if (!cands.length) return null;
+  const comRitmo = cands.filter((b) => b.ritmo);
+  // com faixa de ritmo: a mais rápida; sem faixa (sem resultado recente): o bloco forte com repetições, senão o primeiro
+  const b = comRitmo.length ? comRitmo.reduce((m, x) => (media(x.ritmo) < media(m.ritmo) ? x : m))
+    : cands.find((x) => x.tipo === 'forte' && (x.repeticoes || 1) > 1) || cands.find((x) => x.tipo === 'forte') || cands[0];
+  return { rotulo: String(b.rotulo || 'Trecho principal').slice(0, 60), ritmo: b.ritmo ? [Math.round(b.ritmo.de), Math.round(b.ritmo.ate)] : null };
+}
+const trechoOk = (x) => (isObj(x) && typeof x.rotulo === 'string' && x.rotulo ? { rotulo: x.rotulo.slice(0, 60), ritmo: parDe(x.ritmo, 100, 1300) } : null);
 const unidadeDe = (t) => (t.un === 'd' || (Array.isArray(t.blocos) && t.blocos.some((b) => b.m > 0 && !b.seg)) ? 'd' : 't');
 const parRitmo = (r) => (Array.isArray(r) ? r : r ? [Math.round(r.de), Math.round(r.ate)] : null);
-export const planejadoDe = (t) => (t && typeof t.tipo === 'string' && t.tipo ? limparPlanejado({ tipo: t.tipo, durMin: t.durMin, distKm: t.distKm, kmCorrendo: t.kmCorrendo, ritmo: parRitmo(t.ritmo), pse: Array.isArray(t.pse) ? t.pse.map((x) => Math.round(x)) : null, un: unidadeDe(t) }) : null);
+export const planejadoDe = (t) => (t && typeof t.tipo === 'string' && t.tipo ? limparPlanejado({ tipo: t.tipo, durMin: t.durMin, distKm: t.distKm, kmCorrendo: t.kmCorrendo, trecho: t.trecho || trechoDe(t), ritmo: parRitmo(t.ritmo), pse: Array.isArray(t.pse) ? t.pse.map((x) => Math.round(x)) : null, un: unidadeDe(t) }) : null);
 
 // O treino que o plano MOSTROU em cada dia (state.run.mostrados): os ajustes do plano só valem de hoje em diante, então o
 // que foi mostrado em um dia que já passou tem de ficar guardado para a análise, as faltas e a semana passada baterem com
@@ -1516,9 +1536,22 @@ function analisar(plan, r, ctx) {
       planos.push('O plano não repõe. Se a semana inteira ficar bem abaixo, a próxima parte do que você fez.');
     } else it('ok', 'ok', porTempo ? 'Duração dentro do planejado.' : 'Distância dentro do planejado.');
   }
-  // 3) ritmo, nos treinos contínuos com faixa
+  // 3) ritmo, nos treinos contínuos com faixa. Com outras partes (acelerações e a caminhada entre elas), a média da sessão
+  // não serve para comparar com a faixa da rodagem: vale o pace do trecho, quando anotado.
   let disseEsforco = false;
-  if (plan.ritmo && ritmo && CONTINUOS.has(plan.tipo) && !forteFeito) {
+  const trecho = plan.trecho || null;
+  const ritmoCmp = trecho && trecho.ritmo && CONTINUOS.has(plan.tipo) ? (r.paceTrecho || 0) : ritmo;
+  if (trecho && !trecho.ritmo && r.paceTrecho) it('info', '', `Pace de ${fmtRitmo(r.paceTrecho)} por km em “${trecho.rotulo.toLowerCase()}”. Sem um resultado recente, o plano ainda não tem faixa de ritmo para comparar.`);
+  if (trecho && trecho.ritmo && !CONTINUOS.has(plan.tipo) && r.paceTrecho) {
+    const f = `${fmtRitmo(trecho.ritmo[0])} a ${fmtRitmo(trecho.ritmo[1])}`;
+    const nome = trecho.rotulo.toLowerCase();
+    if (r.paceTrecho < trecho.ritmo[0] - 5) it('info', 'mais', `Pace de ${fmtRitmo(r.paceTrecho)} por km em “${nome}”, mais rápido que a faixa (${f}). Mantenha todos no mesmo ritmo: se o último sair mais lento, o primeiro foi rápido demais.`);
+    else if (r.paceTrecho > trecho.ritmo[1] + 10) it('info', 'menos', `Pace de ${fmtRitmo(r.paceTrecho)} por km em “${nome}”, mais lento que a faixa (${f})${r.pse != null && r.pse >= 8 ? `, com esforço ${r.pse}: pode ser cansaço acumulado, calor ou noite ruim` : ''}.`, ...(r.pse != null && r.pse >= 8 ? ['saw2016'] : []));
+    else it('ok', 'ok', `Pace de ${fmtRitmo(r.paceTrecho)} por km em “${nome}”: dentro da faixa (${f}).`);
+  }
+  if (trecho && CONTINUOS.has(plan.tipo) && !r.paceTrecho && ritmo && plan.ritmo) it('info', '', 'A média da sessão conta as acelerações e a caminhada entre elas. Para comparar com a faixa da rodagem, anote o pace da rodagem.');
+  if (plan.ritmo && ritmoCmp && CONTINUOS.has(plan.tipo) && !forteFeito) {
+    const ritmo = ritmoCmp;
     const faixa = `${fmtRitmo(plan.ritmo[0])} a ${fmtRitmo(plan.ritmo[1])}`;
     const limite = plan.pse ? plan.pse[1] : 4;
     if (ritmo < plan.ritmo[0] - 5) {
@@ -2092,6 +2125,32 @@ export function gerarPlano(respostas, opcoes) {
     semanas = cv.map((s) => ({ n: s.n, fase: s.fase, foco: focoDe(s, cfg), descarga: s.descarga, dias: diasDaSemana(s, pf, c, cfg, cont, op.diasPernas) }));
   }
   aparar(semanas, c);
+
+  // ----- teste de ritmo marcado pelo plano: sem um resultado recente (entrevista, prova ou teste das últimas 12 semanas),
+  // todos os treinos vão só pelo esforço. Para quem mede a distância (GPS, esteira ou pista), o plano marca um teste de 5 km
+  // na semana seguinte (a 2ª, para quem está começando), no lugar do treino forte ou de uma rodagem, até ele ser registrado.
+  // Fora: cautela de saúde, menores de 16, dor que muda o treino e volta de pausa. O dia e a distância são escolha do
+  // aplicativo; o teste em si é o mesmo "Teste de ritmo" de sempre (o resultado atualiza os ritmos: vdoto2_ajuste).
+  if (acompanha && diaValido(op.inicio) && diaValido(op.hoje) && !P && !lento && pf.nivel >= 2 && (pf.modo === 'gps' || pf.modo === 'esteira' || pf.local === 'pista') && !pf.cautela && pf.idade >= 16 && pior.nivel === 0 && !volta) {
+    // sempre na semana seguinte (a 2ª, para quem está começando): a semana em curso, já mostrada, não muda
+    const w = semAtual + 1;
+    const sem = semanas.find((x) => x.n === w);
+    const dataDe = (wd) => somaDias(op.inicio, (w - 1) * 7 + ((wd + 6) % 7));
+    const pode = (d) => dataDe(d.wd) >= op.hoje;
+    const longo = sem ? sem.dias.find((d) => d.tipo === 'longo') : null;
+    const perto = (d) => longo && (Math.abs(pos(d.wd) - pos(longo.wd)) <= 1);
+    const jaTem = sem && sem.dias.some((d) => ehEventoDia(d));
+    const alvo = !sem || jaTem || sem.descarga ? null
+      : sem.dias.find((d) => d.intensidade === 'forte' && pode(d)) || sem.dias.find((d) => (d.tipo === 'leve' || d.tipo === 'regenerativo') && !perto(d) && pode(d));
+    if (alvo) {
+      const j = sem.dias.indexOf(alvo);
+      const ev = tEvento(pf, c, { dist: 5, evento: 'teste' });
+      ev.detalhe = 'Sem um resultado recente, este teste calcula o ritmo de todos os treinos. ' + ev.detalhe + ' No registro, marque o tipo “Teste de ritmo”, com a distância e o tempo só do trecho do teste.';
+      ev.automatico = true;
+      sem.dias[j] = { wd: alvo.wd, ...ev };
+      ajustes.push({ texto: `Teste de ritmo de 5 km marcado para ${fmtDia(dataDe(alvo.wd))}.`, motivo: 'Sem um resultado recente de prova ou de teste, os treinos vão só pelo esforço. O resultado do teste calcula o ritmo de cada treino; depois, os ritmos sobem sozinhos conforme você treina.', refs: ['vdoto2_ajuste'] });
+    }
+  }
 
   // ----- treino forte feito na véspera (fora do plano): o forte de hoje ou de amanhã vira rodagem leve. Depois de um treino
   // intenso, a recuperação leva de 24 a 48 horas (buchheit2014); dois fortes em dias seguidos só somam cansaço (seiler2009) -----

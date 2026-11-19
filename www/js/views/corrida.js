@@ -550,7 +550,8 @@ function resumoRegistro(r) {
   if (r.distKm) partes.push(fmtKm(r.distKm));
   if (r.etapas) partes.push(`${r.etapas.feitas} de ${r.etapas.de} etapas`);
   if (r.durMin) partes.push((r.durEst ? 'cerca de ' : '') + fmtTempo(r.durMin * 60));
-  if (r.distKm && r.durMin && r.tipo !== 'caminhada') partes.push(`${fmtRitmo((r.durMin * 60) / r.distKm)} por km`);
+  if (r.distKm && r.durMin && r.tipo !== 'caminhada') partes.push(`${fmtRitmo((r.durMin * 60) / r.distKm)} por km${r.plan && r.plan.trecho ? ' na sessão' : ''}`);
+  if (r.paceTrecho) partes.push(`${fmtRitmo(r.paceTrecho)} por km ${r.plan && r.plan.trecho ? (/tiro/i.test(r.plan.trecho.rotulo) ? 'nos tiros' : /limiar/i.test(r.plan.trecho.rotulo) ? 'no limiar' : 'na rodagem') : 'no trecho'}`);
   if (r.pse) partes.push(`esforço ${r.pse}`);
   if (r.local === 'esteira') partes.push('na esteira');
   for (const d of r.dores || []) partes.push(`${d.tipo === 'muscular' ? 'dor muscular' : 'dor'} em ${LOCAIS_DOR[d.onde].toLowerCase()} (${d.nivel})`);
@@ -715,9 +716,31 @@ function formulario(data, planejado, existente, aoFechar) {
   const durMinI = h('input', { class: 'input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'off', maxlength: '3', value: seg0 ? String(Math.floor(seg0 / 60)) : '', placeholder: 'min', 'aria-label': 'Tempo: minutos' });
   const durSegI = h('input', { class: 'input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'off', maxlength: '2', value: seg0 % 60 ? String(seg0 % 60).padStart(2, '0') : '', placeholder: 'seg', 'aria-label': 'Tempo: segundos' });
   for (const el of [durMinI, durSegI]) el.addEventListener('input', () => { el.value = el.value.replace(/\D/g, ''); });
+  // o pace calculado aparece na hora, com a distância e o tempo preenchidos (a média da sessão)
+  const paceVivo = h('div', { class: 'small bold', id: 'pace-calculado', 'aria-live': 'polite' });
+  const atualizarPace = () => {
+    const km = dist.value ? parseNum(dist.value) : 0;
+    const seg = (durMinI.value ? Number(durMinI.value) : 0) * 60 + (durSegI.value ? Number(durSegI.value) : 0);
+    const ok = km > 0 && seg > 0 && seg / km >= 110 && seg / km <= 1800;
+    paceVivo.textContent = ok ? `Pace: ${fmtRitmo(seg / km)} por km${r.plan && r.plan.trecho ? ' (média da sessão)' : ''}` : '';
+    paceVivo.hidden = !ok;
+  };
+  for (const el of [durMinI, durSegI]) el.addEventListener('input', atualizarPace);
+  dist.addEventListener('input', atualizarPace);
   durMinI.addEventListener('input', () => { if (durMinI.value.length >= 3) durSegI.focus(); });
   const campoTempo = h('div', { class: 'field grow' }, h('span', { text: 'Tempo' }), h('div', { class: 'row gap-s tempo-campos' }, durMinI, h('span', { class: 'muted', text: 'min' }), durSegI, h('span', { class: 'muted', text: 's' })));
   const campoDist = h('label', { class: 'field grow' }, h('span', { text: 'Distância (km)' }), dist);
+  // pace do trecho principal (o que o relógio mostra durante a rodagem, os tiros ou o ritmo de limiar): opcional
+  const trecho = r.plan && r.plan.trecho ? r.plan.trecho : null;
+  const paceTxt = (seg) => (seg ? `${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, '0')}` : '');
+  const paceI = h('input', { class: 'input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'off', value: paceTxt(r.paceTrecho), placeholder: '0:00', 'aria-label': 'Pace do trecho, em minutos por km' });
+  paceI.addEventListener('input', () => {
+    const dig = paceI.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 4);
+    paceI.value = !dig ? '' : dig.length <= 2 ? `0:${dig.padStart(2, '0')}` : `${dig.slice(0, -2)}:${dig.slice(-2)}`;
+  });
+  const lerPace = () => { const m = /^(\d{1,2}):(\d{2})$/.exec(paceI.value.trim()); if (!m) return paceI.value.trim() ? NaN : 0; const seg = Number(m[1]) * 60 + Number(m[2]); return Number(m[2]) > 59 ? NaN : seg; };
+  const nomeTrecho = trecho ? (/acelera|corrida leve/i.test(trecho.rotulo) ? 'da rodagem' : /tiro/i.test(trecho.rotulo) ? 'dos tiros' : /limiar/i.test(trecho.rotulo) ? 'no ritmo de limiar' : /prova/i.test(trecho.rotulo) ? 'no ritmo de prova' : /final/i.test(trecho.rotulo) ? 'no final forte' : `em “${trecho.rotulo.toLowerCase()}”`) : '';
+  const campoPace = trecho ? h('div', { class: 'field' }, comAjuda(h('span', { text: `Pace ${nomeTrecho} (opcional)` }), 'Pace do trecho', [`É o pace que o relógio mostra ${nomeTrecho}, sem o aquecimento, as pausas e a caminhada.`, trecho.ritmo ? `A faixa do plano: ${paceTxt(trecho.ritmo[0])} a ${paceTxt(trecho.ritmo[1])} por km.` : 'Com um resultado de teste ou de prova, o plano passa a ter a faixa de ritmo para comparar.', 'Digite só os números: 5, 3, 0 vira 5:30.']), paceI) : null;
   let comDistancia = false; // sem GPS: a pessoa pode abrir o campo da distância
   const medidas = h('div', { class: 'col gap-s', id: 'registro-medidas' });
   const drawMedidas = () => {
@@ -741,7 +764,9 @@ function formulario(data, planejado, existente, aoFechar) {
       return;
     }
     medidas.appendChild(h('div', { class: 'row top' }, campoDist, campoTempo));
+    medidas.appendChild(paceVivo); atualizarPace();
     medidas.appendChild(h('p', { class: 'tiny muted', text: r.tipo === 'teste' || r.tipo === 'prova' ? 'Só o trecho do teste ou da prova, sem o aquecimento: é o que atualiza os seus ritmos.' : 'Digite só os números: 3, 0, 4 vira 3,04 km.' }));
+    if (campoPace && r.tipo !== 'teste' && r.tipo !== 'prova') medidas.appendChild(campoPace);
   };
   drawMedidas();
   card.appendChild(medidas);
@@ -811,6 +836,8 @@ function formulario(data, planejado, existente, aoFechar) {
       let t = emMin(mm * 60 + ss), durEst = false;
       if (!Number.isFinite(d) || d < 0 || d > 120) { toast('Confira a distância, em quilômetros.'); dist.focus(); return; }
       if (t > 900) { toast('Confira o tempo, em minutos.'); durMinI.focus(); return; }
+      const pc = campoPace && modo === 'completo' && r.tipo !== 'teste' && r.tipo !== 'prova' ? lerPace() : 0;
+      if (!Number.isFinite(pc) || (pc && (pc < 120 || pc > 1200))) { toast('Confira o pace, em minutos e segundos por km.'); paceI.focus(); return; }
       if ((r.tipo === 'teste' || r.tipo === 'prova') && (!d || !t)) { toast('No teste e na prova, informe a distância e o tempo do trecho.'); (d ? durMinI : dist).focus(); return; }
       // sem medir nada: vale o tempo do plano (proporcional às etapas feitas), marcado como estimado
       if (!d && !t) {
@@ -823,7 +850,7 @@ function formulario(data, planejado, existente, aoFechar) {
       const semTipo = r.dores.find((x) => !x.tipo);
       if (semTipo) { toast(`Diga como foi a dor em ${LOCAIS_DOR[semTipo.onde].toLowerCase()}.`); const el = dorBox.querySelector(`[data-onde="${semTipo.onde}"]`); if (el) el.scrollIntoView({ block: 'center' }); return; }
       // "não sei dizer" vale como dor em um ponto (articulação, osso ou tendão), o lado mais cauteloso
-      const limpo = limparRegistro({ ...r, dores: r.dores.map((x) => ({ ...x, tipo: x.tipo === 'naosei' ? 'articular' : x.tipo })), distKm: d, durMin: t, durEst, etapas: modo === 'etapas' ? r.etapas : null, nota: nota.value, local: r.local === 'esteira' ? 'esteira' : '' });
+      const limpo = limparRegistro({ ...r, dores: r.dores.map((x) => ({ ...x, tipo: x.tipo === 'naosei' ? 'articular' : x.tipo })), distKm: d, durMin: t, durEst, paceTrecho: pc || null, etapas: modo === 'etapas' ? r.etapas : null, nota: nota.value, local: r.local === 'esteira' ? 'esteira' : '' });
       if (!limpo) { toast('Esse ritmo não parece possível. Confira a distância e o tempo.'); return; }
       update((s) => {
         const i = s.runs.findIndex((x) => x.id === limpo.id);

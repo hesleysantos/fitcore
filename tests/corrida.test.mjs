@@ -807,10 +807,10 @@ test('análise do treino feito: mais longo, mais rápido, esforço alto, forte t
   const st = estado(base, inicio, inicio);
   const p = planoAtual(st, inicio);
   const dia = (pred) => { for (const s of p.semanas.slice(0, 3)) for (const d of s.dias) if (pred(d)) return { d, data: somaDias(inicio, (s.n - 1) * 7 + ((d.wd + 6) % 7)) }; throw new Error('dia não encontrado'); };
-  const leve = dia((d) => d.tipo === 'leve' && d.ritmo);
+  const leve = dia((d) => d.tipo === 'leve' && d.ritmo && d.blocos.length === 1); // rodagem sem acelerações: a média da sessão é o pace da rodagem
   const plan = planejadoDe(leve.d);
   // kmCorrendo só existe quando o treino tem caminhada no meio (acelerações)
-  assert.deepEqual(Object.keys(plan).filter((k) => k !== 'kmCorrendo').sort(), ['distKm', 'durMin', 'pse', 'ritmo', 'tipo', 'un']);
+  assert.deepEqual(Object.keys(plan).filter((k) => k !== 'kmCorrendo' && k !== 'trecho').sort(), ['distKm', 'durMin', 'pse', 'ritmo', 'tipo', 'un']);
   const feito = (extra) => ({ ...reg('a1', leve.data, 'leve', leve.d.distKm, leve.d.durMin, 3), plan, ...extra });
   const an = (r, runs = []) => analiseDoRegistro({ ...st, runs: [...runs, r] }, leve.data, r);
   // dentro do plano
@@ -1255,4 +1255,43 @@ test('cada treino diz o que fazer: acelerações com duração e caminhada; sem 
       if (aparelho === 'tempo') for (const bl of d.blocos) assert.doesNotMatch(textoBloco(bl, d.modo), /por km/, d.nome);
     }
   }
+});
+
+test('pace do trecho: o plano guarda o trecho principal; o registro guarda o pace; a análise compara com a faixa do trecho', () => {
+  // intervalado: o trecho é o tiro
+  const t = { tipo: 'intervalado', blocos: [{ rotulo: 'Aquecimento em corrida leve', tipo: 'aquecer', seg: 600 }, { rotulo: 'Tiro forte', tipo: 'forte', seg: 180, repeticoes: 3, pausa: { tipo: 'trote', seg: 120 }, ritmo: { de: 291, ate: 300 } }, { rotulo: 'Volta à calma em trote leve', tipo: 'desaquecer', seg: 300 }], durMin: 28, distKm: 4.6, pse: [7, 9] };
+  const plan = planejadoDe(t);
+  assert.deepEqual(plan.trecho, { rotulo: 'Tiro forte', ritmo: [291, 300] });
+  const st = { run: null, runs: [], dores: [], plans: [], activePlan: '' };
+  const texto = (extra) => { const r = { ...limparRegistro({ id: 'pt1', data: '2026-11-18', tipo: 'intervalado', distKm: 4.6, durMin: 28, pse: 8, ...extra }), plan }; return analiseDoRegistro({ ...st, runs: [r] }, '2026-11-18', r).itens.map((x) => x.texto).join(' | '); };
+  assert.match(texto({ paceTrecho: 295 }), /Pace de 4:55 por km em “tiro forte”: dentro da faixa \(4:51 a 5:00\)/);
+  assert.match(texto({ paceTrecho: 270 }), /mais rápido que a faixa/);
+  assert.match(texto({ paceTrecho: 330 }), /mais lento que a faixa/);
+  // pace impossível sai do registro
+  assert.equal(limparRegistro({ id: 'pt2', data: '2026-11-18', durMin: 28, paceTrecho: 60 }).paceTrecho, undefined);
+  // rodagem contínua de um bloco só: sem trecho (a média da sessão já é o pace)
+  assert.equal(planejadoDe({ tipo: 'leve', blocos: [{ rotulo: 'Corrida leve', tipo: 'correr', m: 6000, ritmo: { de: 363, ate: 434 } }], durMin: 43, distKm: 6 }).trecho, undefined);
+  // rodagem com acelerações: o trecho é a rodagem; sem o pace dela, a média da sessão não é comparada com a faixa
+  const lv = { tipo: 'leve', blocos: [{ rotulo: 'Corrida leve', tipo: 'correr', m: 6500, ritmo: { de: 363, ate: 434 } }, { rotulo: 'Acelerações', tipo: 'forte', seg: 15, repeticoes: 6, pausa: { tipo: 'caminhar', seg: 60 } }], durMin: 50, distKm: 7.3, pse: [2, 4], ritmo: { de: 363, ate: 434 }, kmCorrendo: 6.8 };
+  const pl = planejadoDe(lv);
+  assert.equal(pl.trecho.rotulo, 'Corrida leve');
+  const r0 = { ...limparRegistro({ id: 'pt3', data: '2026-11-18', tipo: 'leve', distKm: 7.3, durMin: 56, pse: 3 }), plan: pl };
+  const t0 = analiseDoRegistro({ ...st, runs: [r0] }, '2026-11-18', r0).itens.map((x) => x.texto).join(' | ');
+  assert.ok(!/Mais lento que a faixa/.test(t0) && /anote o pace da rodagem/.test(t0), t0);
+  const r1 = { ...limparRegistro({ id: 'pt4', data: '2026-11-18', tipo: 'leve', distKm: 7.3, durMin: 56, pse: 3, paceTrecho: 400 }), plan: pl };
+  assert.match(analiseDoRegistro({ ...st, runs: [r1] }, '2026-11-18', r1).itens.map((x) => x.texto).join(' | '), /Ritmo dentro da faixa/);
+});
+test('teste de ritmo marcado pelo plano: só sem resultado e com como medir a distância; some depois de registrado', () => {
+  const base = { experiencia: 'regular', kmSemana: 25, longoAtual: 10, provas: '5a10', pausa: 'treinando', objetivo: 'saude', dias: ['1', '2', '4', '6'], diaLongo: 'auto', tempo: '60', tempoLongo: '120', aparelho: 'gps', local: 'rua', idade: 31, peso: 78, altura: 176, lesao12m: 'nao', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'] };
+  const testes = (a, runs = [], hoje = '2026-09-01') => { const st = estado(a, '2026-09-01', '2026-09-01'); st.runs = limparRegistros(runs); return planoAtual(st, hoje).semanas.flatMap((s) => s.dias.filter((d) => d.tipo === 'teste').map((d) => ({ n: s.n, d }))); };
+  const t = testes({ ...base, resultado: 'nao' });
+  assert.equal(t.length, 1);
+  assert.equal(t[0].n, 2);
+  assert.ok(t[0].d.automatico && /5 km/.test(t[0].d.nome) && /marque o tipo “Teste de ritmo”/.test(t[0].d.detalhe));
+  // com resultado, sem GPS, com cautela ou menor de 16: nenhum teste automático
+  assert.equal(testes({ ...base, resultado: '5', resultadoMin: 25 }).length, 0);
+  assert.equal(testes({ ...base, resultado: 'nao', aparelho: 'tempo' }).length, 0);
+  // registrado o teste, ele sai do plano e os ritmos aparecem
+  const feito = [{ id: 't1', data: '2026-09-09', tipo: 'teste', distKm: 5, durMin: 27, pse: 8, dores: [], nota: '', planejado: '' }];
+  assert.equal(testes({ ...base, resultado: 'nao' }, feito, '2026-09-10').length, 0);
 });
