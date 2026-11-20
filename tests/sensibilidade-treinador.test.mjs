@@ -34,7 +34,7 @@ const todosDiferentes = (lista, rot) => { const s = new Set(lista); assert.equal
 const p0 = gerarPlano(base, GYM, 0);
 
 test('todas as perguntas da entrevista estão cobertas por este arquivo', () => {
-  assert.deepEqual(PERGUNTAS.map((q) => q.k), ['objetivo', 'idade', 'condicoes', 'triagem', 'remedios', 'experiencia', 'pausa', 'liberado', 'peso', 'altura', 'semTreino', 'dias', 'tempo', 'local', 'extras', 'limitacoes', 'foco'], 'pergunta nova na entrevista: acrescente o teste de sensibilidade dela');
+  assert.deepEqual(PERGUNTAS.map((q) => q.k), ['objetivo', 'idade', 'condicoes', 'triagem', 'remedios', 'experiencia', 'pausa', 'liberado', 'peso', 'altura', 'semTreino', 'soCorrida', 'dias', 'tempo', 'local', 'extras', 'limitacoes', 'foco'], 'pergunta nova na entrevista: acrescente o teste de sensibilidade dela');
   assert.deepEqual(opcoes('objetivo'), ['hipertrofia', 'emagrecimento', 'forca', 'saude', 'resistencia']);
   assert.deepEqual(opcoes('experiencia'), ['nunca', 'iniciante', 'intermediario', 'avancado']);
   assert.deepEqual(opcoes('pausa'), ['treinando', '2a4s', '1a3m', '3a6m', 'mais6m']);
@@ -56,6 +56,12 @@ test('todas as perguntas da entrevista estão cobertas por este arquivo', () => 
   assert.deepEqual(Object.keys(TIPOS_DOR), ['muscular', 'articular', 'aguda']);
   assert.deepEqual(Object.keys(QUANDO_DOR), ['durante', 'depois', 'repouso']);
   assert.equal(Object.keys(LOCAIS_DOR).length, 20);
+});
+
+test('soCorrida: não muda a musculação (o dia continua sem ela); só devolve o dia à corrida (logic/dias-livres.js)', () => {
+  const a = { ...base, semTreino: ['6'] };
+  assert.equal(doseEAgenda(gerarPlano({ ...a, soCorrida: ['6'] }, GYM, 0)), doseEAgenda(gerarPlano(a, GYM, 0)));
+  assert.equal(doseEAgenda(gerarPlano({ ...a, soCorrida: ['nenhum'] }, GYM, 0)), doseEAgenda(gerarPlano(a, GYM, 0)));
 });
 
 test('semTreino: cada dia marcado sai da agenda (musculação e corrida); "Nenhum" e a resposta antiga não mudam nada', () => {

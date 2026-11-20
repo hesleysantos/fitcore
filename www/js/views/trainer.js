@@ -5,6 +5,7 @@
 // Na proposta: o resumo, os avisos, os treinos da semana (fechados, um toque abre os exercícios) e o botão de aceitar.
 import { h, btn, icon, note, badge, sectionTitle, toggle, toast, confirmSheet, plural, dateKey, uid, DIAS_CURTO, DIAS_LONGO } from '../ui.js';
 import { state, update, activePlan } from '../store.js';
+import { aplicarDiasNosTreinos } from '../logic/dias-livres.js';
 import { go, refresh } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { FAQ_TREINO } from '../data/knowledge.js';
@@ -457,11 +458,17 @@ export function trainerView() {
     // o objetivo começa igual ao da alimentação (o usuário pode trocar)
     if (pre.objetivo == null && treinoPara(n.objetivo)) pre.objetivo = treinoPara(n.objetivo);
     // dias sem treino: o padrão é "Nenhum" (treina em qualquer dia); respostas antigas, sem a pergunta, também
-    if (!Array.isArray(pre.semTreino) || !pre.semTreino.length) pre.semTreino = ['nenhum'];
+    // (a resposta é uma só para os dois treinos: quem respondeu na entrevista da corrida já vem com ela marcada)
+    const ra = state.run.answers || {};
+    if (!Array.isArray(pre.semTreino) || !pre.semTreino.length) pre.semTreino = Array.isArray(ra.semTreino) && ra.semTreino.length ? [...ra.semTreino] : ['nenhum'];
+    if (!Array.isArray(pre.soCorrida)) pre.soCorrida = Array.isArray(ra.soCorrida) ? [...ra.soCorrida] : ['nenhum'];
+    // "Em algum desses dias você ainda quer correr?" só para quem também corre
+    const corre = !!(state.run.aceitoEm || Object.keys(ra).length);
     return {
       title: 'Treinador', body: [interview({
-        perguntas: PERGUNTAS, respostas: pre, base: a, notas: { objetivo: notaObjetivo('treino') },
-        onDone: (r) => { update((s) => { s.trainer.answers = r; s.trainer.aceitoEm = ''; s.trainer.revisaoEm = ''; s.trainer.adiadoAte = ''; }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); conferirObjetivos('treino'); },
+        perguntas: corre ? PERGUNTAS : PERGUNTAS.filter((q) => q.k !== 'soCorrida'), respostas: pre, base: a, notas: { objetivo: notaObjetivo('treino') },
+        // os dias valem também para a corrida (o plano dela se refaz sozinho) e o treino atual sai dos dias sem musculação
+        onDone: (r) => { let msg = ''; update((s) => { s.trainer.answers = r; s.trainer.aceitoEm = ''; s.trainer.revisaoEm = ''; s.trainer.adiadoAte = ''; msg = aplicarDiasNosTreinos(s, 'trainer'); }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); conferirObjetivos('treino'); if (msg) toast(msg); },
         onCancel: () => { modo = 'auto'; refresh(); },
       })],
     };

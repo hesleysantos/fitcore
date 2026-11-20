@@ -8,7 +8,8 @@ import { EX_POR_ID } from '../www/js/data/exercises.js';
 import { MUSCULOS } from '../www/js/data/muscles.js';
 import { PERGUNTAS, gerarPlano, perfil, planoFortalecimento, resumoCombinado, respostasCompletas } from '../www/js/logic/trainer.js';
 import { gerarPlano as gerarCorrida, planoAtual, planoDaSemanaEm, inicioPara } from '../www/js/logic/corrida.js';
-import { bloqueadosDe, diasBloqueados, livresDe, notaDosDias, perguntaSemTreino, MAX_BLOQUEADOS } from '../www/js/logic/dias-livres.js';
+import { bloqueadosDe, diasBloqueados, livresDe, notaDosDias, perguntaSemTreino, MAX_BLOQUEADOS, soCorridaDe, semCorridaDe, diasSemCorrida, sincronizarDias, ajustarAgenda, aplicarDiasNosTreinos } from '../www/js/logic/dias-livres.js';
+import { PERGUNTAS as P_CORRIDA } from '../www/js/logic/corrida.js';
 import { marcar as marcarOpcao, limiteDe } from '../www/js/logic/escolhas.js';
 import * as P from '../www/js/logic/perdido.js';
 import * as store from '../www/js/store.js';
@@ -58,7 +59,9 @@ test('a pergunta: opcional, com os 7 dias e "Nenhum" por último, antes de "quan
   const q = PERGUNTAS.find((x) => x.k === 'semTreino');
   assert.ok(q && q.opcional && q.tipo === 'varios' && q.nenhum === 'nenhum');
   assert.deepEqual(q.op.map((o) => o[0]), ['1', '2', '3', '4', '5', '6', '0', 'nenhum']);
-  assert.equal(PERGUNTAS.indexOf(q) + 1, PERGUNTAS.findIndex((x) => x.k === 'dias'));
+  // (entre as duas, só a de quem também corre: "Em algum desses dias você ainda quer correr?")
+  assert.equal(PERGUNTAS.indexOf(q) + 2, PERGUNTAS.findIndex((x) => x.k === 'dias'));
+  assert.equal(PERGUNTAS[PERGUNTAS.indexOf(q) + 1].k, 'soCorrida');
   assert.equal(limiteDe(q, {}), 5);
   // marcar o sexto dia tira o mais antigo, com aviso
   let a = { semTreino: ['1', '2', '3', '4', '5'] };
@@ -162,7 +165,7 @@ test('corrida: o plano nunca usa um dia bloqueado no Treinador, e diz o que tiro
   const p = gerarCorrida(RUN, { bloqueados: [0] });
   assert.ok(!corridasDe(p).includes(0));
   assert.notEqual(p.perfil.diaLongo, 0);
-  assert.ok(p.avisos.some((x) => /Sem corrida domingo: no Treinador/.test(x.texto)));
+  assert.ok(p.avisos.some((x) => /Sem corrida domingo: você marcou que não treina/.test(x.texto)));
   // todos os dias marcados para correr estão bloqueados: a corrida vai para o mesmo número de dias livres
   const todos = gerarCorrida({ ...RUN, dias: ['6', '0'] }, { bloqueados: [6, 0] });
   assert.equal(todos.perfil.dias.length, 2);
@@ -261,4 +264,59 @@ test('treino perdido: nunca vai para um dia bloqueado', () => {
   const p = P.propor(estado([2, 4, 5, 6, 0]), D(0), D(0));
   assert.equal(p.motivo, 'sem_dia');
   assert.equal(p.movs.length, 0);
+});
+
+// ---------- dias por tipo de treino: "sábado só corrida" e as duas entrevistas ----------
+const visiveis = (q, a) => q.op.filter((o) => typeof o[3] !== 'function' || o[3](a)).map((o) => o[0]);
+
+test('as duas entrevistas perguntam os dias sem treino e, de quem faz os dois, em quais ainda quer correr', () => {
+  for (const P of [PERGUNTAS, P_CORRIDA]) {
+    const ks = P.map((q) => q.k);
+    assert.ok(ks.includes('semTreino') && ks.indexOf('soCorrida') === ks.indexOf('semTreino') + 1, ks.join(','));
+    const q = P.find((x) => x.k === 'soCorrida');
+    assert.ok(q.opcional && !q.se({ semTreino: ['nenhum'] }) && q.se({ semTreino: ['6'] }));
+    assert.deepEqual(visiveis(q, { semTreino: ['6', '0'] }), ['6', '0', 'nenhum']);
+  }
+  // na entrevista da corrida, os dias de corrida vêm depois e sem os dias sem corrida
+  const ks = P_CORRIDA.map((q) => q.k);
+  assert.ok(ks.indexOf('dias') > ks.indexOf('soCorrida'));
+  const dias = P_CORRIDA.find((x) => x.k === 'dias');
+  assert.deepEqual(visiveis(dias, { semTreino: ['6', '0'], soCorrida: ['6'] }).sort(), ['1', '2', '3', '4', '5', '6']);
+  assert.equal(visiveis(dias, { semTreino: ['nenhum'] }).length, 7);
+});
+
+test('sábado só corrida: a corrida usa o sábado; a musculação não', () => {
+  const a = { ...base, semTreino: ['6'], soCorrida: ['6'] };
+  assert.deepEqual([bloqueadosDe(a), soCorridaDe(a), semCorridaDe(a)], [[6], [6], []]);
+  assert.deepEqual(semCorridaDe({ ...a, soCorrida: ['nenhum'] }), [6]);
+  // musculação: nenhum treino no sábado
+  const m = gerarPlano(a, GYM);
+  assert.ok(m && !Object.keys(m.agenda).map(Number).includes(6));
+  // corrida pelo estado: o sábado continua
+  const run = { ...RUN, dias: ['2', '4', '6'], semTreino: ['6'], soCorrida: ['6'] };
+  const st = store.sanitize({ run: { answers: run, aceitoEm: '2026-10-07T12:00:00.000Z', inicio: '2026-10-05' }, trainer: { answers: a } });
+  assert.deepEqual([diasBloqueados(st), diasSemCorrida(st)], [[6], []]);
+  assert.ok(corridasDe(planoAtual(st, HOJE)).includes(6), 'corrida no sábado');
+  // sem o "ainda quer correr", o sábado sai dos dois
+  const st2 = store.sanitize({ run: { answers: { ...run, soCorrida: ['nenhum'] }, aceitoEm: '2026-10-07T12:00:00.000Z', inicio: '2026-10-05' }, trainer: { answers: { ...a, soCorrida: ['nenhum'] } } });
+  assert.ok(!corridasDe(planoAtual(st2, HOJE)).includes(6));
+  // a resposta guardada passa pela validação do estado nas duas entrevistas
+  assert.deepEqual([st.trainer.answers.soCorrida, st.run.answers.soCorrida], [['6'], ['6']]);
+});
+
+test('a resposta de uma entrevista vale para a outra, e o treino de musculação sai do dia sem musculação', () => {
+  const s = { trainer: { answers: { ...base, semTreino: ['nenhum'] } }, run: { answers: { ...RUN, semTreino: ['6', '0'], soCorrida: ['6'] } }, plans: [{ id: 'p', dias: [{ id: 'a', nome: 'Treino A' }, { id: 'b', nome: 'Treino B' }, { id: 'c', nome: 'Treino C' }], agenda: { 1: 'a', 3: 'b', 6: 'c' } }], activePlan: 'p' };
+  const msg = aplicarDiasNosTreinos(s, 'run');
+  assert.deepEqual([s.trainer.answers.semTreino, s.trainer.answers.soCorrida], [['6', '0'], ['6']]);
+  // o treino C sai do sábado para o dia livre mais afastado dos outros (sexta: 2 dias de quarta e 3 de segunda)
+  assert.deepEqual(s.plans[0].agenda, { 1: 'a', 3: 'b', 5: 'c' });
+  assert.match(msg, /Treino C passou de sábado para sexta/);
+  // quem ainda não fez a outra entrevista: nada é criado lá
+  const s2 = { trainer: { answers: {} }, run: { answers: { semTreino: ['6'] } }, plans: [], activePlan: '' };
+  sincronizarDias(s2, 'run');
+  assert.deepEqual(s2.trainer.answers, {});
+  assert.deepEqual(diasBloqueados(s2), [6], 'quem só corre: a resposta da corrida vale');
+  // sem dia livre: o treino fica de fora e a frase pede para escolher
+  const r = ajustarAgenda({ 1: 'a', 2: 'b' }, [0, 2, 3, 4, 5, 6].slice(0, 5).concat());
+  assert.ok(r.movidos.length + r.sobrou.length === 1);
 });

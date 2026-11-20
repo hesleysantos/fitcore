@@ -57,11 +57,20 @@ export function interview({ perguntas, respostas, onDone, onCancel, avatar = 'co
   // começa sempre na primeira pergunta: a pessoa revê tudo (as respostas guardadas já vêm marcadas)
   let i = 0;
 
+  // opção com condição que deixou de valer (ex.: dia de corrida que a pessoa marcou depois como "sem treino"): sai da resposta
+  function podar() {
+    for (const x of perguntas) {
+      if (x.tipo !== 'varios' || !Array.isArray(a[x.k])) continue;
+      const l = a[x.k].filter((v) => { const o = x.op.find((op) => op[0] === v); return o && (typeof o[3] !== 'function' || o[3](a)); });
+      if (l.length !== a[x.k].length) { if (l.length) a[x.k] = l; else delete a[x.k]; }
+    }
+  }
   function draw() {
     while (root.firstChild) root.removeChild(root.firstChild);
     // perguntas com condição (campo `se`) só aparecem quando ela vale; a resposta de uma pergunta escondida é descartada
     const visiveis = () => perguntas.filter((x) => !x.se || x.se(a));
     for (const x of perguntas) if (x.se && !x.se(a)) { delete a[x.k]; if (x.dataEm) delete a[x.dataEm]; }
+    podar();
     const vis = visiveis();
     if (i >= vis.length) i = vis.length - 1;
     const q = vis[i];
@@ -76,6 +85,7 @@ export function interview({ perguntas, respostas, onDone, onCancel, avatar = 'co
         for (const x of perguntas) if (x.se && !x.se(a)) { delete a[x.k]; if (x.dataEm) delete a[x.dataEm]; }
         // a data da liberação só existe com a resposta "sim"
         for (const x of perguntas) if (x.dataEm) { if (a[x.k] !== 'sim') delete a[x.dataEm]; else if (!a[x.dataEm]) a[x.dataEm] = hoje; }
+        podar();
         onDone(a);
       } else { i = p + 1; draw(); window.scrollTo(0, 0); }
     }, 'primary lg grow');

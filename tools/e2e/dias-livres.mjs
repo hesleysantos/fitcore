@@ -88,7 +88,9 @@ export default async (page) => {
     }
   });
   ok(viuPergunta && viuDias, 'viu as duas perguntas');
-  ok(vistas.indexOf('Tem algum dia em que você não pode treinar?') === vistas.indexOf('Quantos dias por semana você consegue treinar?') - 1, 'a pergunta nova vem logo antes de "quantos dias"');
+  // entre as duas, só a de quem também corre ("Em algum desses dias você ainda quer correr?")
+  const iS = vistas.indexOf('Tem algum dia em que você não pode treinar?'), iD = vistas.indexOf('Quantos dias por semana você consegue treinar?');
+  ok(iS >= 0 && (iD === iS + 1 || (iD === iS + 2 && vistas[iS + 1] === 'Em algum desses dias você ainda quer correr?')), 'a pergunta nova vem logo antes de "quantos dias": ' + vistas.slice(iS, iD + 1).join(' | '));
   await page.sleep(500);
   const resp = await st('s.trainer.answers.semTreino');
   ok(JSON.stringify(resp) === JSON.stringify(['3', '0']), 'resposta guardada: ' + JSON.stringify(resp));
@@ -125,18 +127,26 @@ export default async (page) => {
   ok(await page.eval(`const b = document.querySelector('.card.dia[data-wd="0"] .chip-agenda'); if (!b) return false; b.click(); await new Promise((r) => setTimeout(r, 400)); return /marcou que não treina neste dia/.test(document.querySelector('.sheet').innerText);`), 'escolher treino à mão no domingo: a folha lembra que é dia sem treino');
   await page.eval(`for (const b of document.querySelectorAll('.sheet .iconbtn[aria-label="Fechar"]')) b.click();`); await page.sleep(300);
 
-  console.log('4. Entrevista da corrida: os dias bloqueados não aparecem (a mesma preferência)');
+  console.log('4. Entrevista da corrida: os dias sem treino (a mesma resposta) e o domingo só para a corrida');
   await page.goto(B + '#/corrida', 900);
   ok(await page.click('Refazer a entrevista'), 'abriu a entrevista da corrida');
   await page.sleep(400);
   await page.eval(`const b = [...document.querySelectorAll('.sheet button')].find((x) => /^(Refazer|Responder|Continuar|Sim)/.test(x.textContent.trim())); if (b) b.click();`); await page.sleep(400);
-  const vistasC = await entrevista(async () => {}, 'Em quais dias da semana você pode correr?');
+  let vistasC = await entrevista(async () => {}, 'Tem algum dia em que você não pode treinar?');
+  ok((vistasC[vistasC.length - 1] || '') === 'Tem algum dia em que você não pode treinar?', 'a pergunta dos dias sem treino também está na entrevista da corrida');
+  ok((await opcoes()).filter((o) => o.on).map((o) => o.t).join() === 'Quarta,Domingo', 'já vem com a resposta do Treinador (quarta e domingo)');
+  await avancar(); await page.sleep(150);
+  vistasC = await entrevista(async () => {}, 'Em algum desses dias você ainda quer correr?');
+  ok((vistasC[vistasC.length - 1] || '') === 'Em algum desses dias você ainda quer correr?', 'quem também faz musculação: "ainda quer correr" nesses dias?');
+  ok((await opcoes()).map((o) => o.t).join() === 'Quarta,Domingo,Não, nenhum treino nesses dias', 'só os dias sem treino, e "nenhum"');
+  await escolher('Domingo'); await page.sleep(100);
+  await page.shot('dias-livres/so-corrida');
+  await avancar(); await page.sleep(150);
+  vistasC = await entrevista(async () => {}, 'Em quais dias da semana você pode correr?');
   const ultima = vistasC[vistasC.length - 1] || '';
   ok(ultima === 'Em quais dias da semana você pode correr?', 'chegou à pergunta dos dias da corrida');
   const lc = await opcoes();
-  ok(lc.length === 5 && !lc.some((o) => /Quarta|Domingo/.test(o.t)), 'sem quarta e domingo nas opções: ' + lc.map((o) => o.t).join(', '));
-  ok(lc.filter((o) => o.on).map((o) => o.t).join() === 'Segunda-feira,Sexta-feira', 'a resposta guardada perdeu os dias bloqueados: ' + lc.filter((o) => o.on).map((o) => o.t).join());
-  ok(/no Treinador você marcou que não treina nesses dias/.test(await page.text()), 'a pergunta diz por quê');
+  ok(lc.length === 6 && !lc.some((o) => /Quarta/.test(o.t)) && lc.some((o) => /Domingo/.test(o.t)), 'sem quarta; domingo volta para a corrida: ' + lc.map((o) => o.t).join(', '));
   ok(await semRolagem(), 'sem rolagem para o lado');
   await page.shot('dias-livres/corrida-dias');
 

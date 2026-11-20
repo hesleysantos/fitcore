@@ -24,7 +24,7 @@ import { FAIXA_DA_RESPOSTA, FAIXAS_PAUSA } from './pausa.js';
 import { LOCAIS_DOR, DIAS_ATIVA, dorDeAlerta, doresAtivas } from './dor.js';
 import { doresForaDaCorrida } from './saude-fora.js';
 import { comboAtual } from './combinado.js';
-import { diasBloqueados } from './dias-livres.js';
+import { diasSemCorrida, perguntaSemTreino, perguntaSoCorrida, semCorridaDe } from './dias-livres.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { TIPOS_TREINO, DOR_CORRIDA, MOTIVOS_CARGA } from '../data/corrida.js';
 import { perguntaCondicoes, perguntaTriagem, perguntaRemedios, perguntaLiberado, condicoesDe, sinaisDe, remediosDe, soComSupervisao, respostasProtegidas } from './saude.js';
@@ -106,8 +106,11 @@ export const PERGUNTAS = [
     op: [['3', '3 km', ''], ['5', '5 km', ''], ['10', '10 km', ''], ['21', 'Meia maratona', ''], ['42', 'Maratona', ''], ['nao', 'Não tenho', '']],
   },
   { k: 'resultadoMin', tipo: 'numero', se: (a) => corre(a) && !!a.resultado && a.resultado !== 'nao', titulo: 'Em quanto tempo?', ajuda: 'Em horas, minutos e segundos, como no relógio. Exemplo: 27 min 30 s.', min: 8, max: 420, un: 'minutos', padrao: 30, formato: 'tempo' },
-  { k: 'dias', tipo: 'varios', titulo: 'Em quais dias da semana você pode correr?', ajuda: 'Marque os dias possíveis. Eu deixo pelo menos um dia de descanso por semana e evito treinos fortes em dias seguidos.', op: DIAS_OP },
-  { k: 'diaLongo', tipo: 'um', se: (a) => Array.isArray(a.dias) && a.dias.length >= 2, titulo: 'Qual é o melhor dia para o treino mais longo?', ajuda: 'Se o dia não estiver entre os que você marcou, eu escolho.', op: [['auto', 'Tanto faz', 'Eu escolho o melhor dia'], ...DIAS_OP] },
+  // dias sem treino (a mesma pergunta do Treinador: a resposta vale para os dois treinos) e, de quem também faz musculação,
+  // os dias em que ainda quer correr (logic/dias-livres.js). Os dias sem corrida saem das opções logo abaixo.
+  perguntaSemTreino(), perguntaSoCorrida(),
+  { k: 'dias', tipo: 'varios', titulo: 'Em quais dias da semana você pode correr?', ajuda: 'Marque os dias possíveis. Eu deixo pelo menos um dia de descanso por semana e evito treinos fortes em dias seguidos.', op: DIAS_OP.map((o) => [...o, (a) => !semCorridaDe(a).includes(Number(o[0]))]) },
+  { k: 'diaLongo', tipo: 'um', se: (a) => Array.isArray(a.dias) && a.dias.length >= 2, titulo: 'Qual é o melhor dia para o treino mais longo?', ajuda: 'Se o dia não estiver entre os que você marcou, eu escolho.', op: [['auto', 'Tanto faz', 'Eu escolho o melhor dia'], ...DIAS_OP.map((o) => [...o, (a) => !semCorridaDe(a).includes(Number(o[0]))])] },
   { k: 'tempo', tipo: 'um', titulo: 'Quanto tempo você tem por treino, em um dia comum?', ajuda: 'Conte com aquecimento e volta à calma.', op: [['30', 'Cerca de 30 minutos', ''], ['45', 'Cerca de 45 minutos', ''], ['60', 'Cerca de 1 hora', ''], ['90', 'Até 1h30', '']] },
   { k: 'tempoLongo', tipo: 'um', se: comDistancia, titulo: 'E no dia do treino mais longo?', op: [['60', 'Até 1 hora', ''], ['90', 'Até 1h30', ''], ['120', 'Até 2 horas', ''], ['150', 'Até 2h30', ''], ['180', 'Até 3 horas', 'O treino mais longo do plano vai até 2h30']] },
   {
@@ -1932,7 +1935,8 @@ const nSemanas = (n) => (n === 1 ? '1 semana' : `${n} semanas`);
 export function gerarPlano(respostas, opcoes) {
   const op = opcoesLimpas(opcoes);
   // dias em que a pessoa não treina (resposta do Treinador — logic/dias-livres.js): a corrida nunca cai neles
-  const livre = semDiasBloqueados(respostas, op.bloqueados);
+  // dias sem corrida: os do estado e os da própria resposta (sem treino, menos os que ficaram só para a corrida)
+  const livre = semDiasBloqueados(respostas, [...op.bloqueados, ...semCorridaDe(respostas)]);
   let pf = perfil(livre.respostas);
   if (pf.bloqueio) return null;
   if (livre.tirados.length) pf = { ...pf, diasTirados: livre.tirados, diasRemanejados: livre.todos };
@@ -2397,7 +2401,7 @@ function avisos(pf, P, { semanas, limitado }) {
     const local = { coxa: 'coxa-tras' }[k] || k, o = Object.prototype.hasOwnProperty.call(DOR_CORRIDA, local) ? DOR_CORRIDA[local] : null;
     if (o) av('warn', `Você disse que sente dor: ${o.nome.toLowerCase()}. Por isso as 2 primeiras semanas ficam sem treinos fortes e o plano sobe mais devagar (7% por semana). ${o.reduzir} Conte a dor com a intensidade em “Contar uma dor”: o plano se ajusta ao que você sente.`, [...new Set(['nhs_dor', ...o.f])].slice(0, 5));
   }
-  if (pf.diasTirados) av('info', pf.diasRemanejados ? `Os dias que você marcou para correr estão entre os dias sem treino do Treinador (${pf.diasTirados.map((w) => DIAS_NOME[w]).join(', ')}): a corrida foi para ${pf.dias.map((w) => DIAS_NOME[w]).join(', ')}. Confira em “Mudar respostas”.` : `Sem corrida ${pf.diasTirados.map((w) => DIAS_NOME[w]).join(' e ')}: no Treinador, você marcou que não treina ${pf.diasTirados.length === 1 ? 'nesse dia' : 'nesses dias'}.`, []);
+  if (pf.diasTirados) av('info', pf.diasRemanejados ? `Os dias que você marcou para correr estão entre os dias sem treino (${pf.diasTirados.map((w) => DIAS_NOME[w]).join(', ')}): a corrida foi para ${pf.dias.map((w) => DIAS_NOME[w]).join(', ')}. Confira em “Mudar respostas”.` : `Sem corrida ${pf.diasTirados.map((w) => DIAS_NOME[w]).join(' e ')}: você marcou que não treina ${pf.diasTirados.length === 1 ? 'nesse dia' : 'nesses dias'}.`, []);
   if (pf.descansoForcado != null) av('info', `Você marcou os 7 dias. Deixei ${DIAS_NOME[pf.descansoForcado]} como descanso: pelo menos um dia sem treino por semana.`, ['meeusen2013', 'warden2021']);
   if (pf.nivel === 0 && !pf.gestante && pf.tempo <= 30) av('info', 'Com cerca de 30 minutos por treino, o programa chega a 26 minutos seguidos de corrida. Para chegar aos 30, as últimas semanas pedem treinos de 35 a 40 minutos, contando a caminhada do começo e do fim.', ['nhs_c25k']);
   if (limitado) av('info', `Com os dias e o tempo que você tem, o plano chega a cerca de ${limitado} km por semana. Para evoluir mais, abra mais um dia ou mais tempo por treino.`, ['fokkema2020', 'knopp2024']);
@@ -2511,7 +2515,7 @@ function opcoesDoEstado(st, hoje) {
   return {
     // + problemas de saúde que não vêm do treino (logic/saude-fora.js), já com o efeito na corrida pronto em `fora`
     inicio: run.inicio, hoje, registros: Array.isArray(st.runs) ? st.runs : [], diasForca: forca, diasPernas: pernas, dores: [...doresAtivas(st, hoje), ...(() => { try { return doresForaDaCorrida(st, hoje); } catch { return []; } })()], desde,
-    bloqueados: diasBloqueados(st), // dias em que a pessoa não treina (logic/dias-livres.js)
+    bloqueados: diasSemCorrida(st), // dias sem corrida: os sem treino, menos os que ficaram só para a corrida (logic/dias-livres.js)
     foco: comboAtual(st).foco, mostrados: run.mostrados, degrau: run.degrau, carga: run.carga,
     emagrecer: querEmagrecer(st),
     // o plano começou na segunda-feira seguinte ao aceite? (as pausas adiam o início guardado: desconta)
