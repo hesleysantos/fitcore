@@ -91,10 +91,13 @@ export default async (page) => {
 
     console.log('3. "Melhorou": volta aos poucos');
     await page.goto(B + '#/', 300); await page.reload(1200);
-    await page.click('Melhorou', '#saude-fora button'); await page.sleep(600);
+    // no Início, uma linha por problema; o "Melhorou" fica no detalhe, que abre ao tocar
+    ok(await page.eval(`return document.querySelectorAll('#saude-fora .saude-item').length === 1 && !document.querySelector('#saude-fora .note');`), 'Início: uma linha curta, sem o texto inteiro');
+    await clicar('#saude-fora .saude-item'); await page.sleep(400);
+    await page.click('Melhorou', '.sheet button'); await page.sleep(600);
     s = await saude();
     ok(s[0].fim === dk(hoje), '"Melhorou" gravado');
-    ok(/Volta aos poucos: o joelho/.test(await texto('#saude-fora')), 'a região volta com menos carga por uma semana');
+    ok(!(await page.eval(`return !!document.querySelector('#saude-fora');`)), 'depois de "Melhorou", o aviso some do Início (a volta gradual segue só dentro do treino)');
 
     console.log('4. Pela tela da corrida: febre → sem treino');
     await page.goto(B + '#/corrida', 300); await page.reload(1400);
@@ -120,7 +123,7 @@ export default async (page) => {
     ok(!(await page.eval(`const m = await import('/js/store.js'); return !!m.state.current;`)), 'nenhum treino começou');
     await naFolha('Já melhorei'); await page.sleep(700);
     const ini3 = await texto();
-    ok(/Volta aos poucos/.test(ini3) && /Iniciar treino/.test(ini3) && /treino leve/.test(ini3), 'depois de melhorar: treino leve, com "Iniciar treino"');
+    ok(!/Volta aos poucos/.test(ini3) && /Iniciar treino/.test(ini3) && !(await page.eval(`return !!document.querySelector('#saude-fora');`)), 'depois de melhorar: o aviso some do Início e o treino volta');
     ok(await semRolagem(), 'sem rolagem para o lado');
     await foto(`saude-fora/inicio-volta-${tema}`);
   }

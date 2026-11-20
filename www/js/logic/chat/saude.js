@@ -10,7 +10,7 @@ import { LOCAIS_DOR } from '../dor.js';
 import { doencaDeOutro, cansouDe } from './comum.js';
 // a doença já passou e a pergunta é como voltar ("como volto depois de uma gripe de 2 semanas")
 const JA_PASSOU = /\b(como (eu )?volto|voltar a treinar|voltando a treinar|depois (de|da|do) (uma |um |minha |meu )?(gripe|covid|virose|doenca|cirurgia|dengue))\b/;
-import { TIPOS_SAUDE, GRAUS_SAUDE, SINAIS, MAX_SAUDE, proximoPasso, novoProblema, efeitoDoProblema, efeitoDeHoje, sinaisDeEmergencia } from '../saude-fora.js';
+import { TIPOS_SAUDE, GRAUS_SAUDE, SINAIS, MAX_SAUDE, proximoPasso, novoProblema, efeitoDoProblema, efeitoDeHoje, sinaisDeEmergencia, anotarProblema } from '../saude-fora.js';
 
 export { sinaisDeEmergencia };
 
@@ -140,8 +140,7 @@ function montarDecisao(r, coach) {
         const p = novoProblema(id, hoje, r);
         if (!p) return false;
         if (!Array.isArray(s.saudeFora)) s.saudeFora = [];
-        s.saudeFora.push(p);
-        if (s.saudeFora.length > MAX_SAUDE) s.saudeFora.splice(0, s.saudeFora.length - MAX_SAUDE);
+        anotarProblema(s.saudeFora, p); // o mesmo problema contado de novo substitui o anterior
         return undefined;
       },
       depois: ef.musc === 'sem' ? 'Anotado. Quando melhorar, toque em “Melhorou” no Início.' : 'Anotado. O treino de hoje já leva isso em conta.',

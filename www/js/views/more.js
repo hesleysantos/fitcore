@@ -14,7 +14,7 @@ import { abrirExportar } from './exportar.js';
 import { abrirPrivacidade, abrirTermos, blocoPrivacidade, blocoTermos } from './termos.js';
 import { folhaDoNome } from './home.js';
 
-export const APP_VERSAO = '1.18.0';
+export const APP_VERSAO = '1.18.1';
 
 // ---------- Minha academia ----------
 export function gymView() {

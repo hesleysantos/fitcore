@@ -34,8 +34,25 @@ test('saúde fora do treino: registro válido passa inteiro; lixo é recusado', 
   // lista: sem repetidos, em ordem de data, com limite
   const l = S.limparSaudeFora([prob({ id: 'b', data: '2026-11-10' }), prob({ id: 'a', data: '2026-11-02' }), prob({ id: 'a', data: '2026-11-03' }), { lixo: 1 }]);
   assert.deepEqual(l.map((x) => x.id), ['a', 'b']);
-  assert.equal(S.limparSaudeFora(Array.from({ length: S.MAX_SAUDE + 30 }, (_, i) => prob({ id: 'p' + i }))).length, S.MAX_SAUDE);
+  const diaN = (i) => new Date(Date.UTC(2025, 0, 1 + i)).toISOString().slice(0, 10); // um registro por dia (cópias no mesmo dia viram uma)
+  assert.equal(S.limparSaudeFora(Array.from({ length: S.MAX_SAUDE + 30 }, (_, i) => prob({ id: 'p' + i, data: diaN(i) }))).length, S.MAX_SAUDE);
   assert.deepEqual(S.limparSaudeFora('x'), []);
+  // cópias do mesmo problema no mesmo dia (versões antigas guardavam uma a cada relato): fica a última
+  const copias = S.limparSaudeFora([1, 2, 3, 4].map((n) => prob({ id: 'c' + n, tipo: 'corte', onde: 'braco', data: '2026-11-17' })));
+  assert.deepEqual(copias.map((x) => x.id), ['c4']);
+  // contar de novo o mesmo problema em curso substitui; outro local ou um problema já terminado, não
+  const lista = [prob({ id: 'x1', tipo: 'corte', onde: 'braco', data: '2026-11-15' })];
+  assert.ok(S.anotarProblema(lista, prob({ id: 'x2', tipo: 'corte', onde: 'braco', data: '2026-11-17' })));
+  assert.deepEqual(lista.map((x) => x.id), ['x2']);
+  S.anotarProblema(lista, prob({ id: 'x3', tipo: 'corte', onde: 'joelho', data: '2026-11-17' }));
+  assert.deepEqual(lista.map((x) => x.id), ['x2', 'x3']);
+  // "Melhorou" encerra também as cópias do mesmo problema ainda em aberto (registradas em dias diferentes)
+  const varias = [prob({ id: 'm1', tipo: 'corte', onde: 'braco', data: '2026-11-15' }), prob({ id: 'm2', tipo: 'corte', onde: 'braco', data: '2026-11-16' }), prob({ id: 'm3', tipo: 'corte', onde: 'joelho', data: '2026-11-16' })];
+  assert.ok(S.marcar(varias, 'm2', 'melhorou', '2026-11-17'));
+  assert.deepEqual(varias.map((x) => x.fim), ['2026-11-17', '2026-11-17', '']);
+  const velho = [prob({ id: 'v1', tipo: 'resfriado', data: '2026-01-02', fim: '2026-01-05' })];
+  S.anotarProblema(velho, prob({ id: 'v2', tipo: 'resfriado', data: '2026-11-17' }));
+  assert.deepEqual(velho.map((x) => x.id), ['v1', 'v2']);
 });
 
 test('cada tipo × gravidade × região (e sinais) → o efeito certo', () => {
@@ -277,7 +294,9 @@ test('chat: intenções do Treinador e do Treinador de corrida, percorridas até
       const s = JSON.parse(JSON.stringify(ctx.st));
       assert.notEqual(a.aplicar(s, ctx), false, rot);
       const limpo = store.sanitize(s);
-      assert.equal(limpo.saudeFora.length, ctx.st.saudeFora.length + 1, 'anotado e válido: ' + rot);
+      // anotado e válido; o mesmo problema ainda em curso (a febre "z") é substituído pelo relato novo, sem duplicar
+      const substituiu = limpo.saudeFora.length === ctx.st.saudeFora.length && ctx.st.saudeFora.some((q) => !limpo.saudeFora.some((x) => x.id === q.id));
+      assert.ok(limpo.saudeFora.length === ctx.st.saudeFora.length + 1 || substituiu, 'anotado e válido: ' + rot);
       const novo = limpo.saudeFora[limpo.saudeFora.length - 1];
       assert.equal(novo.data, ctx.hoje);
       // a decisão mostrada é a mesma que o app aplica depois de anotar

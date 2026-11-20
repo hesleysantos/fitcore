@@ -7,7 +7,7 @@ import { folha } from './common.js';
 import { REFS } from '../data/knowledge.js';
 import { REFS_CORRIDA } from '../data/corrida.js';
 import { LOCAIS_DOR } from '../logic/dor.js';
-import { TIPOS_SAUDE, GRAUS_SAUDE, SINAIS, MAX_SAUDE, proximoPasso, novoProblema, efeitoDoProblema, efeitoDeHoje, problemasDeHoje, marcar } from '../logic/saude-fora.js';
+import { TIPOS_SAUDE, GRAUS_SAUDE, SINAIS, MAX_SAUDE, proximoPasso, novoProblema, efeitoDoProblema, efeitoDeHoje, problemasDeHoje, marcar, anotarProblema } from '../logic/saude-fora.js';
 
 const hojeK = () => dateKey(new Date());
 const fontes = (ks) => {
@@ -90,7 +90,7 @@ export function contarProblema({ tipo = '', aoSalvar = null } = {}) {
     if (ef) card.appendChild(porQue(ef.porque, ef.refs));
     corpo.appendChild(card);
     rodape.appendChild(btn('Anotar', () => {
-      update((s) => { if (!Array.isArray(s.saudeFora)) s.saudeFora = []; s.saudeFora.push(p); if (s.saudeFora.length > MAX_SAUDE) s.saudeFora.splice(0, s.saudeFora.length - MAX_SAUDE); });
+      update((s) => { if (!Array.isArray(s.saudeFora)) s.saudeFora = []; anotarProblema(s.saudeFora, p); });
       f.close();
       toast('Anotado. O treino de hoje já leva isso em conta.');
       if (aoSalvar) aoSalvar(p);
@@ -118,40 +118,58 @@ function agir(id, acao, aoMudar, msg) {
   if (aoMudar) aoMudar();
   refresh();
 }
+// O que um problema muda hoje, por inteiro: o texto, o "Por quê?" e as ações ("Melhorou", "Ainda não"...)
+function detalheDoProblema(p, ef, hoje, aoMudar) {
+  const t = TIPOS_SAUDE[p.tipo];
+  const sub = [t.nome + (p.onde ? ' · ' + LOCAIS_DOR[p.onde] : ''), quando(diasDesde(p.data, hoje))].join(' · ');
+  const linha = h('div', { class: 'col gap-s', 'data-problema': p.id, 'data-nivel': ef.nivel });
+  linha.appendChild(h('div', null, h('div', { class: 'bold', text: ef.titulo }), h('div', { class: 'small muted', text: sub })));
+  if (ef.nivel === 'urgente') linha.appendChild(ligar());
+  linha.appendChild(note(tipoNota(ef.nivel), ef.texto + (ef.ate ? ` Até ${fmtDia(ef.ate)}.` : '')));
+  if (ef.aviso) linha.appendChild(note('warn', ef.aviso));
+  linha.appendChild(porQue(ef.porque, ef.refs));
+  if (ef.fase === 'ativo') {
+    const acoes = h('div', { class: 'row wrap gap-s' });
+    if (ef.perguntar) acoes.appendChild(h('span', { class: 'small bold grow', text: 'Melhorou?' }));
+    acoes.appendChild(btn('Melhorou', () => agir(p.id, 'melhorou', aoMudar, 'Que bom! O treino volta aos poucos.'), 'sm ghost', 'check'));
+    if (ef.perguntar) acoes.appendChild(btn('Ainda não', () => agir(p.id, 'ainda', aoMudar, 'Certo. O treino segue ajustado.'), 'sm ghost'));
+    if (!p.avaliado && (p.sinais || (p.tipo === 'dor-cabeca' && p.detalhe === 'esforco') || (p.tipo === 'cabeca' && p.detalhe === 'sintomas'))) acoes.appendChild(btn('Já fui avaliado', () => agir(p.id, 'avaliado', aoMudar, 'Anotado. Siga o que o profissional orientou.'), 'sm ghost'));
+    linha.appendChild(acoes);
+  }
+  return linha;
+}
 // Cartão com os problemas que mudam o treino hoje (ativos e em volta). null quando não há nenhum.
-export function cartaoSaude({ aoMudar = null, contar = true } = {}) {
+// compacto (Início): uma linha por problema ("Volta aos poucos: o braço · até 24/11"); o texto, o "Por quê?" e o
+// "Melhorou" abrem ao tocar. O que é urgente (procurar atendimento agora) continua à vista, por inteiro.
+export function cartaoSaude({ aoMudar = null, contar = true, compacto = false } = {}) {
   const hoje = hojeK();
-  const itens = problemasDeHoje(state, hoje);
+  // no Início, depois do "Melhorou" o aviso some: a volta gradual (menos carga por alguns dias) segue só dentro do treino
+  const itens = problemasDeHoje(state, hoje).filter((x) => !compacto || x.ef.fase === 'ativo');
   if (!itens.length) return null;
   const card = h('div', { class: 'card col gap-s', id: 'saude-fora' });
   for (const { p, ef } of itens) {
+    if (!compacto || ef.nivel === 'urgente') { card.appendChild(detalheDoProblema(p, ef, hoje, aoMudar)); continue; }
     const t = TIPOS_SAUDE[p.tipo];
-    const sub = [t.nome + (p.onde ? ' · ' + LOCAIS_DOR[p.onde] : ''), quando(diasDesde(p.data, hoje))].join(' · ');
-    const linha = h('div', { class: 'col gap-s', 'data-problema': p.id, 'data-nivel': ef.nivel });
-    linha.appendChild(h('div', null, h('div', { class: 'bold', text: ef.titulo }), h('div', { class: 'small muted', text: sub })));
-    if (ef.nivel === 'urgente') linha.appendChild(ligar());
-    linha.appendChild(note(tipoNota(ef.nivel), ef.texto + (ef.ate ? ` Até ${fmtDia(ef.ate)}.` : '')));
-    if (ef.aviso) linha.appendChild(note('warn', ef.aviso));
-    linha.appendChild(porQue(ef.porque, ef.refs));
-    if (ef.fase === 'ativo') {
-      const acoes = h('div', { class: 'row wrap gap-s' });
-      if (ef.perguntar) acoes.appendChild(h('span', { class: 'small bold grow', text: 'Melhorou?' }));
-      acoes.appendChild(btn('Melhorou', () => agir(p.id, 'melhorou', aoMudar, 'Que bom! O treino volta aos poucos.'), 'sm ghost', 'check'));
-      if (ef.perguntar) acoes.appendChild(btn('Ainda não', () => agir(p.id, 'ainda', aoMudar, 'Certo. O treino segue ajustado.'), 'sm ghost'));
-      if (!p.avaliado && (p.sinais || (p.tipo === 'dor-cabeca' && p.detalhe === 'esforco') || (p.tipo === 'cabeca' && p.detalhe === 'sintomas'))) acoes.appendChild(btn('Já fui avaliado', () => agir(p.id, 'avaliado', aoMudar, 'Anotado. Siga o que o profissional orientou.'), 'sm ghost'));
-      linha.appendChild(acoes);
-    }
-    card.appendChild(linha);
+    const sub = [t.nome + (p.onde ? ' · ' + LOCAIS_DOR[p.onde] : ''), ef.ate ? 'até ' + fmtDia(ef.ate) : quando(diasDesde(p.data, hoje))].join(' · ');
+    const abrir = () => {
+      const fl = folha({ title: 'Saúde', body: detalheDoProblema(p, ef, hoje, () => { fl.close(); if (aoMudar) aoMudar(); }) });
+    };
+    card.appendChild(h('button', { class: 'hoje-item saude-item', type: 'button', 'data-problema': p.id, 'data-nivel': ef.nivel, onClick: abrir },
+      h('span', { class: 'hoje-ic' }, icon('heart', 's')),
+      h('span', { class: 'grow col hoje-txt' }, h('span', { class: 'bold ellipsis', text: ef.titulo }), h('span', { class: 'small muted', text: sub })),
+      ef.perguntar && ef.fase === 'ativo' ? h('span', { class: 'badge acc', text: 'Melhorou?' }) : icon('right', 's muted')));
   }
   if (contar) card.appendChild(botaoContarProblema('block ghost sm', aoMudar));
   return card;
 }
 
 // Aviso para o treino de musculação de hoje: null quando nada muda.
-export function avisoDoTreino() {
+// soAtivos (Início): depois do "Melhorou", nada de aviso fora do treino
+export function avisoDoTreino({ soAtivos = false } = {}) {
   let e;
   try { e = efeitoDeHoje(state, hojeK()); } catch { return null; }
   if (!e.principal) return null;
+  if (soAtivos && !e.itens.some((x) => x.ef.fase === 'ativo')) return null;
   if (e.musc === 'sem') return note(e.principal.ef.nivel === 'urgente' ? 'danger' : 'warn', `${e.principal.ef.titulo}: ${e.principal.ef.texto}`);
   if (e.musc === 'leve') return note('info', 'Hoje, treino leve: uma série a menos, menos carga e pare se algo piorar.');
   const bloqueadas = e.regioes.filter((x) => x.modo === 'bloqueia');

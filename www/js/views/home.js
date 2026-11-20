@@ -87,8 +87,11 @@ export function homeView() {
 
   // problema de saúde que não vem do treino (febre, pancada...) e muda o treino de hoje: logic/saude-fora.js
   let saudeHoje = null, semTreino = false;
-  try { saudeHoje = cartaoSaude(); semTreino = semTreinoHoje(state, dateKey(hoje)); } catch { saudeHoje = null; }
-  if (saudeHoje) body.push(saudeHoje);
+  // uma linha por problema; o detalhe abre ao tocar (contar outro fica nos atalhos)
+  try { saudeHoje = cartaoSaude({ compacto: true, contar: false }); semTreino = semTreinoHoje(state, dateKey(hoje)); } catch { saudeHoje = null; }
+  // no alto só o que é urgente (procurar atendimento agora); o resto desce para depois do dia e da semana
+  const saudeUrgente = !!(saudeHoje && saudeHoje.querySelector('[data-nivel="urgente"]'));
+  if (saudeHoje && saudeUrgente) body.push(saudeHoje);
 
   // treino em andamento
   if (state.current) {
@@ -132,7 +135,7 @@ export function homeView() {
       linhas.push(itemHoje({ ic: 'dumbbell', id: 'inicio-musculacao', titulo: `Musculação: ${dia.nome}`, sub: `${plural(dia.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(dia)} min`, selo: feitoHoje ? badge('Feito', 'ok') : null, aoTocar: abrirHoje }));
       if (efHoje.veioDe) linhas.push(h('p', { class: 'small', id: 'inicio-movido', text: `Veio de ${nomeDoDia(efHoje.veioDe, hojeK)}.` }));
       if (!feitoHoje && treinouHoje) linhas.push(h('p', { class: 'small muted', text: 'Você já fez outro treino hoje; este é o agendado para o dia.' }));
-      const av = (() => { try { return avisoDoTreino(); } catch { return null; } })();
+      const av = (() => { try { return avisoDoTreino({ soAtivos: true }); } catch { return null; } })();
       if (av) linhas.push(av);
       if (!semTreino) acoes.push(btn(feitoHoje ? 'Treinar de novo' : 'Iniciar treino', () => startSession(plan.id, dia.id), feitoHoje ? 'sm grow' : 'primary grow', 'play'));
     } else if (!corridaHoje && !marcaMovidaHoje) {
@@ -245,6 +248,9 @@ export function homeView() {
     h('div', null, h('h2', { text: 'Sua semana' }), h('div', { class: 'small muted', id: 'semana-contagem', text: comCorrida ? `Musculação ${comMeta ? `${feitos.size}/${meta}` : feitos.size} · ${contaCorrida}` : comMeta ? `${feitos.size} de ${meta} ${meta === 1 ? 'treino' : 'treinos'}` : `${feitosTxt} nesta semana` })),
     week,
     seq > 0 ? h('div', { class: 'row small' }, icon('flame', 's accent'), h('span', { text: seq === 1 ? '1 semana com a meta cumprida' : `${seq} semanas seguidas com a meta cumprida` })) : null));
+
+  // saúde (febre, pancada, corte...): uma linha por problema, abaixo do dia e da semana
+  if (saudeHoje && !saudeUrgente) body.push(saudeHoje);
 
   // evolução: as dicas mais importantes da análise dos treinos
   // (quem só corre também: a análise do aeróbico da semana usa as corridas)

@@ -194,7 +194,22 @@ export function limparSaudeFora(raw) {
     vistos.add(p.id); out.push(p);
   }
   out.sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0));
-  return out.length > MAX_SAUDE ? out.slice(-MAX_SAUDE) : out;
+  // o mesmo problema (tipo e local) contado de novo enquanto ainda vale: fica só o mais recente. Versões antigas
+  // guardavam uma cópia a cada vez que a pessoa contava, e o Início mostrava todas, repetidas.
+  const unico = out.filter((p, i) => !out.slice(i + 1).some((q) => q.tipo === p.tipo && q.onde === p.onde && q.data === p.data));
+  return unico.length > MAX_SAUDE ? unico.slice(-MAX_SAUDE) : unico;
+}
+// mesmo tipo e mesmo local, e o anterior ainda muda o treino no dia do relato novo (em curso ou na volta gradual)
+const mesmoProblema = (antes, depois) => antes.tipo === depois.tipo && antes.onde === depois.onde && antes.data <= depois.data && !!efeitoDoProblema(antes, depois.data);
+// Anota um problema contado (pelo formulário ou pelo chat) sem duplicar: o mesmo problema ainda em curso é substituído
+// pelo relato novo, que traz o grau e a data de agora. Muda `lista` (um array do estado) no lugar.
+export function anotarProblema(lista, p) {
+  const novo = limparProblema(p);
+  if (!Array.isArray(lista) || !novo) return false;
+  for (let i = lista.length - 1; i >= 0; i--) { const q = limparProblema(lista[i]); if (q && mesmoProblema(q, novo)) lista.splice(i, 1); }
+  lista.push(novo);
+  if (lista.length > MAX_SAUDE) lista.splice(0, lista.length - MAX_SAUDE);
+  return true;
 }
 
 // Quantos dias o registro vale sozinho (dor de cabeça e cólica são do dia; não seguram o treino por semanas sem resposta)
@@ -439,7 +454,8 @@ export function proximoPasso(r) {
 export function marcar(lista, id, acao, hoje) {
   const p = Array.isArray(lista) ? lista.find((x) => x && x.id === id) : null;
   if (!p || !dia(hoje) || hoje < p.data) return false;
-  if (acao === 'melhorou') p.fim = hoje;
+  // "Melhorou" vale para o problema, não só para um registro: cópias do mesmo problema ainda em aberto também terminam
+  if (acao === 'melhorou') { p.fim = hoje; for (const q of lista) if (q && q !== p && q.tipo === p.tipo && (q.onde || '') === (p.onde || '') && !q.fim && dia(q.data) && q.data <= hoje) q.fim = hoje; }
   else if (acao === 'avaliado') p.avaliado = hoje;
   else if (acao === 'ainda') p.visto = hoje;
   else return false;
