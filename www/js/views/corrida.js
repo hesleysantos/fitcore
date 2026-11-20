@@ -21,7 +21,7 @@ import { cartaoCombinado, perguntarCombinado } from './combinado.js';
 import { LOCAIS_DOR, doresAtivas, limparDor, MAX_DORES } from '../logic/dor.js';
 import { botaoChat } from './chat.js';
 import { podeNaEsteira, versaoNaEsteira, naEsteira, marcarEsteira, etapasNaEsteira } from '../logic/esteira.js';
-import { podeMarcarCorrida, corridaPerdidaEm } from '../logic/perdido.js';
+import { podeMarcarCorrida, corridaPerdidaEm, reajustarDepoisDaCorrida } from '../logic/perdido.js';
 import { botaoNaoCorri, linhaNaoCorrida } from './perdido.js';
 import { cargaDaSemana, cargaDoDia, aplicarCarga, desfazerCarga } from '../logic/carga-corrida.js';
 
@@ -857,9 +857,12 @@ function formulario(data, planejado, existente, aoFechar) {
       // "não sei dizer" vale como dor em um ponto (articulação, osso ou tendão), o lado mais cauteloso
       const limpo = limparRegistro({ ...r, dores: r.dores.map((x) => ({ ...x, tipo: x.tipo === 'naosei' ? 'articular' : x.tipo })), distKm: d, durMin: t, durEst, paceTrecho: pc || null, etapas: modo === 'etapas' ? r.etapas : null, nota: nota.value, local: r.local === 'esteira' ? 'esteira' : '' });
       if (!limpo) { toast('Esse ritmo não parece possível. Confira a distância e o tempo.'); return; }
+      let reajuste = null;
       update((s) => {
         const i = s.runs.findIndex((x) => x.id === limpo.id);
         if (i >= 0) s.runs[i] = limpo; else s.runs.push(limpo);
+        // corrida marcada "Não corri" (ou que mudou de dia) feita agora, num dia sem corrida do plano: a marca vira "feita"
+        if (i < 0) { try { reajuste = reajustarDepoisDaCorrida(s, limpo, hojeKey()); } catch { reajuste = null; } if (reajuste) s.perdidos = reajuste.perdidos; }
         s.runs.sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0));
         if (s.runs.length > MAX_REGISTROS) s.runs.splice(0, s.runs.length - MAX_REGISTROS);
         if (s.run.cron && (s.run.cron.terminado || s.run.cron.data === limpo.data)) s.run.cron = null; // a corrida do dia foi registrada: o cronômetro não continua rodando
@@ -881,7 +884,7 @@ function formulario(data, planejado, existente, aoFechar) {
       if (!state.run.cron) { clearInterval(cronT); cronT = 0; keepAwake(false); }
       guardarMostrado();
       toast(soDorMuscularLeve(limpo.dores) ? 'Corrida registrada. Parece dor muscular comum de treino: costuma piorar em 1 a 3 dias e passar em até uma semana.'
-        : existente ? 'Registro atualizado.' : 'Corrida registrada! O plano leva em conta.');
+        : existente ? 'Registro atualizado.' : reajuste ? 'Corrida registrada! ' + reajuste.textos.join(' ') : 'Corrida registrada! O plano leva em conta.');
       refresh();
     }, 'primary grow', 'check')));
   return { card, definirTempo: (min) => { if (!durMinI.value.trim() && !durSegI.value.trim()) durMinI.value = String(min); } };

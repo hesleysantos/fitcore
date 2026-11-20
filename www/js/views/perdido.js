@@ -315,6 +315,12 @@ export function linhaNaoTreinado(dia, nome, aoMudar, podeDesfazer = true) {
 }
 // Linha da corrida marcada como não feita (ou que mudou de dia)
 export function linhaNaoCorrida(entrada, nome, aoMudar, podeDesfazer = true) {
+  // feita depois, em outro dia (logic/perdido.js, reajustarDepoisDaCorrida)
+  if (entrada.feitoEm) {
+    return h('div', { class: 'treino row perdido', 'data-corrida-perdida': entrada.data, 'data-feito-em': entrada.feitoEm },
+      h('div', { class: 'grow' }, h('div', { class: 'row gap-s' }, h('span', { class: 'bold', text: nome || 'Corrida' }), badge('Feita', 'ok')), h('div', { class: 'small muted', text: `Feita ${P.nomeDoDia(entrada.feitoEm, hojeK())}.` })),
+      podeDesfazer ? btn('Desfazer', () => desfazerMarca(entrada, aoMudar), 'sm ghost nao-treinei') : null);
+  }
   return h('div', { class: 'treino row perdido', 'data-corrida-perdida': entrada.data, ...(entrada.motivo ? { 'data-motivo': entrada.motivo } : {}) },
     h('div', { class: 'grow' },
       h('div', { class: 'row gap-s' }, h('span', { class: 'bold', text: nome || 'Corrida' }), badge(entrada.para ? 'Mudou de dia' : 'Não feita', entrada.para ? 'acc' : 'warn')),

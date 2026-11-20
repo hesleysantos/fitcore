@@ -79,3 +79,39 @@ test('nada muda: o treino do dia, treino de outra semana, sem plano', () => {
   const leve = livre(SEG, [['flexao-de-bracos', 1]]);
   assert.equal(P.reajustarDepoisDoTreino({ ...st, sessions: [leve] }, leve, SEG, ''), null);
 });
+
+// ---------- corrida ----------
+import { PERGUNTAS as P_CORRIDA, planoDaSemana } from '../www/js/logic/corrida.js';
+const RUN = { experiencia: 'regular', kmSemana: 25, longoAtual: 10, provas: '5a10', pausa: 'treinando', objetivo: 'saude', dias: ['1', '3', '5'], diaLongo: 'auto', tempo: '60', tempoLongo: '90', aparelho: 'gps', local: 'rua', idade: 35, peso: 72, altura: 175, lesao12m: 'nao', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'] };
+for (const q of P_CORRIDA) if (!(q.k in RUN) && !(q.se && !q.se(RUN)) && !q.opcional) RUN[q.k] = q.tipo === 'numero' ? (q.padrao ?? q.min) : q.tipo === 'um' ? q.op[0][0] : [q.op[0][0]];
+const comCorrida = (perdidos, runs = []) => store.sanitize({ run: { answers: RUN, aceitoEm: '2026-11-01T10:00:00.000Z', inicio: '2026-11-02', pausadoEm: '', pausas: [] }, perdidos, runs });
+const corrida = (id, data) => ({ id, data, tipo: 'livre', distKm: 5, durMin: 30, pse: 4 });
+
+test('corrida: "Não corri" na segunda e corrida registrada na terça (sem corrida do plano): a marca vira "feita terça"', () => {
+  const marca = { tipo: 'corrida', data: SEG, em: '2026-11-16T20:00:00.000Z', motivo: 'tempo' };
+  const st = comCorrida([marca], [corrida('r1', TER)]);
+  assert.ok(!planoDaSemana(st, TER).dias[2], 'terça sem corrida do plano');
+  const r = P.reajustarDepoisDaCorrida(st, st.runs[0], TER);
+  assert.deepEqual(r.textos, ['A corrida de segunda foi feita hoje.']);
+  assert.equal(r.perdidos[0].feitoEm, TER);
+  assert.deepEqual(store.sanitize({ perdidos: r.perdidos }).perdidos, r.perdidos);
+});
+
+test('corrida: a corrida que tinha ido para quinta é feita na terça: sai de quinta', () => {
+  const marca = { tipo: 'corrida', data: SEG, em: '2026-11-16T20:00:00.000Z', para: '2026-11-19' };
+  let st = comCorrida([marca], []);
+  assert.ok(planoDaSemana(st, TER).dias[4], 'a corrida de segunda está na quinta');
+  st = comCorrida([marca], [corrida('r1', TER)]);
+  const r = P.reajustarDepoisDaCorrida(st, st.runs[0], TER);
+  assert.deepEqual(r.textos, ['A corrida de segunda foi feita hoje: não vai mais para quinta.']);
+  const depois = planoDaSemana({ ...st, perdidos: r.perdidos }, TER);
+  assert.ok(!depois.dias[4], 'quinta fica sem corrida');
+  assert.ok(!r.perdidos[0].para && r.perdidos[0].feitoEm === TER);
+});
+
+test('corrida: a corrida do próprio dia, ou sem marca na semana, não muda nada', () => {
+  const st = comCorrida([], [corrida('r1', '2026-11-18')]);
+  assert.equal(P.reajustarDepoisDaCorrida(st, st.runs[0], '2026-11-18'), null);
+  const st2 = comCorrida([{ tipo: 'corrida', data: SEG, em: '2026-11-16T20:00:00.000Z' }], [corrida('r1', '2026-11-18')]);
+  assert.equal(P.reajustarDepoisDaCorrida(st2, st2.runs[0], '2026-11-18'), null, 'quarta tem a corrida dela');
+});

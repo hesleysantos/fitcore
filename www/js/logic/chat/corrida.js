@@ -408,7 +408,49 @@ export const comPlano = (ctx) => temCorrida(ctx.st) && temPlano(ctx);
 // bônus do motor: uma data na frase ("para amanhã", "sexta") puxa para mudar de dia
 const comDuasDatas = (i) => i.datas.filter((d) => !d.semana).length >= 2;
 const comDataFutura = (i) => i.datas.some((d) => !d.semana && d.data !== i.hoje) && /\b(mudar|mudo|passar|passo|trocar|troco|adiar|adio|deixar|deixo|remarcar|mover|antecipar|adiantar|fizer|jogar|empurrar|em vez|no lugar)\b/.test(i.texto);
+// "Corri hoje a corrida de ontem" / "na verdade eu corri": a corrida marcada como não feita foi feita depois. Registrada
+// num dia sem corrida do plano, o app já reajusta (logic/perdido.js, reajustarDepoisDaCorrida); feita no próprio dia, sem
+// registro, a marca passa a "feita".
+const HOJE_DITO = /\b(hoje|agora|agorinha)\b/;
+export function passoCorridaFeitaDepois(ctx) {
+  const hoje = ctx.hoje, st = ctx.st, seg = segundaDa(hoje);
+  const marcas = (Array.isArray(st.perdidos) ? st.perdidos : []).filter((e) => e && e.tipo === 'corrida' && e.data < hoje && segundaDa(e.data) === seg);
+  const feita = marcas.filter((e) => e.feitoEm).sort((a, b) => (a.data < b.data ? 1 : -1))[0];
+  const m = marcas.filter((e) => !e.feitoEm).sort((a, b) => (a.data < b.data ? 1 : -1))[0];
+  if (!m && feita) return { texto: [`Já está certo: a corrida de ${nomeDia(feita.data, hoje)} conta como feita ${nomeDia(feita.feitoEm, hoje)}.`], ir: [{ rotulo: 'Ver a semana', rota: 'corrida' }] };
+  if (!m) return { texto: ['Nesta semana não há corrida marcada como não feita.', 'Se você correu hoje, registre a corrida: o plano leva em conta.'], ir: [{ rotulo: 'Registrar a corrida', rota: 'corrida/dia/' + hoje }] };
+  const onde = m.para ? ` e passou para ${nomeDia(m.para, hoje)}` : '';
+  const registrar = { rotulo: 'Corri hoje: registrar', rota: 'corrida/dia/' + hoje };
+  if (HOJE_DITO.test(ctx.texto || '')) return {
+    texto: [`A corrida de ${nomeDia(m.data, hoje)} estava marcada como não feita${onde}.`, `Registre a corrida de hoje: ela passa a contar como a de ${nomeDia(m.data, hoje)}${m.para ? ` e sai de ${nomeDia(m.para, hoje)}` : ''}. O plano leva em conta o volume, e um treino forte de hoje deixa o forte de amanhã mais leve.`],
+    ir: [registrar],
+  };
+  return {
+    texto: [`A corrida de ${nomeDia(m.data, hoje)} estava marcada como não feita${onde}. Quando você correu?`],
+    acoes: [{
+      rotulo: `Corri ${nomeDia(m.data, hoje)}: marcar como feita`,
+      confirmar: `A corrida de ${nomeDia(m.data, hoje)} passa a contar como feita${m.para ? ` e sai de ${nomeDia(m.para, hoje)}` : ''}.`,
+      aplicar: (s) => {
+        const e = (Array.isArray(s.perdidos) ? s.perdidos : []).find((x) => x && x.tipo === 'corrida' && x.data === m.data);
+        if (!e) return false;
+        delete e.para; e.feitoEm = e.data;
+        s.perdidos = P.limparPerdidos(s.perdidos);
+        return true;
+      },
+      depois: 'Pronto: a corrida conta como feita.', data: m.data, semana: true,
+    }],
+    ir: [registrar],
+  };
+}
+
 export const INTENCOES = [
+  {
+    id: 'corrida-feita-depois', coach: 'corrida', titulo: 'Corri a corrida que tinha faltado', resumo: 'a corrida que você fez depois',
+    palavras: ['corrida que faltei', 'corrida faltei', 'tinha faltado', 'na verdade corri', 'acabei correndo', 'corri sim', 'consegui correr', 'corri ontem', 'corrida de ontem', 'corrida que passou', 'corri hoje corrida'],
+    bonus: (i) => (/\b(corri|consegui|acabei|fiz)\b/.test(i.texto) && (/\b(faltei|faltado|faltou|perdi|perdida|ontem|passou|tinha passado|na verdade)\b/.test(i.texto) || i.datas.some((d) => !d.semana && d.data < i.hoje)) && !/\b(nao vou|vou faltar|nao vai dar|nao consigo)\b/.test(i.texto) ? 3.5 : 0),
+    disponivel: comPlano,
+    inicio: passoCorridaFeitaDepois,
+  },
   {
     id: 'chuva', coach: 'corrida', titulo: 'Choveu ou não dá para correr na rua', resumo: 'chuva ou não poder correr na rua', data: true,
     palavras: ['caindo mundo', 'caindo agua', 'tempo fechado', 'nao da pra sair', 'nao da sair', 'nao consigo sair', '!alagado', '!alagada', 'rua alagada', '!chuva', 'correr+chuva', 'chuva nao correr', 'esta chuva', 'ta chuva', 'chuva forte', 'correr rua', 'nao da correr rua', 'sem lugar correr', 'escuro', 'tempo ruim', 'tempo ruim correr', 'clima', 'frio demais', 'muito frio', 'frio correr', 'frio rua', 'alagado', 'rua molhada', 'calor demais', 'muito calor', 'perigoso rua', 'raio', 'trovao'],

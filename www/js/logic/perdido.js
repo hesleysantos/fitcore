@@ -102,8 +102,10 @@ export function limparPerdido(x) {
   const motivo = motivoOk(x.motivo);
   const comMotivo = (o) => (motivo ? { ...o, motivo } : o);
   if (x.tipo === 'corrida') {
-    const para = diaOk(x.para) && x.para !== x.data && segundaDe(x.para) === segundaDe(x.data) ? x.para : '';
-    return comMotivo(para ? { tipo: 'corrida', data: x.data, em, para } : { tipo: 'corrida', data: x.data, em });
+    // feitoEm: a corrida foi feita depois, nesse dia (reajustarDepoisDaCorrida); com ela, não há mais dia novo
+    const feitoEm = diaOk(x.feitoEm) && segundaDe(x.feitoEm) === segundaDe(x.data) && x.feitoEm >= x.data ? x.feitoEm : '';
+    const para = !feitoEm && diaOk(x.para) && x.para !== x.data && segundaDe(x.para) === segundaDe(x.data) ? x.para : '';
+    return comMotivo(para ? { tipo: 'corrida', data: x.data, em, para } : feitoEm ? { tipo: 'corrida', data: x.data, em, feitoEm } : { tipo: 'corrida', data: x.data, em });
   }
   if (x.tipo === 'troca') {
     const planId = idStr(x.planId), diaId = idStr(x.diaId);
@@ -510,6 +512,31 @@ export function reajustarDepoisDoTreino(st, sessao, hoje, em) {
   const fim = semanaEfetiva(plan, lista, seg);
   for (const j of livres) if (fim[j].diaId && !fim[j].veioDe && !fim[j].perdido) textos.push(`${capi(nomeDoDia(fim[j].data, hoje))} volta a ter o ${nome(fim[j].diaId)}.`);
   return { perdidos: lista, textos };
+}
+
+// ---------- corrida feita depois ----------
+// A corrida marcada "Não corri" (ou que mudou para um dia seguinte) foi feita depois, num dia sem corrida do plano (ou a
+// mais no dia). A marca guarda "feita em tal dia" e, se a corrida tinha ido para um dia seguinte, ela sai de lá. O resto o
+// plano de corrida já faz com o que foi registrado: o volume da semana conta a corrida, e um treino forte feito na véspera
+// deixa o forte do dia seguinte leve (logic/corrida.js; refs buchheit2014, seiler2009). Uma corrida perdida não se repõe
+// juntando com outra (ref frandsen2025): aqui ela só foi feita em outro dia. Devolve { perdidos, textos } ou null.
+export function reajustarDepoisDaCorrida(st, registro, hoje) {
+  const D = registro && diaOk(registro.data) ? registro.data : '';
+  if (!D || !diaOk(hoje) || D > hoje || segundaDe(D) !== segundaDe(hoje)) return null;
+  const seg = segundaDe(hoje);
+  // a corrida que o plano tinha para esse dia: se havia e este é o único registro do dia, ele é ela (nada a reajustar)
+  let doDia = null;
+  try { const s = planoDaSemanaEm(st, hoje, seg); doDia = s && Array.isArray(s.dias) ? s.dias[diaDaSemana(D)] : null; } catch { doDia = null; }
+  const outros = (Array.isArray(st.runs) ? st.runs : []).filter((r) => r && r.data === D && r.id !== registro.id);
+  if (doDia && doDia.tipo !== 'descanso' && !outros.length) return null;
+  const perdidos = limparPerdidos(st.perdidos);
+  const daSemana = perdidos.filter((e) => e.tipo === 'corrida' && e.data < D && segundaDe(e.data) === seg && !e.feitoEm && (!e.para || e.para > D))
+    .sort((a, b) => (a.para && !b.para ? -1 : !a.para && b.para ? 1 : a.data < b.data ? 1 : -1));
+  const m = daSemana[0];
+  if (!m) return null;
+  const lista = perdidos.map((e) => (e === m ? (() => { const n = { ...e, feitoEm: D }; delete n.para; return n; })() : e));
+  const textos = [m.para ? `A corrida de ${nomeDoDia(m.data, hoje)} foi feita ${nomeDoDia(D, hoje)}: não vai mais para ${nomeDoDia(m.para, hoje)}.` : `A corrida de ${nomeDoDia(m.data, hoje)} foi feita ${nomeDoDia(D, hoje)}.`];
+  return { perdidos: limparPerdidos(lista), textos };
 }
 
 // A marca a gravar: 'mover' (a proposta, se houver) ou 'seguir'. `em` = ISO de agora. null se não dá para marcar.
