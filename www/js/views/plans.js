@@ -308,6 +308,10 @@ export function plansView() {
     // feriado informado pela pessoa: a linha com "Desfazer" no dia
     const dataDia = dateKey(dataDe(wd));
     if (plan && semanaVista === 0 && dataDia >= hojeK && ehFeriado(state, dataDia)) card.appendChild(linhaFeriado(dataDia));
+    // treinos feitos neste dia que não são o treino dele (outro treino do plano, treino livre): aparecem com "Ver"
+    for (const s of state.sessions.filter((x) => dateKey(new Date(x.inicio)) === dataDia && !(d && x.diaId === d.id && x.planId === plan.id))) {
+      card.appendChild(h('div', { class: 'treino row', 'data-sessao': s.id }, h('div', { class: 'grow' }, h('div', { class: 'row gap-s' }, h('span', { class: 'bold', text: s.nome || 'Treino' }), badge('Feito', 'ok'))), btn('Ver', () => go('historico/' + s.id), 'sm ghost')));
+    }
     // outros esportes do dia e "Adicionar outro treino" (semana atual, de hoje para trás: views/esportes.js)
     if (semanaVista === 0 && dataDia <= hojeK) {
       const la = linhasAtividades(dataDia, refresh);

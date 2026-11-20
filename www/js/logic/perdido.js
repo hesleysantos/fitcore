@@ -118,7 +118,15 @@ export function limparPerdido(x) {
     && movs[0].diaId === diaId && movs[0].de === x.data
     && new Set(movs.map((m) => m.de)).size === movs.length && new Set(movs.map((m) => m.para)).size === movs.length;
   if (!valido) movs = [];
-  return comMotivo({ tipo: 'musculacao', data: x.data, planId, diaId, movs, em });
+  // feitoEm: o treino deste dia já foi feito antes, nesse dia (logic/perdido.js, reajustarDepoisDoTreino);
+  // trocadoPor: neste dia a pessoa fez outro treino do plano no lugar deste
+  // (o próprio dia: a pessoa avisou depois que treinou, sem registro no app)
+  const feitoEm = diaOk(x.feitoEm) && segundaDe(x.feitoEm) === seg ? x.feitoEm : '';
+  // ('livre' = um treino fora do plano)
+  const trocadoPor = idStr(x.trocadoPor) && x.trocadoPor !== diaId ? x.trocadoPor : '';
+  // ajuste 'descanso': o treino mudou de dia para dar 48 horas aos mesmos músculos de um treino feito antes
+  const ajuste = x.ajuste === 'descanso' && movs.length ? 'descanso' : '';
+  return comMotivo({ tipo: 'musculacao', data: x.data, planId, diaId, movs, em, ...(feitoEm ? { feitoEm } : {}), ...(trocadoPor ? { trocadoPor } : {}), ...(ajuste ? { ajuste } : {}) });
 }
 export function limparPerdidos(raw) {
   if (!Array.isArray(raw)) return [];
@@ -257,7 +265,7 @@ export function podeMarcar(st, data, hoje, opc = {}) {
   const dia = treinoDoDia(st, data);
   if (!dia || dia.perdido) return nao(dia && dia.perdido ? 'marcado' : 'sem_treino');
   if (!dia.diaId) return nao('sem_treino');
-  if ((Array.isArray(st.sessions) ? st.sessions : []).some((s) => s && diaLocal(s.inicio) === data)) return nao('treinou');
+  if (!(opc && opc.aposTreino) && (Array.isArray(st.sessions) ? st.sessions : []).some((s) => s && diaLocal(s.inicio) === data)) return nao('treinou');
   if (st.current && data === hoje) return nao('em_andamento');
   if (plan.criadoEm && diaLocal(plan.criadoEm) > data) return nao('antes_do_plano');
   const d = plan.dias.find((x) => x.id === dia.diaId);
@@ -400,6 +408,108 @@ export function propor(st, data, hoje, opc = {}) {
     out.texto = `${por} O ${base.nome} volta ${naProxima(data)}, no dia de sempre.`;
   }
   return out;
+}
+
+// ---------- treino feito em outro dia (ou outro treino): o treinador reajusta a semana ----------
+// A pessoa concluiu um treino num dia em que ele não estava. Ex.: na segunda marcou "Não treinei", o Treino A passou para
+// sexta e, na terça, ela fez o Treino A. As regras são as de sempre (propor):
+//  1. O Treino A não vai mais para sexta: a mudança da marca de segunda sai (a sexta volta a ter o treino dela) e a marca
+//     guarda que ele foi feito na terça. Se o A estava num dia seguinte pela agenda (sem marca), esse dia fica livre.
+//  2. O treino que era da terça (se havia e não foi feito) vira "não treinado" nesse dia, com "fez o Treino A no lugar", e
+//     vai para outro dia desta semana pelas mesmas regras de "Não treinei" (48 horas para os mesmos músculos contando o
+//     treino feito, dias livres, corrida, um dia de descanso — refs garber2011, acsm2009, meeusen2013); sem dia que dê,
+//     volta na semana seguinte (perder um treino custa pouco — refs acsm2009, caterisano2019).
+// Treino diferente (livre, de outro plano ou montado na hora): o que conta são os músculos. Para ganhar músculo, o que mais
+// pesa é o volume da semana (ref pelland2026); por isso um treino da semana que ainda falta e cujos músculos principais o
+// treino feito já trabalhou (75% das séries de cada um ou mais — COBRE) conta como feito, e o dia dele fica livre. O que
+// não ficou coberto segue as regras de cima: o treino do dia muda de dia, e o de amanhã, se pega os mesmos músculos
+// pesados do treino feito, também muda (48 horas — ref garber2011).
+// Devolve { perdidos, textos } (as marcas novas e o que mudou, em frases) ou null quando nada muda.
+const COBRE = 0.75;
+const cobre = (feito, treino) => {
+  const pesados = Object.keys(treino.grupos).filter((g) => treino.grupos[g] >= PESADO);
+  return pesados.length > 0 && pesados.every((g) => (feito.grupos[g] || 0) >= Math.ceil(COBRE * treino.grupos[g]));
+};
+export function reajustarDepoisDoTreino(st, sessao, hoje, em) {
+  const plan = planoAtivo(st);
+  const D = sessao && typeof sessao.inicio === 'string' ? diaLocal(sessao.inicio) : '';
+  if (!plan || !sessao || !diaOk(D) || !diaOk(hoje) || D > hoje || segundaDe(D) !== segundaDe(hoje)) return null;
+  const nome = (id) => (plan.dias.find((d) => d.id === id) || {}).nome || '';
+  const doPlano = sessao.planId === plan.id && !!nome(sessao.diaId);
+  const X = doPlano ? sessao.diaId : '';
+  const seg = segundaDe(hoje);
+  const perdidos = limparPerdidos(st.perdidos);
+  // o treino do dia, que tinha saído porque a pessoa fez outro no lugar, foi feito também: volta para o dia dele
+  const trocado = X ? perdidos.find((e) => e.tipo === 'musculacao' && e.data === D && e.diaId === X && e.trocadoPor) : null;
+  if (trocado) return { perdidos: perdidos.filter((e) => e !== trocado), textos: [`O ${nome(X)} também foi feito ${nomeDoDia(D, hoje)}: fica no dia dele.`] };
+  const sem = semanaEfetiva(plan, perdidos, seg);
+  const iD = sem.findIndex((d) => d.data === D);
+  if (iD < 0 || (X && sem[iD].diaId === X)) return null;
+  const sessoes = Array.isArray(st.sessions) ? st.sessions : [];
+  const feitoNoDia = (id, data) => sessoes.some((x) => x && x !== sessao && x.planId === plan.id && x.diaId === id && diaLocal(x.inicio) === data);
+  const cargaFeita = cargaDaSessao(sessao);
+  const cargaDe_ = (id) => cargaDoTreino(plan.dias.find((d) => d.id === id));
+  const textos = [];
+  const marcas = perdidos.map((e) => ({ ...e, ...(Array.isArray(e.movs) ? { movs: e.movs.map((m) => ({ ...m })) } : {}) }));
+  const livres = []; // dias desta semana que ficaram livres
+  // 1. o mesmo treino num dia seguinte desta semana
+  const k = X ? sem.findIndex((d, j) => j > iD && d.diaId === X && !d.perdido) : -1;
+  if (k >= 0) {
+    const dk = sem[k].data;
+    const P_ = sem[k].veioDe ? marcas.find((e) => e.tipo === 'musculacao' && e.planId === plan.id && Array.isArray(e.movs) && e.movs.some((m) => m.diaId === X && m.para === dk)) : null;
+    if (P_) {
+      P_.movs = []; P_.feitoEm = D;
+      textos.push(`O ${nome(X)} foi feito ${nomeDoDia(D, hoje)}: não vai mais para ${nomeDoDia(dk, hoje)}.`);
+    } else {
+      marcas.push({ tipo: 'musculacao', data: dk, planId: plan.id, diaId: X, movs: [], em, feitoEm: D });
+      textos.push(`O ${nome(X)} foi feito ${nomeDoDia(D, hoje)}: ${nomeDoDia(dk, hoje)} fica livre.`);
+    }
+    livres.push(k);
+  } else if (X) {
+    // marcado como não treinado antes, sem dia novo ("seguir a semana"): a marca guarda que ele foi feito
+    const antes = marcas.find((e) => e.tipo === 'musculacao' && e.planId === plan.id && e.diaId === X && e.data < D && segundaDe(e.data) === seg && !e.feitoEm && !(Array.isArray(e.movs) && e.movs.length));
+    if (antes) { antes.feitoEm = D; textos.push(`O ${nome(X)} de ${nomeDoDia(antes.data, hoje)} foi feito ${nomeDoDia(D, hoje)}.`); }
+  }
+  // treino diferente: os treinos que ainda faltam na semana e cujos músculos ele já trabalhou contam como feitos
+  const Y = sem[iD].diaId;
+  const yCoberto = !X && Y && cobre(cargaFeita, cargaDe_(Y));
+  if (!X) {
+    for (let j = iD; j < 7; j++) {
+      const d = sem[j];
+      if (!d.diaId || d.perdido || feitoNoDia(d.diaId, d.data) || (j > iD && d.data <= hoje) || !cobre(cargaFeita, cargaDe_(d.diaId))) continue;
+      marcas.push({ tipo: 'musculacao', data: d.data, planId: plan.id, diaId: d.diaId, movs: [], em, feitoEm: D });
+      textos.push(j === iD ? `O treino de ${nomeDoDia(D, hoje)} trabalhou os mesmos músculos do ${nome(d.diaId)}: ele conta como feito.` : `O treino de ${nomeDoDia(D, hoje)} já trabalhou os músculos do ${nome(d.diaId)} de ${nomeDoDia(d.data, hoje)}: ele conta como feito, e ${nomeDoDia(d.data, hoje)} fica livre.`);
+      if (j > iD) livres.push(j);
+    }
+  }
+  // 2. o treino que era deste dia, se não foi feito nem ficou coberto
+  let lista = limparPerdidos(marcas);
+  if (Y && Y !== X && !yCoberto && !feitoNoDia(Y, D)) {
+    const p = propor({ ...st, perdidos: lista }, D, hoje, { aposTreino: true });
+    if (p.pode) {
+      const m = limparPerdido({ tipo: 'musculacao', data: D, planId: plan.id, diaId: Y, movs: p.movs, em, trocadoPor: X || 'livre' });
+      if (m) lista = limparPerdidos([...lista, m]);
+      const outros = p.movs.slice(1).map((x) => `o ${nome(x.diaId)} vai para ${nomeDoDia(x.para, hoje)}`);
+      textos.push(p.movs.length ? `O ${nome(Y)}, que era ${nomeDoDia(D, hoje)}, passou para ${nomeDoDia(p.movs[0].para, hoje)}${outros.length ? ' e ' + outros.join(', ') : ''}.` : `O ${nome(Y)}, que era ${nomeDoDia(D, hoje)}, volta ${naProxima(D)}: nesta semana não há dia com descanso suficiente.`);
+    }
+  }
+  // 3. o treino de amanhã com os mesmos músculos pesados do treino feito: 48 horas de descanso
+  const amanha = somaDias(D, 1);
+  const sem2 = semanaEfetiva(plan, lista, seg);
+  const iA = sem2.findIndex((d) => d.data === amanha);
+  if (iA > 0 && sem2[iA].diaId && !sem2[iA].perdido && amanha > hoje && choca(cargaFeita, cargaDe_(sem2[iA].diaId))) {
+    const Z = sem2[iA].diaId;
+    const p = propor({ ...st, perdidos: lista }, amanha, hoje, { futuro: true });
+    if (p.pode && p.movs.length) {
+      const m = limparPerdido({ tipo: 'musculacao', data: amanha, planId: plan.id, diaId: Z, movs: p.movs, em, ajuste: 'descanso' });
+      if (m) { lista = limparPerdidos([...lista, m]); textos.push(`O ${nome(Z)} de amanhã passou para ${nomeDoDia(p.movs[0].para, hoje)}: os mesmos músculos precisam de 48 horas de descanso.`); }
+    }
+  }
+  if (!textos.length) return null;
+  // o dia que ficou livre volta a ter o treino dele?
+  const fim = semanaEfetiva(plan, lista, seg);
+  for (const j of livres) if (fim[j].diaId && !fim[j].veioDe && !fim[j].perdido) textos.push(`${capi(nomeDoDia(fim[j].data, hoje))} volta a ter o ${nome(fim[j].diaId)}.`);
+  return { perdidos: lista, textos };
 }
 
 // A marca a gravar: 'mover' (a proposta, se houver) ou 'seguir'. `em` = ISO de agora. null se não dá para marcar.

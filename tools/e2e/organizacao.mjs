@@ -742,7 +742,9 @@ export default async (page) => {
   await iniciarDia('Dia T');
   r = await ev(`digitar(campo(0, 'carga da série 1'), '15'); await espera(30); await marcar(0, 0); await clicar('Pular'); await marcar(0, 1); await espera(200); const c = S.state.current; const b = barra(); const sets = c.itens[0].sets.map((x) => [x.kg, x.reps, x.ok]); const restEnd = c.restEnd; await clicar('Finalizar treino'); await espera(400); return { b, sets, restEnd, fl: folha(), n: S.state.sessions.length, cur: S.state.current, hash: location.hash };`);
   ok(J(r.sets) === J([[15, 10, true], [15, 10, true]]) && r.restEnd === 0 && /Finalizar treino/.test(r.b), 'a última série do treino não inicia descanso e a barra oferece "Finalizar treino"', r);
-  ok(r.fl === '' && r.n === 1 && r.cur === null && /^#\/historico\//.test(r.hash), 'com todas as séries feitas, finaliza direto (sem pergunta) e mostra o resumo', r);
+  // (o treino foi feito fora do dia dele: a folha "Ajustei a sua semana" pode aparecer — logic/perdido.js, reajustarDepoisDoTreino)
+  ok((r.fl === '' || r.fl === 'Ajustei a sua semana') && r.n === 1 && r.cur === null && /^#\/historico\//.test(r.hash), 'com todas as séries feitas, finaliza direto (sem pergunta) e mostra o resumo', r);
+  if (r.fl) { await page.sleep(400); await clicar('Ok'); await page.sleep(300); }
   await clicar('Início'); await page.sleep(300);
   ok(/^#\/?$/.test(await hash()), 'o botão "Início" do resumo leva à tela inicial', await hash());
   // treino livre

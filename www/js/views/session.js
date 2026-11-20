@@ -15,6 +15,7 @@ import { REFS } from '../data/knowledge.js';
 import { barrarSemTreino, avisoDoTreino } from './saude-fora.js';
 import { efeitoDeHoje } from '../logic/saude-fora.js';
 import { itensDoDia as itensDaSemana } from '../logic/ajuste-semana.js';
+import { reajustarDepoisDoTreino } from '../logic/perdido.js';
 import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate, agendarAviso, cancelarAviso, fimDoDescanso, alertaDoDescanso } from '../device.js';
 
 // ---------- carga recomendada ----------
@@ -546,17 +547,28 @@ export function sessionView() {
       if (!ok) return;
     }
     const id = c.id;
+    let ajuste = null;
     update((s) => {
       const cc = s.current;
       const itens = cc.itens.map((it) => ({ ex: it.ex, alvo: it.alvo, descanso: it.descanso, planejadas: it.sets.length, sets: it.sets.filter((x) => x.ok) })).filter((it) => it.sets.length);
-      s.sessions.push({ id: cc.id, planId: cc.planId, diaId: cc.diaId, nome: cc.nome, inicio: cc.inicio, fim: new Date().toISOString(), nota: cc.nota || '', itens });
+      const feita = { id: cc.id, planId: cc.planId, diaId: cc.diaId, nome: cc.nome, inicio: cc.inicio, fim: new Date().toISOString(), nota: cc.nota || '', itens };
+      s.sessions.push(feita);
       if (s.sessions.length > 5000) s.sessions.splice(0, s.sessions.length - 5000);
       s.current = null;
+      // treino feito num dia em que ele não estava (ex.: o treino de ontem, marcado como não feito, feito hoje) ou outro
+      // treino (livre, de outro plano): o treinador reajusta a semana com as regras de "Não treinei" (logic/perdido.js)
+      try { ajuste = reajustarDepoisDoTreino(s, feita, dateKey(new Date()), new Date().toISOString()); } catch { ajuste = null; }
+      if (ajuste) s.perdidos = ajuste.perdidos;
       cancelarAviso();
       s.ui.onboarded = true;
     });
     apagarGuia();
     replace('historico/' + id);
+    // (depois da troca de tela: a folha fecha quando a página muda)
+    if (ajuste) setTimeout(() => {
+      const f = folha({ title: 'Ajustei a sua semana', body: h('div', { class: 'col gap-s', id: 'folha-reajuste' }, ...ajuste.textos.map((t) => h('p', { text: t })), h('p', { class: 'small muted', text: 'Com as mesmas regras de sempre: 48 horas de descanso para os mesmos músculos e pelo menos um dia sem treino.' })),
+        footer: [btn('Ver a semana', () => { f.close(); go('treinos'); }, 'primary grow'), btn('Ok', () => f.close(), 'ghost grow')] });
+    }, 350);
   }
 
   function tick() {

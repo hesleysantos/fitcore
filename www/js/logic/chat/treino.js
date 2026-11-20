@@ -623,6 +623,50 @@ export function passoSeguidos(ctx) {
   if (pf.jovem) detalhes.push('Antes dos 18 anos, a força fica em dias não seguidos, com 2 dias de descanso na semana.');
   return { texto, detalhes, refs, ir: [{ rotulo: 'Ver a semana', rota: 'treinos' }] };
 }
+// "Fiz o treino que tinha faltado": o treino marcado como não feito nesta semana foi feito depois (hoje, registrado no app:
+// no fim do treino o app já reajusta a semana — logic/perdido.js, reajustarDepoisDoTreino) ou no próprio dia, sem registro
+// (a marca passa a "feito" e o treino sai do dia para onde tinha ido).
+const HOJE_DITO = /\b(hoje|agora|agorinha)\b/;
+export function passoFeitoDepois(ctx) {
+  const hoje = ctx.hoje, st = ctx.st, plan = P.planoAtivo(st);
+  if (!plan) return semTreinoNoDia('sem_treino', hoje, hoje);
+  const seg = segundaDa(hoje);
+  const nome = (id) => (plan.dias.find((d) => d.id === id) || {}).nome || 'treino';
+  const daSemana = (Array.isArray(st.perdidos) ? st.perdidos : []).filter((e) => e && e.tipo === 'musculacao' && e.planId === plan.id && e.data < hoje && segundaDa(e.data) === seg && !e.trocadoPor);
+  const feita = daSemana.filter((e) => e.feitoEm).sort((a, b) => (a.data < b.data ? 1 : -1))[0];
+  const m = daSemana.filter((e) => !e.feitoEm).sort((a, b) => (a.data < b.data ? 1 : -1))[0];
+  if (!m && feita) return { texto: [`Já está certo: o ${nome(feita.diaId)} de ${nomeDia(feita.data, hoje)} conta como feito ${nomeDia(feita.feitoEm, hoje)}, e eu reajustei a semana.`], ir: [{ rotulo: 'Ver a semana', rota: 'treinos' }] };
+  if (!m) return { texto: ['Nesta semana não há treino marcado como não feito.', 'Se você fez hoje o treino de outro dia, registre: na aba Treinos, toque em “Iniciar” nele. No fim, eu reajusto a semana.'], ir: [{ rotulo: 'Abrir Treinos', rota: 'treinos' }] };
+  const para = Array.isArray(m.movs) && m.movs.length ? m.movs[0].para : '';
+  const onde = para ? ` e passou para ${nomeDia(para, hoje)}` : '';
+  const registrar = { rotulo: `Fiz hoje: registrar o ${nome(m.diaId)}`, rota: 'treinos' };
+  const marcar = {
+    rotulo: `Fiz ${nomeDia(m.data, hoje)}: marcar como feito`,
+    confirmar: `O ${nome(m.diaId)} de ${nomeDia(m.data, hoje)} passa a contar como feito${para ? ` e sai de ${nomeDia(para, hoje)}` : ''}.`,
+    aplicar: (s) => {
+      const e = (Array.isArray(s.perdidos) ? s.perdidos : []).find((x) => x && x.tipo === 'musculacao' && x.data === m.data && x.planId === m.planId && x.diaId === m.diaId);
+      if (!e) return false;
+      e.movs = []; e.feitoEm = e.data;
+      s.perdidos = P.limparPerdidos(s.perdidos);
+      return true;
+    },
+    depois: `Pronto: o ${nome(m.diaId)} conta como feito${para ? `, e ${nomeDia(para, hoje)} volta ao que era` : ''}.`,
+    data: m.data, semana: true,
+  };
+  // "fiz hoje": o caminho é registrar o treino (o reajuste vem no fim dele); "na verdade treinei": marcar como feito
+  if (HOJE_DITO.test(ctx.texto || '')) return {
+    texto: [`O ${nome(m.diaId)} de ${nomeDia(m.data, hoje)} estava marcado como não feito${onde}.`, `Registre o treino de hoje: na aba Treinos, toque em “Iniciar” no ${nome(m.diaId)} e marque as séries. No fim, eu tiro ele de ${para ? nomeDia(para, hoje) : 'onde estava'} e, se hoje tinha outro treino, passo esse para outro dia, com 48 horas de descanso para os mesmos músculos.`],
+    detalhes: ['O reajuste usa as mesmas regras do “Não treinei”: descanso entre os mesmos músculos, dias livres, a corrida da semana e pelo menos um dia sem treino.'],
+    refs: ['garber2011', 'acsm2009', 'meeusen2013'],
+    ir: [registrar],
+  };
+  return {
+    texto: [`O ${nome(m.diaId)} de ${nomeDia(m.data, hoje)} estava marcado como não feito${onde}. Quando você fez?`],
+    acoes: [marcar],
+    ir: [registrar],
+  };
+}
+
 // O treino de outro dia desta semana feito hoje (marca "troca" de logic/perdido.js, avaliarTroca)
 export function passoAntecipar(ctx) {
   const b = bloqueio(ctx);
@@ -908,6 +952,14 @@ export const INTENCOES = [
     palavras: ['segunda a sexta', 'segunda a domingo', 'como fica semana', 'minha semana', 'semana', '!agenda', 'agenda semana', 'programacao', 'treinos semana', '!calendario', '!cronograma', 'tenho semana', 'tem semana', 'o que tenho semana', 'ver semana', 'mostra semana', 'mostrar semana', 'semana toda', 'semana inteira', 'semana treino', 'semana treinos', 'resto semana', 'proximos dia', 'proximos treinos', 'como ficou semana', 'quais dia treino', 'que dia treino', 'dias treino', 'como fica', 'como ficou', 'como ta', 'como esta', 'quais treinos semana'],
     disponivel: (ctx) => temPlano(ctx) || temCorrida(ctx.st),
     inicio: (ctx) => passoSemana(ctx, 'treinador'),
+  },
+  {
+    id: 'feito-depois', coach: 'treinador', titulo: 'Fiz o treino que tinha faltado', resumo: 'o treino que você fez depois',
+    palavras: ['treino faltei', 'treino que faltei', 'tinha faltado', 'treino perdido', 'repus treino', 'repor treino feito', 'fiz treino faltado', 'na verdade treinei', 'acabei treinando', 'consegui treinar sim', 'treinei sim', 'fiz sim treino', 'fiz treino ontem', 'fiz treino de ontem', 'treino de ontem hoje', 'treino que passou', 'treino que tinha passado', 'treino que ficou'],
+    // "fiz/treinei" + o treino que faltou (ontem, segunda, o que passou para outro dia)
+    bonus: (i) => (/\b(fiz|treinei|consegui|repus|acabei)\b/.test(i.texto) && (/\b(faltei|faltado|faltou|perdi|perdido|ontem|passou|tinha passado|ficou para tras|na verdade)\b/.test(i.texto) || i.datas.some((d) => !d.semana && d.data < i.hoje)) && !/\b(nao vou|vou faltar|nao vai dar|nao consigo)\b/.test(i.texto) ? 3.5 : 0),
+    disponivel: temPlano,
+    inicio: passoFeitoDepois,
   },
   {
     id: 'antecipar', coach: 'treinador', titulo: 'Fazer o treino de outro dia hoje', resumo: 'fazer hoje o treino de outro dia', resumoNoDia: 'fazer hoje o treino de {dia}', data: true,

@@ -292,10 +292,25 @@ const comMotivo = (e, t) => (e && P.MOTIVO_CURTO[e.motivo] ? `${cap(P.MOTIVO_CUR
 export function linhaNaoTreinado(dia, nome, aoMudar, podeDesfazer = true) {
   const hoje = hojeK();
   const para = dia.perdido.para;
+  const e = dia.perdido.entrada;
+  // feito em outro dia (logic/perdido.js, reajustarDepoisDoTreino): não é falta
+  if (e.feitoEm) {
+    return h('div', { class: 'treino row perdido', 'data-perdido': dia.data, 'data-feito-em': e.feitoEm },
+      h('div', { class: 'grow' }, h('div', { class: 'row gap-s' }, h('span', { class: 'bold', text: nome }), badge('Feito', 'ok')), h('div', { class: 'small muted', text: `Feito ${P.nomeDoDia(e.feitoEm, hoje)}.` })),
+      podeDesfazer ? btn('Desfazer', () => desfazerMarca(e, aoMudar), 'sm ghost nao-treinei') : null);
+  }
+  // mudou de dia para dar 48 horas aos mesmos músculos de um treino feito antes (não é falta)
+  if (e.ajuste === 'descanso' && para) {
+    return h('div', { class: 'treino row perdido', 'data-perdido': dia.data, 'data-ajuste': 'descanso' },
+      h('div', { class: 'grow' }, h('div', { class: 'row gap-s' }, h('span', { class: 'bold', text: nome }), badge('Mudou de dia', 'acc')), h('div', { class: 'small muted', text: `Passou para ${P.nomeDoDia(para, hoje)}: 48 horas de descanso para os mesmos músculos.` })),
+      podeDesfazer ? btn('Desfazer', () => desfazerMarca(e, aoMudar), 'sm ghost nao-treinei') : null);
+  }
+  const plan = (state.plans || []).find((p) => p.id === e.planId);
+  const outro = e.trocadoPor === 'livre' ? 'um treino livre' : e.trocadoPor && plan ? 'o ' + ((plan.dias.find((d) => d.id === e.trocadoPor) || {}).nome || 'outro treino') : '';
   return h('div', { class: 'treino row perdido', 'data-perdido': dia.data, ...(dia.perdido.entrada.motivo ? { 'data-motivo': dia.perdido.entrada.motivo } : {}) },
     h('div', { class: 'grow' },
-      h('div', { class: 'row gap-s' }, h('span', { class: 'bold', text: nome }), badge('Não treinado', 'warn')),
-      h('div', { class: 'small muted', text: comMotivo(dia.perdido.entrada, para ? `Passou para ${P.nomeDoDia(para, hoje)}.` : `Volta ${P.naProxima(dia.data)}.`) })),
+      h('div', { class: 'row gap-s' }, h('span', { class: 'bold', text: nome }), outro ? badge('Trocado', 'acc') : badge('Não treinado', 'warn')),
+      h('div', { class: 'small muted', text: (outro ? `Você fez ${outro} no lugar. ` : '') + comMotivo(dia.perdido.entrada, para ? `Passou para ${P.nomeDoDia(para, hoje)}.` : `Volta ${P.naProxima(dia.data)}.`) })),
     podeDesfazer ? btn('Desfazer', () => desfazerMarca(dia.perdido.entrada, aoMudar), 'sm ghost nao-treinei') : null);
 }
 // Linha da corrida marcada como não feita (ou que mudou de dia)
