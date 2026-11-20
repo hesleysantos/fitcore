@@ -20,6 +20,7 @@ import { EX_POR_ID } from '../data/exercises.js';
 import { METS_CARDIO } from './gasto.js';
 import { condicoesDe } from './saude.js';
 import { minutosDoRegistro, minutosEquivalentes, querEmagrecer, planoDaSemana, META_OMS_MIN, META_EMAGRECER_MIN } from './corrida.js';
+import { ESPORTE_POR_ID } from '../data/esportes.js';
 
 const DIA = 86400000, SEMANA = 7 * DIA;
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -37,7 +38,7 @@ export function metaAerobica(st) {
   if (idade && idade < 18) return { perfil: 'jovem', min: 420, texto: 'Até os 17 anos, a OMS recomenda 60 minutos por dia, em média, de atividade moderada a vigorosa.', refs: ['oms2020'] };
   if (cond.includes('gestante') || cond.includes('posparto')) return { perfil: 'gestante', min: META_OMS_MIN, texto: 'Na gestação e no pós-parto, a OMS recomenda pelo menos 150 minutos por semana de atividade moderada.', refs: ['oms2020'] };
   if (querEmagrecer(st)) return { perfil: 'emagrecer', min: META_OMS_MIN, relogio: META_EMAGRECER_MIN, texto: 'Para emagrecer, 150 a 200 minutos por semana ajudam; acima de 225, a perda tende a ser maior.', refs: ['swift2014', 'oppert2021', 'oms2020'] };
-  if (idade >= 65) return { perfil: 'idoso', min: META_OMS_MIN, texto: 'Depois dos 65 anos, a meta é a mesma, com exercícios de equilíbrio e força em 3 dias ou mais.', refs: ['oms2020'] };
+  if (idade >= 65) return { perfil: 'idoso', min: META_OMS_MIN, texto: 'Depois dos 65, a meta é a mesma, com exercícios de equilíbrio e força em 3 dias ou mais.', refs: ['oms2020'] };
   return { perfil: 'adulto', min: META_OMS_MIN, texto: 'A OMS recomenda de 150 a 300 minutos de atividade moderada por semana.', refs: ['oms2020'] };
 }
 
@@ -66,6 +67,14 @@ export function aerobicoFeito(st, agora = Date.now(), dias = 14) {
     primeiro = Math.min(primeiro, t);
     rel += m.relogio; eq += m.equivalente; n++;
   }
+  // outros esportes do dia (logic/esportes.js): de 3 METs para cima é moderado; de 6 para cima, vigoroso (vale 2)
+  for (const a of lista(st && st.atividades)) {
+    const t = a && typeof a.data === 'string' ? Date.parse(a.data + 'T12:00:00') : NaN;
+    const e = a ? ESPORTE_POR_ID.get(a.esporte) : null;
+    if (!e || !Number.isFinite(t) || t < desde - DIA / 2 || t > agora + DIA / 2 || !(a.min > 0) || e.met < 3) continue;
+    primeiro = Math.min(primeiro, t);
+    rel += a.min; eq += e.met >= 6 ? 2 * a.min : a.min; n++;
+  }
   const semanas = Number.isFinite(primeiro) ? Math.min(dias / 7, Math.max(1, (agora - Math.max(desde, primeiro)) / SEMANA)) : dias / 7;
   return { equivalente: Math.round(eq / semanas), relogio: Math.round(rel / semanas), registros: n };
 }
@@ -85,7 +94,7 @@ export function dicaCardio(st, agora = Date.now()) {
   const f = aerobicoFeito(st, agora);
   const objetivo = respostas(st, 'trainer').objetivo || '';
   const plano = doPlanoDaSemana(st, agora);
-  const conta = 'Corrida, caminhada e cardio contam; 1 min correndo vale 2.';
+  const conta = 'Corrida, caminhada, cardio e esportes contam; correr vale 2.';
   const refs = [...new Set([...meta.refs, 'compendio2024'])];
   if (f.equivalente < meta.min) {
     if (!f.registros && plano == null) return null; // nada registrado e sem plano de corrida: ainda não há o que medir

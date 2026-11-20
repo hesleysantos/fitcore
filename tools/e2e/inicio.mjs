@@ -87,5 +87,24 @@ export default async (page) => {
   await page.goto(B + '#/ajustes', 700);
   ok(/Seu nome[\s\S]*Ana/.test(await page.eval(`return document.getElementById('ajuste-nome').innerText;`)), 'Ajustes mostra o nome e deixa mudar');
 
+  console.log('5. Adicionar outro treino: outro esporte com as calorias');
+  await page.eval(`(await import('/js/store.js')).update((x) => { x.settings.tema = 'claro'; }); return true;`);
+  await page.goto(B + '#/', 800);
+  ok(await page.click('Outro treino', '#inicio-hoje button'), 'botão "Outro treino" no resumo de hoje');
+  await page.sleep(300);
+  ok(await page.eval(`const t = document.getElementById('folha-outro-treino').innerText; return /Outro treino de musculação/.test(t) && /Corrida ou caminhada/.test(t) && /Outro esporte/.test(t);`), 'opções: outro treino, corrida e outro esporte');
+  await page.click('Outro esporte', '.sheet button'); await page.sleep(400);
+  await page.eval(`document.querySelector('.sheet [data-esporte="futebol"]').click(); return true;`); await page.sleep(200);
+  const est = await page.eval(`return document.querySelector('.sheet .esporte-kcal').innerText;`);
+  ok(/≈ 450 kcal/.test(est) && /≈ 7,5 kcal por minuto/.test(est), 'futebol, 60 min, 64 kg: ≈ 450 kcal e 7,5 por minuto', est);
+  await foto('esporte');
+  await page.click('Salvar', '.sheet button'); await page.sleep(600);
+  const h = await page.eval(`return document.getElementById('inicio-hoje').innerText;`);
+  ok(h.includes('Futebol (pelada)') && /60 min · ≈ 450 kcal/.test(h), 'o futebol aparece no resumo de hoje, com as calorias', h);
+  await page.goto(B + '#/treinos', 800);
+  ok((await page.eval(`return document.querySelector('.card.dia.hl').innerText;`)).includes('Futebol (pelada)'), 'e no cartão de hoje da aba Treinos');
+  await page.click('Apagar Futebol (pelada)', '.card.dia.hl button'); await page.sleep(400);
+  ok(await page.eval(`return (await import('/js/store.js')).state.atividades.length === 0;`), 'apagar tira o registro');
+
   if (falhas.length) throw new Error(falhas.length + ' falha(s): ' + falhas.join(' | '));
 };

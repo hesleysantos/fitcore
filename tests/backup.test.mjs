@@ -66,6 +66,7 @@ function estadoCheio() {
     ] },
     // "Não treinei" (com o treino passado para outro dia) e "Não corri"
     feriados: ['2026-11-20'],
+    atividades: [{ id: 'at1', data: '2026-11-15', esporte: 'futebol', min: 60, em: '2026-11-15T20:00:00.000Z' }],
     perdidos: [
       { tipo: 'musculacao', data: '2026-11-03', planId: 'p1', diaId: plano.dias[0].id, movs: [{ diaId: plano.dias[0].id, de: '2026-11-03', para: '2026-11-05' }], em: '2026-11-03T21:00:00.000Z' },
       { tipo: 'corrida', data: '2026-11-04', em: '2026-11-04T21:00:00.000Z' },

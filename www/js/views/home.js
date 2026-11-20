@@ -22,6 +22,8 @@ import { cartaoSaude, avisoDoTreino, contarProblema } from './saude-fora.js';
 import { semTreinoHoje } from '../logic/saude-fora.js';
 import { itensDoDia } from '../logic/ajuste-semana.js';
 import { linhaCargaInicio } from './corrida.js';
+import { linhasAtividades, botaoOutroTreino } from './esportes.js';
+import { botaoChat } from './chat.js';
 
 function saudacao(hora = new Date().getHours()) {
   return hora < 5 ? 'Boa noite' : hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
@@ -149,12 +151,18 @@ export function homeView() {
     const partes = [x.distKm ? String(x.distKm).replace('.', ',') + ' km' : '', x.durMin ? Math.round(x.durMin) + ' min' : ''].filter(Boolean).join(' · ');
     linhas.push(itemHoje({ ic: 'run', titulo: x.local === 'esteira' ? 'Esteira fora do plano' : 'Corrida fora do plano', sub: partes, selo: badge('Feita', 'ok'), aoTocar: () => go('corrida') }));
   }
+  // outros esportes de hoje (futebol, natação...): tempo e calorias (views/esportes.js)
+  const esportesHoje = linhasAtividades(hojeK, refresh);
+  if (esportesHoje) linhas.push(esportesHoje);
   if (linhas.length) {
     const temAlgo = (plan && !state.current) || corridaHoje || extrasHoje.length;
     body.push(h('div', { class: 'card col gap-s hoje', id: 'inicio-hoje' },
       h('div', { class: 'row between' }, h('h2', { text: 'Hoje' }), temAlgo ? btn('Ver semana', abrirHoje, 'plain sm') : null),
       ...linhas,
-      acoes.length ? h('div', { class: 'row hoje-acoes' }, ...acoes) : null));
+      acoes.length ? h('div', { class: 'row hoje-acoes' }, ...acoes) : null,
+      // treinar outra coisa hoje: outro treino, corrida ou outro esporte
+      // dúvida para o Treinador e treinar outra coisa hoje (outro treino, corrida ou outro esporte), discretos
+      h('div', { class: 'row between outro-treino perdido-acoes' }, plan ? botaoChat('treinador', 'Dúvida? Pergunte', 'sm plain') : botaoChat('corrida', 'Dúvida? Pergunte', 'sm plain'), botaoOutroTreino(hojeK, refresh, 'plain sm', 'Outro treino'))));
   }
   const posSemana = body.length; // "Sua semana" entra logo depois do resumo de hoje
   // semana puxada (logic/carga-corrida.js): a corrida de hoje ou de amanhã fica mais leve ou muda de dia

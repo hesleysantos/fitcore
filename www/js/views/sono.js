@@ -419,7 +419,8 @@ export function sonoView() {
   } else {
     const dicas = h('div', { class: 'col', id: 'sono-dicas' });
     desenharDicas(dicas, pn.dicas);
-    body.push(cartaoMeta(pn), cartaoHorario(pn, () => desenharDicas(dicas, painelDeSono(state, hojeKey()).dicas)), cartaoNoite(pn), cartaoCochilos(pn), cartaoSemana(pn), dicas);
+    // no alto, o registro da noite (a ferramenta); a meta e o horário de dormir (informação) logo abaixo
+    body.push(cartaoNoite(pn), cartaoMeta(pn), cartaoHorario(pn, () => desenharDicas(dicas, painelDeSono(state, hojeKey()).dicas)), cartaoCochilos(pn), cartaoSemana(pn), dicas);
   }
   body.push(sinais(), faq());
   body.push(h('p', { class: 'tiny muted center', text: 'Informação educativa baseada em consensos e estudos publicados. Não substitui avaliação médica.' }));

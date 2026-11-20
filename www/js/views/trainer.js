@@ -77,10 +77,11 @@ function cabecalho() {
   return h('div', { class: 'col' }, abasTreinador('forca'),
     h('div', { class: 'coach-hd' }, h('div', { class: 'avatar' }, icon('coach', 'l')), h('div', null, h('h2', { text: 'Treinador virtual' }), h('p', { class: 'tiny muted', text: 'Baseado em diretrizes de educação física. Não substitui um profissional.' }))));
 }
+// (o aviso de que não substitui um profissional fica no fim da tela: no alto, só o que se usa)
 function cabecalhoCurto() {
-  return h('div', { class: 'col gap-s' }, abasTreinador('forca'),
-    h('div', { class: 'nutri-topo' }, h('div', { class: 'avatar' }, icon('coach', 's')), h('p', { class: 'tiny muted', text: 'Treinador virtual. Baseado em diretrizes de educação física: não substitui um profissional.' })));
+  return h('div', { class: 'col gap-s', 'data-curto': '1' }, abasTreinador('forca'));
 }
+const rodapeAviso = () => h('div', { class: 'nutri-topo rodape-aviso' }, h('div', { class: 'avatar' }, icon('coach', 's')), h('p', { class: 'tiny muted', text: 'Treinador virtual. Baseado em diretrizes de educação física: não substitui um profissional.' }));
 // seção que abre ao toque
 const acc = (titulo, filhos, id) => h('details', { class: 'acc', id }, h('summary', { text: titulo }), h('div', null, ...filhos));
 // avisos: os que mudam o que fazer (atenção e perigo) ficam à vista; os informativos vão para "Cuidados para o seu perfil"
@@ -466,5 +467,6 @@ export function trainerView() {
     };
   }
   if (modo === 'proposta' || !state.trainer.aceitoEm) return { title: 'Treinador', body: proposta() };
-  return { title: 'Treinador', body: painel() };
+  const corpo = painel();
+  return { title: 'Treinador', body: corpo[0] && corpo[0].dataset && corpo[0].dataset.curto ? [...corpo, rodapeAviso()] : corpo };
 }

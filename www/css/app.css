@@ -674,10 +674,17 @@ details.pq.perdido-pq > summary { min-height: 44px; }
 .hoje-ic { width: 36px; height: 36px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); }
 .hoje-txt { min-width: 0; gap: 1px; }
 .hoje-acoes { flex-wrap: wrap; }
-.hoje-acoes > .btn { min-width: 0; white-space: nowrap; padding-left: 10px; padding-right: 10px; }
+.hoje-acoes > .btn { min-width: 0; white-space: nowrap; padding-left: 8px; padding-right: 8px; gap: 6px; font-size: 0.95rem; }
+.hoje .outro-treino { justify-content: space-between; flex-wrap: nowrap; }
+.hoje .outro-treino .btn { padding-left: 2px; padding-right: 2px; white-space: nowrap; }
 .atalhos-tit { font-size: 1.02rem; margin: 6px 2px -4px; }
 .atalhos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .atalho { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 84px; padding: 10px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: 0.8rem; line-height: 1.2; text-align: center; cursor: pointer; }
 .atalho-ic { color: var(--accent); }
 .atalho:active, .hoje-item:active { transform: scale(0.98); }
 :root[data-letra='grande'] .atalhos, :root[data-letra='muito'] .atalhos { grid-template-columns: repeat(2, 1fr); }
+.outro-treino { justify-content: flex-end; }
+.esporte-kcal { min-height: 52px; }
+.esporte-total { font-size: 1.5rem; font-weight: 750; color: var(--accent); }
+.esporte-item .iconbtn { flex: none; }
+.resto-semana { margin: 8px 2px -2px; }

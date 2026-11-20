@@ -50,10 +50,11 @@ function cabecalho() {
     h('div', { class: 'coach-hd' }, h('div', { class: 'avatar' }, icon('run', 'l')), h('div', null, h('h2', { text: 'Treinador de corrida' }), h('p', { class: 'tiny muted', text: 'Baseado em estudos de treinamento. Não substitui um profissional.' }))));
 }
 // com proposta ou plano, o cabeçalho cabe em uma linha: o treino de hoje aparece logo
+// (o aviso de que não substitui um profissional fica no fim da tela: no alto, só o que se usa)
 function cabecalhoCurto() {
-  return h('div', { class: 'col gap-s' }, abasTreinador('corrida'),
-    h('div', { class: 'nutri-topo' }, h('div', { class: 'avatar' }, icon('run', 's')), h('p', { class: 'tiny muted', text: 'Treinador de corrida. Baseado em estudos de treinamento: não substitui um profissional.' })));
+  return h('div', { class: 'col gap-s', 'data-curto': '1' }, abasTreinador('corrida'));
 }
+const rodapeAviso = () => h('div', { class: 'nutri-topo rodape-aviso' }, h('div', { class: 'avatar' }, icon('run', 's')), h('p', { class: 'tiny muted', text: 'Treinador de corrida. Baseado em estudos de treinamento: não substitui um profissional.' }));
 function fontes(chaves) {
   const box = h('div', { class: 'col gap-s' });
   for (const k of chaves || []) if (REFS_CORRIDA[k]) box.appendChild(h('p', { class: 'ref', text: '• ' + REFS_CORRIDA[k] }));
@@ -388,10 +389,11 @@ function painel() {
       treinoHoje && !marcaHoje ? btn(dHoje.feito ? 'Ver a corrida de hoje' : 'Iniciar', () => go('corrida/dia/' + hoje), (dHoje.feito ? 'ghost' : 'primary') + ' block alvo', dHoje.feito ? 'right' : 'play') : null,
       treinoHoje && !dHoje.feito && !marcaHoje && podeMarcarCorrida(state, hoje, hoje) ? h('div', { class: 'perdido-acoes' }, botaoNaoCorri(hoje, refresh)) : null));
   }
+  // dúvida ou imprevisto (chuva, juntar com a musculação, dor): o chat do Treinador de corrida (views/chat.js), logo
+  // depois do treino de hoje (no alto, as ferramentas; as informações, abaixo)
+  body.push(botaoChat('corrida', 'Perguntar ao treinador de corrida'));
   // a carga da semana: segue, fica mais leve ou muda de dia (logic/carga-corrida.js)
   if (!sem.antesDoInicio && !sem.concluido) { const cs = cartaoSemana(hoje); if (cs) body.push(cs); }
-  // dúvida ou imprevisto (chuva, juntar com a musculação, dor): o chat do Treinador de corrida (views/chat.js)
-  body.push(botaoChat('corrida', 'Perguntar ao treinador de corrida'));
   // 2. o que muda o treino: avisos graves (meta que não coube, prova retirada), alertas dos registros, dores e ajustes
   for (const av of p.avisos) if (av.destaque || av.tipo === 'danger') body.push(aviso(av));
   for (const al of alertas(state.runs, hoje)) body.push(aviso(al));
@@ -522,7 +524,8 @@ export function corridaView() {
     };
   }
   if (modo === 'proposta' || !state.run.aceitoEm) return { title: 'Treinador', body: proposta() };
-  return { title: 'Treinador', body: painel() };
+  const corpo = painel();
+  return { title: 'Treinador', body: corpo[0] && corpo[0].dataset && corpo[0].dataset.curto ? [...corpo, rodapeAviso()] : corpo };
 }
 
 // ---------- treino do dia ----------

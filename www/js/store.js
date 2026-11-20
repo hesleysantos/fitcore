@@ -15,6 +15,7 @@ import { diaValido } from './logic/saude.js';
 import { limparPerdidos, limparFeriados } from './logic/perdido.js';
 import { limparAjustesSemana } from './logic/ajuste-semana.js';
 import { limparEsteira } from './logic/esteira.js';
+import { limparAtividades } from './logic/esportes.js';
 
 const DB_NAME = 'fitcore';
 const STORE = 'kv';
@@ -52,6 +53,7 @@ const defaults = () => ({
   diario: diarioPadrao(), // diário alimentar: o que a pessoa comeu de fato (logic/diario.js)
   perdidos: [], // "Não treinei" e "Não corri": dias marcados e para onde o treino foi (logic/perdido.js)
   feriados: [], // dias de feriado ('AAAA-MM-DD'): a academia não abre (logic/perdido.js)
+  atividades: [], // outros esportes do dia (futebol, natação...): tempo e gasto estimado (logic/esportes.js)
   ajustesSemana: [], // treino mudado só numa semana: a versão do treino para aquela semana (logic/ajuste-semana.js)
   // objetivosOk: par "treino|alimentação" que o usuário escolheu manter diferente (logic/objetivos.js)
   // backupAdiadoEm: quando a pessoa tocou em "Depois" no lembrete de backup da tela inicial
@@ -238,6 +240,7 @@ export function sanitize(raw, { doAparelho = false } = {}) {
   d.runs = limparRegistros(raw.runs); // até 3000 registros, sem id repetido
   d.perdidos = limparPerdidos(raw.perdidos);
   d.feriados = limparFeriados(raw.feriados);
+  d.atividades = limparAtividades(raw.atividades);
   // só versões de treinos que ainda existem no plano
   d.ajustesSemana = limparAjustesSemana(raw.ajustesSemana).filter((x) => d.plans.some((p) => p.id === x.planId && p.dias.some((dd) => dd.id === x.diaId)));
   const u = isObj(raw.ui) ? raw.ui : {};

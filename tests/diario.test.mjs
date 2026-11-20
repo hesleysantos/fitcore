@@ -594,7 +594,7 @@ test('alimentos só para registrar (frituras, salgados, lanches): fonte oficial,
     const f = FOOD.get(id);
     assert.ok(f, 'não existe: ' + id);
     assert.ok(f.soDiario === true && f.preco === null, 'só diário e sem preço: ' + id);
-    assert.ok(['TACO', 'IBGE'].includes(f.fonte), 'fonte TACO ou POF/IBGE: ' + id);
+    assert.ok(['TACO', 'IBGE', 'TBCA', 'USDA'].includes(f.fonte), 'fonte oficial (TACO, POF/IBGE, TBCA ou USDA): ' + id);
     assert.ok(f.porcao.g > 0 && f.porcao.desc, 'medida caseira: ' + id);
     assert.ok(!USADOS_EM_CASA.has(id), 'na lista de casa: ' + id);
   }

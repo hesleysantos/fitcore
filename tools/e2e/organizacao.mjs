@@ -105,7 +105,9 @@ export default async (page) => {
     const certo = !r.erro && r.fl === 'Modelos de treino' && r.novos === 1 && r.nome === m.nome && r.origem === 'modelo' && J(r.itens) === J(m.itens) && r.existem && r.agenda === m.semana && r.agenda === m.diasSemana && r.agendaOk && r.h2 === m.nome && r.aberta === '' && r.cards === m.itens.length && /Modelo copiado/.test(r.toast);
     ok(certo, `modelo ${k + 1} "${m.nome}": plano criado, ativo, ${m.itens.length} treino(s), agenda de ${m.semana} dia(s)`, r);
     // o primeiro treino do modelo inicia; sai sem registrar (alternando Descartar e Encerrar)
-    await clicar('Iniciar'); await page.sleep(400);
+    // (a aba Treinos começa pelo dia de hoje: clica no Iniciar do 1º treino do plano)
+    const d0 = await ev(`return S.activePlan().dias[0].id;`);
+    await clicar('Iniciar', `[data-treino="${d0}"] button`); await page.sleep(400);
     const s1 = await ev(`const c = S.state.current; return { hash: location.hash, itens: c ? c.itens.length : -1, series: c ? c.itens.map((i) => i.sets.length) : [], cards: cartoes().length, nome: c && c.nome, barra: barra() };`);
     ok(s1.hash === '#/sessao' && s1.itens === m.itens[0] && J(s1.series) === J(m.series) && s1.cards === m.itens[0] && /Encerrar/.test(s1.barra), `   inicia o 1º treino com ${m.itens[0]} exercícios e as séries do modelo`, s1);
     if (k % 2) { await clicar('Encerrar'); await confirmar(); } else { await clicar('Descartar treino'); await confirmar(); }

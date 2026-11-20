@@ -18,6 +18,7 @@ import { registrarTrocaManual } from '../logic/variacao.js';
 import { diasBloqueados } from '../logic/dias-livres.js';
 import { itensDoDia } from '../logic/ajuste-semana.js';
 import { alcance, mudarItens, seloSemana } from './ajuste-semana.js';
+import { linhasAtividades, botaoOutroTreino } from './esportes.js';
 
 const ORDEM_SEMANA = [1, 2, 3, 4, 5, 6, 0];
 const AGENDA_PADRAO = { 1: [1], 2: [1, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5], 6: [1, 2, 3, 4, 5, 6], 7: [1, 2, 3, 4, 5, 6, 0] };
@@ -307,7 +308,19 @@ export function plansView() {
     // feriado informado pela pessoa: a linha com "Desfazer" no dia
     const dataDia = dateKey(dataDe(wd));
     if (plan && semanaVista === 0 && dataDia >= hojeK && ehFeriado(state, dataDia)) card.appendChild(linhaFeriado(dataDia));
+    // outros esportes do dia e "Adicionar outro treino" (semana atual, de hoje para trás: views/esportes.js)
+    if (semanaVista === 0 && dataDia <= hojeK) {
+      const la = linhasAtividades(dataDia, refresh);
+      if (la) card.append(rotulo('star', 'Outros esportes'), la);
+      if (dataDia === hojeK) card.appendChild(h('div', { class: 'row outro-treino' }, botaoOutroTreino(dataDia, refresh)));
+    }
     semana.appendChild(card);
+  }
+  // na semana atual, o dia de hoje vem primeiro (é o que se usa); o resto da semana, embaixo, na ordem de sempre
+  const cartaoHoje = hojeWd >= 0 ? semana.querySelector(`.card.dia[data-wd="${hojeWd}"]`) : null;
+  if (cartaoHoje && cartaoHoje !== semana.firstChild) {
+    semana.insertBefore(cartaoHoje, semana.firstChild);
+    semana.insertBefore(h('div', { class: 'tiny muted bold resto-semana', text: 'RESTO DA SEMANA' }), cartaoHoje.nextSibling);
   }
   body.push(semana);
   // um link só, discreto, no fim da semana (é usado pouco)
