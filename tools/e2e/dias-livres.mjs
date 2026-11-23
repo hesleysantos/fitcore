@@ -1,9 +1,9 @@
-// Teste de ponta a ponta dos dias sem treino ("não sugerir treinos no domingo"), clicando nas telas:
-// 1) a pergunta nova na entrevista do Treinador (opcional, "Nenhum" já marcado, limite de 5 dias) e a de quantos dias,
-//    que não oferece mais treinos do que os dias livres;
-// 2) o plano gerado e a agenda da aba Treinos sem musculação nem corrida nos dias bloqueados;
-// 3) a entrevista da corrida sem os dias bloqueados (a mesma preferência, sem perguntar de novo);
-// 4) o "Não treinei", que nunca passa o treino para um dia bloqueado;
+// Teste de ponta a ponta dos dias de cada treino (logic/dias-livres.js), clicando nas telas:
+// 1) a pergunta da entrevista do Treinador ("Em quais dias você pode fazer musculação?", pelo menos 2) e a de quantos
+//    desses dias, que não oferece mais treinos do que os dias marcados;
+// 2) o plano gerado e a agenda da aba Treinos sem musculação nos dias não marcados;
+// 3) a entrevista da corrida, que pergunta só os dias de corrida (sem as perguntas antigas de dias sem treino);
+// 4) o "Não treinei", que nunca passa o treino para um dia sem musculação (resposta antiga, que continua valendo);
 // tudo em 360 px, sem rolagem para o lado e sem erro no console.
 // Uso, com "npm start" rodando: node tools/e2e/navegador.mjs tools/e2e/dias-livres.mjs
 import * as store from '../../www/js/store.js';
@@ -57,7 +57,7 @@ export default async (page) => {
 
   await page.send('Emulation.setDeviceMetricsOverride', { width: 360, height: 780, deviceScaleFactor: 1, mobile: true });
 
-  console.log('1. Entrevista do Treinador: a pergunta nova e o limite de dias');
+  console.log('1. Entrevista do Treinador: os dias da musculação e o limite de dias');
   // respostas antigas (sem a pergunta nova), plano de corrida aceito e a prioridade já escolhida
   await carregar(base({ trainer: { answers: TREINO }, run: { answers: CORRIDA, aceitoEm: new Date(seg.getTime() - 7 * 86400000).toISOString(), inicio: dk(new Date(seg.getTime() - 7 * 86400000)), pausadoEm: '' }, combo: { foco: 'equilibrio', fortalecimento: 'nao', em: new Date().toISOString() } }));
   await page.goto(B + '#/treinador', 300); await page.reload(1400);
@@ -65,35 +65,32 @@ export default async (page) => {
   await page.sleep(400);
   let viuPergunta = false, viuDias = false;
   const vistas = await entrevista(async (q) => {
-    if (q === 'Tem algum dia em que você não pode treinar?') {
+    if (q === 'Em quais dias você pode fazer musculação?') {
       viuPergunta = true;
       const l = await opcoes();
-      ok(l.map((o) => o.t).join(',') === 'Segunda,Terça,Quarta,Quinta,Sexta,Sábado,Domingo,Nenhum, qualquer dia serve', 'os 7 dias e "Nenhum" por último');
-      ok(l.filter((o) => o.on).map((o) => o.t).join() === 'Nenhum, qualquer dia serve', '"Nenhum" já vem marcado (resposta antiga)');
-      ok(/até 5 dias/.test(await page.text()), 'diz o limite de 5 dias');
+      ok(l.map((o) => o.t).join(',') === 'Segunda,Terça,Quarta,Quinta,Sexta,Sábado,Domingo', 'os 7 dias, sem "Nenhum"');
+      ok(/pelo menos 2/.test(await page.text()) && /mesmos dias da corrida/.test(await page.text()), 'diz o mínimo e que pode repetir os dias da corrida');
+      await escolher('Segunda'); await page.sleep(80);
+      ok(await page.eval(`const b = [...document.querySelectorAll('button.btn.primary')].find((e) => /^(Continuar|Concluir)$/.test(e.textContent.trim())); return !!b && b.disabled;`), 'com 1 dia só, não avança');
+      for (const d of ['Terça', 'Quinta', 'Sexta', 'Sábado']) await escolher(d);
       ok(await semRolagem(), 'sem rolagem para o lado na pergunta');
       await page.shot('dias-livres/pergunta');
-      ok(await escolher('Quarta') && await escolher('Domingo'), 'marcou quarta e domingo');
-      const m = (await opcoes()).filter((o) => o.on).map((o) => o.t).join();
-      ok(m === 'Quarta,Domingo', '"Nenhum" saiu ao marcar os dias: ' + m);
     }
-    if (q === 'Quantos dias por semana você consegue treinar?') {
+    if (q === 'Quantos desses dias você quer treinar?') {
       viuDias = true;
       const l = await opcoes();
-      ok(l.map((o) => o.t).join(',') === '2 dias,3 dias,4 dias,5 dias', 'sem a opção de 6 dias (só 5 livres): ' + l.map((o) => o.t).join(','));
-      ok(/sobram 5 dias livres: dá para treinar até 5 dias/.test(await page.text()), 'a pergunta diz por quê');
+      ok(l.map((o) => o.t).join(',') === '2 dias,3 dias,4 dias,5 dias', 'sem a opção de 6 dias (5 marcados): ' + l.map((o) => o.t).join(','));
+      ok(/Você marcou 5 dias: dá para treinar até 5/.test(await page.text()), 'a pergunta diz por quê');
       ok(l.find((o) => o.t === '4 dias').on, 'a resposta guardada (4 dias) continua marcada');
-      ok(await semRolagem(), 'sem rolagem para o lado');
       await page.shot('dias-livres/quantos-dias');
     }
   });
   ok(viuPergunta && viuDias, 'viu as duas perguntas');
-  // entre as duas, só a de quem também corre ("Em algum desses dias você ainda quer correr?")
-  const iS = vistas.indexOf('Tem algum dia em que você não pode treinar?'), iD = vistas.indexOf('Quantos dias por semana você consegue treinar?');
-  ok(iS >= 0 && (iD === iS + 1 || (iD === iS + 2 && vistas[iS + 1] === 'Em algum desses dias você ainda quer correr?')), 'a pergunta nova vem logo antes de "quantos dias": ' + vistas.slice(iS, iD + 1).join(' | '));
+  ok(!vistas.some((q) => /não pode treinar|ainda quer correr/.test(q)), 'as perguntas antigas não aparecem');
+  ok(vistas.indexOf('Em quais dias você pode fazer musculação?') + 1 === vistas.indexOf('Quantos desses dias você quer treinar?'), 'os dias vêm logo antes de "quantos desses dias"');
   await page.sleep(500);
-  const resp = await st('s.trainer.answers.semTreino');
-  ok(JSON.stringify(resp) === JSON.stringify(['3', '0']), 'resposta guardada: ' + JSON.stringify(resp));
+  const resp = await st('s.trainer.answers.diasMusc');
+  ok(JSON.stringify(resp) === JSON.stringify(['1', '2', '4', '5', '6']), 'resposta guardada: ' + JSON.stringify(resp));
 
   console.log('2. A proposta e o plano aceito: nada na quarta nem no domingo');
   const titulos = await page.eval(`return [...document.querySelectorAll('.treino-prop summary')].map((s) => s.querySelector('div > div').textContent);`);
@@ -108,45 +105,32 @@ export default async (page) => {
   const agenda = await st(`(s.plans.find((p) => p.id === s.activePlan) || {}).agenda || {}`);
   ok(Object.keys(agenda).length === 4 && !Object.keys(agenda).some((w) => BLOQ.includes(Number(w))), 'agenda do plano sem quarta e domingo: ' + Object.keys(agenda).map((w) => CURTO[w]).join(', '));
 
-  console.log('3. A agenda da semana na tela (musculação e corrida)');
+  console.log('3. A agenda da semana na tela: musculação só nos dias marcados; a corrida nos dias dela');
   await page.goto(B + '#/treinos', 300); await page.reload(1400);
   for (const w of BLOQ) {
     const c = await page.eval(`const c = document.querySelector('.card.dia[data-wd="${w}"]'); return c ? c.innerText : '';`);
-    ok(!!c && !/Iniciar|Abrir corrida|Corrida\b/.test(c) && /Descanso/.test(c), `${CURTO[w]}: descanso, sem musculação nem corrida`);
+    ok(!!c && !/Iniciar treino|Treino [A-D]\b/.test(c), `${CURTO[w]}: sem musculação`);
   }
   const corridas = await page.eval(`return [...document.querySelectorAll('.card.dia')].filter((c) => /Abrir corrida|Ver corrida/.test(c.innerText)).map((c) => Number(c.dataset.wd));`);
-  ok(corridas.length > 0 && corridas.every((w) => !BLOQ.includes(w)), 'a corrida ficou nos dias livres: ' + corridas.map((w) => CURTO[w]).join(', '));
+  ok(corridas.length > 0, 'a corrida continua nos dias dela: ' + corridas.map((w) => CURTO[w]).join(', '));
   ok(await semRolagem(), 'aba Treinos sem rolagem para o lado');
-  await page.eval(`const c = document.querySelector('.card.dia[data-wd="0"]'); if (c) c.scrollIntoView({ block: 'center' });`); await page.sleep(150);
   await page.shot('dias-livres/agenda');
-  // o perfil do Treinador mostra os dias sem treino
   await page.goto(B + '#/treinador', 900);
-  ok(await page.eval(`const d = document.querySelector('#treinador-perfil'); if (!d) return false; d.open = true; await new Promise((r) => setTimeout(r, 100)); return /Sem treino\\s*Qua, Dom/.test(d.innerText);`), '"Seu perfil" mostra "Sem treino: Qua, Dom"');
-  // a folha da agenda (escolha à mão) lembra o dia bloqueado
+  ok(await page.eval(`const d = document.querySelector('#treinador-perfil'); if (!d) return false; d.open = true; await new Promise((r) => setTimeout(r, 100)); return /Dias de musculação\\s*Seg, Ter, Qui, Sex, Sáb/.test(d.innerText);`), '"Seu perfil" mostra os dias de musculação');
   await page.goto(B + '#/treinos', 900);
-  ok(await page.eval(`const b = document.querySelector('.card.dia[data-wd="0"] .chip-agenda'); if (!b) return false; b.click(); await new Promise((r) => setTimeout(r, 400)); return /marcou que não treina neste dia/.test(document.querySelector('.sheet').innerText);`), 'escolher treino à mão no domingo: a folha lembra que é dia sem treino');
+  ok(await page.eval(`const b = document.querySelector('.card.dia[data-wd="0"] .chip-agenda'); if (!b) return false; b.click(); await new Promise((r) => setTimeout(r, 400)); return /não está entre os que você marcou para a musculação/.test(document.querySelector('.sheet').innerText);`), 'escolher treino à mão no domingo: a folha lembra');
   await page.eval(`for (const b of document.querySelectorAll('.sheet .iconbtn[aria-label="Fechar"]')) b.click();`); await page.sleep(300);
 
-  console.log('4. Entrevista da corrida: os dias sem treino (a mesma resposta) e o domingo só para a corrida');
+  console.log('4. Entrevista da corrida: só os dias de corrida, com os 7 dias à vista');
   await page.goto(B + '#/corrida', 900);
   ok(await page.click('Refazer a entrevista'), 'abriu a entrevista da corrida');
   await page.sleep(400);
   await page.eval(`const b = [...document.querySelectorAll('.sheet button')].find((x) => /^(Refazer|Responder|Continuar|Sim)/.test(x.textContent.trim())); if (b) b.click();`); await page.sleep(400);
-  let vistasC = await entrevista(async () => {}, 'Tem algum dia em que você não pode treinar?');
-  ok((vistasC[vistasC.length - 1] || '') === 'Tem algum dia em que você não pode treinar?', 'a pergunta dos dias sem treino também está na entrevista da corrida');
-  ok((await opcoes()).filter((o) => o.on).map((o) => o.t).join() === 'Quarta,Domingo', 'já vem com a resposta do Treinador (quarta e domingo)');
-  await avancar(); await page.sleep(150);
-  vistasC = await entrevista(async () => {}, 'Em algum desses dias você ainda quer correr?');
-  ok((vistasC[vistasC.length - 1] || '') === 'Em algum desses dias você ainda quer correr?', 'quem também faz musculação: "ainda quer correr" nesses dias?');
-  ok((await opcoes()).map((o) => o.t).join() === 'Quarta,Domingo,Não, nenhum treino nesses dias', 'só os dias sem treino, e "nenhum"');
-  await escolher('Domingo'); await page.sleep(100);
-  await page.shot('dias-livres/so-corrida');
-  await avancar(); await page.sleep(150);
-  vistasC = await entrevista(async () => {}, 'Em quais dias da semana você pode correr?');
-  const ultima = vistasC[vistasC.length - 1] || '';
-  ok(ultima === 'Em quais dias da semana você pode correr?', 'chegou à pergunta dos dias da corrida');
+  const vistasC = await entrevista(async () => {}, 'Em quais dias da semana você pode correr?');
+  ok((vistasC[vistasC.length - 1] || '') === 'Em quais dias da semana você pode correr?', 'chegou à pergunta dos dias da corrida');
+  ok(!vistasC.some((q) => /não pode treinar|ainda quer correr/.test(q)), 'sem as perguntas antigas');
   const lc = await opcoes();
-  ok(lc.length === 6 && !lc.some((o) => /Quarta/.test(o.t)) && lc.some((o) => /Domingo/.test(o.t)), 'sem quarta; domingo volta para a corrida: ' + lc.map((o) => o.t).join(', '));
+  ok(lc.length === 7 && /mesmos dias/.test(await page.text()), 'os 7 dias, e a ajuda diz que pode repetir os da musculação: ' + lc.map((o) => o.t).join(', '));
   ok(await semRolagem(), 'sem rolagem para o lado');
   await page.shot('dias-livres/corrida-dias');
 

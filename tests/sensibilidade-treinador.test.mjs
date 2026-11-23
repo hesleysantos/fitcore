@@ -34,11 +34,11 @@ const todosDiferentes = (lista, rot) => { const s = new Set(lista); assert.equal
 const p0 = gerarPlano(base, GYM, 0);
 
 test('todas as perguntas da entrevista estão cobertas por este arquivo', () => {
-  assert.deepEqual(PERGUNTAS.map((q) => q.k), ['objetivo', 'idade', 'condicoes', 'triagem', 'remedios', 'experiencia', 'pausa', 'liberado', 'peso', 'altura', 'semTreino', 'soCorrida', 'dias', 'tempo', 'local', 'extras', 'limitacoes', 'foco'], 'pergunta nova na entrevista: acrescente o teste de sensibilidade dela');
+  assert.deepEqual(PERGUNTAS.map((q) => q.k), ['objetivo', 'idade', 'condicoes', 'triagem', 'remedios', 'experiencia', 'pausa', 'liberado', 'peso', 'altura', 'diasMusc', 'dias', 'tempo', 'local', 'extras', 'limitacoes', 'foco'], 'pergunta nova na entrevista: acrescente o teste de sensibilidade dela');
   assert.deepEqual(opcoes('objetivo'), ['hipertrofia', 'emagrecimento', 'forca', 'saude', 'resistencia']);
   assert.deepEqual(opcoes('experiencia'), ['nunca', 'iniciante', 'intermediario', 'avancado']);
   assert.deepEqual(opcoes('pausa'), ['treinando', '2a4s', '1a3m', '3a6m', 'mais6m']);
-  assert.deepEqual(opcoes('semTreino'), ['1', '2', '3', '4', '5', '6', '0', 'nenhum']);
+  assert.deepEqual(opcoes('diasMusc'), ['1', '2', '3', '4', '5', '6', '0']);
   assert.deepEqual(opcoes('dias'), ['2', '3', '4', '5', '6']);
   assert.deepEqual(opcoes('tempo'), ['30', '45', '60', '75']);
   assert.deepEqual(opcoes('local'), ['completa', 'minha', 'halteres', 'corporal']);
@@ -64,11 +64,12 @@ test('soCorrida: não muda a musculação (o dia continua sem ela); só devolve 
   assert.equal(doseEAgenda(gerarPlano({ ...a, soCorrida: ['nenhum'] }, GYM, 0)), doseEAgenda(gerarPlano(a, GYM, 0)));
 });
 
-test('semTreino: cada dia marcado sai da agenda (musculação e corrida); "Nenhum" e a resposta antiga não mudam nada', () => {
+test('diasMusc: cada dia fora dos marcados sai da agenda; os 7 dias, "Nenhum" antigo e a falta de resposta não mudam nada', () => {
   // o resto da regra (todas as combinações, corrida, fortalecimento e treino perdido) está em tests/dias-livres.test.mjs
   assert.equal(doseEAgenda(gerarPlano({ ...base, semTreino: ['nenhum'] }, GYM, 0)), doseEAgenda(p0));
-  for (const w of opcoes('semTreino').filter((x) => x !== 'nenhum')) {
-    const p = gerarPlano({ ...base, semTreino: [w] }, GYM, 0);
+  assert.equal(doseEAgenda(gerarPlano({ ...base, diasMusc: opcoes('diasMusc') }, GYM, 0)), doseEAgenda(p0));
+  for (const w of opcoes('diasMusc')) {
+    const p = gerarPlano({ ...base, diasMusc: opcoes('diasMusc').filter((x) => x !== w) }, GYM, 0);
     assert.ok(!Object.keys(p.agenda).includes(w), 'treino no dia bloqueado: ' + w);
     assert.equal(Object.keys(p.agenda).length, 4, 'os 4 treinos continuam: ' + w);
     // só muda a agenda quando o dia bloqueado era um dia de treino (segunda, terça, quinta e sexta)

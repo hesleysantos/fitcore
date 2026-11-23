@@ -40,7 +40,7 @@ import { planoDaSemanaEm } from './corrida.js';
 import { comboAtual } from './combinado.js';
 import { perfil } from './trainer.js';
 import { respostasProtegidas } from './saude.js';
-import { diasBloqueados } from './dias-livres.js';
+import { diasBloqueados, diasSemCorrida } from './dias-livres.js';
 import { efeitoDeHoje } from './saude-fora.js';
 
 export const MAX_PERDIDOS = 200;
@@ -601,7 +601,7 @@ const capi = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
 export function porQueNaoDia(o, hoje, alternado = false) {
   const q = capi(nomeDoDia(o.data, hoje));
   switch (o.motivo) {
-    case 'bloqueado': return `${q} é um dia em que você não treina.`;
+    case 'bloqueado': return `${q} não é um dos seus dias de musculação.`;
     case 'feriado': return `${q} é feriado: a academia não abre.`;
     case 'saude': return `${q}, o problema de saúde que você contou ainda muda o treino.`;
     case 'treinou': return `${q} já tem treino feito.`;
@@ -833,7 +833,8 @@ export function avaliarMoverCorrida(st, de, para, hoje) {
   const alvo = s.dias[diaDaSemana(para)];
   if (alvo && alvo.tipo === 'descanso') return nao('dor', base);
   if ((alvo && !alvo.movidaPara) || corridaMovidaPara(st, para) || runs.some((r) => r && r.data === para)) return nao('ocupado', base);
-  if (new Set(diasBloqueados(st)).has(diaDaSemana(para))) return nao('bloqueado', base);
+  // (a corrida não segue os dias da musculação: só os dias sem treino das respostas antigas — logic/dias-livres.js)
+  if (new Set(diasSemCorrida(st)).has(diaDaSemana(para))) return nao('bloqueado', base);
   if (diasDeSaude(st, hoje, 'corrida').has(para)) return nao('saude', base);
   // a semana com a corrida no dia novo
   const datas = Array.from({ length: 7 }, (_, k) => somaDias(seg, k));

@@ -10,7 +10,7 @@ import { doresForaDoTreino } from './saude-fora.js';
 import { planoDaSemana, planoDaSemanaEm } from './corrida.js';
 import { limparCombo, FOCOS, FORTALECIMENTOS } from './combinado.js';
 import { perguntaCondicoes, perguntaTriagem, perguntaRemedios, perguntaLiberado, condicoesDe, sinaisDe, remediosDe, soComSupervisao, respostasProtegidas } from './saude.js';
-import { perguntaSemTreino, perguntaSoCorrida, bloqueadosDe, livresDe, notaDosDias, nomesDosDias, diasBloqueados } from './dias-livres.js';
+import { perguntaDiasMusc, bloqueadosDe, livresDe, notaDosDias, nomesDosDias, diasBloqueados } from './dias-livres.js';
 
 // ---------- perguntas ----------
 export const PERGUNTAS = [
@@ -61,12 +61,10 @@ export const PERGUNTAS = [
   perguntaLiberado((a) => precisaLiberacao(a) && !soComSupervisao(a), 'Um médico já liberou você para treinar musculação?'),
   { k: 'peso', tipo: 'numero', informar: true, titulo: 'Qual é o seu peso?', ajuda: 'Uma estimativa já serve.', min: 30, max: 250, un: 'kg', padrao: 70, passo: 0.5, dec: 1 },
   { k: 'altura', tipo: 'numero', informar: true, titulo: 'Qual é a sua altura?', ajuda: 'Em centímetros.', min: 120, max: 220, un: 'cm', padrao: 170 },
-  // dias em que a pessoa não treina (vale também para a corrida): logic/dias-livres.js
-  perguntaSemTreino(),
-  // quem também corre: dos dias sem treino, em quais ainda quer correr (a tela só mostra esta pergunta com plano de corrida)
-  perguntaSoCorrida(),
+  // os dias da musculação (a corrida tem a pergunta dela): logic/dias-livres.js
+  perguntaDiasMusc(),
   {
-    k: 'dias', tipo: 'um', titulo: 'Quantos dias por semana você consegue treinar?',
+    k: 'dias', tipo: 'um', titulo: 'Quantos desses dias você quer treinar?',
     ajuda: 'Seja realista: o melhor treino é o que você consegue manter.',
     // não aparece opção com mais treinos do que dias livres (`nota` diz por quê)
     nota: notaDosDias,

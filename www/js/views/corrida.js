@@ -4,7 +4,7 @@ import { state, update } from '../store.js';
 import { go, refresh } from '../router.js';
 import { interview, abasTreinador, cartaoLiberacao } from './coach.js';
 import { respostasParaEntrevista } from '../logic/saude.js';
-import { diasSemCorrida, aplicarDiasNosTreinos } from '../logic/dias-livres.js';
+import { diasSemCorrida, aplicarDiasNosTreinos, limparDiasAntigos } from '../logic/dias-livres.js';
 import { cartaoDores } from './dor.js';
 import { barChart } from './charts.js';
 import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate } from '../device.js';
@@ -12,7 +12,7 @@ import { buscarFaq } from '../data/knowledge.js';
 import { REFS_CORRIDA, FAQ_CORRIDA, TIPOS_TREINO, FONTES_TELA } from '../data/corrida.js';
 import {
   PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, planoAtual, planoDaSemana, treinoDoDia, avisosBloqueio, inicioPara, diasDeForca, evolucao, alertas, naoMedeDe, podeTodoDiaDe, dicas,
-  efeitoDaDor, orientacaoDor, expandirBlocos, textoBloco, limparRegistro, MAX_REGISTROS, fmtRitmo, fmtFaixa, fmtKm, fmtTempo, fmtDia, somaDias, diaValido, diasEntre,
+  efeitoDaDor, orientacaoDor, semanaDaProva, expandirBlocos, textoBloco, limparRegistro, MAX_REGISTROS, fmtRitmo, fmtFaixa, fmtKm, fmtTempo, fmtDia, somaDias, diaValido, diasEntre,
   retomarPlano, diaLocal, segundaDe, planejadoDe, analiseDoRegistro, analiseRecente, guardarDoDia, perfil, saudeDaCorrida,
   MAX_DORES_REGISTRO, MUSCULO_CORRIDA, soDorMuscularLeve, etapasDe,
 } from '../logic/corrida.js';
@@ -90,8 +90,6 @@ const opcoesDoPlano = () => { const { forca, pernas } = diasDeForca(state); retu
 // Entrevista da corrida com as perguntas que valem para os dois treinos: os dias sem treino (a mesma resposta do Treinador)
 // e, de quem também faz musculação, os dias em que ainda quer correr (logic/dias-livres.js). Os dias sem corrida saem das
 // opções de dias de corrida dentro da própria entrevista.
-const fazMusculacao = () => Object.keys(state.trainer.answers || {}).length > 0 || state.plans.length > 0;
-const perguntasDaCorrida = () => (fazMusculacao() ? PERGUNTAS : PERGUNTAS.filter((q) => q.k !== 'soCorrida'));
 const volumeTxt = (s) => (s.fase === 'adaptacao' ? `${s.corridaMin} min de corrida` : s.fase === 'caminhada' ? `${s.volumeMin} min` : `${virgula(s.volumeKm)} km`);
 
 function zonasCard(p) {
@@ -170,13 +168,16 @@ function proposta() {
   }
   const pf = p.perfil;
   const s1 = p.semanas[0];
-  const meta = pf.dist ? `${ROTULO.objetivo[pf.objetivo].toLowerCase()}: ${ROTULO.distancia[pf.dist]}` : ROTULO.objetivo[pf.objetivo].toLowerCase();
+  // (meia ou maratona sem data e sem base para o desafio: a 1ª etapa da preparação — logic/corrida.js, etapaDe)
+  const meta = pf.etapa ? `a 1ª etapa da preparação para a ${ROTULO.distancia[pf.dist]}` : pf.dist ? `${ROTULO.objetivo[pf.objetivo].toLowerCase()}: ${ROTULO.distancia[pf.dist]}` : ROTULO.objetivo[pf.objetivo].toLowerCase();
   const ehCorrida = (d) => d.tipo !== 'caminhada' && d.tipo !== 'descanso';
   const porSemana = p.semanas.map((s) => s.dias.filter(ehCorrida).length);
   const nIni = porSemana[0], nMax = Math.max(...porSemana), nCam = s1.dias.length - nIni;
   const quantas = p.tipo === 'caminhada' ? `${plural(s1.dias.length, 'caminhada', 'caminhadas')} por semana`
     : `${plural(nIni, 'corrida', 'corridas')} por semana${nMax > nIni ? ` no começo (chega a ${nMax})` : ''}${nCam ? ` e ${plural(nCam, 'caminhada', 'caminhadas')}` : ''}`;
-  const dataProva = pf.dist && !p.provaRetirada ? somaDias(inicio, (p.totalSemanas - 1) * 7 + ((pf.diaLongo + 6) % 7)) : '';
+  const dataProva = pf.dist && !pf.etapa && !p.provaRetirada ? somaDias(inicio, (p.totalSemanas - 1) * 7 + ((pf.diaLongo + 6) % 7)) : '';
+  // em etapas: o desafio previsto no fim da 2ª etapa (estimada pela base do fim desta — logic/corrida.js, etapaDe)
+  const dataPrevista = pf.etapa && pf.proximaEtapa ? somaDias(inicio, (p.totalSemanas + pf.proximaEtapa - 1) * 7 + ((pf.diaLongo + 6) % 7)) : '';
   // A semana 1 vai de segunda a domingo. Aceito no meio da semana, o plano usa esta semana e só valem os dias de hoje em
   // diante: a tela mostra o primeiro treino de verdade, e não a segunda-feira que já passou.
   const dataDe = (wd) => somaDias(inicio, (wd + 6) % 7);
@@ -188,6 +189,9 @@ function proposta() {
   body.push(h('div', { class: 'bubble' },
     h('p', { text: `Montei um plano de ${plural(p.totalSemanas, 'semana', 'semanas')} para ${meta}, com ${quantas}.` }),
     pf.objetivo === 'prova' && dataProva ? h('p', { class: 'bold', text: `A prova fica em ${fmtDia(dataProva)}. Confira a data: se não for essa, toque em “Mudar respostas” e ajuste as semanas.` }) : null,
+    // sem data marcada: quem escolheu o dia do desafio foi o app, e a pessoa precisa saber disso
+    pf.objetivo !== 'prova' && dataProva ? h('p', { class: 'small', id: 'corrida-sem-data', text: `Sem data marcada, eu escolhi o dia do ${p.semanas[p.semanas.length - 1].dias.some((d) => d.tipo === 'teste') ? 'teste' : 'desafio'}: ${fmtDia(dataProva)}, no fim das ${p.totalSemanas} semanas. Dá para trocar por outro dia da mesma semana.` }) : null,
+    pf.etapa ? h('p', { class: 'small', id: 'corrida-etapa', text: dataPrevista ? `Sem data marcada: a preparação vai em 2 etapas, e o desafio fica previsto para ${fmtDia(dataPrevista)}.` : 'Sem data marcada: a preparação vai em etapas, e esta constrói a base.' }) : null,
     h('p', { class: 'small muted', text: pf.nivel <= 1 ? 'Seus treinos vão por tempo e esforço: é a forma mais indicada para quem está começando.' : p.modo === 'gps' ? 'Seus treinos saem em distância e faixa de ritmo.' : p.modo === 'esteira' ? 'Seus treinos saem em distância e velocidade da esteira.' : 'Seus treinos saem em tempo e esforço.' })));
   for (const av of p.avisos.filter(avisoAlto)) body.push(aviso(av));
   if (doresAtivas(state, hoje).length) body.push(note('info', 'Você tem uma dor registrada: depois de aceitar, os treinos dos próximos dias saem ajustados a ela.'));
@@ -196,7 +200,9 @@ function proposta() {
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Nível' }), h('span', { text: ROTULO.nivel[pf.nivel] })),
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Primeiro treino' }), h('span', { id: 'corrida-primeiro', text: fmtDia(primeiroData) + (primeiroData === hoje ? ' (hoje)' : '') })),
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Semana 1' }), h('span', { text: `${dmCurto(inicio)} a ${dmCurto(somaDias(inicio, 6))}${noMeio ? ' (esta semana)' : ''}` })),
-    dataProva ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: pf.objetivo === 'prova' ? 'Prova' : 'Dia do desafio' }), h('span', { text: fmtDia(dataProva) })) : null));
+    dataProva ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: pf.objetivo === 'prova' ? 'Prova' : 'Dia do desafio' }), h('span', { text: fmtDia(dataProva) })) : null,
+    pf.etapa ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Fim da 1ª etapa' }), h('span', { text: fmtDia(somaDias(inicio, p.totalSemanas * 7 - 1)) })) : null,
+    dataPrevista ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Desafio (previsto)' }), h('span', { text: fmtDia(dataPrevista) })) : null));
   body.push(sectionTitle('A primeira semana'));
   // aceito no meio da semana: os dias que já passaram aparecem apagados, com "Já passou"
   body.push(h('div', { class: 'card col gap-s', id: 'corrida-semana1' }, ...s1.dias.map((d) => {
@@ -358,9 +364,9 @@ function painel() {
   if (sem.antesDoInicio || sem.concluido) {
     body.push(h('div', { class: 'card hl col gap-s', id: 'corrida-hoje', dataset: { hoje: sem.concluido ? 'concluido' : 'antes' } },
       h('h2', { text: sem.antesDoInicio ? 'Plano aceito' : 'Plano concluído' }), barra,
-      h('p', { class: 'small muted', text: sem.antesDoInicio ? `${sem.fase}. Até lá, descanse ou caminhe.` : 'Parabéns por chegar ao fim! Refaça a entrevista para montar o próximo plano a partir de onde você está.' }),
+      h('p', { class: 'small muted', text: sem.antesDoInicio ? `${sem.fase}. Até lá, descanse ou caminhe.` : pf.etapa ? `Etapa concluída! Para a próxima, refaça a entrevista com a sua corrida mais longa e os km por semana de agora: ela parte daí e chega à ${ROTULO.distancia[pf.dist]}.` : 'Parabéns por chegar ao fim! Refaça a entrevista para montar o próximo plano a partir de onde você está.' }),
       provaTxt,
-      sem.concluido ? btn('Montar um novo plano', () => { modo = 'entrevista'; refresh(); window.scrollTo(0, 0); }, 'primary block', 'refresh') : null));
+      sem.concluido ? btn(pf.etapa ? 'Montar a próxima etapa' : 'Montar um novo plano', () => { modo = 'entrevista'; refresh(); window.scrollTo(0, 0); }, 'primary block', 'refresh') : null));
   } else {
     const wdHoje = new Date(hoje + 'T12:00:00').getDay();
     const dHoje = sem.dias[wdHoje];
@@ -384,6 +390,16 @@ function painel() {
       marcaHoje && (treinoHoje || movidaHoje) ? linhaNaoCorrida(marcaHoje, String((treinoHoje ? dHoje.nome : movidaHoje.nome) || 'Corrida'), refresh) : null,
       treinoHoje && !marcaHoje ? btn(dHoje.feito ? 'Ver a corrida de hoje' : 'Iniciar', () => go('corrida/dia/' + hoje), (dHoje.feito ? 'ghost' : 'primary') + ' block alvo', dHoje.feito ? 'right' : 'play') : null,
       treinoHoje && !dHoje.feito && !marcaHoje && podeMarcarCorrida(state, hoje, hoje) ? h('div', { class: 'perdido-acoes' }, botaoNaoCorri(hoje, refresh)) : null));
+  }
+  // semana da prova: o essencial em 3 linhas, e a comida na Nutricionista (logic/corrida.js, semanaDaProva)
+  const sp = sem.concluido ? null : semanaDaProva(p, hoje);
+  if (sp) {
+    const quando = sp.dias === 0 ? 'hoje' : sp.dias === 1 ? 'amanhã' : `faltam ${sp.dias} dias`;
+    body.push(h('div', { class: 'card col gap-s', id: 'semana-prova' },
+      h('div', { class: 'row between' }, h('h3', { text: `Semana d${sp.nome === 'teste' ? 'o teste' : sp.nome === 'prova' ? 'a prova' : 'o desafio'}` }), badge(quando, 'ok')),
+      h('ul', { class: 'small lista-curta' }, ...sp.itens.map((t) => h('li', { text: t }))),
+      btn('O que comer na véspera e no dia', () => go('nutricao'), 'ghost block sm', 'apple'),
+      porQue('', sp.refs, 'Fontes')));
   }
   // dúvida ou imprevisto (chuva, juntar com a musculação, dor): o chat do Treinador de corrida (views/chat.js), logo
   // depois do treino de hoje (no alto, as ferramentas; as informações, abaixo)
@@ -462,7 +478,7 @@ function painel() {
   if (ds.length) body.push(accId('corrida-dicas', 'Dicas para você', ...ds.map((d) => h('div', { class: 'dica plana' }, h('div', { class: 'dica-ic' }, icon('bolt')), h('div', { class: 'grow' }, h('div', { class: 'bold', text: d.titulo }), h('div', { class: 'small', text: d.texto }), porQue('', d.refs, 'Fontes'))))));
   // o plano, os cuidados e as explicações
   body.push(accId('corrida-plano', 'O seu plano',
-    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Objetivo' }), h('span', { text: ROTULO.objetivo[pf.objetivo] + (pf.dist ? ' · ' + ROTULO.distancia[pf.dist] : '') })),
+    h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Objetivo' }), h('span', { text: ROTULO.objetivo[pf.objetivo] + (pf.dist ? ' · ' + ROTULO.distancia[pf.dist] : '') + (pf.etapa ? ' (1ª etapa)' : '') })),
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Nível' }), h('span', { text: ROTULO.nivel[pf.nivel] })),
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Como medir' }), h('span', { text: ROTULO.modo[p.modo] })),
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Musculação' }), h('span', { text: diasDeForca(state).forca.length ? diasDeForca(state).forca.map((wd) => DIAS_CURTO[wd]).join(', ') : 'sem treino marcado' }))));
@@ -506,14 +522,12 @@ export function corridaView() {
     // as respostas guardadas, mais o que as outras entrevistas disseram sobre a saúde (a pessoa confere e desmarca)
     const pre = respostasParaEntrevista('corrida', state);
     for (const k of ['idade', 'peso', 'altura']) if (pre[k] == null) { const v = typeof state.trainer.answers[k] === 'number' ? state.trainer.answers[k] : state.nutri.answers[k]; if (typeof v === 'number') pre[k] = v; }
-    // dias sem treino: a resposta é uma só para os dois treinos (quem respondeu no Treinador já vem com ela marcada)
-    const ta = state.trainer.answers || {};
-    if (!Array.isArray(pre.semTreino) || !pre.semTreino.length) pre.semTreino = Array.isArray(ta.semTreino) && ta.semTreino.length ? [...ta.semTreino] : ['nenhum'];
-    if (!Array.isArray(pre.soCorrida)) pre.soCorrida = Array.isArray(ta.soCorrida) ? [...ta.soCorrida] : ['nenhum'];
+    // (as perguntas antigas de dias sem treino não são mais feitas: os dias da corrida são a pergunta "dias")
+    limparDiasAntigos(pre);
     return {
       title: 'Treinador', body: [interview({
-        perguntas: perguntasDaCorrida(), respostas: pre, base: a, avatar: 'run',
-        onDone: (r) => { let msg = ''; update((s) => { s.run.answers = r; s.run.aceitoEm = ''; s.run.inicio = ''; s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; s.run.carga = []; msg = aplicarDiasNosTreinos(s, 'run'); }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); if (msg) toast('Musculação: ' + msg); },
+        perguntas: PERGUNTAS, respostas: pre, base: a, avatar: 'run',
+        onDone: (r) => { let msg = ''; update((s) => { s.run.answers = limparDiasAntigos(r); s.run.aceitoEm = ''; s.run.inicio = ''; s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; s.run.carga = []; msg = aplicarDiasNosTreinos(s); }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); if (msg) toast('Musculação: ' + msg); },
         onCancel: () => { modo = 'auto'; refresh(); },
       })],
     };

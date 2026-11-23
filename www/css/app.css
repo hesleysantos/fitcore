@@ -690,3 +690,6 @@ details.pq.perdido-pq > summary { min-height: 44px; }
 .resto-semana { margin: 8px 2px -2px; }
 .tempo-campos { flex-wrap: nowrap; align-items: center; }
 .tempo-campos .input { width: 3.6em; min-width: 0; flex: 0 1 auto; text-align: center; padding-left: 6px; padding-right: 6px; }
+
+/* listas curtas dentro de cartões (ex.: semana da prova) */
+.lista-curta { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; }

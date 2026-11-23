@@ -222,7 +222,12 @@ function conferir(p, a, rot, F, adaptado = false) {
     const gerais = p.semanas.filter((s) => s.fase !== 'adaptacao' && s.fase !== 'caminhada' && s.fase !== 'polimento');
     if (gerais.length >= 8 && !gerais.some((s) => s.descarga)) F.add('plano longo sem semana de descarga', rot);
     // prova: última semana com o dia da prova no dia do longo; polimento quando o plano tem 8 semanas ou mais
-    if (pf.dist) {
+    // meia ou maratona sem data cujo longo não chega ao mínimo (15 km; 25 km): 1ª etapa, sem desafio, sem data, com a explicação
+    if (pf.etapa) {
+      if (pf.objetivo === 'prova' || pf.semanasProva || ![21, 42].includes(pf.dist)) F.add('etapa fora de meia ou maratona sem data', rot);
+      if (p.semanas.some((s) => s.dias.some((d) => d.tipo === 'prova' || d.tipo === 'teste'))) F.add('desafio na etapa', rot);
+      if (!p.avisos.some((a) => /etapas: você está na 1ª/.test(a.texto))) F.add('etapa sem explicação', rot);
+    } else if (pf.dist) {
       const ult = p.semanas[p.semanas.length - 1];
       const ev = ult.dias.filter((d) => d.tipo === 'prova' || d.tipo === 'teste');
       if (ev.length !== 1) { if (!p.provaRetirada) F.add('plano com distância sem dia de prova na última semana', rot); }

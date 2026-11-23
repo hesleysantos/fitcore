@@ -24,7 +24,7 @@ import { FAIXA_DA_RESPOSTA, FAIXAS_PAUSA } from './pausa.js';
 import { LOCAIS_DOR, DIAS_ATIVA, dorDeAlerta, doresAtivas } from './dor.js';
 import { doresForaDaCorrida } from './saude-fora.js';
 import { comboAtual } from './combinado.js';
-import { diasSemCorrida, perguntaSemTreino, perguntaSoCorrida, semCorridaDe } from './dias-livres.js';
+import { diasSemCorrida, semCorridaDe, PERGUNTAS_DIAS_ANTIGAS } from './dias-livres.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { TIPOS_TREINO, DOR_CORRIDA, MOTIVOS_CARGA } from '../data/corrida.js';
 import { perguntaCondicoes, perguntaTriagem, perguntaRemedios, perguntaLiberado, condicoesDe, sinaisDe, remediosDe, soComSupervisao, respostasProtegidas } from './saude.js';
@@ -114,10 +114,9 @@ export const PERGUNTAS = [
     op: [['3', '3 km', ''], ['5', '5 km', ''], ['10', '10 km', ''], ['21', 'Meia maratona', ''], ['42', 'Maratona', ''], ['nao', 'Não tenho', '']],
   },
   { k: 'resultadoMin', tipo: 'numero', se: (a) => corre(a) && !!a.resultado && a.resultado !== 'nao', titulo: 'Em quanto tempo?', ajuda: 'Em horas, minutos e segundos, como no relógio. Exemplo: 27 min 30 s.', min: 8, max: 420, un: 'minutos', padrao: 30, formato: 'tempo' },
-  // dias sem treino (a mesma pergunta do Treinador: a resposta vale para os dois treinos) e, de quem também faz musculação,
-  // os dias em que ainda quer correr (logic/dias-livres.js). Os dias sem corrida saem das opções logo abaixo.
-  perguntaSemTreino(), perguntaSoCorrida(),
-  { k: 'dias', tipo: 'varios', titulo: 'Em quais dias da semana você pode correr?', ajuda: 'Marque os dias possíveis. Correr todo dia só vale para quem já corre com regularidade; para os outros, eu deixo um dia de descanso. Treinos fortes nunca ficam em dias seguidos.', op: DIAS_OP.map((o) => [...o, (a) => !semCorridaDe(a).includes(Number(o[0]))]) },
+  // os dias da corrida (a musculação tem a pergunta dela, no Treinador: logic/dias-livres.js). Respostas antigas com dias sem
+  // treino ainda tiram esses dias das opções.
+  { k: 'dias', tipo: 'varios', titulo: 'Em quais dias da semana você pode correr?', ajuda: 'Se você também faz musculação, pode marcar os mesmos dias: eu organizo os dois treinos. Treinos fortes nunca ficam em dias seguidos.', op: DIAS_OP.map((o) => [...o, (a) => !semCorridaDe(a).includes(Number(o[0]))]) },
   { k: 'diaLongo', tipo: 'um', se: (a) => Array.isArray(a.dias) && a.dias.length >= 2, titulo: 'Qual é o melhor dia para o treino mais longo?', ajuda: 'Se o dia não estiver entre os que você marcou, eu escolho.', op: [['auto', 'Tanto faz', 'Eu escolho o melhor dia'], ...DIAS_OP.map((o) => [...o, (a) => !semCorridaDe(a).includes(Number(o[0]))])] },
   { k: 'tempo', tipo: 'um', titulo: 'Quanto tempo você tem por treino, em um dia comum?', ajuda: 'Conte com aquecimento e volta à calma.', op: [['30', 'Cerca de 30 minutos', ''], ['45', 'Cerca de 45 minutos', ''], ['60', 'Cerca de 1 hora', ''], ['90', 'Até 1h30', '']] },
   { k: 'tempoLongo', tipo: 'um', se: comDistancia, titulo: 'E no dia do treino mais longo?', op: [['60', 'Até 1 hora', ''], ['90', 'Até 1h30', ''], ['120', 'Até 2 horas', ''], ['150', 'Até 2h30', ''], ['180', 'Até 3 horas', 'Na meia e na maratona, o treino mais longo pode chegar a 3 horas'], ['210', 'Até 3h30', 'Só na maratona: acima de 3 horas, o longo alterna corrida e caminhada', (a) => a.distancia === '42']] },
@@ -1269,7 +1268,8 @@ export function limparRegistros(raw) {
 function limparRespostas(v) {
   const out = {};
   if (!isObj(v)) return out;
-  for (const q of PERGUNTAS) {
+  // (com as perguntas antigas de dias sem treino: a resposta guardada continua valendo — logic/dias-livres.js)
+  for (const q of [...PERGUNTAS, ...PERGUNTAS_DIAS_ANTIGAS]) {
     if (!Object.prototype.hasOwnProperty.call(v, q.k)) continue;
     const x = v[q.k];
     if (q.tipo === 'numero') { if (typeof x === 'number' && Number.isFinite(x) && x >= q.min && x <= q.max) out[q.k] = x; }
@@ -1900,7 +1900,7 @@ function voltaDe(datas, paradas, hoje) {
   return tier && semana >= 1 && semana <= tier.semForte ? { ...v, tier, semana } : null;
 }
 
-const eventoDe = (pf) => (pf.dist ? (pf.objetivo === 'ritmo' && pf.dist <= 10 ? 'teste' : 'prova') : null);
+const eventoDe = (pf) => (pf.dist && !pf.etapa ? (pf.objetivo === 'ritmo' && pf.dist <= 10 ? 'teste' : 'prova') : null);
 const ehEventoDia = (d) => d.tipo === 'prova' || d.tipo === 'teste';
 const ehCorridaDia = (d) => d.tipo !== 'caminhada' && d.tipo !== 'descanso';
 // medida em que o longo é mostrado: meio quilômetro (por distância) ou 5 minutos (por tempo)
@@ -2034,7 +2034,45 @@ function outraMedida(d, c) {
   return b.ritmo ? `Se medir a distância: ${fmtKm(km)} (${fmtFaixa(b.ritmo, 'gps')})${mais}.` : `Se medir a distância: cerca de ${fmtKm(km)}, ${jeito}${mais}. O ritmo é estimado: na dúvida, vale o tempo.`;
 }
 
+// Meia maratona ou maratona sem data (objetivo "correr mais longe" ou "mais rápido"): a data do desafio do fim do plano
+// seria escolhida pelo app. Ele só fica no plano se o maior treino chega ao mínimo da distância (meia, 15 km; maratona,
+// 25 km: fokkema2020, knopp2024); se não chega (o volume da semana, os dias ou o tempo seguram o longo), o plano vira a
+// 1ª etapa da preparação, sem o desafio: correr bem mais que a corrida mais longa do mês aumenta o risco de lesão
+// (frandsen2025). A etapa termina 3 semanas depois de o longo chegar ao maior valor (ou quando ele chega ao mínimo), e a
+// próxima parte da base nova. A 2ª etapa é estimada com a base do fim da 1ª (corrida mais longa e volume da última semana):
+// `proxima` = semanas até o desafio, ou null quando nem ela chega lá com os dias e o tempo de hoje.
+// A conta é feita no plano sem os registros, para a etapa não mudar de tamanho enquanto acontece.
+const MINIMO_LONGO = { 21: 15, 42: 25 };
+function etapaDe(respostas, opcoes) {
+  const a = isObj(respostas) ? respostas : {}, o = isObj(opcoes) ? opcoes : {};
+  if (a.objetivo === 'prova' || !(a.distancia === '21' || a.distancia === '42')) return null;
+  const p = gerarPlanoBase(respostas, { bloqueados: o.bloqueados, diasForca: o.diasForca, diasPernas: o.diasPernas, foco: o.foco, emagrecer: o.emagrecer });
+  if (!p || !p.perfil.dist || p.perfil.semanasProva) return null;
+  const minimo = MINIMO_LONGO[p.perfil.dist] || 0;
+  if (!minimo || (p.perfil.longoAtual || 0) >= minimo) return null;
+  const longos = p.semanas.map((s) => Math.max(0, ...s.dias.filter((d) => ehCorridaDia(d) && !ehEventoDia(d)).map((d) => d.distKm || 0)));
+  const maior = Math.max(0, ...longos);
+  if (maior >= minimo) return null;
+  const pico = longos.findIndex((x) => x >= maior - 0.01) + 1;
+  const semanas = Math.min(p.semanas.length, Math.max(DURACAO[p.perfil.dist][0], pico + 3));
+  // a 2ª etapa, a partir do fim desta
+  const ult = p.semanas[semanas - 1];
+  const vol = ult ? ult.dias.filter((d) => ehCorridaDia(d)).reduce((x, d) => x + (d.distKm || 0), 0) : 0;
+  const longo = Math.max(...longos.slice(0, semanas));
+  const exp = a.experiencia === 'avancado' ? 'avancado' : vol >= 10 ? 'regular' : 'iniciante';
+  let proxima = null;
+  try {
+    const p2 = gerarPlanoBase({ ...a, experiencia: exp, kmSemana: Math.round(vol), longoAtual: Math.round(longo * 2) / 2, pausa: 'treinando' }, { bloqueados: o.bloqueados, diasForca: o.diasForca, diasPernas: o.diasPernas, foco: o.foco, emagrecer: o.emagrecer });
+    const ev = p2 && p2.perfil.dist === p.perfil.dist ? p2.semanas[p2.semanas.length - 1].dias.find(ehEventoDia) : null;
+    const maior2 = p2 ? Math.max(0, ...p2.semanas.flatMap((s) => s.dias.filter((d) => ehCorridaDia(d) && !ehEventoDia(d)).map((d) => d.distKm || 0))) : 0;
+    if (ev && maior2 >= minimo) proxima = p2.totalSemanas;
+  } catch { proxima = null; }
+  return { semanas, proxima, maior: longo };
+}
 export function gerarPlano(respostas, opcoes) {
+  return gerarPlanoBase(respostas, opcoes, etapaDe(respostas, opcoes));
+}
+function gerarPlanoBase(respostas, opcoes, etapa = null) {
   const op = opcoesLimpas(opcoes);
   // dias em que a pessoa não treina (resposta do Treinador — logic/dias-livres.js): a corrida nunca cai neles
   // dias sem corrida: os do estado e os da própria resposta (sem treino, menos os que ficaram só para a corrida)
@@ -2154,6 +2192,7 @@ export function gerarPlano(respostas, opcoes) {
   const est = c.est.leve;
   const grade = gradeDe(c);
   const feitoKm = (w) => naSemana(w).reduce((s, r) => s + kmDe(r, est), 0);
+  if (etapa && pf.dist && !pf.semanasProva) pf = { ...pf, etapa: true, semanasPlano: etapa.semanas, proximaEtapa: etapa.proxima };
   const semAlvo = pf.semanasProva || pf.semanasPlano || null;
 
   let semanas, totalSemanas, tipoPlano, limitado = 0, textoVolta = null;
@@ -2563,7 +2602,7 @@ function avisos(pf, P, { semanas, limitado }) {
     // O que segura o maior treino: o tempo do dia mais longo (o longo já chega ao limite que a pessoa deu) ou o prazo (cada
     // treino longo sobe no máximo 10% sobre o maior do mês — frandsen2025). O aviso diz qual dos dois e o que muda.
     // (quem já corre a distância mínima não recebe o aviso: o maior treino fica baixo só porque a prova está perto)
-    if (maior < minimo && (pf.longoAtual || 0) < minimo) {
+    if (pf.etapa || (maior < minimo && (pf.longoAtual || 0) < minimo)) {
       const durLongo = Math.max(0, ...semanas.flatMap((s) => s.dias.filter((d) => d.tipo === 'longo').map((d) => d.durMin)));
       const peloTempo = durLongo >= pf.tempoLongo - 5;
       const precisa = semanasNecessarias(pf, pf.dist, Math.max(1, pf.nivel), Math.max(2, pf.longoAtual || 2));
@@ -2571,12 +2610,19 @@ function avisos(pf, P, { semanas, limitado }) {
       const volMax = Math.max(0, ...semanas.map((s) => s.volumeKm || 0));
       // três causas: o tempo do dia mais longo; o prazo (o longo sobe no máximo 10% sobre o maior do mês); ou o volume da semana
       // (com poucos dias e pouco tempo nos dias comuns, o longo fica em até cerca de metade da semana — ramskov2016, knopp2024)
+      if (pf.etapa) {
+        // (a preparação em etapas: logic/corrida.js, etapaDe. O texto é curto: o que é, até onde vai e o que vem depois)
+        const nome = ROTULO.distancia[pf.dist];
+        const depois = pf.proximaEtapa ? `A 2ª leva cerca de ${nSemanas(pf.proximaEtapa)} e termina com o desafio dos ${fmtKm(km)}.` : `Com os dias e o tempo de hoje, a 2ª etapa ainda não chega ao desafio: ${peloTempo ? 'mais tempo no dia do longo' : 'mais dias de corrida ou mais tempo por treino'} abre caminho.`;
+        av('info', `Preparação para a ${nome} em ${pf.proximaEtapa ? '2 etapas' : 'etapas'}: você está na 1ª. Em ${nSemanas(semanas.length)}, o treino longo vai de ${fmtKm(pf.longoAtual || 2)} a ${fmtKm(maior)}. ${depois} Por que em etapas: o maior treino deve chegar a ${pf.dist === 42 ? '25 a 35 km' : '15 a 21 km'} antes do desafio, e ele cresce no máximo 10% por vez.`, ['fokkema2020', 'knopp2024', 'frandsen2025']);
+      } else {
       const causa = peloTempo
         ? `No seu ritmo leve, o treino longo usa todo o tempo que você tem no dia mais longo (${tempoTxt}) e chega a ${fmtKm(maior)}.${pf.tempoLongoDito < 180 && (pf.dist === 21 || pf.dist === 42) ? ' Com mais tempo nesse dia (até 3 horas), ele vai mais longe.' : ''}`
         : semanas.length < precisa
           ? `Partindo da sua corrida mais longa (${fmtKm(pf.longoAtual || 2)}), cada treino longo sobe no máximo 10% sobre o maior do mês, e em ${semanas.length} ${semanas.length === 1 ? 'semana' : 'semanas'} ele chega a ${fmtKm(maior)}. Para chegar a ${fmtKm(minimo)}, seriam cerca de ${precisa} semanas.`
           : `O treino longo fica em até cerca de metade do volume da semana, como nos planos estudados, e o volume sobe aos poucos: do seu ponto de partida, o plano chega a cerca de ${fmtKm(volMax)} por semana e ${fmtKm(maior)} no longo. Ao terminar, refaça a entrevista: com a base nova, o próximo plano vai mais longe. Mais dias de corrida ou mais tempo nos dias comuns também ajudam.`;
-      av('warn', `O maior treino do plano chega a ${fmtKm(maior)}, pouco para ${ROTULO.distancia[pf.dist]} (${fmtKm(km)}): o recomendado é chegar a ${pf.dist === 42 ? '25 a 35 km' : '15 a 21 km'}. ${causa} ${pf.dist === 42 ? 'Na maratona, quem fica abaixo de 25 km no maior treino termina, em média, 13 minutos mais lento. ' : ''}Se a prova não muda de data, dá para completar alternando corrida e caminhada: o tempo final fica parecido, com menos desconforto.`, ['frandsen2025', 'fokkema2020', 'knopp2024', 'ramskov2016', 'hottenrott2016']);
+      av('warn', `O maior treino do plano chega a ${fmtKm(maior)}, pouco para ${ROTULO.distancia[pf.dist]} (${fmtKm(km)}): o recomendado é chegar a ${pf.dist === 42 ? '25 a 35 km' : '15 a 21 km'}. ${causa} ${pf.dist === 42 ? 'Na maratona, quem fica abaixo de 25 km no maior treino termina, em média, 13 minutos mais lento. ' : ''}${pf.objetivo === 'prova' ? 'Se a prova não muda de data' : 'No desafio do fim do plano'}, dá para completar alternando corrida e caminhada: o tempo final fica parecido, com menos desconforto.`, ['frandsen2025', 'fokkema2020', 'knopp2024', 'ramskov2016', 'hottenrott2016']);
+      }
     }
     // 5 e 10 km: prazo menor que o dos programas estudados (9 a 10 semanas: nhs_c25k, filipas2022)
     if (pf.dist <= 10 && pf.semanasProva && pf.semanasProva < DURACAO[pf.dist][0]) av('warn', `${pf.semanasProva === 1 ? 'Falta 1 semana' : `Faltam ${pf.semanasProva} semanas`}, menos do que os programas estudados para essa distância (9 a 13 semanas). O plano não acelera além do seguro: vá para completar, sem meta de tempo.`, ['nhs_c25k', 'ryan2003', 'frandsen2025']);
@@ -2592,6 +2638,24 @@ function avisos(pf, P, { semanas, limitado }) {
     if (pf.alvoSeg < prev * 0.95) av('warn', `Meta ambiciosa: seu resultado recente aponta para cerca de ${fmtTempo(prev)} em ${ROTULO.distancia[pf.dist]}, e a meta é ${fmtTempo(pf.alvoSeg)}. Em um ensaio de 16 semanas, corredores bem treinados ganharam de 0,6 a 1,7%. Os treinos e o ritmo da prova seguem o seu condicionamento atual; refaça a conta depois de um teste.`, ['filipas2022', 'vickers2016', 'vdoto2_ajuste']);
   }
   return a;
+}
+// Semana da prova (ou do desafio): os 7 dias antes dela, o resumo do que importa, curto, na tela da corrida. O mesmo que
+// as orientações do plano ("Dia da prova") e o tipo de treino da prova dizem: polimento (wang2023, smyth2021taper), largar
+// um pouco abaixo do ritmo (smyth2021muro, smyth2020vc). A comida da véspera e do dia está na Nutricionista.
+export function semanaDaProva(p, hoje) {
+  if (!p || !p.prova || !diaValido(hoje) || !diaValido(p.prova.data)) return null;
+  const dias = diasEntre(hoje, p.prova.data);
+  if (dias < 0 || dias > 7) return null;
+  const nome = p.prova.tipo === 'teste' ? 'teste' : p.perfil && p.perfil.objetivo === 'prova' ? 'prova' : 'desafio';
+  return {
+    dias, nome,
+    itens: [
+      'Os treinos ficam menores de propósito: as pernas chegam descansadas.',
+      'Nada novo no dia: tênis, roupa e comida que você já usou nos treinos.',
+      'Largue um pouco abaixo do ritmo planejado e acelere na segunda metade.',
+    ],
+    refs: ['wang2023', 'smyth2021taper', 'smyth2021muro', 'smyth2020vc'],
+  };
 }
 function orientacoes(pf, P, op) {
   const o = [];

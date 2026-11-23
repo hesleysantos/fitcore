@@ -157,7 +157,7 @@ export default async (page) => {
     const f = await folhaTxt();
     const dias = await page.eval(`return [...document.querySelectorAll('.sheet .chip[data-dia]')].map((c) => c.dataset.dia);`);
     ok(!dias.includes(dk(amanha)), 'amanhã não aparece como opção');
-    if (dias.length) ok(/Amanhã é um dia em que você não treina\./.test(f), 'a folha explica por que não amanhã');
+    if (dias.length) ok(/Amanhã não é um dos seus dias de musculação\./.test(f), 'a folha explica por que não amanhã');
     await foto('treino-perdido/amanha-livre');
     await page.click('Cancelar', '.sheet button'); await page.eval(`document.querySelector('.sheet .iconbtn') && document.querySelector('.sheet .iconbtn').click();`);
   }

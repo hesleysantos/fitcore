@@ -49,6 +49,7 @@ export function interview({ perguntas, respostas, onDone, onCancel, avatar = 'co
     if (q.tipo === 'numero') return typeof v === 'number' && v >= q.min && v <= q.max;
     if (q.tipo === 'um') return typeof v === 'string' && q.op.some((o) => o[0] === v && (typeof o[3] !== 'function' || o[3](a)));
     if (!Array.isArray(v) || !v.length) return false;
+    if (q.minimo && v.length < q.minimo) return false; // ex.: os dias da musculação, pelo menos 2
     // respostas antigas (ou de antes de mudar o tempo de treino) que passam do limite: a pessoa ajusta antes de seguir
     const max = limiteDe(q, a);
     return !max || somaDe(q, v) <= max;

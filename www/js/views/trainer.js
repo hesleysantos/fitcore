@@ -5,7 +5,7 @@
 // Na proposta: o resumo, os avisos, os treinos da semana (fechados, um toque abre os exercícios) e o botão de aceitar.
 import { h, btn, icon, note, badge, sectionTitle, toggle, toast, confirmSheet, plural, dateKey, uid, DIAS_CURTO, DIAS_LONGO } from '../ui.js';
 import { state, update, activePlan } from '../store.js';
-import { aplicarDiasNosTreinos } from '../logic/dias-livres.js';
+import { aplicarDiasNosTreinos, bloqueadosDe, limparDiasAntigos } from '../logic/dias-livres.js';
 import { go, refresh } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { FAQ_TREINO } from '../data/knowledge.js';
@@ -136,7 +136,7 @@ function perfilCard(a, pf, extra) {
     pf.retorno ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Parado antes de voltar' }), h('span', { text: ROTULO.pausa[a.pausa] })) : null,
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Frequência' }), h('span', { text: `${plural(pf.dias, 'dia', 'dias')} por semana · ${pf.tempo >= 75 ? 'mais de 1 h' : pf.tempo + ' min'}` })),
     // dias em que a pessoa não treina (vale também para a corrida)
-    pf.bloqueados.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Sem treino' }), h('span', { text: pf.bloqueados.map((w) => DIAS_CURTO[w]).join(', ') })) : null,
+    pf.bloqueados.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Dias de musculação' }), h('span', { text: [1, 2, 3, 4, 5, 6, 0].filter((w) => !pf.bloqueados.includes(w)).map((w) => DIAS_CURTO[w]).join(', ') })) : null,
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Local' }), h('span', { text: ROTULO.local[a.local] })),
     pf.extras.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Também tem' }), h('span', { text: pf.extras.map((x) => ROTULO.extras[x] || x).join(', ') })) : null,
     pf.limitacoes.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Cuidados' }), h('span', { text: pf.limitacoes.join(', ') })) : null,
@@ -457,18 +457,14 @@ export function trainerView() {
     for (const k of ['idade', 'peso', 'altura']) if (pre[k] == null) { const v = typeof state.run.answers[k] === 'number' ? state.run.answers[k] : n[k]; if (typeof v === 'number') pre[k] = v; }
     // o objetivo começa igual ao da alimentação (o usuário pode trocar)
     if (pre.objetivo == null && treinoPara(n.objetivo)) pre.objetivo = treinoPara(n.objetivo);
-    // dias sem treino: o padrão é "Nenhum" (treina em qualquer dia); respostas antigas, sem a pergunta, também
-    // (a resposta é uma só para os dois treinos: quem respondeu na entrevista da corrida já vem com ela marcada)
-    const ra = state.run.answers || {};
-    if (!Array.isArray(pre.semTreino) || !pre.semTreino.length) pre.semTreino = Array.isArray(ra.semTreino) && ra.semTreino.length ? [...ra.semTreino] : ['nenhum'];
-    if (!Array.isArray(pre.soCorrida)) pre.soCorrida = Array.isArray(ra.soCorrida) ? [...ra.soCorrida] : ['nenhum'];
-    // "Em algum desses dias você ainda quer correr?" só para quem também corre
-    const corre = !!(state.run.aceitoEm || Object.keys(ra).length);
+    // dias da musculação: quem respondeu a pergunta antiga ("dias sem treino") já vem com os outros dias marcados
+    if (!Array.isArray(pre.diasMusc) && bloqueadosDe(pre).length) pre.diasMusc = [1, 2, 3, 4, 5, 6, 0].filter((w) => !bloqueadosDe(pre).includes(w)).map(String);
+    limparDiasAntigos(pre);
     return {
       title: 'Treinador', body: [interview({
-        perguntas: corre ? PERGUNTAS : PERGUNTAS.filter((q) => q.k !== 'soCorrida'), respostas: pre, base: a, notas: { objetivo: notaObjetivo('treino') },
-        // os dias valem também para a corrida (o plano dela se refaz sozinho) e o treino atual sai dos dias sem musculação
-        onDone: (r) => { let msg = ''; update((s) => { s.trainer.answers = r; s.trainer.aceitoEm = ''; s.trainer.revisaoEm = ''; s.trainer.adiadoAte = ''; msg = aplicarDiasNosTreinos(s, 'trainer'); }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); conferirObjetivos('treino'); if (msg) toast(msg); },
+        perguntas: PERGUNTAS, respostas: pre, base: a, notas: { objetivo: notaObjetivo('treino') },
+        // o treino atual sai dos dias sem musculação
+        onDone: (r) => { let msg = ''; update((s) => { s.trainer.answers = limparDiasAntigos(r); s.trainer.aceitoEm = ''; s.trainer.revisaoEm = ''; s.trainer.adiadoAte = ''; msg = aplicarDiasNosTreinos(s); }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); conferirObjetivos('treino'); if (msg) toast(msg); },
         onCancel: () => { modo = 'auto'; refresh(); },
       })],
     };
