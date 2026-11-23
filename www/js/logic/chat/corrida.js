@@ -16,7 +16,7 @@
 import * as P from '../perdido.js';
 import { temCorrida } from '../combinado.js';
 import { doresAtivas } from '../dor.js';
-import { planoAtual, treinoDoDia as corridaDoDia, alertas, analiseRecente, fmtFaixa, textoBloco } from '../corrida.js';
+import { planoAtual, treinoDoDia as corridaDoDia, alertas, naoMedeDe, analiseRecente, fmtFaixa, textoBloco } from '../corrida.js';
 import { corridaDeHoje, corridaChave, treinoDeHoje, passoJuntar, passoDor, acaoNaoCorrer, passoSemana, diaDe, cap } from './treino.js';
 import { faqDe, nomeDia, noDia, diaValido, segundaDa, somaDia, impedimento } from './comum.js';
 import { FAQ_CORRIDA, TIPOS_TREINO } from '../../data/corrida.js';
@@ -139,7 +139,7 @@ export function passoMaisRapido(ctx) {
   const d = corridaNoDia(ctx, data);
   const pf = perfilDoPlano(ctx);
   let al = [];
-  try { al = alertas(ctx.st.runs, hoje).filter((x) => x.tipo === 'warn'); } catch { al = []; }
+  try { al = alertas(ctx.st.runs, hoje, naoMedeDe(ctx.st)).filter((x) => x.tipo === 'warn'); } catch { al = []; }
   const dores = (() => { try { return doresAtivas(ctx.st, hoje); } catch { return []; } })();
   const texto = [], detalhes = [], refs = [];
   let aviso;

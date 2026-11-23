@@ -2,9 +2,10 @@
 // Fica separado do motor para os módulos de assuntos não importarem o motor (que importa todos eles).
 import { REFS } from '../../data/knowledge.js';
 import { REFS_CORRIDA } from '../../data/corrida.js';
+import { REFS_SONO } from '../../data/sono.js';
 
 // Texto da referência (as duas listas do app: Treinador/Nutricionista e Treinador de corrida); '' se não existe.
-export const textoDaRef = (k) => (typeof k === 'string' && Object.prototype.hasOwnProperty.call(REFS, k) ? REFS[k] : typeof k === 'string' && Object.prototype.hasOwnProperty.call(REFS_CORRIDA, k) ? REFS_CORRIDA[k] : '');
+export const textoDaRef = (k) => (typeof k !== 'string' ? '' : Object.prototype.hasOwnProperty.call(REFS, k) ? REFS[k] : Object.prototype.hasOwnProperty.call(REFS_CORRIDA, k) ? REFS_CORRIDA[k] : Object.prototype.hasOwnProperty.call(REFS_SONO, k) ? REFS_SONO[k] : '');
 // só as chaves que existem, sem repetir
 export const refsValidas = (l) => [...new Set((Array.isArray(l) ? l : []).filter((k) => textoDaRef(k)))];
 

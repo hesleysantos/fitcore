@@ -11,7 +11,7 @@ import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate } from '../device.js
 import { buscarFaq } from '../data/knowledge.js';
 import { REFS_CORRIDA, FAQ_CORRIDA, TIPOS_TREINO, FONTES_TELA } from '../data/corrida.js';
 import {
-  PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, planoAtual, planoDaSemana, treinoDoDia, avisosBloqueio, inicioPara, diasDeForca, evolucao, alertas, dicas,
+  PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, planoAtual, planoDaSemana, treinoDoDia, avisosBloqueio, inicioPara, diasDeForca, evolucao, alertas, naoMedeDe, dicas,
   efeitoDaDor, orientacaoDor, expandirBlocos, textoBloco, limparRegistro, MAX_REGISTROS, fmtRitmo, fmtFaixa, fmtKm, fmtTempo, fmtDia, somaDias, diaValido, diasEntre,
   retomarPlano, diaLocal, segundaDe, planejadoDe, analiseDoRegistro, analiseRecente, guardarDoDia, perfil, saudeDaCorrida,
   MAX_DORES_REGISTRO, MUSCULO_CORRIDA, soDorMuscularLeve, etapasDe,
@@ -392,7 +392,7 @@ function painel() {
   if (!sem.antesDoInicio && !sem.concluido) { const cs = cartaoSemana(hoje); if (cs) body.push(cs); }
   // 2. o que muda o treino: avisos graves (meta que não coube, prova retirada), alertas dos registros, dores e ajustes
   for (const av of p.avisos) if (av.destaque || av.tipo === 'danger') body.push(aviso(av));
-  for (const al of alertas(state.runs, hoje)) body.push(aviso(al));
+  for (const al of alertas(state.runs, hoje, naoMedeDe(state))) body.push(aviso(al));
   // dores: o mesmo registro vale para a musculação. Com dor contada, o cartão fica aqui; sem dor, só o botão, mais abaixo
   const pfDor = perfilAtual();
   // (o efeito da dor que já está em "O que ajustei no plano", com o porquê e as fontes, não se repete no cartão)
@@ -769,7 +769,8 @@ function formulario(data, planejado, existente, aoFechar) {
       if (mostraDist) { medidas.appendChild(paceVivo); atualizarPace(); }
       const basta = r.tipo === 'caminhada' ? 'Na caminhada, basta o tempo.' : unPlano === 't' ? 'Este treino é por tempo: basta o tempo.' : 'Sem GPS, basta o tempo.';
       if (!mostraDist) medidas.appendChild(h('div', { class: 'row between' }, h('span', { class: 'tiny muted grow', text: basta }), btn('Informar a distância', () => { comDistancia = true; drawMedidas(); dist.focus(); }, 'plain sm')));
-      else medidas.appendChild(h('p', { class: 'tiny muted', text: 'Distância opcional: fica no seu histórico, com o pace.' }));
+      // quem disse na entrevista que não mede a distância: ela fica no histórico, mas o treinador não se baseia nela
+      else medidas.appendChild(h('p', { class: 'tiny muted', id: 'dist-nao-usada', text: naoMedeDe(state) && r.tipo !== 'teste' && r.tipo !== 'prova' ? 'Distância opcional: fica no seu histórico, com o pace. O treinador não se baseia nela, porque na entrevista você disse que não mede a distância: o plano segue pelo tempo e pelo esforço. Para mudar, refaça a entrevista.' : 'Distância opcional: fica no seu histórico, com o pace.' }));
       return;
     }
     medidas.appendChild(h('div', { class: 'row top' }, campoDist, campoTempo));
@@ -787,7 +788,7 @@ function formulario(data, planejado, existente, aoFechar) {
   const drawPse = () => {
     while (pseChips.firstChild) pseChips.removeChild(pseChips.firstChild);
     for (let v = 1; v <= 10; v++) pseChips.appendChild(h('button', { type: 'button', class: 'chip' + (r.pse === v ? ' on' : ''), role: 'radio', 'aria-checked': r.pse === v ? 'true' : 'false', 'aria-label': `Esforço ${v}: ${PSE_TXT[v]}`, onClick: () => { r.pse = r.pse === v ? null : v; drawPse(); } }, String(v)));
-    pseTxt.textContent = r.pse ? PSE_TXT[r.pse] : 'Não informado. Sem o esforço, a análise do treino fica só no tempo e na distância.';
+    pseTxt.textContent = r.pse ? PSE_TXT[r.pse] : (naoMedeDe(state) ? 'Não informado. Sem o esforço, a análise do treino fica só no tempo.' : 'Não informado. Sem o esforço, a análise do treino fica só no tempo e na distância.');
   };
   drawPse();
   card.appendChild(h('div', { class: 'col gap-s' }, comAjuda(h('div', { class: 'small bold', text: 'Esforço do treino, de 1 a 10' }), 'Esforço de 1 a 10', [...AJUDA_ESFORCO(), 'Pense no treino inteiro, uns minutos depois de terminar.']), pseChips, pseTxt));
@@ -938,7 +939,10 @@ export function corridaDiaView(data) {
     const t = TIPOS_TREINO[planejado.comoRodagem ? 'leve' : planejado.tipo];
     const card = h('div', { class: 'card hl col' },
       h('div', { class: 'tiny accent bold', text: `SEMANA ${planejado.semana} · ${ROTULO.fase[planejado.fase].toUpperCase()}` }),
-      h('h2', { text: planejado.nome }), h('p', { text: planejado.resumo }), h('p', { class: 'small muted', text: planejado.detalhe }));
+      h('h2', { text: planejado.nome }), h('p', { text: planejado.resumo }),
+      // a mesma corrida na outra medida (km ou tempo): a pessoa escolhe a que puder usar no dia
+      planejado.outraMedida && !ves ? h('p', { class: 'small outra-medida', text: planejado.outraMedida }) : null,
+      h('p', { class: 'small muted', text: planejado.detalhe }));
     if (planejado.tipo !== 'descanso') {
       if (planejado.blocos.length > 1 || planejado.blocos.some((b) => b.repeticoes > 1)) {
         const ol = h('ol', { class: 'blocos' });

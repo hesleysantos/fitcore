@@ -357,6 +357,8 @@ function passoMeta(P, qual) {
 }
 const METAS = {
   id: 'nutri-metas', coach: 'nutri', titulo: 'Quanto comer de proteína e água', resumo: 'as suas metas de proteína, água e refeições',
+  // "quantas calorias tem um pastel?" é sobre o alimento, não sobre as metas da pessoa (nutri-alimento)
+  anula: (i) => /\b(tem|tem um|tem uma|no|na|de um|de uma)\b/.test(i.texto) && !/\b(preciso|devo|minha|meu|minhas|meus|por dia|meta|beber)\b/.test(i.texto) && !!alimentoNoTexto(i.texto),
   palavras: ['quanto de proteina', 'quanta proteina', 'proteina por dia', 'gramas de proteina', 'meta de proteina', 'quanto de agua', 'quanta agua', 'litros de agua', 'agua por dia', 'beber agua', 'hidratacao',
     'quantas refeicoes', 'numero de refeicoes', 'refeicoes por dia', 'quanto devo comer', 'quanto comer', 'minhas metas', 'minha meta', 'calorias por dia', 'quantas calorias', 'meta de calorias', 'macros', 'macronutrientes',
     'quanto beber', 'quantos litros', 'quanta agua beber', 'beber quanto', 'meta agua', 'meta proteina', 'proteina preciso', 'quanto proteina', 'quantas gramas proteina', 'kcal'],
@@ -393,15 +395,26 @@ function conflito(f, P) {
   return { tipo: 'restricao', texto: `Com ${juntaE(falta.map((t) => NOME_RESTRICAO[t]))}, este alimento não serve para você.` };
 }
 const EMBUTIDOS = /presunto|peito-de-peru|mortadela|salame|salsicha|linguica|bacon|calabresa/;
-export function passoAlimento(f, P) {
+export function passoAlimento(f, P, pergunta = '') {
   const texto = [], detalhes = [], refs = ['guia2014'];
   const c = conflito(f, P);
   let aviso;
+  // "quantas calorias tem um pastel?": os números do alimento primeiro, da tabela de onde ele veio (data/foods.js). Fora
+  // de quem tem transtorno alimentar e dos menores de 18, que não veem calorias (o mesmo critério do diário)
+  const liq = /\bmL\b/.test(f.porcao.desc) || f.cat === 'bebidas';
+  if (/\b(calorias?|kcal|proteinas?|carboidratos?|gorduras?|energia)\b/.test(String(pergunta)) && !P.transtorno && !P.menor) {
+    const m = MEDIDAS[f.id], g = m ? m[0] : f.porcao.g, d = m ? m[1] : f.porcao.desc;
+    const n1 = (x) => String(Math.round((Number(x) || 0) * 10) / 10).replace('.', ',');
+    texto.push(`${f.nome}: ${Math.round(f.kcal)} kcal em 100 ${liq ? "mL" : "g"} (${n1(f.p)} g de proteína, ${n1(f.c)} g de carboidrato e ${n1(f.g)} g de gordura). Na porção de referência, ${d.replace(/\s*\([^)]*\)/g, "")}, cerca de ${Math.round((f.kcal * g) / 100)} kcal.`);
+    detalhes.push('Fonte dos números: ' + ({ TACO: 'TACO (Unicamp)', TBCA: 'TBCA (USP)', USDA: 'USDA FoodData Central', IBGE: 'IBGE, POF 2008-2009' }[f.fonte] || f.fonte) + '.');
+    refs.push(f.fonte === 'IBGE' ? 'pof2008' : 'taco');
+  }
   if (c && c.tipo !== 'lactose') {
     texto.push(c.texto);
     if (c.tipo === 'alergia') { aviso = { tipo: 'warn', texto: 'Leia sempre o rótulo: procure “ALÉRGICOS: CONTÉM” ou “PODE CONTER”.' }; refs.push('anvisa_alergenicos'); }
   } else {
     if (P.transtorno) texto.push(f.nova === 4 ? 'Pode fazer parte da sua vida, sem culpa. No dia a dia, o Guia Alimentar sugere preferir comida feita na hora.' : 'Pode fazer parte da sua alimentação, sem culpa.');
+    else if (f.nova === 1 && (f.soDiario || /frit|empanad|milanesa/.test(f.id))) texto.push('Pode, de vez em quando: é uma preparação caseira, mas com bastante óleo ou açúcar. O Guia Alimentar pede óleo, açúcar e sal em pequenas quantidades ao cozinhar.');
     else if (f.nova === 1) texto.push('Pode, sim: é um alimento in natura ou minimamente processado, a base de uma alimentação saudável.');
     else if (f.nova === 2) texto.push('Pode, em pequenas quantidades, para temperar e cozinhar.');
     else if (f.nova === 3) texto.push('Pode: o Guia Alimentar sugere os processados em pequena quantidade, como parte de uma refeição.');
@@ -433,7 +446,8 @@ export function passoAlimento(f, P) {
   return { texto, detalhes, refs: refsOk(refs), ...(aviso ? { aviso } : {}), ir: [IR_NUTRI] };
 }
 // O alimento citado num texto ("posso comer pão francês?", "tapioca engorda?"), ou null
-const PALAVRAS_DE_DUVIDA = new Set(['posso', 'pode', 'comer', 'come', 'como', 'comi', 'engorda', 'engordam', 'emagrece', 'faz', 'mal', 'bem', 'qual', 'quanto', 'quanta', 'porcao', 'porcoes', 'tamanho', 'medida', 'saudavel',
+// (as palavras de grupo — fruta, verdura, carne, doce — não apontam um alimento: "qual a melhor fruta para emagrecer")
+const PALAVRAS_DE_DUVIDA = new Set(['tem', 'calorias', 'caloria', 'kcal', 'energia', 'proteina', 'proteinas', 'carboidrato', 'carboidratos', 'gordura', 'gorduras', 'quantas', 'quantos', 'fruta', 'frutas', 'verdura', 'verduras', 'legume', 'legumes', 'carne', 'carnes', 'doce', 'doces', 'comida', 'comidas', 'alimento', 'alimentos', 'lanche', 'lanches', 'prato', 'refeicao', 'melhor', 'melhores', 'posso', 'pode', 'comer', 'come', 'como', 'comi', 'engorda', 'engordam', 'emagrece', 'faz', 'mal', 'bem', 'qual', 'quanto', 'quanta', 'porcao', 'porcoes', 'tamanho', 'medida', 'saudavel',
   'de', 'da', 'do', 'das', 'dos', 'a', 'o', 'as', 'os', 'e', 'um', 'uma', 'no', 'na', 'noite', 'dia', 'todo', 'eu', 'ok', 'tudo', 'isso', 'ruim', 'bom', 'boa', 'devo', 'quantos', 'quantas', 'gramas', 'colheres', 'por', 'pra', 'para', 'com', 'sem', 'muito', 'pouco', 'dieta', 'ultraprocessado', 'alimento', 'vez', 'quando']);
 export function alimentoNoTexto(texto) {
   const pal = normalizar(texto).split(' ').filter((w) => w.length >= 3 && !PALAVRAS_DE_DUVIDA.has(w));
@@ -450,14 +464,16 @@ export function alimentoNoTexto(texto) {
 const ALIMENTO = {
   id: 'nutri-alimento', coach: 'nutri', titulo: 'Dúvida sobre um alimento', resumo: 'uma dúvida sobre um alimento',
   // um alimento conhecido com uma dúvida sobre ele ("tapioca engorda?", "cuscuz é saudável?")
-  bonus: (i) => (/\b(engorda\w*|emagrece\w*|saudavel|faz mal|faz bem|posso comer|pode comer|e bom|e ruim|liberado|pode tomar|posso tomar)\b/.test(i.texto) && !/\b(creatina|whey|cafeina|suplement\w*|pre treino|termogenic\w*|bcaa|glutamina|albumina)\b/.test(i.texto) && alimentoNoTexto(i.texto) ? 2 : 0),
+  bonus: (i) => (/\b(engorda\w*|emagrece\w*|saudavel|faz mal|faz bem|posso comer|pode comer|e bom|e ruim|liberado|pode tomar|posso tomar)\b/.test(i.texto) && !/\b(creatina|whey|cafeina|suplement\w*|pre treino|termogenic\w*|bcaa|glutamina|albumina)\b/.test(i.texto) && alimentoNoTexto(i.texto) ? 2 : 0)
+    // "quantas calorias tem um pastel?": as calorias de um alimento citado (não as metas da pessoa)
+    + (/\b(calorias?|caloria|kcal|proteinas?|carboidratos?|gorduras?|energia)\b/.test(i.texto) && /\b(tem|tem um|tem uma|de um|de uma|no|na)\b/.test(i.texto) && !/\b(preciso|devo|minha|meu|minhas|meus|por dia|meta)\b/.test(i.texto) && alimentoNoTexto(i.texto) ? 6.5 : 0),
   palavras: ['posso comer', 'pode comer', 'engorda', 'emagrece', 'faz mal', 'faz bem', 'porcao', 'tamanho da porcao', 'quanto de arroz', 'quanto de feijao', 'quanto de carne', 'quanto de pao', 'medida caseira',
     'saudavel', 'ultraprocessado', 'industrializado', 'pao', 'arroz', 'feijao', 'ovo', 'banana', 'refrigerante', 'chocolate', 'doces', 'tapioca', 'cuscuz', 'pizza', 'acai',
     'faz mal comer', 'e ruim', 'tem problema comer', 'liberado', 'pode tomar', 'leite', 'queijo', 'macarrao', 'batata', 'frango', 'carne', 'fruta', 'iogurte', 'granola', 'aveia', 'mel', 'suco', 'cerveja', 'pao integral'],
   inicio: (ctx) => {
     const P = perfilNutri(ctx);
     const f = isObj(ctx) && typeof ctx.texto === 'string' ? alimentoNoTexto(ctx.texto) : null;
-    if (f) return passoAlimento(f, P);
+    if (f) return passoAlimento(f, P, ctx.texto);
     return {
       texto: ['De que tipo de alimento é a sua dúvida?'],
       opcoes: [...GRUPOS.map(([id, nome]) => ({ rotulo: nome, valor: id })), { rotulo: 'Outro alimento', valor: 'outro' }],

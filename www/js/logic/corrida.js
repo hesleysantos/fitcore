@@ -73,7 +73,7 @@ export const PERGUNTAS = [
     ],
   },
   { k: 'kmSemana', tipo: 'numero', se: corre, titulo: 'Quantos quilômetros você corre por semana?', ajuda: 'A média das últimas semanas em que treinou. Uma estimativa serve.', min: 0, max: 200, un: 'km por semana', padrao: 15 },
-  { k: 'longoAtual', tipo: 'numero', se: (a) => corre(a) || a.experiencia === 'irregular', titulo: 'Qual foi a sua corrida mais longa nas últimas 4 semanas?', ajuda: 'O treino longo cresce a partir dela, sem saltos. Se ficou parado, informe a de antes da pausa.', min: 1, max: 60, un: 'km', padrao: 5 },
+  { k: 'longoAtual', tipo: 'numero', se: (a) => corre(a) || a.experiencia === 'irregular', titulo: 'Qual foi a sua corrida mais longa nas últimas 4 semanas?', ajuda: 'O treino longo cresce a partir dela, sem saltos. Se ficou parado, informe a de antes da pausa. Vale meio quilômetro.', min: 0.5, max: 60, un: 'km', padrao: 5, passo: 0.5, dec: 1 },
   // Quem vai para o programa de corrida e caminhada (ainda não corre 10 minutos seguidos, ou não passou de 3 km na corrida
   // mais longa): quanto corre hoje sem parar. O programa começa da etapa que já é possível, e não do zero. O NHS Couch to 5K
   // (ref nhs_c25k) tem 20 minutos seguidos na semana 5 e 25 na semana 6; não há estudo sobre começar adiantado pela
@@ -120,7 +120,7 @@ export const PERGUNTAS = [
   { k: 'dias', tipo: 'varios', titulo: 'Em quais dias da semana você pode correr?', ajuda: 'Marque os dias possíveis. Eu deixo pelo menos um dia de descanso por semana e evito treinos fortes em dias seguidos.', op: DIAS_OP.map((o) => [...o, (a) => !semCorridaDe(a).includes(Number(o[0]))]) },
   { k: 'diaLongo', tipo: 'um', se: (a) => Array.isArray(a.dias) && a.dias.length >= 2, titulo: 'Qual é o melhor dia para o treino mais longo?', ajuda: 'Se o dia não estiver entre os que você marcou, eu escolho.', op: [['auto', 'Tanto faz', 'Eu escolho o melhor dia'], ...DIAS_OP.map((o) => [...o, (a) => !semCorridaDe(a).includes(Number(o[0]))])] },
   { k: 'tempo', tipo: 'um', titulo: 'Quanto tempo você tem por treino, em um dia comum?', ajuda: 'Conte com aquecimento e volta à calma.', op: [['30', 'Cerca de 30 minutos', ''], ['45', 'Cerca de 45 minutos', ''], ['60', 'Cerca de 1 hora', ''], ['90', 'Até 1h30', '']] },
-  { k: 'tempoLongo', tipo: 'um', se: comDistancia, titulo: 'E no dia do treino mais longo?', op: [['60', 'Até 1 hora', ''], ['90', 'Até 1h30', ''], ['120', 'Até 2 horas', ''], ['150', 'Até 2h30', ''], ['180', 'Até 3 horas', 'Na meia e na maratona, o treino mais longo pode chegar a 3 horas']] },
+  { k: 'tempoLongo', tipo: 'um', se: comDistancia, titulo: 'E no dia do treino mais longo?', op: [['60', 'Até 1 hora', ''], ['90', 'Até 1h30', ''], ['120', 'Até 2 horas', ''], ['150', 'Até 2h30', ''], ['180', 'Até 3 horas', 'Na meia e na maratona, o treino mais longo pode chegar a 3 horas'], ['210', 'Até 3h30', 'Só na maratona: acima de 3 horas, o longo alterna corrida e caminhada', (a) => a.distancia === '42']] },
   {
     // como medir o treino: define se a prescrição sai em distância e ritmo, em velocidade de esteira ou em tempo e esforço
     k: 'aparelho', tipo: 'um', titulo: 'Como você mede as suas corridas?',
@@ -132,6 +132,13 @@ export const PERGUNTAS = [
       ['nada', 'Não meço', 'Vou pelo que sinto'],
     ],
   },
+  // Correr pelo prazer (saúde, sem prova): só por tempo basta. Para a saúde, o que conta são os minutos e o esforço, sem
+  // distância nem ritmo (oms2020: "at least 150–300 min of moderate-intensity", com a intensidade medida pelo esforço de 0 a
+  // 10; lee2014, texto completo: correr "even 5-10 minutes per day and slow speeds <6 mph" foi ligado a menor mortalidade,
+  // com benefício "similar between lower and higher doses"). Quem escolhe só o tempo não vê distância nem lembrete de GPS.
+  { k: 'soTempo', tipo: 'um', opcional: true, se: (a) => a.objetivo === 'saude' || a.objetivo === 'comecar',
+    titulo: 'Quer treinar só por tempo?', ajuda: 'Para a saúde, o que conta são os minutos e o esforço: distância e ritmo são opcionais.',
+    op: [['sim', 'Sim, só por tempo', 'Corro pelo prazer: sem distância, sem ritmo e sem lembrete de GPS'], ['nao', 'Tanto faz', 'O treinador escolhe pelo jeito como você mede']] },
   { k: 'local', tipo: 'um', titulo: 'Onde você corre na maior parte das vezes?', ajuda: 'Na esteira, os treinos saem em km/h; na pista, os tiros saem em metros. Nos outros lugares, nada muda.', op: [['rua', 'Rua, parque ou calçadão', ''], ['pista', 'Pista de atletismo', ''], ['esteira', 'Esteira', ''], ['varia', 'Varia', '']] },
   { k: 'peso', tipo: 'numero', informar: true, titulo: 'Qual é o seu peso?', ajuda: 'Uma estimativa já serve.', min: 30, max: 250, un: 'kg', padrao: 70, passo: 0.5, dec: 1 },
   { k: 'altura', tipo: 'numero', informar: true, titulo: 'Qual é a sua altura?', ajuda: 'Em centímetros.', min: 120, max: 220, un: 'cm', padrao: 170 },
@@ -287,7 +294,7 @@ export const fmtDia = (k) => `${DIAS_NOME[diaDaSemana(k)]}, ${Number(k.slice(8, 
 
 // ---------- perfil ----------
 const TEMPOS = [30, 45, 60, 90];
-const TEMPOS_LONGO = [60, 90, 120, 150, 180];
+const TEMPOS_LONGO = [60, 90, 120, 150, 180, 210];
 const RITMO_PADRAO = [480, 450, 390, 345]; // ritmo leve estimado (s/km) por nível, só para converter tempo em distância aproximada
 const RITMO_CAMINHADA = 630;
 const maisPerto = (v, l, padrao) => (Number.isFinite(v) && v > 0 ? l.reduce((m, x) => (Math.abs(x - v) < Math.abs(m - v) ? x : m), l[0]) : padrao);
@@ -368,7 +375,11 @@ export function perfil(respostas) {
   // a prova em 150 minutos (meia: maior treino de 15 a 21 km; maratona: 30 a 35 km, e abaixo de 25 km, prova pior — refs
   // fokkema2020, knopp2024): o longo vai até o tempo que a pessoa disse ter, no máximo 3 horas.
   const tempoLongoDito = dist ? Math.max(tempo, maisPerto(Number(a.tempoLongo), TEMPOS_LONGO, 90)) : tempo; // o que a pessoa disse ter no dia mais longo
-  const tempoLongo = Math.min(dist === 21 || dist === 42 ? 180 : 150, tempoLongoDito);
+  // Nenhum estudo testou um teto de tempo para o longo: os dados são por distância (fokkema2020, knopp2024, frandsen2025), e
+  // os tetos de tempo são de treinadores (Daniels, 2h30; Hansons, cerca de 3 h). Na maratona, quem é mais lento só chega aos
+  // 25 a 30 km com mais tempo: até 3h30, com corrida e caminhada alternadas acima de 3 h (o tempo de prova fica parecido e a
+  // dor muscular, menor: hottenrott2016; treinadores como McMillan e Galloway usam longos assim para quem leva mais de 4h30).
+  const tempoLongo = Math.min(dist === 42 ? 210 : dist === 21 ? 180 : 150, tempoLongoDito);
   const semanasProva = objetivo === 'prova' ? Math.round(entre(numero(a.semanasProva, 12), 1, 52)) : null;
   // tempo-alvo: entre o recorde mundial da distância e 12 minutos por km
   const temAlvo = !cautela && idade >= 16 && dist === distPedida && (objetivo === 'ritmo' || objetivo === 'prova') && a.temAlvo === 'sim' && Number.isFinite(a.alvoMin);
@@ -381,7 +392,8 @@ export function perfil(respostas) {
   // como medir: iniciantes sempre por tempo e esforço (buist2008, nhs_c25k); com resultado e GPS ou esteira, distância e ritmo
   const aparelho = ['gps', 'esteira', 'tempo', 'nada'].includes(a.aparelho) ? a.aparelho : 'tempo';
   const local = ['rua', 'pista', 'esteira', 'varia'].includes(a.local) ? a.local : 'rua';
-  const modo = nivel <= 1 ? 'tempo' : aparelho === 'gps' ? 'gps' : aparelho === 'esteira' || local === 'esteira' ? 'esteira' : 'tempo';
+  const soTempo = a.soTempo === 'sim' && (objetivo === 'saude' || objetivo === 'comecar');
+  const modo = nivel <= 1 || soTempo ? 'tempo' : aparelho === 'gps' ? 'gps' : aparelho === 'esteira' || local === 'esteira' ? 'esteira' : 'tempo';
   // Treinos fortes por semana: amadores, 1 a 2 (boullosa2020); 2 só nas semanas com 5 ou mais corridas, como no ensaio com
   // amadores (filipas2022: a conta é feita em cada semana, na curva), e nunca 3 (seiler2009). Fica no piso da faixa (1) quem é
   // iniciante, tem de 16 a 17 anos ou 60 ou mais (a força muscular dos mais velhos leva 48 a 72 h para voltar: borges2016).
@@ -389,8 +401,12 @@ export function perfil(respostas) {
   // a partir dos 15–16: fitmodel2025).
   let qMax = nivel === 0 || cautela || idade < 16 || (idade < 18 && dist === 10) ? 0 : nivel === 1 || jovem || idoso ? 1 : 2;
   if (dias.length <= 1) qMax = 0;
-  const longoAtual = jaCorre ? entre(numero(a.longoAtual, Math.max(3, km * 0.4)), 1, 60) : 0;
-  const continuo = ['1', '5', '10', '15', '20'].includes(a.continuo) ? Number(a.continuo) : 0; // minutos de corrida sem parar hoje
+  const longoAtual = jaCorre ? entre(numero(a.longoAtual, Math.max(3, km * 0.4)), 0.5, 60) : 0;
+  // minutos de corrida sem parar hoje. Sem a resposta (ela é opcional), quem já corre e não passou de 3 km tem a conta feita
+  // pela corrida mais longa, a 6:30 por km: um ritmo mais rápido que o de quem está começando, para a conta dar MENOS minutos
+  // do que a pessoa corre de fato (o programa começa de uma etapa que ela já faz). A conta é do app, não de um estudo.
+  const pelaDistancia = (m) => (m >= 20 ? 20 : m >= 15 ? 15 : m >= 10 ? 10 : m >= 5 ? 5 : m >= 1 ? 1 : 0);
+  const continuo = ['1', '5', '10', '15', '20'].includes(a.continuo) ? Number(a.continuo) : jaCorre && longoAtual < 3 ? pelaDistancia(longoAtual * 6.5) : 0;
   return {
     idade, exp, nivel, nivelBase, retorno, pausaDias, ativo, jaCorre, jovem, idoso, master, gestante, posparto, cardiaco, renal, diabetes, hipertensao, cronica, liberado,
     precisaLiberacao, confirmar, bloqueio, bloqueado: !!bloqueio, cautela, imc, obeso, lesaoPrevia, limitacoes: lim, condicoes: cond, triagem: tri, remedios, pulsoBaixo, supervisao,
@@ -409,7 +425,9 @@ export function perfil(respostas) {
     // corridas por semana: no máximo 3 para quem corre sem regularidade (iniciantes se lesionam mais acima de 3 dias: pollock1998)
     irregular, maxCorridas: irregular ? 3 : 9,
     // começo mais lento no programa de corrida e caminhada (bertelsen2018, chodzko2009, goom2019)
-    inicioLento: nivel === 0 && (obeso || idoso || posparto), continuo,
+    inicioLento: nivel === 0 && (obeso || idoso || posparto), continuo, soTempo,
+    // não mede a distância (entrevista: "Só o tempo", "Não meço" ou só por tempo): ver distanciaDoTreinador
+    naoMede: soTempo || a.aparelho === 'tempo' || a.aparelho === 'nada',
   };
 }
 
@@ -565,7 +583,7 @@ function tLongo(km, c, finalKm = 0) {
   const d = treino('longo', blocos, c, { ritmo: P ? P.longo : null });
   const total = c.porDist ? fmtKm(blocos.reduce((s, b) => s + b.m, 0) / 1000) : fmtDuracao(blocos.reduce((s, b) => s + b.seg, 0));
   d.resumo = blocos.length > 1 ? `${total}: leve, com o final em ritmo de prova · ${aprox(d)}` : `${total} em ritmo leve${c.porDist ? ' · ' + aprox(d) : ''}`;
-  d.detalhe = (blocos.length > 1 ? 'Comece leve e entre no ritmo de prova só no trecho final. ' : 'Ritmo de conversa do começo ao fim: o que conta aqui é o tempo correndo. ') + (pf.nivel <= 1 ? 'Pode caminhar 1 minuto de vez em quando.' : d.durMin > 90 ? 'Leve água e, acima de 1h30, algo para comer.' : '');
+  d.detalhe = (blocos.length > 1 ? 'Comece leve e entre no ritmo de prova só no trecho final. ' : 'Ritmo de conversa do começo ao fim: o que conta aqui é o tempo correndo. ') + (d.durMin > 180 ? 'Acima de 3 horas, alterne corrida e caminhada (por exemplo, 8 minutos correndo e 1 caminhando) do começo ao fim: o cansaço muscular fica menor. ' : '') + (pf.nivel <= 1 ? 'Pode caminhar 1 minuto de vez em quando.' : d.durMin > 90 ? 'Leve água e, acima de 1h30, algo para comer.' : '');
   if (blocos.length > 1) d.intensidade = 'moderada';
   return d;
 }
@@ -1092,6 +1110,11 @@ function diasDaSemana(s, pf, c, cfg, cont, pernas) {
   }
   // o longo é o treino mais longo da semana: nenhuma rodagem dura mais do que ele
   if (lg) for (const d of leves) out.set(d, limitarAo(out.get(d), lgMin, c));
+  // e não dura o mesmo que ele: com o longo de 25 minutos ou mais, a rodagem que empataria fica 5 minutos mais curta (sem
+  // descer dos 20 minutos). Assim a semana tem um dia mais longo desde a 1ª, como nos programas de iniciantes, em que a
+  // última sessão da semana é a mais longa (nhs_c25k), e nos planos publicados, em que o longo é o maior treino (knopp2024)
+  // (só nas 4 primeiras semanas do plano: depois, o longo já cresce mais que as rodagens)
+  if (lg && lgMin >= 25 && s.n <= 4 && !s.descarga && !s.polimento && !pf.gestante) for (const d of leves) { const t = out.get(d); if (t && t.durMin >= lgMin) { const m = limitarAo(t, lgMin - 5, c); if (m.durMin >= 20) out.set(d, m); } }
   // 4) dia da prova ou do teste
   if (ehEvento) out.set(pf.diaLongo, tEvento(pf, c, cfg));
   // 5) dias disponíveis que sobraram: caminhada (iniciantes) ou atividade livre (menores de 14)
@@ -1289,7 +1312,15 @@ export function limparCorrida(raw) {
 }
 
 const ehCorrida = (r) => r.tipo !== 'caminhada';
-const kmDe = (r, est) => (r.distKm ? r.distKm : (r.durMin * 60) / est * (r.tipo === 'corrida_caminhada' ? 0.6 : 1));
+// Quem disse na entrevista que não mede a distância pode anotar os km de uma corrida (para o histórico e o pace), mas o
+// treinador não se baseia neles: o volume, o maior treino do mês e a análise do registro vão pelo tempo e pelo esforço. A
+// exceção é o "Teste de ritmo" e a prova, em que a pessoa mede de propósito (numa pista, numa esteira ou no percurso oficial).
+export const naoMedeDe = (st) => { try { return !!(st && isObj(st.run) && perfil(st.run.answers).naoMede); } catch { return false; } };
+export const distanciaDoTreinador = (rs, naoMede) => (naoMede && Array.isArray(rs) ? rs.map((r) => (r && r.distKm && r.durMin > 0 && r.tipo !== 'teste' && r.tipo !== 'prova' ? { ...r, distKm: 0 } : r)) : rs);
+// km de um registro: a distância anotada; sem ela, pelo tempo. Se o registro veio de um treino do plano, os km previstos na
+// proporção do tempo feito (o treino com aquecimento, tiros e trote tem km diferentes do ritmo leve × tempo); senão, o
+// tempo no ritmo leve estimado
+const kmDe = (r, est) => (r.distKm ? r.distKm : r.plan && r.plan.distKm > 0 && r.plan.durMin > 0 && r.durMin > 0 ? r.plan.distKm * (r.durMin / r.plan.durMin) : (r.durMin * 60) / est * (r.tipo === 'corrida_caminhada' ? 0.6 : 1));
 const LEVES = new Set(['leve', 'longo', 'regenerativo', 'corrida_caminhada', 'livre']);
 
 // ---------- efeito de uma dor no plano ----------
@@ -1696,7 +1727,10 @@ function analisar(plan, r, ctx) {
   return fim();
 }
 // análise de um registro do estado (as corridas do mesmo dia são somadas)
-export function analiseDoRegistro(st, hoje, registro) {
+export function analiseDoRegistro(st0, hoje, registro0) {
+  const nm = naoMedeDe(st0);
+  const st = nm && st0 ? { ...st0, runs: distanciaDoTreinador(st0.runs, true) } : st0;
+  const registro = nm && registro0 ? distanciaDoTreinador([registro0], true)[0] : registro0;
   const r0 = limparRegistro(registro);
   if (!r0) return null;
   const runs = limparRegistros(st && Array.isArray(st.runs) ? st.runs : []).filter((x) => x.id !== r0.id && x.tipo !== 'caminhada');
@@ -1720,7 +1754,8 @@ export function analiseDoRegistro(st, hoje, registro) {
   return analisar(plan, r, { longa30: Math.max(0, ...antes.map((x) => x.distKm || 0)), longaMin30: Math.max(0, ...antes.map((x) => x.durMin || 0)), informado, nivel, desconhecido, soma: todos.length });
 }
 // Últimas corridas com a análise de cada uma, os treinos que o plano mostrou e ficaram sem registro, e os padrões que se repetem.
-export function analiseRecente(st, hoje, n = 5) {
+export function analiseRecente(st0, hoje, n = 5) {
+  const st = naoMedeDe(st0) ? { ...st0, runs: distanciaDoTreinador(st0.runs, true) } : st0;
   const out = { itens: [], faltas: [], padroes: [], contagem: { dentro: 0, acima: 0, abaixo: 0, livre: 0, sem: 0 } };
   if (!st || !diaValido(hoje)) return out;
   const runs = limparRegistros(st.runs).filter((r) => r.data <= hoje);
@@ -1751,9 +1786,12 @@ export function analiseRecente(st, hoje, n = 5) {
     const daSemana = mostrados.filter((m) => m.data >= ini && m.data <= fim);
     // só com a semana inteira guardada dá para dizer quanto o plano previa
     if (daSemana.length === 7) {
-      const previsto = daSemana.filter(corridaMostrada).reduce((s, m) => s + m.distKm, 0);
-      const feito = runs.filter((r) => r.tipo !== 'caminhada' && r.data >= ini && r.data <= fim).reduce((s, r) => s + (r.distKm || 0), 0);
-      if (previsto >= 5 && feito > previsto * 1.15 && feito - previsto >= 3) out.padroes.push({ id: 'acima_do_volume', texto: `Na semana passada você correu ${fmtKm(feito)}, e o plano mostrava ${fmtKm(previsto)}. O plano não acompanha o excesso: esta semana parte do que estava previsto. O limite seguro é subir até 10% por semana; saltos grandes aumentam o risco de lesão.`, refs: ['soligard2016', 'frandsen2025'] });
+      // (quem não mede a distância: em minutos)
+      const porMin = naoMedeDe(st);
+      const fmtV = (x) => (porMin ? `${Math.round(x)} min` : fmtKm(x));
+      const previsto = daSemana.filter(corridaMostrada).reduce((s, m) => s + ((porMin ? m.durMin : m.distKm) || 0), 0);
+      const feito = runs.filter((r) => r.tipo !== 'caminhada' && r.data >= ini && r.data <= fim).reduce((s, r) => s + ((porMin ? r.durMin : r.distKm) || 0), 0);
+      if (previsto >= (porMin ? 30 : 5) && feito > previsto * 1.15 && feito - previsto >= (porMin ? 20 : 3)) out.padroes.push({ id: 'acima_do_volume', texto: `Na semana passada você correu ${fmtV(feito)}, e o plano mostrava ${fmtV(previsto)}. O plano não acompanha o excesso: esta semana parte do que estava previsto. O limite seguro é subir até 10% por semana; saltos grandes aumentam o risco de lesão.`, refs: ['soligard2016', 'frandsen2025'] });
     }
   }
   const fortesPerdidos = out.faltas.filter((f) => f.forte).length;
@@ -1862,8 +1900,9 @@ function estruturaNivel0(pf, est, grade, semAlvo) {
   let geral = null, T0 = nCC;
   if (pf.dist) {
     const Tg = semAlvo ? semAlvo - nCC : semanasNecessarias(pf, pf.dist, 1, 4);
-    // o programa de iniciantes já vale como as 8 semanas de base
-    if (Tg >= 2) geral = { T: Tg, nivel: 1, dist: pf.dist, evento: eventoDe(pf), v0: Math.min(11, (nC * 27 * 60) / est), longo0: 4, semQ: 0, estLeve: est, grade, qMax: pf.cautela || pf.idade < 16 || nC < 2 ? 0 : 1 };
+    // o programa de iniciantes vale como as 8 semanas de base; quem começou adiantado (pelo que já corre) completa as 8
+    // semanas sem treino forte já no plano geral
+    if (Tg >= 2) geral = { T: Tg, nivel: 1, dist: pf.dist, evento: eventoDe(pf), v0: Math.min(11, (nC * 27 * 60) / est), longo0: 4, semQ: Math.max(0, 8 - nCC), estLeve: est, grade, qMax: pf.cautela || pf.idade < 16 || nC < 2 ? 0 : 1 };
     else if (semAlvo) T0 = semAlvo;
   }
   return { corridaDias, nC, comeco, passoEtapa, nCC, geral, T0 };
@@ -1948,9 +1987,29 @@ function aparar(semanas, c) {
       }
     }
     vols.push(geral ? km(s) : null);
+    // a rodagem encurtada pode deixar o longo, antes empatado com ela, como o maior treino da semana: o nome volta a ser "Longão"
+    s.dias = nomearLongo(s.dias);
   }
 }
 const nSemanas = (n) => (n === 1 ? '1 semana' : `${n} semanas`);
+// A mesma corrida contínua na outra medida (rodagem, regenerativo e longo de um bloco só): quem treina por distância vê
+// quanto tempo dá, e quem treina por tempo vê quantos km dá, para os dias em que puder medir. A medida principal continua a
+// escolhida pelo plano (iniciantes e quem não mede: tempo e esforço — buist2008, nhs_c25k). Com ritmos calculados (resultado
+// ou teste), a conta usa o ritmo do treino; sem eles, um ritmo estimado, e o texto diz que, na dúvida, vale o tempo.
+function outraMedida(d, c) {
+  if (!d || !['leve', 'regenerativo', 'longo'].includes(d.tipo) || !Array.isArray(d.blocos) || !d.blocos.length) return '';
+  // a rodagem com acelerações no fim: a conta vale para a corrida; as acelerações continuam iguais
+  if (d.blocos.length > 1 && !(d.tipo === 'leve' && d.blocos.length === 2 && d.blocos[1].rotulo === 'Acelerações')) return '';
+  const b = d.blocos[0];
+  if (!b || b.repeticoes > 1 || b.pausa) return '';
+  const ritmo = b.ritmo ? media(b.ritmo) : d.tipo === 'regenerativo' ? c.est.reg : d.tipo === 'longo' ? c.est.longo : c.est.leve;
+  const jeito = d.tipo === 'regenerativo' ? 'bem leve' : 'em ritmo leve';
+  const mais = d.blocos.length > 1 ? ', e as acelerações no fim' : '';
+  if (b.m) return `Sem medir a distância: ${fmtDuracao(Math.max(10, Math.round(((b.m / 1000) * ritmo) / 300) * 5) * 60)} ${jeito}${mais}.`;
+  if (!b.seg) return '';
+  const km = Math.max(1, Math.round((b.seg / ritmo) * 2) / 2);
+  return b.ritmo ? `Se medir a distância: ${fmtKm(km)} (${fmtFaixa(b.ritmo, 'gps')})${mais}.` : `Se medir a distância: cerca de ${fmtKm(km)}, ${jeito}${mais}. O ritmo é estimado: na dúvida, vale o tempo.`;
+}
 
 export function gerarPlano(respostas, opcoes) {
   const op = opcoesLimpas(opcoes);
@@ -1960,6 +2019,7 @@ export function gerarPlano(respostas, opcoes) {
   let pf = perfil(livre.respostas);
   if (pf.bloqueio) return null;
   if (livre.tirados.length) pf = { ...pf, diasTirados: livre.tirados, diasRemanejados: livre.todos };
+  if (pf.naoMede && Array.isArray(op.registros)) op.registros = distanciaDoTreinador(op.registros, true);
   const ajustes = [], extras = [];
   const acompanha = !!(op.inicio && op.hoje);
   // "Em quantas semanas é a prova?" conta a semana da entrevista; se o plano só começa na segunda seguinte, sobra uma a menos
@@ -2192,8 +2252,9 @@ export function gerarPlano(respostas, opcoes) {
         }
       }
       if (temRegistros) {
-        // treino longo: até 10% acima da corrida mais longa dos últimos 30 dias (frandsen2025)
-        const m30 = Math.max(0, ...corridas.filter((r) => r.data < iniSemana(semAtual) && diasEntre(r.data, iniSemana(semAtual)) <= 30).map((r) => { const w = r.data >= base0 ? semanaDe(r.data) : 0; const lim = w >= 1 && w <= T ? (maiorMostrado(w) ?? (cv[w - 1].longo || cv[w - 1].vol)) : Infinity; return Math.min(kmDe(r, est), lim); }));
+        // treino longo: até 10% acima da corrida mais longa dos últimos 30 dias (frandsen2025). Cada corrida conta no máximo o
+        // que estava planejado para ela: correr a mais que o plano não abre espaço para um longo maior
+        const m30 = Math.max(0, ...corridas.filter((r) => r.data < iniSemana(semAtual) && diasEntre(r.data, iniSemana(semAtual)) <= 30).map((r) => { const w = r.data >= base0 ? semanaDe(r.data) : 0; const lim = w >= 1 && w <= T ? (maiorMostrado(w) ?? (cv[w - 1].longo || cv[w - 1].vol)) : Infinity; return Math.min(kmDe(r, est), lim, r.plan && r.plan.distKm > 0 ? r.plan.distKm : Infinity); }));
         const piso = !volta && semAtual <= 4 ? cfg.longo0 : 0; // nas 4 primeiras semanas vale também o longo informado na entrevista
         const ref = Math.max(m30, piso);
         if (ref > 0) {
@@ -2371,6 +2432,7 @@ export function gerarPlano(respostas, opcoes) {
     s.volumeKm = r1(s.dias.filter(ehCorridaDia).reduce((x, d) => x + d.distKm, 0));
     s.volumeMin = s.dias.reduce((x, d) => x + d.durMin, 0);
     s.corridaMin = s.dias.reduce((x, d) => x + (d.tipo === 'corrida_caminhada' ? d.corridaMin || 0 : ehCorridaDia(d) ? d.durMin : 0), 0);
+    if (tipoPlano !== 'adaptacao' && tipoPlano !== 'caminhada' && !pf.soTempo) for (const d of s.dias) { const o = outraMedida(d, c); if (o) d.outraMedida = o; }
   }
   if (textoVolta && semanas[semAtual - 1]) { const aj = ajustes.find((x) => x.volta); if (aj) aj.texto = textoVolta(semanas[semAtual - 1].volumeKm); }
   const zonas = zonasDe(pf, P);
@@ -2436,7 +2498,20 @@ function avisos(pf, P, { semanas, limitado }) {
   if (pf.resultadoInvalido) av('warn', 'O resultado que você informou não parece possível (mais rápido que o recorde mundial da distância, ou lento demais para uma corrida contínua): desconsiderei. Os treinos vão pelo esforço; confira o tempo em “Mudar respostas”.', ['wa_recordes', 'smyth2022']);
   if (pf.alvoInvalido) av('warn', 'O tempo-alvo que você informou não parece possível para a distância: desconsiderei. Confira em “Mudar respostas”.', ['wa_recordes']);
   if (pf.lento) av('info', 'Pelo seu resultado, o ritmo leve calculado ficaria mais lento que uma caminhada rápida. Por isso os treinos vão por tempo e esforço: corra em ritmo de conversa e caminhe quando precisar.', ['hreljac2005', 'abe2019', 'foster2020']);
-  else if (pf.nivel >= 2 && !P) av('info', pf.modo === 'tempo' ? 'Sem GPS, os treinos vão pelo tempo e pelo esforço, sem ritmo. Se um dia correr numa pista ou esteira, registre uma corrida forte de 3 km ou 5 km como “Teste de ritmo” para ter ritmos calculados.' : 'Sem um resultado recente, os treinos vão pelo esforço. Para ter ritmos calculados, registre uma corrida forte de 3 km ou 5 km como “Teste de ritmo”.', ['smyth2022', 'foster2020']);
+  // Quando passar a medir a distância (quem treina só por tempo). Medir a distância não mostrou, em estudo, melhorar o
+  // desempenho nem evitar lesão em quem já corre (os estudos com corredores só descrevem quem usa relógio e aplicativo: Dallinga 2015, Janssen 2017). Ela passa a importar:
+  // (1) com uma prova ou um tempo-alvo, porque os ritmos dos treinos saem de um resultado medido (vdoto2_ajuste); (2) na meia
+  // e na maratona, porque as metas do maior treino são em km (fokkema2020: mais de 21 km na meia; 25 a 35 km na maratona) —
+  // o app avisa a partir da semana em que o longão passa de 1h30 (o corte de 1h30 é do app). O GPS erra de 4% a 9% na
+  // cidade e na mata (gilgen2020): nos treinos leves, a fala continua valendo. Quem escolheu só por tempo não vê estes avisos.
+  const semMedir = !pf.soTempo && pf.modo === 'tempo' && (pf.aparelho === 'tempo' || pf.aparelho === 'nada') && pf.nivel >= 1;
+  if (semMedir && (pf.objetivo === 'ritmo' || pf.objetivo === 'prova') && !P) av('info', 'Com uma prova ou um tempo-alvo, vale passar a medir a distância: um relógio ou aplicativo com GPS (ou a esteira) e um “Teste de ritmo” de 3 ou 5 km calculam o ritmo de cada treino. Até lá, os treinos vão pelo tempo e pela fala.', ['vdoto2_ajuste', 'foster2020']);
+  if (semMedir && (pf.dist === 21 || pf.dist === 42)) {
+    const sLongo = semanas.find((s) => s.dias.some((d) => d.tipo === 'longo' && d.durMin > 90));
+    if (sLongo) av('info', `Da semana ${sLongo.n} em diante, o longão passa de 1h30. Na ${pf.dist === 42 ? "maratona" : "meia maratona"}, a meta do maior treino é em quilômetros (${pf.dist === 42 ? "25 a 35 km" : "15 a 21 km ou mais"}): a partir daí, vale medir a distância com um relógio ou aplicativo com GPS. Na cidade ou na mata, o GPS pode errar de 4% a 9%: nos treinos leves, continue pela fala.`, ['fokkema2020', 'gilgen2020']);
+  }
+  if (pf.soTempo) av('info', 'Só por tempo: para a saúde, o que conta são os minutos e o esforço. Faça a maior parte das corridas no ritmo em que dá para conversar e some 150 minutos ou mais de atividade por semana. Se um dia quiser uma prova ou um tempo-alvo, refaça a entrevista.', ['oms2020', 'lee2014', 'foster2020']);
+  else if (pf.nivel >= 2 && !P && !(semMedir && (pf.objetivo === 'ritmo' || pf.objetivo === 'prova'))) av('info', pf.modo === 'tempo' ? 'Sem GPS, os treinos vão pelo tempo e pelo esforço, sem ritmo. Se um dia correr numa pista ou esteira, registre uma corrida forte de 3 km ou 5 km como “Teste de ritmo” para ter ritmos calculados.' : 'Sem um resultado recente, os treinos vão pelo esforço. Para ter ritmos calculados, registre uma corrida forte de 3 km ou 5 km como “Teste de ritmo”.', ['smyth2022', 'foster2020']);
   if (pf.alvoSeg && !P && pf.dist) av('info', `Sem um resultado recente, não dá para saber se a meta de ${fmtTempo(pf.alvoSeg)} está ao alcance: os treinos e a prova vão pelo esforço. Os ritmos seguem o condicionamento de hoje, não o desejado; registre um “Teste de ritmo” para calcular.`, ['vdoto2_ajuste', 'smyth2022']);
   // prazo e alcance
   if (pf.dist) {
@@ -2769,7 +2844,8 @@ export function evolucao(registros, hoje, nSemanas = 8) {
   };
 }
 // Alertas de lesão e excesso a partir dos registros.
-export function alertas(registros, hoje) {
+export function alertas(registros0, hoje, naoMede = false) {
+  const registros = distanciaDoTreinador(registros0, naoMede);
   const out = [];
   if (!diaValido(hoje)) return out;
   const rs = limparRegistros(registros).filter((r) => r.data <= hoje && ehCorrida(r));

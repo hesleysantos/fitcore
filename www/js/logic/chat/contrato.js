@@ -86,4 +86,4 @@ export const COACHES = {
   nutri: 'Nutricionista',
 };
 // Destinos de `ir.abrir` que a tela (views/chat.js) sabe abrir
-export const ABRIR = ['contar-dor', 'combinado', 'treinador-entrevista', 'treinador-novo', 'treinador-trocas', 'corrida-entrevista', 'nutri-entrevista', 'trocar-dias'];
+export const ABRIR = ['contar-dor', 'combinado', 'treinador-entrevista', 'treinador-novo', 'treinador-trocas', 'corrida-entrevista', 'nutri-entrevista', 'trocar-dias', 'planejar-extra'];

@@ -15,6 +15,7 @@ import { abrirNoTreinador } from './trainer.js';
 import { abrirEntrevistaCorrida } from './corrida.js';
 import { abrirEntrevistaNutri } from './nutrition.js';
 import { folhaTrocarDias } from './trocar-dias.js';
+import { folhaPlanejar } from './esportes.js';
 
 const VOLTA = { treinador: 'treinador', corrida: 'corrida', nutri: 'nutricao' };
 const ICONE = { treinador: 'coach', corrida: 'run', nutri: 'apple' };
@@ -100,6 +101,8 @@ function irPara(coach, x) {
   } else if (x.abrir === 'combinado') perguntarCombinado({ aoMudar: () => falar(coach, { texto: ['Prioridade guardada. Os treinos passam a segui-la.'] }) });
   else if (x.abrir === 'corrida-entrevista') abrirEntrevistaCorrida();
   else if (x.abrir === 'trocar-dias') folhaTrocarDias(() => falar(coach, { texto: ['Pronto: os treinos estão nos dias novos.'] }));
+  // treino a mais num dia que ainda vai chegar (logic/treino-extra.js): o dia vem da frase
+  else if (x.abrir === 'planejar-extra') { if (typeof x.data === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x.data)) folhaPlanejar(x.data, () => falar(coach, { texto: ['Pronto: a semana foi ajustada. Está na aba Treinos.'] })); else go('treinos'); }
   else if (x.abrir === 'nutri-entrevista') abrirEntrevistaNutri();
   else if (typeof x.abrir === 'string' && x.abrir.startsWith('treinador-')) abrirNoTreinador(x.abrir.slice(10));
 }

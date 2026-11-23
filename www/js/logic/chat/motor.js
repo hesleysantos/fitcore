@@ -40,6 +40,7 @@ import { EX_POR_ID } from '../../data/exercises.js';
 import * as NUTRI from './nutri.js';
 import { refsValidas, lerDatas, nomeDia, noDia, diaValido } from './comum.js';
 import { FAQ_TREINO, FAQ_NUTRI, buscarFaq } from '../../data/knowledge.js';
+import { FAQ_SONO } from '../../data/sono.js';
 import { ajudaDe } from '../../data/ajuda.js';
 import { FAQ_CORRIDA } from '../../data/corrida.js';
 import { expandir, conceitos, radical, idfDe, oracoes } from './nlu.js';
@@ -61,7 +62,7 @@ export const DIRETO = 2;     // vantagem a partir da qual o treinador responde d
 export const DIRETO_CONTADA = 3;
 const PERGUNTA_FIM = /\?\s*$/;
 // jeito de perguntar como usar o app ("como marco...", "onde vejo...", "tem como...")
-const USO_DO_APP = /^(o que (significa|quer dizer)|o que e (o |esse |este |a )?(botao|ponto|simbolo|sinal|interrogacao)|qual (e )?o significado|como (eu )?(faco|marco|informo|aviso|coloco|registro|anoto|vejo|uso|mudo|aumento|diminuo|troco|ligo|desligo|acho|encontro|salvo|apago|desfaco|edito|configuro|escolho|peco|conto|digo|passo|comeco|inicio)|onde (fica|ficam|vejo|registro|acho|marco|mudo|encontro|esta|estao|coloco|anoto)|tem como|da pra (marcar|registrar|mudar|ver|salvar|trocar|informar))\b/;
+const USO_DO_APP = /^(o que (significa|quer dizer)|o que e (o |esse |este |a )?(botao|ponto|simbolo|sinal|interrogacao)|qual (e )?o significado|como (eu )?(faco|marco|informo|aviso|coloco|registro|anoto|vejo|uso|mudo|aumento|diminuo|troco|ligo|desligo|acho|encontro|salvo|apago|desfaco|edito|configuro|escolho|peco|conto|digo|passo|comeco|inicio|instalo|crio|monto|baixo|planejo|adiciono|lanco|tiro)|(o |esse |este )?(app|aplicativo) (funciona|serve|roda|precisa|salva|guarda|apaga)|onde (fica|ficam|vejo|registro|acho|marco|mudo|encontro|esta|estao|coloco|anoto)|tem como|da pra (marcar|registrar|mudar|ver|salvar|trocar|informar))\b/;
 // a frase fala do assunto de outro treinador? (correr, comer...): sem isso, o chat não manda a pessoa para lá
 const DOMINIO = {
   corrida: /\b(corr\w*|km|quilometro\w*|pace|ritmo|longao|prova|maratona|meia maratona|trote|tiros?|rodagem|5k|10k)\b/,
@@ -74,7 +75,11 @@ const falaDoTreinador = (coach, t) => (DOMINIO[coach] || DOMINIO.treinador).test
 const RESPIRA = /\b(respir\w*|prend\w* (o )?ar|valsalva)\b/;
 const DICA = /\b(vale a pena|vale|e bom|e ruim|faz mal|faz diferenca|ajuda|ajudam|devo|preciso|precisa|dica|dicas|o que e|qual a diferenca|funciona|estraga|atrapalha|prejudica|compensa|e melhor|qual e melhor|quantas vezes|quanto tempo de|e normal|tem problema|pode ser)\b/;
 const DIA_DITO = /\b(hoje|agora|amanha|ontem|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b/;
-const FAQ_DO = { treinador: FAQ_TREINO, corrida: FAQ_CORRIDA, nutri: FAQ_NUTRI };
+// (o sono entra no Treinador: "dormir pouco atrapalha o ganho de massa?" — data/sono.js, com as fontes de lá)
+// (e as perguntas da Nutricionista que são do treino: jejum, comer antes e depois, proteína)
+const FAQ_TREINO_NUTRI = FAQ_NUTRI.filter((it) => /jejum|antes do treino|depois do treino|proteína preciso/.test(it.q));
+const FAQ_SONO_TREINO = FAQ_SONO.filter((it) => /ganho de músculo|Quem treina precisa/.test(it.q));
+const FAQ_DO = { treinador: [...FAQ_TREINO, ...FAQ_SONO_TREINO, ...FAQ_TREINO_NUTRI], corrida: [...FAQ_CORRIDA, ...FAQ_NUTRI.filter((it) => /jejum|antes do treino|durante a corrida|carga de carboidrato/.test(it.q))], nutri: FAQ_NUTRI };
 // como usar o app (data/ajuda.js: onde fica cada coisa): buscado só quando a frase pergunta do app (USO_DO_APP)
 const AJUDA_DO = { treinador: ajudaDe('treinador'), corrida: ajudaDe('corrida'), nutri: ajudaDe('nutri') };
 // ordem dos assuntos nos botões da abertura (os que não estão aqui vêm depois, na ordem dos módulos)
@@ -1076,6 +1081,12 @@ export function responder(texto, coach, ctx) {
   }
   const datas = r.datas;
   const cData = { ...c, datas, ...(datas.length ? { data: datas[0].data } : {}) };
+  // pergunta de definição ("o que é pace?", "o que é rodagem?"): a pergunta frequente que explica responde, antes da
+  // continuação do assunto e do treino do dia (nunca na frente de uma dor)
+  if (/^(o que (e|sao|significa|quer dizer)|que (e|sao)|oq e) /.test(c.texto) && (!r.melhor || prioridade(r.melhor.intencao) < 2)) {
+    const fd = faqBusca(texto, coach);
+    if (fd && (fd.boa || (fd.nq >= 1 && fd.cobre >= 0.5)) && faqSegura(fd.it, c)) return comAlt(limparPasso(passoDaFaq(fd.it)), '');
+  }
   // 3. continuação do assunto ("e amanhã?", "e a corrida?", "e no agachamento?")
   if (!r.confiante || lerTexto(texto).length <= 2) {
     const cont = continuar(texto, coach, { ...c, memoria: mem }, mem, datas, r.ent);

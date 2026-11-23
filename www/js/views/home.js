@@ -22,7 +22,7 @@ import { cartaoSaude, avisoDoTreino, contarProblema } from './saude-fora.js';
 import { semTreinoHoje } from '../logic/saude-fora.js';
 import { itensDoDia } from '../logic/ajuste-semana.js';
 import { linhaCargaInicio } from './corrida.js';
-import { linhasAtividades, botaoOutroTreino } from './esportes.js';
+import { linhasAtividades, botaoOutroTreino, linhasPlanejados } from './esportes.js';
 import { botaoChat } from './chat.js';
 
 function saudacao(hora = new Date().getHours()) {
@@ -157,6 +157,9 @@ export function homeView() {
   // outros esportes de hoje (futebol, natação...): tempo e calorias (views/esportes.js)
   const esportesHoje = linhasAtividades(hojeK, refresh);
   if (esportesHoje) linhas.push(esportesHoje);
+  // esporte ou corrida a mais planejados para hoje (com "Fiz" e "Registrar")
+  const planejadosHoje = linhasPlanejados(hojeK, refresh);
+  if (planejadosHoje) linhas.push(planejadosHoje);
   if (linhas.length) {
     const temAlgo = (plan && !state.current) || corridaHoje || extrasHoje.length;
     body.push(h('div', { class: 'card col gap-s hoje', id: 'inicio-hoje' },

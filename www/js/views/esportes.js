@@ -7,12 +7,16 @@ import { folha } from './common.js';
 import { startSession, startFree } from './session.js';
 import { ESPORTES, ESPORTE_POR_ID, GRUPOS_ESPORTE } from '../data/esportes.js';
 import { gastoPorMinuto, gastoDaAtividade, atividadesDoDia, MIN_MAX } from '../logic/esportes.js';
+import { analisarEsporte, analisarMusculacao, analisarCorrida, gravarExtra, apagarExtra, planejadosDoDia } from '../logic/treino-extra.js';
+import { nomeDoDia } from '../logic/perdido.js';
 
 const fmtKcal = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 const porMinTxt = (g) => `≈ ${String(Math.round(g.porMin * 10) / 10).replace('.', ',')} kcal por minuto`;
 
-// Folha "Adicionar ao dia": o que mais a pessoa fez (ou vai fazer) nesse dia
+// Folha "Adicionar ao dia": o que mais a pessoa fez (ou vai fazer) nesse dia. Num dia que ainda vai chegar, o treino a mais
+// passa pelo treinador, que mostra o que muda na semana antes de confirmar (logic/treino-extra.js)
 export function folhaOutroTreino(data = dateKey(new Date()), aoMudar = refresh) {
+  if (data > dateKey(new Date())) { folhaPlanejar(data, aoMudar); return; }
   const hoje = data === dateKey(new Date());
   const plan = activePlan();
   const opt = (ic, t, s, onClick, attrs = {}) => h('button', { class: 'opt', type: 'button', onClick, ...attrs }, icon(ic, 'l accent'), h('div', null, h('div', { class: 'o-t', text: t }), h('div', { class: 'o-s', text: s })));
@@ -33,7 +37,7 @@ export function folhaOutroTreino(data = dateKey(new Date()), aoMudar = refresh) 
 }
 
 // Escolher o esporte e o tempo; mostra o gasto estimado enquanto a pessoa escolhe
-export function folhaEsporte(data = dateKey(new Date()), aoMudar = refresh) {
+export function folhaEsporte(data = dateKey(new Date()), aoMudar = refresh, planejar = false) {
   let esporte = '', min = 60;
   const estimativa = h('div', { class: 'esporte-kcal', 'aria-live': 'polite' });
   const desenharEstimativa = () => {
@@ -60,15 +64,24 @@ export function folhaEsporte(data = dateKey(new Date()), aoMudar = refresh) {
   };
   busca.addEventListener('input', desenharLista);
   desenharLista(); desenharEstimativa();
-  const tempo = h('div', { class: 'row between' }, h('div', { class: 'bold', text: 'Minutos praticados' }), stepper({ value: min, min: 5, max: MIN_MAX, step: 5, label: 'Minutos praticados', onChange: (v) => { min = v; desenharEstimativa(); } }));
+  const tempo = h('div', { class: 'row between' }, h('div', { class: 'bold', text: planejar ? 'Quantos minutos' : 'Minutos praticados' }), stepper({ value: min, min: 5, max: MIN_MAX, step: 5, label: planejar ? 'Quantos minutos' : 'Minutos praticados', onChange: (v) => { min = v; desenharEstimativa(); } }));
   const salvar = () => {
     if (!esporte) { toast('Escolha o esporte.'); return; }
-    update((st) => { st.atividades = [...(st.atividades || []), { id: uid(), data, esporte, min, em: new Date().toISOString() }]; });
+    if (planejar) { s.close(); planejarEsporte(data, esporte, min, aoMudar); return; }
+    const id = uid(), em = new Date().toISOString();
+    update((st) => { st.atividades = [...(st.atividades || []), { id, data, esporte, min, em }]; });
     s.close();
     toast(`${ESPORTE_POR_ID.get(esporte).nome}: ${min} min registrados.`);
     aoMudar();
+    // esporte de hoje que pesa nas pernas: o treinador recomenda afastar o treino de pernas e a corrida forte de hoje e de
+    // amanhã, e pergunta antes (nada muda sozinho). As marcas levam o id da atividade e saem junto com ela.
+    if (data === hojeKey()) {
+      let a = null;
+      try { a = analisarEsporte(state, data, esporte, min, data, id, em); } catch { a = null; }
+      if (a && a.marcas.length) folhaAnalise({ titulo: `Depois do ${ESPORTE_POR_ID.get(esporte).nome.replace(/ \(.*\)$/, '').toLowerCase()}`, textos: a.textos, avisos: a.avisos, pergunta: 'É o recomendado, mas a escolha é sua: quer mudar?', confirmar: 'Mudar como recomendado', aoConfirmar: () => { update((st) => gravarExtra(st, null, a.marcas)); toast('Semana ajustada.'); aoMudar(); }, outro: { rotulo: 'Manter os treinos como estão', aoEscolher: () => {} } });
+    }
   };
-  const s = folha({ title: 'Outro esporte', body: h('div', { class: 'col gap-s', id: 'folha-esporte' }, tempo, estimativa, busca, lista), footer: btn('Salvar', salvar, 'primary block') });
+  const s = folha({ title: 'Outro esporte', body: h('div', { class: 'col gap-s', id: 'folha-esporte' }, tempo, estimativa, busca, lista), footer: btn(planejar ? 'Continuar' : 'Salvar', salvar, 'primary block') });
 }
 
 // Os esportes registrados no dia, cada um com o gasto e um "x" para apagar
@@ -81,8 +94,90 @@ export function linhasAtividades(data, aoMudar = refresh) {
     return h('div', { class: 'hoje-item esporte-item', 'data-atividade': a.id },
       h('span', { class: 'hoje-ic' }, icon('star', 's')),
       h('span', { class: 'grow col hoje-txt' }, h('span', { class: 'bold ellipsis', text: e.nome }), h('span', { class: 'small muted', text: `${a.min} min${g.mostrar ? ` · ≈ ${fmtKcal(g.kcal)} kcal` : ''}` })),
-      iconBtn('close', `Apagar ${e.nome}`, () => { update((st) => { st.atividades = (st.atividades || []).filter((x) => x.id !== a.id); }); toast('Atividade apagada.'); aoMudar(); }, 'soft'));
+      iconBtn('close', `Apagar ${e.nome}`, () => { update((st) => { st.atividades = (st.atividades || []).filter((x) => x.id !== a.id); st.perdidos = (st.perdidos || []).filter((x) => !(x && x.extra === a.id)); }); toast('Atividade apagada.'); aoMudar(); }, 'soft'));
   }));
 }
 
 export const botaoOutroTreino = (data, aoMudar = refresh, cls = 'plain sm', rotulo = 'Adicionar outro treino') => btn(rotulo, () => folhaOutroTreino(data, aoMudar), cls, 'plus');
+
+// ---------- treino a mais num dia que ainda vai chegar ----------
+const hojeKey = () => dateKey(new Date());
+// A análise do treinador: o que muda na semana, com Confirmar (ou o motivo de não dar)
+// `outro`: { rotulo, aoEscolher } — a segunda escolha (por exemplo, manter os treinos como estão)
+function folhaAnalise({ titulo, textos = [], avisos = [], pode = true, motivo = '', confirmar = 'Confirmar', aoConfirmar, outro = null, pergunta = '' }) {
+  const corpo = h('div', { class: 'col gap-s', id: 'folha-analise-extra' },
+    h('div', { class: 'tiny accent bold', text: 'O TREINADOR OLHOU A SEMANA' }),
+    ...(pode ? textos : [motivo]).map((t) => h('p', { class: 'small', text: t })),
+    ...(pode ? avisos : []).map((t) => h('div', { class: 'note warn small' }, icon('warn'), h('div', { class: 'grow', text: t }))),
+    pergunta && pode ? h('p', { class: 'small bold', text: pergunta }) : null);
+  const ok = btn(confirmar, () => { s.close(); aoConfirmar(); }, 'primary block', 'check');
+  const footer = !pode ? btn('Entendi', () => s.close(), 'block') : outro ? h('div', { class: 'col gap-s' }, ok, btn(outro.rotulo, () => { s.close(); outro.aoEscolher(); }, 'ghost block')) : ok;
+  const s = folha({ title: titulo, body: corpo, footer });
+}
+export function folhaPlanejar(data, aoMudar = refresh) {
+  const plan = activePlan();
+  const qd = nomeDoDia(data, hojeKey());
+  const opt = (ic, t, sub, onClick, attrs = {}) => h('button', { class: 'opt', type: 'button', onClick, ...attrs }, icon(ic, 'l accent'), h('div', null, h('div', { class: 'o-t', text: t }), h('div', { class: 'o-s', text: sub })));
+  const corpo = h('div', { class: 'col gap-s', id: 'folha-outro-treino' }, h('p', { class: 'small muted', text: `O que mais você vai fazer ${qd}? O treinador confere a semana e ajusta o resto.` }));
+  const opcoes = h('div', { class: 'opts' });
+  if (plan && plan.dias.length) opcoes.appendChild(opt('dumbbell', 'Musculação', 'Um treino do seu plano neste dia', () => {
+    corpo.replaceChildren(h('p', { class: 'small muted', text: 'Qual treino?' }), h('div', { class: 'list' }, ...plan.dias.map((d) => h('button', { class: 'item', type: 'button', 'data-dia-plano': d.id, onClick: () => { s.close(); planejarMusculacao(data, d.id, aoMudar); } },
+      h('div', { class: 'grow' }, h('div', { class: 't', text: d.nome }), h('div', { class: 's', text: d.foco || plural(d.itens.length, 'exercício', 'exercícios') })), icon('right', 's')))));
+  }, { 'data-acao': 'planejar-musculacao' }));
+  opcoes.appendChild(opt('run', 'Corrida', 'O treinador vê se muda uma corrida da semana ou põe uma a mais', () => { s.close(); planejarCorrida(data, aoMudar); }, { 'data-acao': 'planejar-corrida' }));
+  opcoes.appendChild(opt('star', 'Outro esporte', 'Futebol, vôlei, beach tennis... o treinador sugere afastar o treino de pernas', () => { s.close(); folhaEsporte(data, aoMudar, true); }, { 'data-acao': 'outro-esporte' }));
+  corpo.appendChild(opcoes);
+  const s = folha({ title: 'Planejar treino a mais', body: corpo });
+}
+function planejarMusculacao(data, diaId, aoMudar) {
+  const id = uid(), em = new Date().toISOString();
+  const a = analisarMusculacao(state, data, diaId, hojeKey(), id, em);
+  const nome = ((activePlan() || { dias: [] }).dias.find((d) => d.id === diaId) || {}).nome || 'Treino';
+  folhaAnalise({ titulo: `${nome} ${nomeDoDia(data, hojeKey())}`, textos: a.textos, pode: a.pode, motivo: a.texto, aoConfirmar: () => { update((s) => gravarExtra(s, null, a.marcas)); toast('Semana ajustada.'); aoMudar(); } });
+}
+function planejarCorrida(data, aoMudar) {
+  const id = uid(), em = new Date().toISOString();
+  const hoje = hojeKey();
+  const a = analisarCorrida(state, data, hoje, id, em);
+  if (!a.pode) { folhaAnalise({ titulo: 'Corrida', pode: false, motivo: a.textos[0] || 'Não dá para este dia.' }); return; }
+  const qd = nomeDoDia(data, hoje);
+  const corpo = h('div', { class: 'col gap-s', id: 'folha-analise-extra' }, h('div', { class: 'tiny accent bold', text: 'O TREINADOR OLHOU A SEMANA' }));
+  if (a.mover) {
+    corpo.append(h('p', { class: 'small', text: `A corrida de ${nomeDoDia(a.mover.de, hoje)} (${String(a.mover.nome).toLowerCase()}) pode vir para ${qd}, e ${nomeDoDia(a.mover.de, hoje)} fica livre. É o melhor jeito: a semana não ganha volume de uma vez.` }),
+      btn(`Passar a corrida de ${nomeDoDia(a.mover.de, hoje)} para ${qd}`, () => { s2.close(); update((s) => gravarExtra(s, null, [a.marcaMover])); toast('A corrida mudou de dia.'); aoMudar(); }, 'primary block', 'calendar'),
+      h('p', { class: 'small muted', text: 'Ou, se quiser correr a mais:' }));
+  }
+  corpo.append(...a.avisos.map((t) => h('div', { class: 'note warn small' }, icon('warn'), h('div', { class: 'grow', text: t }))), ...a.textos.map((t) => h('p', { class: 'small muted', text: t })),
+    btn(`Corrida leve a mais, até ${a.extraMin} min`, () => { s2.close(); update((s) => gravarExtra(s, { id, data, tipo: 'corrida', min: a.extraMin, em }, [])); toast('Corrida a mais planejada.'); aoMudar(); }, a.mover ? 'ghost block' : 'primary block', 'plus'));
+  const s2 = folha({ title: `Corrida ${qd}`, body: corpo });
+}
+function planejarEsporte(data, esporte, min, aoMudar) {
+  const id = uid(), em = new Date().toISOString();
+  const a = analisarEsporte(state, data, esporte, min, hojeKey(), id, em);
+  const plano = { id, data, tipo: 'esporte', esporte, min, em };
+  const so = () => { update((s) => gravarExtra(s, plano, [])); toast('Esporte planejado. Os treinos continuam como estão.'); aoMudar(); };
+  // com mudança recomendada, a pessoa decide: o treinador nunca muda sozinho
+  if (a.marcas.length) folhaAnalise({ titulo: `${ESPORTE_POR_ID.get(esporte).nome} ${nomeDoDia(data, hojeKey())}`, textos: a.textos, avisos: a.avisos, pergunta: 'É o recomendado, mas a escolha é sua: quer mudar?', confirmar: 'Mudar como recomendado', aoConfirmar: () => { update((s) => gravarExtra(s, plano, a.marcas)); toast('Esporte planejado e semana ajustada.'); aoMudar(); }, outro: { rotulo: 'Manter os treinos como estão', aoEscolher: so } });
+  else folhaAnalise({ titulo: `${ESPORTE_POR_ID.get(esporte).nome} ${nomeDoDia(data, hojeKey())}`, textos: a.textos, avisos: a.avisos, aoConfirmar: so });
+}
+
+// Treinos a mais planejados para o dia (esporte e corrida), com "Fiz" (esporte) ou "Registrar" (corrida) no dia, e o "x"
+// que tira o treino e desfaz o que ele mudou na semana
+export function linhasPlanejados(data, aoMudar = refresh) {
+  const itens = planejadosDoDia(state, data);
+  if (!itens.length) return null;
+  const hoje = hojeKey();
+  return h('div', { class: 'col gap-s', 'data-planejados': data }, ...itens.map((p) => {
+    const e = p.tipo === 'esporte' ? ESPORTE_POR_ID.get(p.esporte) : null;
+    const nome = e ? e.nome : 'Corrida leve a mais';
+    const acao = e && data <= hoje ? btn('Fiz', () => {
+      update((st) => { st.atividades = [...(st.atividades || []), { id: uid(), data, esporte: p.esporte, min: p.min, em: new Date().toISOString() }]; st.planejados = (st.planejados || []).filter((x) => x.id !== p.id); });
+      toast(`${e.nome}: ${p.min} min registrados.`); aoMudar();
+    }, 'sm primary') : !e && data === hoje ? btn('Registrar', () => go('corrida/dia/' + data), 'sm primary') : null;
+    return h('div', { class: 'hoje-item esporte-item planejado', 'data-planejado': p.id },
+      h('span', { class: 'hoje-ic' }, icon(e ? 'star' : 'run', 's')),
+      h('span', { class: 'grow col hoje-txt' }, h('span', { class: 'bold ellipsis', text: nome }), h('span', { class: 'small muted', text: `${e ? '' : 'até '}${p.min} min · planejado` })),
+      acao,
+      iconBtn('close', `Tirar ${nome}`, () => { update((st) => apagarExtra(st, p.id)); toast('Tirado. A semana voltou ao que era.'); aoMudar(); }, 'soft'));
+  }));
+}

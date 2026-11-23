@@ -18,7 +18,8 @@ import { registrarTrocaManual } from '../logic/variacao.js';
 import { diasBloqueados } from '../logic/dias-livres.js';
 import { itensDoDia } from '../logic/ajuste-semana.js';
 import { alcance, mudarItens, seloSemana } from './ajuste-semana.js';
-import { linhasAtividades, botaoOutroTreino } from './esportes.js';
+import { linhasAtividades, botaoOutroTreino, linhasPlanejados } from './esportes.js';
+import { apagarExtra } from '../logic/treino-extra.js';
 import { folhaTrocarDias } from './trocar-dias.js';
 
 const ORDEM_SEMANA = [1, 2, 3, 4, 5, 6, 0];
@@ -245,6 +246,8 @@ export function plansView() {
         h('div', { class: 'tiny muted mt', text: d.itens.length ? `${plural(d.itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(d)} min` : 'Nenhum exercício ainda' })),
       ef && ef.veioDe ? badge('Movido', 'acc') : wd != null ? chipAgenda(wd, d) : h('button', { class: 'chip sm', type: 'button', onClick: () => diaSheet(plan, d) }, 'Definir dia')),
     dataK ? seloSemana(plan.id, d.id, dataK, refresh) : null,
+    // treino a mais planejado (ou trazido de outro dia a pedido): o "Tirar" desfaz o que ele mudou na semana
+    (() => { const mx = ef && semanaVista === 0 ? (ef.extra || ((state.perdidos || []).find((e) => e && e.tipo === 'troca' && e.data === dataK && e.extra) || {}).extra) : ''; return mx && !feita ? h('div', { class: 'row between treino-extra', 'data-extra-musc': mx }, h('span', { class: 'small muted', text: ef.extra ? 'Treino a mais nesta semana.' : 'Trazido para este dia a seu pedido.' }), btn(ef.extra ? 'Tirar' : 'Desfazer', () => { update((st) => apagarExtra(st, mx)); toast('Desfeito. A semana voltou ao que era.'); refresh(); }, 'sm ghost')) : null; })(),
     // treino já feito neste dia: só "Ver treino" (abre o registro no histórico)
     feita ? btn('Ver treino', () => go('historico/' + feita.id), 'ghost block', 'right') : h('div', { class: 'row' },
       btn('Editar', () => go(`treino/${plan.id}/${d.id}`), 'ghost grow', 'edit'),
@@ -313,12 +316,13 @@ export function plansView() {
     for (const s of state.sessions.filter((x) => dateKey(new Date(x.inicio)) === dataDia && !(d && x.diaId === d.id && x.planId === plan.id))) {
       card.appendChild(h('div', { class: 'treino row', 'data-sessao': s.id }, h('div', { class: 'grow' }, h('div', { class: 'row gap-s' }, h('span', { class: 'bold', text: s.nome || 'Treino' }), badge('Feito', 'ok'))), btn('Ver', () => go('historico/' + s.id), 'sm ghost')));
     }
-    // outros esportes do dia e "Adicionar outro treino" (semana atual, de hoje para trás: views/esportes.js)
-    if (semanaVista === 0 && dataDia <= hojeK) {
-      const la = linhasAtividades(dataDia, refresh);
-      if (la) card.append(rotulo('star', 'Outros esportes'), la);
-      // hoje: outro treino; um dia que já passou: lançar o que foi feito (o treinador reajusta a semana)
-      card.appendChild(h('div', { class: 'row outro-treino' }, botaoOutroTreino(dataDia, refresh, 'plain sm', dataDia === hojeK ? 'Adicionar outro treino' : 'Adicionar treino feito')));
+    // outros esportes do dia e "Adicionar outro treino" (semana atual: views/esportes.js). Hoje: outro treino; um dia que
+    // já passou: lançar o que foi feito; um dia que vai chegar: planejar um treino a mais. O treinador reajusta a semana.
+    if (semanaVista === 0) {
+      const la = dataDia <= hojeK ? linhasAtividades(dataDia, refresh) : null;
+      const lp = linhasPlanejados(dataDia, refresh);
+      if (la || lp) card.append(rotulo('star', 'Outros treinos'), ...[la, lp].filter(Boolean));
+      card.appendChild(h('div', { class: 'row outro-treino' }, botaoOutroTreino(dataDia, refresh, 'plain sm', dataDia === hojeK ? 'Adicionar outro treino' : dataDia < hojeK ? 'Adicionar treino feito' : 'Planejar treino a mais')));
     }
     semana.appendChild(card);
   }

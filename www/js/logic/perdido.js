@@ -45,7 +45,11 @@ import { efeitoDeHoje } from './saude-fora.js';
 
 export const MAX_PERDIDOS = 200;
 // 'troca': um treino de musculação da semana feito ANTES do dia dele (o "treino de amanhã hoje"), marcado pelo chat
-export const TIPOS_PERDIDO = ['musculacao', 'corrida', 'troca'];
+// 'extra': um treino do plano a mais, planejado para um dia sem musculação desta semana (logic/treino-extra.js)
+export const TIPOS_PERDIDO = ['musculacao', 'corrida', 'troca', 'extra'];
+// ajuste de uma marca que não é falta: 'descanso' (48 horas para os mesmos músculos de um treino feito ou planejado),
+// 'esporte' (longe de um esporte planejado — logic/treino-extra.js) e 'pedido' (a pessoa pediu o treino em outro dia)
+export const AJUSTES = ['descanso', 'esporte', 'pedido'];
 export const REFS_MUSCULACAO = ['pelland2026', 'garber2011', 'acsm2009', 'caterisano2019'];
 export const REFS_COMBINADO = ['blagrove2018'];
 export const REFS_CORRIDA = ['frandsen2025'];
@@ -100,7 +104,13 @@ export function limparPerdido(x) {
   if (!isObj(x) || !TIPOS_PERDIDO.includes(x.tipo) || !diaOk(x.data)) return null;
   const em = iso(x.em);
   const motivo = motivoOk(x.motivo);
-  const comMotivo = (o) => (motivo ? { ...o, motivo } : o);
+  // extra: o id do treino a mais planejado (logic/treino-extra.js) que fez a marca; sai junto com ele
+  const ex = idStr(x.extra);
+  const comMotivo = (o) => (ex ? { ...(motivo ? { ...o, motivo } : o), extra: ex } : motivo ? { ...o, motivo } : o);
+  if (x.tipo === 'extra') {
+    const planId = idStr(x.planId), diaId = idStr(x.diaId);
+    return planId && diaId && ex ? { tipo: 'extra', data: x.data, planId, diaId, em, extra: ex } : null;
+  }
   if (x.tipo === 'corrida') {
     // feitoEm: a corrida foi feita depois, nesse dia (reajustarDepoisDaCorrida); com ela, não há mais dia novo
     const feitoEm = diaOk(x.feitoEm) && segundaDe(x.feitoEm) === segundaDe(x.data) && x.feitoEm >= x.data ? x.feitoEm : '';
@@ -110,7 +120,8 @@ export function limparPerdido(x) {
   if (x.tipo === 'troca') {
     const planId = idStr(x.planId), diaId = idStr(x.diaId);
     if (!planId || !diaId || !diaOk(x.de) || x.de === x.data || segundaDe(x.de) !== segundaDe(x.data)) return null;
-    return { tipo: 'troca', data: x.data, de: x.de, planId, diaId, em };
+    // (a troca não tem motivo: só o id do treino a mais que a fez, se foi ele)
+    return { tipo: 'troca', data: x.data, de: x.de, planId, diaId, em, ...(ex ? { extra: ex } : {}) };
   }
   const planId = idStr(x.planId), diaId = idStr(x.diaId);
   if (!planId || !diaId) return null;
@@ -127,7 +138,7 @@ export function limparPerdido(x) {
   // ('livre' = um treino fora do plano)
   const trocadoPor = idStr(x.trocadoPor) && x.trocadoPor !== diaId ? x.trocadoPor : '';
   // ajuste 'descanso': o treino mudou de dia para dar 48 horas aos mesmos músculos de um treino feito antes
-  const ajuste = x.ajuste === 'descanso' && movs.length ? 'descanso' : '';
+  const ajuste = AJUSTES.includes(x.ajuste) && movs.length ? x.ajuste : '';
   return comMotivo({ tipo: 'musculacao', data: x.data, planId, diaId, movs, em, ...(feitoEm ? { feitoEm } : {}), ...(trocadoPor ? { trocadoPor } : {}), ...(ajuste ? { ajuste } : {}) });
 }
 export function limparPerdidos(raw) {
@@ -164,6 +175,11 @@ export function semanaEfetiva(plan, perdidos, segunda) {
   for (const e of lista) {
     const i = idx(e.data);
     if (e.tipo === 'corrida') { dias[i].corridaPerdida = e; continue; }
+    if (e.tipo === 'extra') {
+      // um treino a mais num dia sem musculação
+      if (ok && e.planId === plan.id && existe(e.diaId) && !dias[i].diaId && !dias[i].perdido) { dias[i].diaId = e.diaId; dias[i].extra = e.extra; }
+      continue;
+    }
     if (e.tipo === 'troca') {
       // o treino de `de` feito em `data` (que estava sem musculação)
       const a = idx(e.de);
@@ -338,6 +354,7 @@ export function propor(st, data, hoje, opc = {}) {
   const bloqueado = (k) => bloq.has(sem[k].wd) || fer.has(sem[k].data);
   const saude = diasDeSaude(st, hoje, 'musc');
   const alvo = opc && diaOk(opc.para) ? opc.para : '';
+  const evitar = new Set(opc && Array.isArray(opc.evitar) ? opc.evitar.filter(diaOk) : []);
   const vagas = [];
   for (let k = Math.max(iHoje, i + 1); k < 7; k++) if (!fixo[at(k)] && (!bloqueado(k) || conteudo[at(k)])) vagas.push(k);
   // os treinos que podem andar junto: os que estão nessas vagas
@@ -381,6 +398,8 @@ export function propor(st, data, hoje, opc = {}) {
     for (const k of vagas) {
       if (usada.has(k) || (j > 0 && k < elems[j].de)) continue;
       if (j === 0 && alvo && datas[k] !== alvo) continue; // o dia escolhido pela pessoa
+      // dias a evitar para quem tem pernas (perto de um esporte planejado: logic/treino-extra.js)
+      if (evitar.size && evitar.has(datas[k]) && !(j > 0 && k === elems[j].de) && elems[j].carga && elems[j].carga.pernas) continue;
       const fica = j > 0 && k === elems[j].de;
       if (bloqueado(k) && !fica) continue; // dia sem treino: só o treino que já era dele
       if (saude.has(datas[k]) && !fica) continue; // problema de saúde nesse dia: nada é reposto nele
@@ -640,6 +659,8 @@ export const corridaPerdidaEm = (st, data) => (Array.isArray(st && st.perdidos) 
 // já mudada por esta). Devolve { lista, removidas }.
 export function desfazer(perdidos, alvo) {
   const lista = Array.isArray(perdidos) ? perdidos.slice() : [];
+  // marca de um treino a mais planejado: saem todas as marcas dele
+  if (alvo && alvo.extra) { const fica = lista.filter((e) => !(e && e.extra === alvo.extra)); return { lista: fica, removidas: lista.length - fica.length }; }
   const i = lista.findIndex((e) => e && alvo && e.tipo === alvo.tipo && e.data === alvo.data && (e.planId || '') === (alvo.planId || ''));
   if (i < 0) return { lista, removidas: 0 };
   if (alvo.tipo === 'corrida') { lista.splice(i, 1); return { lista, removidas: 1 }; }
@@ -745,6 +766,50 @@ export function marcaTroca(st, de, para, hoje, em) {
   const a = avaliarTroca(st, de, para, hoje);
   if (!a.pode) return null;
   return limparPerdido({ tipo: 'troca', data: para, de, planId: planoAtivo(st).id, diaId: a.diaId, em });
+}
+// Um treino do plano A MAIS num dia desta semana que ainda vai chegar e está sem musculação (logic/treino-extra.js). As
+// regras são as de sempre: 48 horas entre os mesmos músculos (ref garber2011), um dia sem treino na semana (ref
+// meeusen2013), menores de 18 e diabetes em dias não seguidos (refs colberg2016, valovichmcleod2011), pernas longe da
+// corrida forte e do longo (refs blagrove2018, doma2017). { pode, motivo, nome, bloqueado, amanha } — amanha: a data do
+// treino do dia seguinte, que pega os mesmos músculos e precisa mudar de dia ('' se nenhum). motivo: 'sem_plano' |
+// 'outra_semana' | 'sem_treino' | 'ocupado' | 'feriado' | 'saude' | 'sem_descanso' | 'corrida' | 'sem_folga'.
+export function avaliarExtraMusc(st, data, diaId, hoje, idExtra = 'x') {
+  const plan = planoAtivo(st);
+  const nao = (motivo, extra = {}) => ({ pode: false, motivo, nome: '', bloqueado: false, amanha: '', ...extra });
+  if (!plan || !diaOk(data) || !diaOk(hoje)) return nao('sem_plano');
+  const seg = segundaDe(hoje);
+  if (segundaDe(data) !== seg || data <= hoje) return nao('outra_semana');
+  const dia = plan.dias.find((d) => d.id === diaId);
+  if (!dia) return nao('sem_treino');
+  const base = { nome: dia.nome };
+  const sem = semanaEfetiva(plan, st.perdidos, seg);
+  const i = sem.findIndex((d) => d.data === data);
+  if (sem[i].diaId || sem[i].perdido) return nao('ocupado', { ...base, ocupadoPor: (plan.dias.find((x) => x.id === (sem[i].diaId || (sem[i].perdido || {}).diaId)) || {}).nome || '' });
+  if (feriadosDe(st).has(data)) return nao('feriado', base);
+  if (diasDeSaude(st, hoje, 'musc').has(data)) return nao('saude', base);
+  const marca = limparPerdido({ tipo: 'extra', data, planId: plan.id, diaId, em: '', extra: idExtra });
+  const st2 = comMarca(st, marca);
+  const sem2 = semanaEfetiva(plan, st2.perdidos, seg);
+  const antes = cargasDaSemana(st, plan, sem, seg), carga = cargasDaSemana(st2, plan, sem2, seg);
+  const pf = perfilDe(st, hoje);
+  const alternado = !!(pf.jovem || pf.diabetes);
+  const cx = cargaDoTreino(dia);
+  const bate = (a, b) => !!(a && b && (choca(a, b) || alternado));
+  // carga[k + 1] = dia k da semana (0 = segunda); carga[0] = domingo anterior, carga[8] = segunda seguinte
+  if (bate(carga[i], cx)) return nao('sem_descanso', base);
+  let amanha = '';
+  if (bate(cx, carga[i + 2])) {
+    const d1 = sem2[i + 1];
+    const feito = d1 && (Array.isArray(st.sessions) ? st.sessions : []).some((x) => x && diaLocal(x.inicio) === d1.data);
+    if (!d1 || !d1.diaId || d1.perdido || d1.extra || feito) return nao('sem_descanso', base);
+    amanha = d1.data;
+  }
+  const { corre, chave } = corridaDaSemana(st, hoje, seg);
+  const combo = (() => { try { return comboAtual(st); } catch { return { foco: '' }; } })();
+  if ((combo.foco === 'corrida' || combo.foco === 'equilibrio') && cx.pernas && (chave[i] || chave[i + 1] || (pf.nivel === 1 && chave[i + 2]))) return nao('corrida', base);
+  const livres = (cs) => { let n = 0; for (let k = 0; k < 7; k++) if (!cs[k + 1] && !corre[k]) n++; return n; };
+  if (livres(carga) < Math.min(pf.jovem ? 2 : 1, livres(antes))) return nao('sem_folga', base);
+  return { pode: true, motivo: '', ...base, bloqueado: new Set(diasBloqueados(st)).has(sem[i].wd), amanha };
 }
 // A corrida que mudou PARA `data` (a marca da corrida de origem), ou null
 export const corridaMovidaPara = (st, data) => (Array.isArray(st && st.perdidos) ? st.perdidos.find((e) => e && e.tipo === 'corrida' && e.para === data) || null : null);

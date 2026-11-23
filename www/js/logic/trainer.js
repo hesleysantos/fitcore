@@ -1178,7 +1178,7 @@ function ajustarVolume(dias, pf, tetoFoco = {}) {
   const limite = ORCAMENTO[pf.tempo] * 60;
   // piso de séries por semana: 4 é o mínimo que funciona (iversen2021: "a minimum of 4 weekly sets per muscle group"); para
   // hipertrofia, o novo posicionamento do ACSM pede 10 ou mais (acsm2026: "higher volumes (≥10 sets/wk)"). Quem está
-  // começando parte de 6 (no meio da faixa de 4 a 10 que funciona para quem nunca treinou — schoenfeld2017, pelland2026) e
+  // começando parte de 6 (no meio da faixa de 4 a 10 que funciona para quem nunca treinou — schoenfeld2017vol, pelland2026) e
   // sobe com o tempo: o ganho ainda cresce com o volume, com retorno decrescente (pelland2026). Em treinos de 30 minutos,
   // os 6 não cabem: fica o mínimo de 4
   const pisoDe = (g) => (pf.objetivoDose === 'hipertrofia' && !pf.conservador && pf.retorno < 3 ? (pf.nunca ? (pf.tempo >= 45 ? Math.min(6, teto) : 4) : Math.min(10, teto)) : 4) + (pf.foco.includes(g) ? 2 : 0);
@@ -1317,7 +1317,7 @@ function avisos(pf) {
   // 60+: equilíbrio e exercício "multicomponente" em 3 dias ou mais por semana (oms2020: "varied multicomponent physical activity
   // that emphasises functional balance and strength training [...] on 3 or more days a week"; a diretriz mundial de quedas de 2022
   // pede o mesmo, por 12 semanas ou mais)
-  if (pf.idoso) a.push({ tipo: 'info', texto: 'Aos 60 anos ou mais, a musculação é especialmente indicada. Priorizei máquinas e exercícios estáveis, com progressão gradual e sem levar as séries até a falha. Some exercícios de equilíbrio em 3 dias ou mais por semana (ficar num pé só, com apoio por perto; andar em linha reta, um pé na frente do outro): eles diminuem o risco de queda.', refs: ['oms2020', 'fragala2019'] });
+  if (pf.idoso) a.push({ tipo: 'info', texto: 'Aos 60 anos ou mais, a musculação é especialmente indicada. Priorizei máquinas e exercícios estáveis, com progressão gradual e sem levar as séries até a falha. Some exercícios de equilíbrio em 3 dias ou mais por semana (ficar num pé só, com apoio por perto; andar em linha reta, um pé na frente do outro): eles diminuem o risco de queda.', refs: ['oms2020'] });
   if (pf.limitacoes.length) a.push({ tipo: 'info', texto: 'Evitei os exercícios marcados como de cuidado para: ' + pf.limitacoes.map((x) => CUIDADOS[x] || x).join(', ') + '. Se algum movimento causar dor (não o cansaço normal do músculo), pare e troque o exercício. Dor que persiste precisa de avaliação profissional.' });
   if (pf.diabetes) a.push({ tipo: 'warn', texto: 'Diabetes: a musculação ajuda a controlar a glicose. O plano fica em 8 repetições ou mais, com a força em dias alternados; antes de treinos mais pesados, peça liberação médica. Se usa insulina ou sulfonilureia, meça a glicemia antes: abaixo de 90 mg/dL, coma 15 a 30 g de carboidrato; acima de 250 com cetonas, não treine. Com retinopatia ou doença nos rins, evite carga máxima, prender a respiração e ficar de cabeça baixa.' });
   if (pf.renal) a.push({ tipo: 'warn', texto: 'Doença nos rins: quem já treina pode seguir em intensidade moderada; antes de treinos pesados, peça liberação médica. O plano fica em 8 repetições ou mais e até 3 séries por exercício. Com sintoma novo (dor no peito, falta de ar, inchaço, tontura), pare e procure um médico.' });

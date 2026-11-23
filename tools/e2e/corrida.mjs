@@ -81,7 +81,7 @@ export default async (page) => {
   await page.click('Começar'); await page.sleep(400);
   await entrevista({
     'Como é a sua corrida': 'Nunca corri', 'objetivo na corrida': 'Começar a correr', 'não pode treinar': 'Nenhum, qualquer dia serve', 'quais dias': [dia(0), dia(2), dia(4)], 'melhor dia para o treino mais longo': 'Tanto faz',
-    'tempo você tem por treino': 'Cerca de 45 minutos', 'mede as suas corridas': 'Relógio ou aplicativo com GPS', 'Onde você corre': 'Rua, parque ou calçadão',
+    'tempo você tem por treino': 'Cerca de 45 minutos', 'mede as suas corridas': 'Relógio ou aplicativo com GPS', 'Onde você corre': 'Rua, parque ou calçadão', 'só por tempo': 'Tanto faz',
     anos: 41, peso: 92, altura: 168, 'lesão nos últimos': 'Não', 'dor em alguma': 'Nenhuma', condições: 'Nenhuma', sinais: 'Nenhum deles', 'remédio de uso contínuo': 'Nenhum',
   });
   t = await texto();

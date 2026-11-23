@@ -301,10 +301,12 @@ export function linhaNaoTreinado(dia, nome, aoMudar, podeDesfazer = true) {
       h('div', { class: 'grow' }, h('div', { class: 'row gap-s' }, h('span', { class: 'bold', text: nome }), badge('Feito', 'ok')), h('div', { class: 'small muted', text: `Feito ${P.nomeDoDia(e.feitoEm, hoje)}.` })),
       podeDesfazer ? btn('Desfazer', () => desfazerMarca(e, aoMudar), 'sm ghost nao-treinei') : null);
   }
-  // mudou de dia para dar 48 horas aos mesmos músculos de um treino feito antes (não é falta)
-  if (e.ajuste === 'descanso' && para) {
-    return h('div', { class: 'treino row perdido', 'data-perdido': dia.data, 'data-ajuste': 'descanso' },
-      h('div', { class: 'grow' }, h('div', { class: 'row gap-s' }, h('span', { class: 'bold', text: nome }), badge('Mudou de dia', 'acc')), h('div', { class: 'small muted', text: `Passou para ${P.nomeDoDia(para, hoje)}: 48 horas de descanso para os mesmos músculos.` })),
+  // mudou de dia sem ser falta: 48 horas para os mesmos músculos de um treino feito ou planejado, longe de um esporte
+  // planejado ou a pedido da pessoa (logic/treino-extra.js)
+  if (e.ajuste && para) {
+    const por = { descanso: '48 horas de descanso para os mesmos músculos.', esporte: 'fica longe do esporte que você planejou.', pedido: 'como você pediu.' }[e.ajuste] || '';
+    return h('div', { class: 'treino row perdido', 'data-perdido': dia.data, 'data-ajuste': e.ajuste },
+      h('div', { class: 'grow' }, h('div', { class: 'row gap-s' }, h('span', { class: 'bold', text: nome }), badge('Mudou de dia', 'acc')), h('div', { class: 'small muted', text: `Passou para ${P.nomeDoDia(para, hoje)}${por ? ': ' + por : '.'}` })),
       podeDesfazer ? btn('Desfazer', () => desfazerMarca(e, aoMudar), 'sm ghost nao-treinei') : null);
   }
   const plan = (state.plans || []).find((p) => p.id === e.planId);

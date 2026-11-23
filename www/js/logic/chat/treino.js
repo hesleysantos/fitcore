@@ -832,6 +832,29 @@ function passoFalta(ctx, ex) {
 
 // ---------- os assuntos ----------
 const temPlano = (ctx) => !!P.planoAtivo(ctx.st);
+// "Vou jogar bola sábado", "quero treinar a mais na quinta": o treino a mais num dia que ainda vai chegar. O treinador
+// confere a semana e afasta o treino de pernas e a corrida forte do esporte (logic/treino-extra.js; views/esportes.js)
+const ESPORTE_RE = /\b(jogar|jogo|bola|pelada|futebol|futsal|society|volei|basquete|handebol|tenis|beach|padel|crossfit|hiit|jiu|luta|lutas|muay|boxe|judo|karate|trilha|bike|pedal|ciclismo|natacao)\b/;
+function passoPlanejar(ctx) {
+  const hoje = ctx.hoje;
+  const seg = segundaDa(hoje);
+  const d = (Array.isArray(ctx.datas) ? ctx.datas : []).filter((x) => x && !x.semana && diaValido(x.data) && x.data > hoje && segundaDa(x.data) === seg).map((x) => x.data).sort()[0] || '';
+  return {
+    texto: [d ? `Para ${P.nomeDoDia(d, hoje)}: escolha o que vai fazer (outro esporte, corrida ou musculação). Eu confiro a semana e mostro o que muda antes de confirmar.` : 'Em que dia? Na aba Treinos, no cartão do dia, toque em “Planejar treino a mais”: eu confiro a semana e mostro o que muda antes de confirmar.'],
+    detalhes: ['Esporte que pesa nas pernas (futebol, basquete, vôlei de quadra, tênis, lutas, HIIT): eu recomendo tirar o treino de pernas e a corrida forte do mesmo dia e do dia seguinte, e pergunto antes: você pode manter os treinos como estão. Depois de um jogo, as pernas levam cerca de 48 horas para voltar ao normal.', 'Musculação a mais: só num dia sem treino, com 48 horas de descanso para os mesmos músculos. Corrida a mais: primeiro eu tento trazer uma corrida da semana; senão, uma corrida leve e curta.'],
+    refs: ['silva2018', 'doeven2018', 'doma2017', 'garber2011'],
+    ir: d ? [{ rotulo: `Planejar ${P.nomeDoDia(d, hoje)}`, abrir: 'planejar-extra', data: d }] : [{ rotulo: 'Abrir Treinos', rota: 'treinos' }],
+  };
+}
+const intencaoPlanejar = (coach) => ({
+  id: coach === 'treinador' ? 'planejar-extra' : 'corrida-planejar-extra', coach, titulo: 'Planejar um treino a mais', resumo: 'planejar um esporte, uma corrida ou um treino a mais num dia',
+  palavras: ['vou jogar', 'jogar bola', 'treino a mais', 'treinar a mais', 'treino extra', 'treinar extra', 'correr a mais', 'corrida a mais', 'corrida extra', 'planejar treino', 'vou jogar volei', 'vou jogar tenis', 'tenho jogo'],
+  // (o jogo dos outros, ou o que já passou, não é um treino a mais: "quem ganhou o jogo de futebol ontem")
+  anula: (i) => /\b(ganhou|ganhei|perdeu|assisti\w*|placar|campeao|time|torcida|ontem|anteontem)\b/.test(i.texto),
+  bonus: (i) => (/\b(nao vou|faltei|nao consigo|nao posso|como faz|calorias)\b/.test(i.texto) ? 0 : (ESPORTE_RE.test(i.texto) && i.datas.some((d) => !d.semana && d.data > i.hoje) ? 4.5 : 0) + (/\b(a mais|extra)\b/.test(i.texto) && /\b(treino|treinar|correr|corrida|musculacao|malhar)\b/.test(i.texto) ? 3.5 : 0)),
+  disponivel: (ctx) => !!P.planoAtivo(ctx.st) || temCorrida(ctx.st),
+  inicio: passoPlanejar,
+});
 function passoPerdidoInicio(ctx) {
   const b = bloqueio(ctx);
   if (b) return b;
@@ -998,6 +1021,8 @@ export const INTENCOES = [
     disponivel: temPlano,
     inicio: passoAparelhoFalta,
   },
+  intencaoPlanejar('treinador'),
+  intencaoPlanejar('corrida'),
   {
     // "quero treinar terça, quinta e sábado": o treinador redistribui os treinos nos dias novos (views/trocar-dias.js)
     id: 'trocar-dias', coach: 'treinador', titulo: 'Trocar os dias dos treinos', resumo: 'trocar os dias da semana dos treinos',
