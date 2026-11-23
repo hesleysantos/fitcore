@@ -5,7 +5,7 @@
 // Na proposta: o resumo, os avisos, os treinos da semana (fechados, um toque abre os exercícios) e o botão de aceitar.
 import { h, btn, icon, note, badge, sectionTitle, toggle, toast, confirmSheet, plural, dateKey, uid, DIAS_CURTO, DIAS_LONGO } from '../ui.js';
 import { state, update, activePlan } from '../store.js';
-import { aplicarDiasNosTreinos, bloqueadosDe, limparDiasAntigos } from '../logic/dias-livres.js';
+import { aplicarDiasNosTreinos } from '../logic/dias-livres.js';
 import { go, refresh } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { FAQ_TREINO } from '../data/knowledge.js';
@@ -24,6 +24,8 @@ import { criarPlano } from './plans.js';
 import { startSession } from './session.js';
 import { situacaoDoPlano, cartaoVariacao } from './variacao.js';
 import { botaoChat } from './chat.js';
+// refazer a entrevista tira as respostas que não são mais perguntadas: "quantos dias" (o treinador escolhe) e "ainda quer correr"
+const semRespostasAntigas = (r) => { const o = { ...r }; delete o.dias; delete o.soCorrida; delete o.diasMusc; return o; };
 
 let modo = 'auto'; // 'auto' | 'entrevista' | 'proposta' | 'trocas'
 // exercícios que entraram no último toque em "Outra versão" (só para marcar "novo" na tela; não é gravado)
@@ -136,7 +138,7 @@ function perfilCard(a, pf, extra) {
     pf.retorno ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Parado antes de voltar' }), h('span', { text: ROTULO.pausa[a.pausa] })) : null,
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Frequência' }), h('span', { text: `${plural(pf.dias, 'dia', 'dias')} por semana · ${pf.tempo >= 75 ? 'mais de 1 h' : pf.tempo + ' min'}` })),
     // dias em que a pessoa não treina (vale também para a corrida)
-    pf.bloqueados.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Dias de musculação' }), h('span', { text: [1, 2, 3, 4, 5, 6, 0].filter((w) => !pf.bloqueados.includes(w)).map((w) => DIAS_CURTO[w]).join(', ') })) : null,
+    pf.bloqueados.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Sem musculação' }), h('span', { text: pf.bloqueados.map((w) => DIAS_CURTO[w]).join(', ') })) : null,
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Local' }), h('span', { text: ROTULO.local[a.local] })),
     pf.extras.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Também tem' }), h('span', { text: pf.extras.map((x) => ROTULO.extras[x] || x).join(', ') })) : null,
     pf.limitacoes.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Cuidados' }), h('span', { text: pf.limitacoes.join(', ') })) : null,
@@ -176,6 +178,8 @@ function proposta() {
   const paraQue = pf.gestante ? 'manter a saúde na gestação' : ROTULO.objetivo[pf.objetivo].toLowerCase();
   const nivelTxt = pf.nunca ? 'para quem está começando' : pf.retorno >= 4 ? 'como recomeço depois da pausa' : pf.nivel < pf.nivelBase ? 'um nível abaixo do seu, por causa da pausa' : 'no nível ' + ['', 'iniciante', 'intermediário', 'avançado'][pf.nivel];
   body.push(h('div', { class: 'bubble', id: 'treinador-resumo' }, h('p', { text: `Montei um plano de ${plural(p.dias.length, 'treino', 'treinos')} por semana para ${paraQue}, ${nivelTxt}.` }),
+    // quantos treinos: o treinador escolheu (diasRecomendados); a fonte fica em Cuidados
+    pf.diasAuto && pf.motivoDias ? h('p', { class: 'small', id: 'treinador-dias', text: pf.motivoDias.texto.charAt(0).toUpperCase() + pf.motivoDias.texto.slice(1) + '.' }) : null,
     ...p.foco.map((x) => h('p', { class: 'small', text: x.texto })),
     h('p', { class: 'small muted', text: 'Toque num treino para ver os exercícios. Você pode editar tudo depois.' })));
   // 2. o que muda o treino: dores contadas e avisos de atenção (os informativos ficam em "Cuidados", no fim)
@@ -457,14 +461,13 @@ export function trainerView() {
     for (const k of ['idade', 'peso', 'altura']) if (pre[k] == null) { const v = typeof state.run.answers[k] === 'number' ? state.run.answers[k] : n[k]; if (typeof v === 'number') pre[k] = v; }
     // o objetivo começa igual ao da alimentação (o usuário pode trocar)
     if (pre.objetivo == null && treinoPara(n.objetivo)) pre.objetivo = treinoPara(n.objetivo);
-    // dias da musculação: quem respondeu a pergunta antiga ("dias sem treino") já vem com os outros dias marcados
-    if (!Array.isArray(pre.diasMusc) && bloqueadosDe(pre).length) pre.diasMusc = [1, 2, 3, 4, 5, 6, 0].filter((w) => !bloqueadosDe(pre).includes(w)).map(String);
-    limparDiasAntigos(pre);
+    // dias sem musculação: o padrão é "Nenhum" (qualquer dia serve); respostas antigas, sem a pergunta, também
+    if (!Array.isArray(pre.semTreino) || !pre.semTreino.length) pre.semTreino = ['nenhum'];
     return {
       title: 'Treinador', body: [interview({
         perguntas: PERGUNTAS, respostas: pre, base: a, notas: { objetivo: notaObjetivo('treino') },
         // o treino atual sai dos dias sem musculação
-        onDone: (r) => { let msg = ''; update((s) => { s.trainer.answers = limparDiasAntigos(r); s.trainer.aceitoEm = ''; s.trainer.revisaoEm = ''; s.trainer.adiadoAte = ''; msg = aplicarDiasNosTreinos(s); }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); conferirObjetivos('treino'); if (msg) toast(msg); },
+        onDone: (r) => { let msg = ''; update((s) => { s.trainer.answers = semRespostasAntigas(r); s.trainer.aceitoEm = ''; s.trainer.revisaoEm = ''; s.trainer.adiadoAte = ''; msg = aplicarDiasNosTreinos(s); }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); conferirObjetivos('treino'); if (msg) toast(msg); },
         onCancel: () => { modo = 'auto'; refresh(); },
       })],
     };

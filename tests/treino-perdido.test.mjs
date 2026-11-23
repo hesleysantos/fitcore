@@ -376,7 +376,7 @@ test('perdido: dia sem treino e menor de 18 — o porquê de amanhã', () => {
   const o = P.opcoesDeDia(st, D(0), D(0));
   const ter = o.dias.find((x) => x.data === D(1));
   assert.equal(ter.motivo, 'bloqueado');
-  assert.equal(P.porQueNaoDia(ter, D(0)), 'Amanhã não é um dos seus dias de musculação.');
+  assert.equal(P.porQueNaoDia(ter, D(0)), 'Amanhã é um dia em que você não pode fazer musculação.');
   assert.ok(o.dias.some((x) => x.pode) && o.melhor !== D(1));
   const jovem = estado([dia('a', SUP), dia('b', INF)], { 1: 'a', 3: 'b' }, { trainer: { answers: { idade: 16 } } });
   const oj = P.opcoesDeDia(jovem, D(0), D(0));

@@ -2,7 +2,7 @@
 // Nenhum dado é enviado para servidor algum.
 import { EX_POR_ID } from './data/exercises.js';
 import { EQUIPAMENTOS } from './data/equipment.js';
-import { PERGUNTAS as P_TREINO } from './logic/trainer.js';
+import { PERGUNTAS as P_TREINO, PERGUNTA_DIAS_ANTIGA } from './logic/trainer.js';
 import { PERGUNTAS_DIAS_ANTIGAS } from './logic/dias-livres.js';
 import { PERGUNTAS as P_NUTRI, limparEmCasa, limparAjustes } from './logic/nutrition.js';
 import { parValido } from './logic/objetivos.js';
@@ -230,7 +230,7 @@ export function sanitize(raw, { doAparelho = false } = {}) {
   for (const x of d.sessions) x.id = unico(x.id, idsSessao, 's');
   d.current = raw.current ? cleanSession(raw.current, true) : null;
   const t = isObj(raw.trainer) ? raw.trainer : {};
-  d.trainer = { answers: cleanAnswers(t.answers, [...P_TREINO, ...PERGUNTAS_DIAS_ANTIGAS]), aceitoEm: iso(t.aceitoEm), revisaoEm: iso(t.revisaoEm), adiadoAte: iso(t.adiadoAte), versao: Math.round(num(t.versao, 0, 9999, 0)), combo: chaveValida(t.combo) ? t.combo : '' };
+  d.trainer = { answers: cleanAnswers(t.answers, [...P_TREINO, ...PERGUNTAS_DIAS_ANTIGAS, PERGUNTA_DIAS_ANTIGA]), aceitoEm: iso(t.aceitoEm), revisaoEm: iso(t.revisaoEm), adiadoAte: iso(t.adiadoAte), versao: Math.round(num(t.versao, 0, 9999, 0)), combo: chaveValida(t.combo) ? t.combo : '' };
   const n = isObj(raw.nutri) ? raw.nutri : {};
   d.nutri = { answers: cleanAnswers(n.answers, P_NUTRI), calculadoEm: iso(n.calculadoEm), seed: Math.round(num(n.seed, 0, 1e6, 0)), emCasa: limparEmCasa(n.emCasa), soCasa: n.soCasa === true, ajustes: limparAjustes(n.ajustes) };
   const dias = new Set();

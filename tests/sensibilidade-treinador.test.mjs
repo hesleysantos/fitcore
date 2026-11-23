@@ -17,6 +17,8 @@ import * as store from '../www/js/store.js';
 const GYM = { all: true, has: {} };
 const base = { objetivo: 'hipertrofia', idade: 30, peso: 75, altura: 175, experiencia: 'intermediario', pausa: 'treinando', dias: '4', tempo: '60', local: 'completa', limitacoes: ['nenhuma'], condicoes: ['nenhuma'], triagem: ['nenhum'], foco: ['equilibrado'] };
 const P = (k) => PERGUNTAS.find((q) => q.k === k);
+// a resposta antiga de "quantos dias" (a pergunta não é mais feita: o treinador escolhe — diasRecomendados), que continua valendo
+const DIAS_ANTIGOS = ['2', '3', '4', '5', '6'];
 const opcoes = (k) => P(k).op.map((o) => o[0]);
 const itens = (p) => p.dias.flatMap((d) => d.itens);
 const exDe = (it) => EX_POR_ID.get(it.ex);
@@ -34,12 +36,11 @@ const todosDiferentes = (lista, rot) => { const s = new Set(lista); assert.equal
 const p0 = gerarPlano(base, GYM, 0);
 
 test('todas as perguntas da entrevista estão cobertas por este arquivo', () => {
-  assert.deepEqual(PERGUNTAS.map((q) => q.k), ['objetivo', 'idade', 'condicoes', 'triagem', 'remedios', 'experiencia', 'pausa', 'liberado', 'peso', 'altura', 'diasMusc', 'dias', 'tempo', 'local', 'extras', 'limitacoes', 'foco'], 'pergunta nova na entrevista: acrescente o teste de sensibilidade dela');
+  assert.deepEqual(PERGUNTAS.map((q) => q.k), ['objetivo', 'idade', 'condicoes', 'triagem', 'remedios', 'experiencia', 'pausa', 'liberado', 'peso', 'altura', 'semTreino', 'tempo', 'local', 'extras', 'limitacoes', 'foco'], 'pergunta nova na entrevista: acrescente o teste de sensibilidade dela');
   assert.deepEqual(opcoes('objetivo'), ['hipertrofia', 'emagrecimento', 'forca', 'saude', 'resistencia']);
   assert.deepEqual(opcoes('experiencia'), ['nunca', 'iniciante', 'intermediario', 'avancado']);
   assert.deepEqual(opcoes('pausa'), ['treinando', '2a4s', '1a3m', '3a6m', 'mais6m']);
-  assert.deepEqual(opcoes('diasMusc'), ['1', '2', '3', '4', '5', '6', '0']);
-  assert.deepEqual(opcoes('dias'), ['2', '3', '4', '5', '6']);
+  assert.deepEqual(opcoes('semTreino'), ['1', '2', '3', '4', '5', '6', '0', 'nenhum']);
   assert.deepEqual(opcoes('tempo'), ['30', '45', '60', '75']);
   assert.deepEqual(opcoes('local'), ['completa', 'minha', 'halteres', 'corporal']);
   assert.deepEqual(opcoes('extras'), ['elastico', 'bola_suica', 'caixa', 'banco_inclinado', 'barra_fixa', 'kettlebell', 'trx', 'corda_pular', 'bicicleta', 'esteira', 'escada', 'nenhum']);
@@ -64,12 +65,11 @@ test('soCorrida: não muda a musculação (o dia continua sem ela); só devolve 
   assert.equal(doseEAgenda(gerarPlano({ ...a, soCorrida: ['nenhum'] }, GYM, 0)), doseEAgenda(gerarPlano(a, GYM, 0)));
 });
 
-test('diasMusc: cada dia fora dos marcados sai da agenda; os 7 dias, "Nenhum" antigo e a falta de resposta não mudam nada', () => {
+test('semTreino: cada dia marcado sai da agenda da musculação; "Nenhum" e a resposta antiga não mudam nada', () => {
   // o resto da regra (todas as combinações, corrida, fortalecimento e treino perdido) está em tests/dias-livres.test.mjs
   assert.equal(doseEAgenda(gerarPlano({ ...base, semTreino: ['nenhum'] }, GYM, 0)), doseEAgenda(p0));
-  assert.equal(doseEAgenda(gerarPlano({ ...base, diasMusc: opcoes('diasMusc') }, GYM, 0)), doseEAgenda(p0));
-  for (const w of opcoes('diasMusc')) {
-    const p = gerarPlano({ ...base, diasMusc: opcoes('diasMusc').filter((x) => x !== w) }, GYM, 0);
+  for (const w of opcoes('semTreino').filter((x) => x !== 'nenhum')) {
+    const p = gerarPlano({ ...base, semTreino: [w] }, GYM, 0);
     assert.ok(!Object.keys(p.agenda).includes(w), 'treino no dia bloqueado: ' + w);
     assert.equal(Object.keys(p.agenda).length, 4, 'os 4 treinos continuam: ' + w);
     // só muda a agenda quando o dia bloqueado era um dia de treino (segunda, terça, quinta e sexta)
@@ -192,7 +192,7 @@ test('pausa: cada faixa de tempo parado muda o aviso de volta; de 3 meses em dia
 
 test('dias por semana: cada opção dá esse número de treinos, em dias diferentes', () => {
   const planos = [];
-  for (const dias of opcoes('dias')) {
+  for (const dias of DIAS_ANTIGOS) {
     const p = gerarPlano({ ...base, dias }, GYM, 0);
     assert.equal(p.dias.length, Number(dias));
     assert.equal(new Set(Object.keys(p.agenda)).size, Number(dias));
@@ -484,7 +484,7 @@ test('prioridade corrida × musculação × os dois: cada opção tem o efeito d
     for (const a of [base, { ...base, objetivo: 'emagrecimento', dias: '5' }]) { const p = gerarPlano(a, GYM, 0, null, lixo); assert.equal(doseEAgenda(p), doseEAgenda(gerarPlano(a, GYM, 0)), JSON.stringify(lixo)); assert.equal(p.combinado, null); }
   }
   let n = 0, mudouAgenda = 0;
-  for (const objetivo of opcoes('objetivo')) for (const experiencia of opcoes('experiencia')) for (const dias of opcoes('dias')) for (const extra of [{}, { idade: 16 }, { condicoes: ['diabetes'], liberado: 'sim' }, { local: 'halteres' }, { tempo: '30' }])
+  for (const objetivo of opcoes('objetivo')) for (const experiencia of opcoes('experiencia')) for (const dias of DIAS_ANTIGOS) for (const extra of [{}, { idade: 16 }, { condicoes: ['diabetes'], liberado: 'sim' }, { local: 'halteres' }, { tempo: '30' }])
     for (const semana of [{ fortes: [3], longo: 0, dias: [1, 3, 5, 0] }, { fortes: [2, 4], longo: 6, dias: [2, 4, 6] }, { fortes: [], longo: 0, dias: [3, 0] }, { fortes: [2], longo: null, dias: [2, 5] }, { fortes: [], longo: null, dias: [1, 4] }]) {
       const a = { ...base, objetivo, experiencia, dias, ...extra };
       const sem = gerarPlano(a, GYM, 0);
@@ -543,7 +543,7 @@ test('fortalecimento dentro da musculação: "sim" garante panturrilha, abdutore
   const ORCAMENTO = { 30: 35, 45: 50, 60: 65, 75: 90 };
   const PADROES = { panturrilha: ['flexao_plantar'], 'abdutores do quadril': ['abducao'], 'um pé só': ['afundo'], core: ['anti_extensao', 'flexao_tronco', 'rotacao', 'flexao_quadril'] };
   let n = 0, completos = 0, semEspaco = 0, semUmPe = 0;
-  for (const objetivo of opcoes('objetivo')) for (const experiencia of opcoes('experiencia')) for (const dias of opcoes('dias')) for (const tempo of opcoes('tempo')) for (const extra of [{}, { local: 'halteres' }, { local: 'corporal' }, { idade: 67 }, { limitacoes: ['joelho'] }, { condicoes: ['gestante'], liberado: 'sim' }]) {
+  for (const objetivo of opcoes('objetivo')) for (const experiencia of opcoes('experiencia')) for (const dias of DIAS_ANTIGOS) for (const tempo of opcoes('tempo')) for (const extra of [{}, { local: 'halteres' }, { local: 'corporal' }, { idade: 67 }, { limitacoes: ['joelho'] }, { condicoes: ['gestante'], liberado: 'sim' }]) {
     const a = { ...base, objetivo, experiencia, dias, tempo, ...extra };
     const rot = JSON.stringify({ objetivo, experiencia, dias, tempo, ...extra });
     const nao = gerarPlano(a, GYM, 0, null, corrida('corrida', 'nao'));
@@ -761,7 +761,7 @@ test('descanso semanal: a prioridade na corrida nunca tira o último dia sem tre
     assert.ok(!tem(p, /sem nenhum dia de descanso/));
   }
   let n = 0, zero = 0, piorVul = 0;
-  for (const extra of [{}, { idade: 16 }, { idade: 66 }, { experiencia: 'iniciante' }, { condicoes: ['diabetes'] }]) for (const dias of opcoes('dias')) for (const objetivo of ['hipertrofia', 'emagrecimento', 'forca'])
+  for (const extra of [{}, { idade: 16 }, { idade: 66 }, { experiencia: 'iniciante' }, { condicoes: ['diabetes'] }]) for (const dias of DIAS_ANTIGOS) for (const objetivo of ['hipertrofia', 'emagrecimento', 'forca'])
     for (const s of [{ fortes: [3], longo: 0, dias: [1, 3, 5, 0] }, { fortes: [2, 4], longo: 6, dias: [1, 2, 4, 5, 6] }, { fortes: [2], longo: 0, dias: [1, 2, 3, 4, 5, 0] }, { fortes: [], longo: 6, dias: [2, 3, 4, 5, 6, 0] }, { fortes: [4], longo: null, dias: [2, 4] }])
       for (const foco of ['', 'musculacao', 'corrida', 'equilibrio']) {
         const a = { ...base, ...extra, dias, objetivo };

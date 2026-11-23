@@ -1,10 +1,11 @@
 // Os dias de cada treino. Puro: sem DOM e sem importar o estado.
-// Cada entrevista pergunta só os dias dela: a do Treinador, em quais dias a pessoa pode fazer musculação (diasMusc); a da
+// Cada entrevista pergunta só os dias dela, numa pergunta só: a do Treinador, em quais dias a pessoa NÃO pode fazer
+// musculação (semTreino; o treinador escolhe quantos treinos cabem nos outros — logic/trainer.js, diasRecomendados); a da
 // corrida, em quais dias pode correr (logic/corrida.js, pergunta "dias"). Os dois planos se combinam depois (logic/trainer.js:
-// pernas longe das corridas mais fortes; o mesmo dia pode ter os dois treinos). Os dias fora da musculação valem para a
+// pernas longe das corridas mais fortes; o mesmo dia pode ter os dois treinos). Os dias sem musculação valem para a
 // musculação, o fortalecimento e o treino perdido de musculação.
-// Respostas antigas (de antes desta mudança): "Tem algum dia em que você não pode treinar?" (semTreino, para os dois
-// treinos) e "Em algum desses dias você ainda quer correr?" (soCorrida). Continuam valendo até a entrevista ser refeita.
+// Respostas antigas: semTreino guardado na entrevista da corrida (valia para os dois treinos) e "Em algum desses dias você
+// ainda quer correr?" (soCorrida). Continuam valendo até a entrevista ser refeita.
 // Ids: '0' = domingo ... '6' = sábado (os mesmos da pergunta de dias da corrida); 'nenhum' = treina em qualquer dia.
 //
 // Limite: até 5 dias fora, para sobrarem os 2 dias livres do menor plano do Treinador (2 treinos por semana). As regras de
@@ -19,13 +20,12 @@ export const NOME_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'se
 const ORDEM = [1, 2, 3, 4, 5, 6, 0];
 const OP_DIAS = [['1', 'Segunda', ''], ['2', 'Terça', ''], ['3', 'Quarta', ''], ['4', 'Quinta', ''], ['5', 'Sexta', ''], ['6', 'Sábado', ''], ['0', 'Domingo', '']];
 
-// A pergunta da entrevista do Treinador: os dias da musculação (pelo menos 2, o menor plano). Opcional só para as respostas
-// antigas, que usam semTreino.
-export const MIN_DIAS_MUSC = 2;
-export const perguntaDiasMusc = () => ({
-  k: 'diasMusc', tipo: 'varios', opcional: true, minimo: MIN_DIAS_MUSC, titulo: 'Em quais dias você pode fazer musculação?',
-  ajuda: 'Marque pelo menos 2. Se você também corre, pode marcar os mesmos dias da corrida: eu organizo os dois treinos.',
-  op: OP_DIAS,
+// A pergunta da entrevista do Treinador (até 5 dias: sobram os 2 do menor plano). Opcional: respostas salvas antes dela
+// valem como "nenhum".
+export const perguntaSemTreino = () => ({
+  k: 'semTreino', tipo: 'varios', opcional: true, titulo: 'Tem algum dia em que você não pode fazer musculação?',
+  ajuda: 'Nos outros dias, eu escolho quantos treinos fazer. A corrida tem os dias dela.', nenhum: NENHUM, max: MAX_BLOQUEADOS, unidade: ['dia', 'dias'],
+  op: [...OP_DIAS, [NENHUM, 'Nenhum, qualquer dia serve', '']],
 });
 // As perguntas antigas, só para a validação das respostas guardadas (store.js e logic/corrida.js): não aparecem mais nas
 // entrevistas, mas a resposta continua valendo até a entrevista ser refeita.
@@ -33,13 +33,6 @@ export const PERGUNTAS_DIAS_ANTIGAS = [
   { k: 'semTreino', tipo: 'varios', max: MAX_BLOQUEADOS, op: [...OP_DIAS, [NENHUM, '', '']] },
   { k: 'soCorrida', tipo: 'varios', op: [...OP_DIAS, [NENHUM, '', '']] },
 ];
-// dias marcados para a musculação (resposta nova), ou null
-function diasMuscDe(respostas) {
-  const v = respostas && typeof respostas === 'object' ? respostas.diasMusc : null;
-  if (!Array.isArray(v)) return null;
-  const s = new Set(v.filter((x) => typeof x === 'string' && /^[0-6]$/.test(x)).map(Number));
-  return s.size ? s : null;
-}
 // dias sem treino em que a corrida continua (só os que estão entre os dias sem treino)
 export function soCorridaDe(respostas) {
   const v = respostas && typeof respostas === 'object' ? respostas.soCorrida : null;
@@ -90,11 +83,8 @@ export function aplicarDiasNosTreinos(s) {
   return r.movidos.map((m) => `${nome(m.diaId)} passou de ${nomesDosDias([m.de])} para ${nomesDosDias([m.para])}.`).join(' ') + (r.sobrou.length ? ' Sem dia livre para ' + r.sobrou.map(nome).join(', ') + ': escolha na aba Treinos.' : '');
 }
 
-// Dias sem musculação de um conjunto de respostas: números de 0 a 6, na ordem da semana (no máximo 5). Na resposta nova, os
-// dias fora dos marcados para a musculação; na antiga, os dias sem treino.
+// Dias sem musculação de um conjunto de respostas: números de 0 a 6, na ordem da semana (no máximo 5).
 export function bloqueadosDe(respostas) {
-  const musc = diasMuscDe(respostas);
-  if (musc) return ORDEM.filter((w) => !musc.has(w)).slice(0, MAX_BLOQUEADOS);
   const v = respostas && typeof respostas === 'object' ? respostas.semTreino : null;
   if (!Array.isArray(v) || v.includes(NENHUM)) return [];
   const s = new Set(v.filter((x) => typeof x === 'string' && /^[0-6]$/.test(x)).map(Number));
@@ -103,7 +93,7 @@ export function bloqueadosDe(respostas) {
 // Dias sem musculação do estado (a resposta do Treinador; sem ela, a resposta antiga da corrida, que valia para os dois)
 export const diasBloqueados = (st) => {
   const t = respostasDe(st, 'trainer');
-  if (t && (diasMuscDe(t) || Array.isArray(t.semTreino))) return bloqueadosDe(t);
+  if (t && Array.isArray(t.semTreino)) return bloqueadosDe(t);
   return bloqueadosDe(respostasDe(st, 'run'));
 };
 // quantos dias livres sobram na semana
@@ -118,7 +108,6 @@ export function notaDosDias(respostas) {
   const b = bloqueadosDe(respostas);
   const livres = livresDe(b);
   if (livres >= 7) return '';
-  if (diasMuscDe(respostas)) return livres >= 6 ? '' : `Você marcou ${livres} dias: dá para treinar até ${livres}.`;
   return livres >= 6 ? `Sem treino ${b.length === 1 ? 'no dia' : 'nos dias'} que você marcou: ${nomesDosDias(b)}.`
     : `Com ${nomesDosDias(b)} sem treino, sobram ${livres} dias livres: dá para treinar até ${livres} dias.`;
 }

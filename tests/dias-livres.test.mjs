@@ -8,7 +8,7 @@ import { EX_POR_ID } from '../www/js/data/exercises.js';
 import { MUSCULOS } from '../www/js/data/muscles.js';
 import { PERGUNTAS, gerarPlano, perfil, planoFortalecimento, resumoCombinado, respostasCompletas } from '../www/js/logic/trainer.js';
 import { gerarPlano as gerarCorrida, planoAtual, planoDaSemanaEm, inicioPara } from '../www/js/logic/corrida.js';
-import { bloqueadosDe, diasBloqueados, livresDe, notaDosDias, perguntaDiasMusc, MAX_BLOQUEADOS, soCorridaDe, semCorridaDe, diasSemCorrida, limparDiasAntigos, ajustarAgenda, aplicarDiasNosTreinos } from '../www/js/logic/dias-livres.js';
+import { bloqueadosDe, diasBloqueados, livresDe, perguntaSemTreino, MAX_BLOQUEADOS, soCorridaDe, semCorridaDe, diasSemCorrida, limparDiasAntigos, ajustarAgenda, aplicarDiasNosTreinos } from '../www/js/logic/dias-livres.js';
 import { PERGUNTAS as P_CORRIDA } from '../www/js/logic/corrida.js';
 import { marcar as marcarOpcao, limiteDe } from '../www/js/logic/escolhas.js';
 import * as P from '../www/js/logic/perdido.js';
@@ -55,53 +55,53 @@ function confere(p, bloq, pf, rot) {
   }
 }
 
-test('a pergunta: os dias da musculação (pelo menos 2), antes de "quantos desses dias"; a resposta antiga continua valendo', () => {
-  const q = PERGUNTAS.find((x) => x.k === 'diasMusc');
-  assert.ok(q && q.opcional && q.tipo === 'varios' && q.minimo === 2 && !q.nenhum);
-  assert.deepEqual(q.op.map((o) => o[0]), ['1', '2', '3', '4', '5', '6', '0']);
-  assert.equal(PERGUNTAS.indexOf(q) + 1, PERGUNTAS.findIndex((x) => x.k === 'dias'));
-  assert.deepEqual(perguntaDiasMusc().op, q.op);
-  // as perguntas antigas não são mais feitas, em nenhuma das duas entrevistas
-  for (const L of [PERGUNTAS, P_CORRIDA]) assert.ok(!L.some((x) => x.k === 'semTreino' || x.k === 'soCorrida'));
-  // os dias sem musculação são os não marcados
-  assert.deepEqual(bloqueadosDe({ diasMusc: ['1', '3', '5'] }), [2, 4, 6, 0]);
-  assert.deepEqual(bloqueadosDe({ diasMusc: ['0', '1', '2', '3', '4', '5', '6'] }), []);
-  assert.deepEqual(bloqueadosDe({ diasMusc: ['x'] }), []);
-  // resposta antiga, sem a pergunta: continua completa; sem dias, vale como "nenhum"
+test('a pergunta: uma só, "Tem algum dia em que você não pode fazer musculação?", com "Nenhum" por último; até 5 dias', () => {
+  const q = PERGUNTAS.find((x) => x.k === 'semTreino');
+  assert.ok(q && q.opcional && q.tipo === 'varios' && q.nenhum === 'nenhum' && /não pode fazer musculação/.test(q.titulo));
+  assert.deepEqual(q.op.map((o) => o[0]), ['1', '2', '3', '4', '5', '6', '0', 'nenhum']);
+  assert.deepEqual(perguntaSemTreino().op, q.op);
+  // não há mais "quantos dias" nem as perguntas de dias das versões anteriores: o treinador escolhe quantos treinos
+  for (const k of ['dias', 'diasMusc', 'soCorrida']) assert.ok(!PERGUNTAS.some((x) => x.k === k), k);
+  for (const k of ['semTreino', 'diasMusc', 'soCorrida']) assert.ok(!P_CORRIDA.some((x) => x.k === k), 'corrida: ' + k);
+  assert.equal(limiteDe(q, {}), 5);
+  const r = marcarOpcao(q, { semTreino: ['1', '2', '3', '4', '5'] }, '6');
+  assert.ok(r.valor.length === 5 && !r.valor.includes('1') && /Limite de 5/.test(r.aviso));
+  assert.deepEqual(marcarOpcao(q, { semTreino: ['3'] }, 'nenhum').valor, ['nenhum']);
+  // resposta antiga, sem a pergunta: continua completa e vale como "nenhum"
   assert.ok(respostasCompletas(base));
   assert.deepEqual(perfil(base).bloqueados, []);
-  assert.equal(perfil(base).livres, 7);
   assert.deepEqual(bloqueadosDe({ semTreino: ['nenhum', '0'] }), []);
   assert.deepEqual(bloqueadosDe({ semTreino: ['0', '6', 'x', 7, '9'] }), [6, 0]);
-  // o estado guarda a resposta nova e a antiga (só dias que existem; a antiga, no máximo 5)
-  const st = store.sanitize({ trainer: { answers: { ...base, semTreino: ['0', '1', '2', '3', '4', '5', '6', 'lixo'] } } });
+  // o estado guarda só dias que existem, no máximo 5; e a resposta antiga de "quantos dias" continua valendo
+  const st = store.sanitize({ trainer: { answers: { ...base, dias: '5', semTreino: ['0', '1', '2', '3', '4', '5', '6', 'lixo'] } }, run: { answers: { ...RUN, semTreino: ['6'] } } });
   assert.equal(st.trainer.answers.semTreino.length, 5);
+  assert.equal(st.trainer.answers.dias, '5');
+  assert.deepEqual(st.run.answers.semTreino, ['6']);
   assert.equal(diasBloqueados(st).length, 5);
-  const st2 = store.sanitize({ trainer: { answers: { ...base, diasMusc: ['1', '4', 'lixo'] } }, run: { answers: { ...RUN, semTreino: ['6'] } } });
-  assert.deepEqual(st2.trainer.answers.diasMusc, ['1', '4']);
-  assert.deepEqual(st2.run.answers.semTreino, ['6']);
-  assert.deepEqual(diasBloqueados(st2), [2, 3, 5, 6, 0]);
   assert.deepEqual(diasBloqueados(store.sanitize({ trainer: { answers: base } })), []);
-  // refazer uma entrevista tira as respostas antigas dela
   assert.deepEqual(limparDiasAntigos({ a: 1, semTreino: ['6'], soCorrida: ['6'] }), { a: 1 });
 });
 
-test('limite: as opções de "quantos dias" não passam dos dias marcados, e o plano também não', () => {
-  const q = PERGUNTAS.find((x) => x.k === 'dias');
-  const visiveis = (a) => q.op.filter((o) => typeof o[3] !== 'function' || o[3](a)).map((o) => o[0]);
-  assert.deepEqual(visiveis({ diasMusc: ['1', '2', '3', '4', '5', '6', '0'] }), ['2', '3', '4', '5', '6']);
-  assert.deepEqual(visiveis({ diasMusc: ['1', '2', '3', '4', '5', '6'] }), ['2', '3', '4', '5', '6']);
-  assert.deepEqual(visiveis({ diasMusc: ['1', '3', '5', '0'] }), ['2', '3', '4']);
-  assert.deepEqual(visiveis({ diasMusc: ['6', '0'] }), ['2']);
-  assert.deepEqual(visiveis({ semTreino: resp([0, 6]) }), ['2', '3', '4', '5']); // resposta antiga
-  assert.equal(notaDosDias({ diasMusc: ['1', '2', '3', '4', '5', '6', '0'] }), '');
-  assert.match(notaDosDias({ diasMusc: ['1', '3', '5'] }), /Você marcou 3 dias: dá para treinar até 3/);
-  assert.match(notaDosDias({ semTreino: ['6', '0'] }), /sobram 5 dias livres: dá para treinar até 5 dias/);
-  // resposta guardada com mais treinos do que dias marcados: o plano usa os dias marcados e diz isso
-  const p = gerarPlano({ ...base, dias: '6', diasMusc: ['1', '3', '5', '0'] }, GYM, 0);
-  assert.ok(Object.keys(p.agenda).length <= 4 && Object.keys(p.agenda).every((w) => ['1', '3', '5', '0'].includes(w)));
-  assert.equal(p.perfil.dias, 4);
-  assert.ok(p.avisos.some((x) => x.diasLivres && /Você pediu 6 dias de treino/.test(x.texto)));
+test('quantos treinos: o treinador escolhe pelo perfil (ACSM 2009, OMS 2020), sem passar dos dias livres; a resposta antiga vale', () => {
+  const semDias = { ...base }; delete semDias.dias;
+  const n = (x, bloq = []) => { const p = gerarPlano({ ...semDias, ...x, semTreino: resp(bloq) }, GYM, 0); return [Object.keys(p.agenda).length, p]; };
+  assert.equal(n({ experiencia: 'iniciante' })[0], 3);
+  assert.equal(n({ experiencia: 'intermediario' })[0], 4);
+  assert.equal(n({ experiencia: 'avancado' })[0], 5);
+  assert.equal(n({ experiencia: 'intermediario', objetivo: 'saude' })[0], 3);
+  assert.equal(n({ idade: 65 })[0], 3);
+  assert.equal(n({ idade: 16 })[0], 3);
+  assert.equal(n({ condicoes: ['diabetes'] })[0], 3);
+  // nunca mais treinos do que dias livres, e o porquê aparece, com fonte
+  const [k, p] = n({ experiencia: 'avancado' }, [1, 2, 3, 4]);
+  assert.equal(k, 3);
+  const av = p.avisos.find((x) => /treinos por semana: no nível avançado, a recomendação é de 4 a 6/.test(x.texto));
+  assert.ok(av && av.refs.includes('acsm2009'), JSON.stringify(p.avisos.map((x) => x.texto)));
+  // a resposta antiga de "quantos dias" continua valendo, sem o aviso da escolha
+  const pAntigo = gerarPlano({ ...base, dias: '6', semTreino: ['1', '3', '5'] }, GYM, 0);
+  assert.ok(Object.keys(pAntigo.agenda).length <= 4);
+  assert.ok(pAntigo.avisos.some((x) => x.diasLivres && /Você pediu 6 dias de treino/.test(x.texto)));
+  assert.ok(!pAntigo.avisos.some((x) => /treinos por semana: /.test(x.texto)));
 });
 
 test('musculação: em todas as combinações de dias × dias bloqueados × perfil, nenhum treino num dia bloqueado e o descanso continua', () => {
@@ -182,8 +182,8 @@ test('corrida: o plano nunca usa um dia bloqueado no Treinador, e diz o que tiro
 });
 
 test('corrida pelo estado: os dias da musculação não mudam a corrida; a resposta antiga da corrida, sim', () => {
-  // dias da musculação (resposta nova): a corrida usa os dias dela
-  const st = store.sanitize({ run: { answers: { ...RUN, dias: ['2', '4', '6', '0'] }, aceitoEm: '2026-10-07T12:00:00.000Z', inicio: '2026-10-05' }, trainer: { answers: { ...base, diasMusc: ['1', '2', '3', '4', '5'] } } });
+  // dias sem musculação: a corrida usa os dias dela
+  const st = store.sanitize({ run: { answers: { ...RUN, dias: ['2', '4', '6', '0'] }, aceitoEm: '2026-10-07T12:00:00.000Z', inicio: '2026-10-05' }, trainer: { answers: { ...base, semTreino: ['6', '0'] } } });
   assert.deepEqual(diasSemCorrida(st), []);
   assert.ok(corridasDe(planoAtual(st, HOJE)).some((w) => w === 0 || w === 6), 'corrida no fim de semana');
   // resposta antiga da corrida ("não posso treinar no fim de semana"): continua valendo até refazer a entrevista
@@ -277,13 +277,9 @@ test('treino perdido: nunca vai para um dia bloqueado', () => {
 const visiveis = (q, a) => q.op.filter((o) => typeof o[3] !== 'function' || o[3](a)).map((o) => o[0]);
 
 test('cada entrevista pergunta os seus dias: a da corrida, só os dias de corrida (todos os 7 dias à vista)', () => {
-  const ks = P_CORRIDA.map((q) => q.k);
-  assert.ok(ks.includes('dias') && !ks.includes('diasMusc'));
-  assert.ok(PERGUNTAS.some((q) => q.k === 'diasMusc'));
-  const dias = P_CORRIDA.find((x) => x.k === 'dias');
-  assert.equal(visiveis(dias, {}).length, 7);
-  // resposta antiga guardada na corrida: os dias sem corrida ainda saem das opções
-  assert.deepEqual(visiveis(dias, { semTreino: ['6', '0'], soCorrida: ['6'] }).sort(), ['1', '2', '3', '4', '5', '6']);
+  const q = P_CORRIDA.find((x) => x.k === 'semCorrida');
+  assert.ok(q && /não pode correr/.test(q.titulo) && q.nenhum === 'nenhum');
+  assert.equal(visiveis(q, {}).length, 8);
 });
 
 test('sábado só corrida: a corrida usa o sábado; a musculação não', () => {
@@ -306,14 +302,14 @@ test('sábado só corrida: a corrida usa o sábado; a musculação não', () => 
 });
 
 test('mudar os dias da musculação tira o treino do dia que saiu; a corrida não muda nada na musculação', () => {
-  const s = { trainer: { answers: { ...base, diasMusc: ['1', '3', '5'] } }, run: { answers: { ...RUN, dias: ['2', '4', '6'] } }, plans: [{ id: 'p', dias: [{ id: 'a', nome: 'Treino A' }, { id: 'b', nome: 'Treino B' }, { id: 'c', nome: 'Treino C' }], agenda: { 1: 'a', 3: 'b', 6: 'c' } }], activePlan: 'p' };
+  const s = { trainer: { answers: { ...base, semTreino: ['2', '4', '6', '0'] } }, run: { answers: { ...RUN, dias: ['2', '4', '6'] } }, plans: [{ id: 'p', dias: [{ id: 'a', nome: 'Treino A' }, { id: 'b', nome: 'Treino B' }, { id: 'c', nome: 'Treino C' }], agenda: { 1: 'a', 3: 'b', 6: 'c' } }], activePlan: 'p' };
   const msg = aplicarDiasNosTreinos(s);
   // o treino C sai do sábado para o dia marcado livre (sexta)
   assert.deepEqual(s.plans[0].agenda, { 1: 'a', 3: 'b', 5: 'c' });
   assert.match(msg, /Treino C passou de sábado para sexta/);
   // nada é copiado de uma entrevista para a outra
   assert.deepEqual(s.run.answers.dias, ['2', '4', '6']);
-  assert.ok(!('semTreino' in s.run.answers) && !('diasMusc' in s.run.answers));
+  assert.ok(!('semTreino' in s.run.answers));
   // quem só corre, com a resposta antiga: ela vale para os dois
   assert.deepEqual(diasBloqueados({ trainer: { answers: {} }, run: { answers: { semTreino: ['6'] } } }), [6]);
   // sem dia livre: o treino fica de fora e a frase pede para escolher

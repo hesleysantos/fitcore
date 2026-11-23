@@ -601,7 +601,7 @@ const capi = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
 export function porQueNaoDia(o, hoje, alternado = false) {
   const q = capi(nomeDoDia(o.data, hoje));
   switch (o.motivo) {
-    case 'bloqueado': return `${q} não é um dos seus dias de musculação.`;
+    case 'bloqueado': return `${q} é um dia em que você não pode fazer musculação.`;
     case 'feriado': return `${q} é feriado: a academia não abre.`;
     case 'saude': return `${q}, o problema de saúde que você contou ainda muda o treino.`;
     case 'treinou': return `${q} já tem treino feito.`;

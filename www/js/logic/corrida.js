@@ -114,10 +114,13 @@ export const PERGUNTAS = [
     op: [['3', '3 km', ''], ['5', '5 km', ''], ['10', '10 km', ''], ['21', 'Meia maratona', ''], ['42', 'Maratona', ''], ['nao', 'Não tenho', '']],
   },
   { k: 'resultadoMin', tipo: 'numero', se: (a) => corre(a) && !!a.resultado && a.resultado !== 'nao', titulo: 'Em quanto tempo?', ajuda: 'Em horas, minutos e segundos, como no relógio. Exemplo: 27 min 30 s.', min: 8, max: 420, un: 'minutos', padrao: 30, formato: 'tempo' },
-  // os dias da corrida (a musculação tem a pergunta dela, no Treinador: logic/dias-livres.js). Respostas antigas com dias sem
-  // treino ainda tiram esses dias das opções.
-  { k: 'dias', tipo: 'varios', titulo: 'Em quais dias da semana você pode correr?', ajuda: 'Se você também faz musculação, pode marcar os mesmos dias: eu organizo os dois treinos. Treinos fortes nunca ficam em dias seguidos.', op: DIAS_OP.map((o) => [...o, (a) => !semCorridaDe(a).includes(Number(o[0]))]) },
-  { k: 'diaLongo', tipo: 'um', se: (a) => Array.isArray(a.dias) && a.dias.length >= 2, titulo: 'Qual é o melhor dia para o treino mais longo?', ajuda: 'Se o dia não estiver entre os que você marcou, eu escolho.', op: [['auto', 'Tanto faz', 'Eu escolho o melhor dia'], ...DIAS_OP.map((o) => [...o, (a) => !semCorridaDe(a).includes(Number(o[0]))])] },
+  // Os dias da corrida, com a mesma pergunta da musculação (cada entrevista para o seu treino — logic/dias-livres.js): os dias
+  // em que a pessoa NÃO pode correr; nos outros, o plano escolhe quantas corridas fazer, pelo nível (MAX_CORRIDAS). Correr
+  // todo dia é um pedido à parte (todoDia): "qualquer dia serve" não quer dizer "quero correr todo dia". Respostas antigas
+  // ("Em quais dias da semana você pode correr?", em `dias`) continuam valendo até a entrevista ser refeita (diasDaCorrida).
+  { k: 'semCorrida', tipo: 'varios', opcional: true, titulo: 'Tem algum dia em que você não pode correr?', ajuda: 'Nos outros dias, eu escolho quantas corridas fazer. A musculação tem os dias dela.', nenhum: 'nenhum', max: 6, unidade: ['dia', 'dias'], op: [...DIAS_OP, ['nenhum', 'Nenhum, qualquer dia serve', '']] },
+  { k: 'todoDia', tipo: 'um', opcional: true, se: (a) => diasDaCorrida(a).length === 7 && (a.experiencia === 'regular' || a.experiencia === 'avancado'), titulo: 'Quer correr todos os dias?', ajuda: 'Só vale para quem já corre com regularidade. Se não der no seu caso, eu explico por quê.', op: [['nao', 'Não', 'Eu escolho quantas corridas, pelo seu nível'], ['sim', 'Sim, todo dia', 'Os dias a mais são corridas leves e curtas']] },
+  { k: 'diaLongo', tipo: 'um', se: (a) => diasDaCorrida(a).length >= 2, titulo: 'Qual é o melhor dia para o treino mais longo?', ajuda: 'Se não der nesse dia, eu escolho.', op: [['auto', 'Tanto faz', 'Eu escolho o melhor dia'], ...DIAS_OP.map((o) => [...o, (a) => diasDaCorrida(a).includes(o[0])])] },
   { k: 'tempo', tipo: 'um', titulo: 'Quanto tempo você tem por treino, em um dia comum?', ajuda: 'Conte com aquecimento e volta à calma.', op: [['30', 'Cerca de 30 minutos', ''], ['45', 'Cerca de 45 minutos', ''], ['60', 'Cerca de 1 hora', ''], ['90', 'Até 1h30', '']] },
   { k: 'tempoLongo', tipo: 'um', se: comDistancia, titulo: 'E no dia do treino mais longo?', op: [['60', 'Até 1 hora', ''], ['90', 'Até 1h30', ''], ['120', 'Até 2 horas', ''], ['150', 'Até 2h30', ''], ['180', 'Até 3 horas', 'Na meia e na maratona, o treino mais longo pode chegar a 3 horas'], ['210', 'Até 3h30', 'Só na maratona: acima de 3 horas, o longo alterna corrida e caminhada', (a) => a.distancia === '42']] },
   {
@@ -298,8 +301,25 @@ const RITMO_PADRAO = [480, 450, 390, 345]; // ritmo leve estimado (s/km) por ní
 const RITMO_CAMINHADA = 630;
 const maisPerto = (v, l, padrao) => (Number.isFinite(v) && v > 0 ? l.reduce((m, x) => (Math.abs(x - v) < Math.abs(m - v) ? x : m), l[0]) : padrao);
 
+// Os dias em que a corrida pode cair, como na resposta antiga ('0' a '6'): os que não estão entre os dias sem corrida
+// (semCorrida, "Nenhum" = os 7); sem essa resposta, a antiga (`dias`), menos os dias sem treino antigos que ela tenha.
+export function diasDaCorrida(a) {
+  const r = isObj(a) ? a : {};
+  if (Array.isArray(r.semCorrida) && r.semCorrida.length) {
+    const fora = new Set(r.semCorrida.includes('nenhum') ? [] : r.semCorrida.filter((x) => typeof x === 'string' && /^[0-6]$/.test(x)));
+    return ['1', '2', '3', '4', '5', '6', '0'].filter((x) => !fora.has(x));
+  }
+  return Array.isArray(r.dias) ? r.dias.filter((x) => typeof x === 'string' && /^[0-6]$/.test(x) && !semCorridaDe(r).includes(Number(x))) : [];
+}
+// a resposta nova vira `dias` (o resto do plano usa só essa chave); `querTodoDia`: o pedido de correr todo dia (na
+// resposta antiga, marcar os 7 dias)
+function comDias(a) {
+  if (typeof a.querTodoDia === 'boolean' && !Array.isArray(a.semCorrida)) return a; // já convertida (semDiasBloqueados)
+  if (!Array.isArray(a.semCorrida) || !a.semCorrida.length) return { ...a, querTodoDia: Array.isArray(a.dias) && new Set(a.dias).size >= 6 };
+  return { ...a, dias: diasDaCorrida(a), querTodoDia: a.todoDia === 'sim' };
+}
 export function perfil(respostas) {
-  const a = isObj(respostas) ? respostas : {};
+  const a = comDias(isObj(respostas) ? respostas : {});
   const idade = entre(numero(a.idade, 30), 1, 120);
   const exp = OPC.experiencia.has(a.experiencia) ? a.experiencia : 'nunca';
   // condições já com o que os remédios dizem (insulina → diabetes; remédio contínuo sem condição → doença crônica): saude.js
@@ -416,9 +436,9 @@ export function perfil(respostas) {
   const podeTodoDia = !cautela && !gestante && !posparto && !hipertensao && !cronica && !diabetes && idade >= 18 && !idoso && !irregular && retorno === 0 && !lesaoPrevia
     && ((objetivo === 'saude' && nivel >= 2) || (nivel >= 3 && ['distancia', 'ritmo', 'prova'].includes(objetivo)));
   // (com 6 ou 7 dias marcados, até uma corrida por dia; o 7º dia só fica sem corrida para quem não pode correr todo dia)
-  const todoDia = podeTodoDia && dias.length >= 6;
+  const todoDia = podeTodoDia && a.querTodoDia && dias.length >= 6;
   let descansoForcado = null;
-  if (dias.length === 7 && !podeTodoDia) { descansoForcado = (diaLongo + 1) % 7; dias = dias.filter((d) => d !== descansoForcado); }
+  if (dias.length === 7 && (!podeTodoDia || !a.querTodoDia)) { descansoForcado = (diaLongo + 1) % 7; dias = dias.filter((d) => d !== descansoForcado); }
   const longoAtual = jaCorre ? entre(numero(a.longoAtual, Math.max(3, km * 0.4)), 0.5, 60) : 0;
   // minutos de corrida sem parar hoje. Sem a resposta (ela é opcional), quem já corre e não passou de 3 km tem a conta feita
   // pela corrida mais longa, a 6:30 por km: um ritmo mais rápido que o de quem está começando, para a conta dar MENOS minutos
@@ -429,7 +449,7 @@ export function perfil(respostas) {
     idade, exp, nivel, nivelBase, retorno, pausaDias, ativo, jaCorre, jovem, idoso, master, gestante, posparto, cardiaco, renal, diabetes, hipertensao, cronica, liberado,
     precisaLiberacao, confirmar, bloqueio, bloqueado: !!bloqueio, cautela, imc, obeso, lesaoPrevia, limitacoes: lim, condicoes: cond, triagem: tri, remedios, pulsoBaixo, supervisao,
     resultadoInvalido: !!rd && typeof a.resultadoMin === 'number' && !resultado, alvoInvalido: temAlvo && !alvoOk,
-    dias, diaLongo, descansoForcado, todoDia, podeTodoDia, tempo, tempoLongo, objetivo, dist, distPedida, distMax, semanasProva, alvoSeg, resultado, aparelho, local, modo, qMax,
+    dias, diaLongo, descansoForcado, querTodoDia: !!a.querTodoDia, todoDia, podeTodoDia, tempo, tempoLongo, objetivo, dist, distPedida, distMax, semanasProva, alvoSeg, resultado, aparelho, local, modo, qMax,
     // irregular: cerca de 3 km (20 a 25 minutos) por dia de corrida, até 3 dias
     kmSemana: irregular ? 3 * Math.min(3, dias.length) : km, longoAtual, tempoLongoDito, provas: ['nenhuma', '5a10', 'meia', 'maratona'].includes(a.provas) ? a.provas : 'nenhuma',
     // passo semanal de volume: até 14% (cerca de 30% em 2 semanas). A mudança de volume de uma semana para outra não previu
@@ -1268,8 +1288,8 @@ export function limparRegistros(raw) {
 function limparRespostas(v) {
   const out = {};
   if (!isObj(v)) return out;
-  // (com as perguntas antigas de dias sem treino: a resposta guardada continua valendo — logic/dias-livres.js)
-  for (const q of [...PERGUNTAS, ...PERGUNTAS_DIAS_ANTIGAS]) {
+  // (com as perguntas antigas de dias: a resposta guardada continua valendo — logic/dias-livres.js e diasDaCorrida)
+  for (const q of [...PERGUNTAS, ...PERGUNTAS_DIAS_ANTIGAS, { k: 'dias', tipo: 'varios', op: DIAS_OP }]) {
     if (!Object.prototype.hasOwnProperty.call(v, q.k)) continue;
     const x = v[q.k];
     if (q.tipo === 'numero') { if (typeof x === 'number' && Number.isFinite(x) && x >= q.min && x <= q.max) out[q.k] = x; }
@@ -1849,7 +1869,8 @@ function opcoesLimpas(o) {
 // estão bloqueados (entrevista da corrida de antes da resposta do Treinador), a corrida vai para o mesmo número de dias
 // livres, os mais espalhados. O longo marcado num dia bloqueado volta para "Tanto faz". Devolve { respostas, tirados, todos }.
 function semDiasBloqueados(respostas, bloqueados) {
-  const a = isObj(respostas) ? respostas : {};
+  const a0 = isObj(respostas) ? respostas : {};
+  const a = Array.isArray(a0.semCorrida) && a0.semCorrida.length ? { ...a0, dias: diasDaCorrida(a0), semCorrida: undefined, querTodoDia: a0.todoDia === 'sim' } : a0;
   const bloq = new Set(bloqueados);
   const marcados = Array.isArray(a.dias) ? [...new Set(a.dias.filter((x) => typeof x === 'string' && /^[0-6]$/.test(x)))] : [];
   const tirados = marcados.map(Number).filter((w) => bloq.has(w)).sort((x, y) => pos(x) - pos(y));
@@ -2564,9 +2585,9 @@ function avisos(pf, P, { semanas, limitado }) {
     if (o) av('warn', `Você disse que sente dor: ${o.nome.toLowerCase()}. Por isso as 2 primeiras semanas ficam sem treinos fortes e o plano sobe mais devagar (7% por semana). ${o.reduzir} Conte a dor com a intensidade em “Contar uma dor”: o plano se ajusta ao que você sente.`, [...new Set(['nhs_dor', ...o.f])].slice(0, 5));
   }
   if (pf.diasTirados) av('info', pf.diasRemanejados ? `Os dias que você marcou para correr estão entre os dias sem treino (${pf.diasTirados.map((w) => DIAS_NOME[w]).join(', ')}): a corrida foi para ${pf.dias.map((w) => DIAS_NOME[w]).join(', ')}. Confira em “Mudar respostas”.` : `Sem corrida ${pf.diasTirados.map((w) => DIAS_NOME[w]).join(' e ')}: você marcou que não treina ${pf.diasTirados.length === 1 ? 'nesse dia' : 'nesses dias'}.`, []);
-  if (pf.descansoForcado != null) {
+  if (pf.descansoForcado != null && pf.querTodoDia) {
     const m = motivoDoDescanso(pf);
-    av('info', `Você marcou os 7 dias. Deixei ${DIAS_NOME[pf.descansoForcado]} sem corrida: ${m.texto}. Nesse dia, caminhada, bicicleta ou natação leves valem.`, m.refs);
+    av('info', `Você pediu para correr todo dia. Deixei ${DIAS_NOME[pf.descansoForcado]} sem corrida: ${m.texto}. Nesse dia, caminhada, bicicleta ou natação leves valem.`, m.refs);
   }
   if (pf.todoDia && pf.dias.length === 7) av('info', pf.dist
     ? 'Você pode correr todo dia: os planos de maratona de maior volume não têm dia de descanso. Os dias a mais são rodagens leves, e os treinos fortes continuam separados. A 7ª corrida entra quando o volume da semana pede. Se aparecer dor ou um cansaço que não passa, tire o dia.'

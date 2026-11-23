@@ -80,7 +80,7 @@ export default async (page) => {
   console.log('2. Perfil iniciante: entrevista, proposta e aceite');
   await page.click('Começar'); await page.sleep(400);
   await entrevista({
-    'Como é a sua corrida': 'Nunca corri', 'objetivo na corrida': 'Começar a correr', 'não pode treinar': 'Nenhum, qualquer dia serve', 'quais dias': [dia(0), dia(2), dia(4)], 'melhor dia para o treino mais longo': 'Tanto faz',
+    'Como é a sua corrida': 'Nunca corri', 'objetivo na corrida': 'Começar a correr', 'não pode correr': [dia(1), dia(3), dia(5), dia(6)], 'melhor dia para o treino mais longo': 'Tanto faz',
     'tempo você tem por treino': 'Cerca de 45 minutos', 'mede as suas corridas': 'Relógio ou aplicativo com GPS', 'Onde você corre': 'Rua, parque ou calçadão', 'só por tempo': 'Tanto faz',
     anos: 41, peso: 92, altura: 168, 'lesão nos últimos': 'Não', 'dor em alguma': 'Nenhuma', condições: 'Nenhuma', sinais: 'Nenhum deles', 'remédio de uso contínuo': 'Nenhum',
   });
@@ -98,8 +98,8 @@ export default async (page) => {
   ok(t.includes('Semana 1 de 14') && t.includes('Esta semana'), 'painel mostra a semana 1 de 14');
   const topo = await page.eval(`const c = document.getElementById('corrida-hoje'); const b = [...c.querySelectorAll('.btn')].map((x) => x.textContent.trim()); return { tipo: c.dataset.hoje, h2: c.querySelector('h2').textContent, b, alto: c.getBoundingClientRect().bottom, alvo: Math.min(...[...c.querySelectorAll('.btn')].map((x) => x.getBoundingClientRect().height)) };`);
   ok(topo.tipo === 'treino' && topo.h2.startsWith('Hoje: ') && topo.b.includes('Iniciar') && topo.alvo >= 44, 'no alto, o treino de hoje com o botão Iniciar: ' + JSON.stringify(topo));
-  const st1 = await estado(`{ aceito: !!s.run.aceitoEm, inicio: s.run.inicio, wd: new Date(s.run.inicio + 'T12:00:00').getDay(), dias: s.run.answers.dias }`);
-  ok(st1.aceito && st1.wd === 1 && st1.dias.length === 3, `plano gravado, começando na segunda-feira ${st1.inicio}`);
+  const st1 = await estado(`{ aceito: !!s.run.aceitoEm, inicio: s.run.inicio, wd: new Date(s.run.inicio + 'T12:00:00').getDay(), dias: s.run.answers.semCorrida }`);
+  ok(st1.aceito && st1.wd === 1 && st1.dias.length === 4, `plano gravado, começando na segunda-feira ${st1.inicio}`);
   await foto('3-painel-iniciante');
 
   console.log('3. Treino do dia, cronômetro guiado e registro');
@@ -302,7 +302,7 @@ export default async (page) => {
   await entrevista({
     'Como é a sua corrida': 'Treino há anos, com bom volume', 'quilômetros você corre': 58, 'corrida mais longa': 24, 'maior prova': 'Maratona', 'sem correr': 'Estou correndo',
     'objetivo na corrida': 'Preparar uma prova com data', 'Qual distância': 'Maratona', 'quantas semanas': 16, 'tempo em mente': 'Sim', 'tempo-alvo': 225,
-    'resultado recente': 'Meia maratona', 'Em quanto tempo?': 104.5, 'não pode treinar': 'Nenhum, qualquer dia serve', 'quais dias': [dia(0), dia(1), dia(2), dia(3), dia(5), dia(6)], 'melhor dia para o treino mais longo': dia(6),
+    'resultado recente': 'Meia maratona', 'Em quanto tempo?': 104.5, 'não pode correr': [dia(4)], 'melhor dia para o treino mais longo': dia(6),
     'tempo você tem por treino': 'Até 1h30', 'treino mais longo': 'Até 3 horas', 'mede as suas corridas': 'Relógio ou aplicativo com GPS', 'Onde você corre': 'Rua, parque ou calçadão',
     anos: 38, peso: 68, altura: 176, 'lesão nos últimos': 'Não', 'dor em alguma': 'Nenhuma', condições: 'Nenhuma', sinais: 'Nenhum deles', 'remédio de uso contínuo': 'Nenhum',
   });

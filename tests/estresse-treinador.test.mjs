@@ -28,7 +28,7 @@ function varios(r, opcoes, nenhum, max = opcoes.length) {
 }
 
 const op = (k) => PERGUNTAS.find((q) => q.k === k).op.map((o) => o[0]);
-const OBJ = op('objetivo'), EXP = op('experiencia'), DIAS = op('dias'), TEMPO = op('tempo'), LOCAL = op('local');
+const OBJ = op('objetivo'), EXP = op('experiencia'), DIAS = ['2', '3', '4', '5', '6'], TEMPO = op('tempo'), LOCAL = op('local'); // DIAS: a resposta antiga de "quantos dias"; sem ela, o treinador escolhe (perfilAleatorio)
 const LIM = op('limitacoes').filter((x) => x !== 'nenhuma');
 const COND = op('condicoes').filter((x) => x !== 'nenhuma');
 const TRI = op('triagem').filter((x) => x !== 'nenhum');
@@ -371,7 +371,7 @@ function perfilAleatorio(r) {
   const peso = r() < 0.15 ? um(r, [30, 30.5, 249.5, 250]) : Math.round((30 + r() * 220) * 2) / 2;
   const altura = r() < 0.15 ? um(r, [120, 121, 219, 220]) : inteiro(r, 120, 220);
   const a = {
-    objetivo: um(r, OBJ), idade, peso, altura, experiencia: um(r, EXP), dias: um(r, DIAS), tempo: um(r, TEMPO), local: um(r, LOCAL),
+    objetivo: um(r, OBJ), idade, peso, altura, experiencia: um(r, EXP), dias: r() < 0.3 ? undefined : um(r, DIAS), tempo: um(r, TEMPO), local: um(r, LOCAL),
     limitacoes: varios(r, LIM, 'nenhuma'), condicoes: varios(r, COND, 'nenhuma'), triagem: varios(r, TRI, 'nenhum'), foco: varios(r, FOCO, 'equilibrado', 2),
     remedios: r() < 0.7 ? varios(r, REM, 'nenhum') : undefined,
     // liberação médica: quase sempre dada (para sobrar plano para conferir); às vezes "não" ou sem resposta (bloqueia)
@@ -432,7 +432,7 @@ test('estresse: 10.000 perfis aleatórios (idades 10–99, pesos e alturas extre
     else if (p && p.dias.length === 0) vazios++;
   }
   TOTAL += N;
-  for (const k of Object.keys(visto)) assert.equal(visto[k].size, PERGUNTAS.find((q) => q.k === k).op.length, 'opção não sorteada em ' + k);
+  for (const k of Object.keys(visto)) assert.equal(visto[k].size, k === 'dias' ? DIAS.length : PERGUNTAS.find((q) => q.k === k).op.length, 'opção não sorteada em ' + k);
   assert.ok(bloqueados > 300, 'faltaram perfis de menores de 14');
   assert.ok(gymVazia > 50, 'faltaram academias vazias');
   assert.ok(vazios < N * 0.02, `planos sem nenhum treino demais: ${vazios}`);

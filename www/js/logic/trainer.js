@@ -10,7 +10,7 @@ import { doresForaDoTreino } from './saude-fora.js';
 import { planoDaSemana, planoDaSemanaEm } from './corrida.js';
 import { limparCombo, FOCOS, FORTALECIMENTOS } from './combinado.js';
 import { perguntaCondicoes, perguntaTriagem, perguntaRemedios, perguntaLiberado, condicoesDe, sinaisDe, remediosDe, soComSupervisao, respostasProtegidas } from './saude.js';
-import { perguntaDiasMusc, bloqueadosDe, livresDe, notaDosDias, nomesDosDias, diasBloqueados } from './dias-livres.js';
+import { perguntaSemTreino, bloqueadosDe, livresDe, nomesDosDias, diasBloqueados } from './dias-livres.js';
 
 // ---------- perguntas ----------
 export const PERGUNTAS = [
@@ -61,15 +61,9 @@ export const PERGUNTAS = [
   perguntaLiberado((a) => precisaLiberacao(a) && !soComSupervisao(a), 'Um médico já liberou você para treinar musculação?'),
   { k: 'peso', tipo: 'numero', informar: true, titulo: 'Qual é o seu peso?', ajuda: 'Uma estimativa já serve.', min: 30, max: 250, un: 'kg', padrao: 70, passo: 0.5, dec: 1 },
   { k: 'altura', tipo: 'numero', informar: true, titulo: 'Qual é a sua altura?', ajuda: 'Em centímetros.', min: 120, max: 220, un: 'cm', padrao: 170 },
-  // os dias da musculação (a corrida tem a pergunta dela): logic/dias-livres.js
-  perguntaDiasMusc(),
-  {
-    k: 'dias', tipo: 'um', titulo: 'Quantos desses dias você quer treinar?',
-    ajuda: 'Seja realista: o melhor treino é o que você consegue manter.',
-    // não aparece opção com mais treinos do que dias livres (`nota` diz por quê)
-    nota: notaDosDias,
-    op: [['2', '2 dias', ''], ['3', '3 dias', ''], ['4', '4 dias', ''], ['5', '5 dias', ''], ['6', '6 dias', '']].map((o) => [...o, (a) => Number(o[0]) <= livresDe(bloqueadosDe(a))]),
-  },
+  // os dias sem musculação (a corrida tem a pergunta dela): logic/dias-livres.js. Quantos treinos por semana, o treinador
+  // escolhe (diasRecomendados).
+  perguntaSemTreino(),
   {
     k: 'tempo', tipo: 'um', titulo: 'Quanto tempo você tem por treino?',
     op: [['30', 'Cerca de 30 minutos', ''], ['45', 'Cerca de 45 minutos', ''], ['60', 'Cerca de 1 hora', ''], ['75', 'Mais de 1 hora', '']],
@@ -224,7 +218,10 @@ export function perfil(respostas) {
   // dias em que a pessoa não treina (logic/dias-livres.js): o plano nunca pede mais treinos do que os dias livres
   const bloqueados = bloqueadosDe(a);
   const livres = livresDe(bloqueados);
-  const diasPedidos = Number.isFinite(d) ? Math.min(6, Math.max(2, d)) : 3;
+  // quantos treinos por semana: o treinador escolhe (a resposta antiga de "quantos dias", quando existe, continua valendo)
+  const rec = diasRecomendados({ nivel, objetivo, idoso, jovem, diabetes, cautela });
+  const diasAuto = !Number.isFinite(d);
+  const diasPedidos = diasAuto ? rec.dias : Math.min(6, Math.max(2, d));
   const dias = Math.min(diasPedidos, livres);
   const tempo = Number.isFinite(t) && t > 0 ? TEMPOS.reduce((m, x) => (Math.abs(x - t) < Math.abs(m - t) ? x : m), 60) : 60;
   // músculos em prioridade, na ordem em que foram escolhidos; as áreas antigas ("pernas", "braços") valem por dois
@@ -240,7 +237,7 @@ export function perfil(respostas) {
     objetivoDose: gestante ? 'saude' : objetivo,
     obeso: imc != null && imc >= 30,
     baixoPeso: imc != null && (idoso ? imc < 22 : imc < 18.5),
-    dias, tempo, diasPedidos, bloqueados, livres,
+    dias, tempo, diasPedidos, bloqueados, livres, diasAuto, motivoDias: rec,
     // os dois únicos dias livres são seguidos (só com 5 dias bloqueados): ver divisoes()
     livresSeguidos: livres === 2 && [0, 1, 2, 3, 4, 5, 6].filter((w) => !bloqueados.includes(w)).some((w, _, l) => l.includes((w + 1) % 7)),
     local: OPC.local.has(a.local) ? a.local : 'completa',
@@ -703,7 +700,34 @@ const numVersao = (v) => Math.abs(Math.floor(Number(v))) % 1000000 || 0;
 // dá para manter o descanso de sempre — 48 horas ou mais entre treinos do mesmo músculo (ref garber2011) e, para menores
 // de 18 e diabetes, força em dias não seguidos (refs faigenbaum2009, colberg2016) —, sai um treino de cada vez até dar:
 // o descanso vem antes do número de treinos, e o plano diz isso em uma linha.
+// A pergunta antiga "Quantos dias por semana você consegue treinar?": não é mais feita (o treinador escolhe), mas a resposta
+// guardada continua valendo até a entrevista ser refeita (store.js a valida).
+export const PERGUNTA_DIAS_ANTIGA = { k: 'dias', tipo: 'um', op: [['2'], ['3'], ['4'], ['5'], ['6']] };
+// Quantos treinos de musculação por semana, quando o treinador escolhe (a entrevista só pergunta os dias em que a pessoa não
+// pode). ACSM 2009 (texto completo): iniciantes "2-3 d/wk" (categoria A), intermediários "3-4 d/wk" (B), avançados "4-6
+// d/wk" (C) — ref acsm2009. OMS 2020: adultos, força "on 2 or more days a week"; 60 anos ou mais, força e equilíbrio "on 3
+// or more days a week" — ref oms2020. ACSM 2026: "≥2 sessions/wk", e com o mesmo volume a frequência quase não muda o
+// ganho — ref acsm2026. Menores de 18 e diabetes: 2 a 3 treinos, em dias não seguidos (refs faigenbaum2009, colberg2016).
+// A escolha dentro de cada faixa é do app: o meio ou o topo da faixa (3, 4 e 5) e, para a saúde, 3 (acima do mínimo de 2).
+export function diasRecomendados({ nivel, objetivo, idoso, jovem, diabetes, cautela }) {
+  if (jovem) return { dias: 3, texto: 'antes dos 18 anos, a recomendação é de 2 a 3 treinos, em dias não seguidos', refs: ['faigenbaum2009'] };
+  if (diabetes) return { dias: 3, texto: 'com diabetes, a recomendação é de 2 a 3 treinos, em dias não seguidos', refs: ['colberg2016'] };
+  if (idoso) return { dias: 3, texto: 'depois dos 60 anos, a recomendação é de força e equilíbrio em 3 dias ou mais', refs: ['oms2020', 'acsm2009'] };
+  if (nivel <= 1 || cautela) return { dias: 3, texto: 'para quem está começando, a recomendação é de 2 a 3 treinos', refs: ['acsm2009'] };
+  if (objetivo === 'saude') return { dias: 3, texto: 'para a saúde, 2 dias ou mais por semana bastam, e o total de séries conta mais que o número de dias', refs: ['oms2020', 'acsm2026'] };
+  if (nivel === 2) return { dias: 4, texto: 'no nível intermediário, a recomendação é de 3 a 4 treinos', refs: ['acsm2009', 'acsm2026'] };
+  return { dias: 5, texto: 'no nível avançado, a recomendação é de 4 a 6 treinos', refs: ['acsm2009', 'acsm2026'] };
+}
 export function gerarPlano(respostas, gymBruta, versaoBruta = 0, doresBrutas = null, combinado = null) {
+  const p = gerarPlanoDias(respostas, gymBruta, versaoBruta, doresBrutas, combinado);
+  // o número de treinos que o treinador escolheu, e por quê (curto)
+  if (p && p.perfil.diasAuto && p.perfil.motivoDias) {
+    const n = Object.keys(p.agenda || {}).length || p.perfil.dias;
+    p.avisos.unshift({ tipo: 'info', diasLivres: true, texto: `${n} ${n === 1 ? 'treino' : 'treinos'} por semana: ${p.perfil.motivoDias.texto}.${p.perfil.livres < 7 ? '' : ' Para treinar em menos dias, marque na entrevista os dias em que você não pode.'}`, refs: p.perfil.motivoDias.refs });
+  }
+  return p;
+}
+function gerarPlanoDias(respostas, gymBruta, versaoBruta = 0, doresBrutas = null, combinado = null) {
   let p = gerarNosDias(respostas, gymBruta, versaoBruta, doresBrutas, combinado);
   if (!p || !p.perfil.bloqueados.length) return p;
   const { diasPedidos, livres, bloqueados } = p.perfil;

@@ -429,7 +429,7 @@ test('estresse: sanitização rejeita lixo e mantém os limites', () => {
     assert.ok(c.cron === null || (Object.keys(c.cron).length === 9 && c.inicio !== '' && Object.values(c.cron).every((v) => typeof v === 'string' || (Number.isInteger(v) && v >= 0))));
     assert.ok(c.inicio === '' || (diaDaSemana(c.inicio) === 1 && c.aceitoEm !== ''));
     if (!c.aceitoEm) assert.equal(c.inicio + c.pausadoEm, '');
-    for (const k of Object.keys(c.answers)) assert.ok(PERGUNTAS.some((q) => q.k === k));
+    for (const k of Object.keys(c.answers)) assert.ok(PERGUNTAS.some((q) => q.k === k) || ['dias', 'semTreino', 'soCorrida'].includes(k), k); // (respostas antigas que continuam valendo)
   }
 });
 

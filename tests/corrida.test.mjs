@@ -14,13 +14,13 @@ test('entrevista: perguntas condicionais e respostas completas', () => {
   assert.ok(respostasCompletas(base));
   assert.ok(respostasCompletas(novato), 'quem nunca correu não responde quilometragem, resultado nem prova');
   assert.equal(respostasCompletas({ ...base, semanasProva: undefined }), false);
-  assert.equal(respostasCompletas({ ...base, dias: [] }), false);
+  assert.equal(respostasCompletas({ ...base, semCorrida: [] }), false);
   assert.equal(respostasCompletas({ ...base, condicoes: ['hipertensao'] }), false, 'com condição de saúde, precisa responder sobre a liberação médica');
   assert.ok(respostasCompletas({ ...base, condicoes: ['hipertensao'], liberado: 'nao' }));
   for (const q of PERGUNTAS) { assert.ok(q.k && q.titulo && ['um', 'varios', 'numero'].includes(q.tipo)); if (q.tipo !== 'numero') assert.ok(q.op.length >= 2); else assert.ok(q.min < q.max && q.padrao >= q.min && q.padrao <= q.max && q.un); }
   // a entrevista pergunta como a pessoa mede a corrida e quais dias da semana tem
   assert.deepEqual(PERGUNTAS.find((q) => q.k === 'aparelho').op.map((o) => o[0]), ['gps', 'esteira', 'tempo', 'nada']);
-  assert.deepEqual(PERGUNTAS.find((q) => q.k === 'dias').op.map((o) => o[0]).sort(), ['0', '1', '2', '3', '4', '5', '6']);
+  assert.deepEqual(PERGUNTAS.find((q) => q.k === 'semCorrida').op.map((o) => o[0]).sort(), ['0', '1', '2', '3', '4', '5', '6', 'nenhum']);
   assert.equal(PERGUNTAS.find((q) => q.k === 'semanasProva').tipo, 'numero');
 });
 
@@ -1340,13 +1340,13 @@ test('correr todo dia: cada perfil tem a sua regra (saúde e prazer com base, di
       for (const s of p.semanas) for (let i = 1; i < s.dias.length; i++) assert.ok(!(s.dias[i].intensidade === 'forte' && s.dias[i - 1].intensidade === 'forte'));
     } else {
       assert.ok(corridasMax(p) <= 6);
-      const av = p.avisos.find((x) => /Você marcou os 7 dias/.test(x.texto));
+      const av = p.avisos.find((x) => /Você pediu para correr todo dia/.test(x.texto));
       if (!pf.bloqueado) assert.ok(av && av.refs.length, JSON.stringify(r));
     }
   }
   // quem começa: o motivo é o risco de quem começa; quem corre: a regra da distância
-  assert.match(gerarPlano({ ...a, experiencia: 'iniciante', kmSemana: 8, longoAtual: 4 }).avisos.find((x) => /7 dias/.test(x.texto)).texto, /começando/);
-  assert.match(gerarPlano({ ...a, objetivo: 'distancia', distancia: '21' }).avisos.find((x) => /7 dias/.test(x.texto)).texto, /mais longe ou mais rápido/);
+  assert.match(gerarPlano({ ...a, experiencia: 'iniciante', kmSemana: 8, longoAtual: 4 }).avisos.find((x) => /correr todo dia\. Deixei/.test(x.texto)).texto, /começando/);
+  assert.match(gerarPlano({ ...a, objetivo: 'distancia', distancia: '21' }).avisos.find((x) => /correr todo dia\. Deixei/.test(x.texto)).texto, /mais longe ou mais rápido/);
   // com 6 dias, quem pode correr todo dia corre os 6; com 4, nada muda
   assert.equal(corridasMax(gerarPlano({ ...a, dias: ['1', '2', '3', '4', '5', '6'] })), 6);
   // 7 dias seguidos: o lembrete muda conforme o perfil

@@ -12,7 +12,7 @@ import { buscarFaq } from '../data/knowledge.js';
 import { REFS_CORRIDA, FAQ_CORRIDA, TIPOS_TREINO, FONTES_TELA } from '../data/corrida.js';
 import {
   PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, planoAtual, planoDaSemana, treinoDoDia, avisosBloqueio, inicioPara, diasDeForca, evolucao, alertas, naoMedeDe, podeTodoDiaDe, dicas,
-  efeitoDaDor, orientacaoDor, semanaDaProva, expandirBlocos, textoBloco, limparRegistro, MAX_REGISTROS, fmtRitmo, fmtFaixa, fmtKm, fmtTempo, fmtDia, somaDias, diaValido, diasEntre,
+  efeitoDaDor, orientacaoDor, semanaDaProva, diasDaCorrida, expandirBlocos, textoBloco, limparRegistro, MAX_REGISTROS, fmtRitmo, fmtFaixa, fmtKm, fmtTempo, fmtDia, somaDias, diaValido, diasEntre,
   retomarPlano, diaLocal, segundaDe, planejadoDe, analiseDoRegistro, analiseRecente, guardarDoDia, perfil, saudeDaCorrida,
   MAX_DORES_REGISTRO, MUSCULO_CORRIDA, soDorMuscularLeve, etapasDe,
 } from '../logic/corrida.js';
@@ -523,11 +523,21 @@ export function corridaView() {
     const pre = respostasParaEntrevista('corrida', state);
     for (const k of ['idade', 'peso', 'altura']) if (pre[k] == null) { const v = typeof state.trainer.answers[k] === 'number' ? state.trainer.answers[k] : state.nutri.answers[k]; if (typeof v === 'number') pre[k] = v; }
     // (as perguntas antigas de dias sem treino não são mais feitas: os dias da corrida são a pergunta "dias")
+    // a pergunta é sobre os dias em que NÃO pode correr: quem respondeu a antiga ("em quais dias pode") já vem com os
+    // outros dias marcados; quem marcou os 7, com "Nenhum" e o pedido de correr todo dia
+    if (!Array.isArray(pre.semCorrida) && Array.isArray(pre.dias) && pre.dias.length) {
+      const pode = diasDaCorrida(pre);
+      const fora = ['1', '2', '3', '4', '5', '6', '0'].filter((x) => !pode.includes(x));
+      pre.semCorrida = fora.length ? fora.slice(0, 6) : ['nenhum'];
+      if (!fora.length && pre.todoDia == null) pre.todoDia = 'sim';
+    }
+    if (!Array.isArray(pre.semCorrida) || !pre.semCorrida.length) pre.semCorrida = ['nenhum'];
     limparDiasAntigos(pre);
+    delete pre.dias;
     return {
       title: 'Treinador', body: [interview({
         perguntas: PERGUNTAS, respostas: pre, base: a, avatar: 'run',
-        onDone: (r) => { let msg = ''; update((s) => { s.run.answers = limparDiasAntigos(r); s.run.aceitoEm = ''; s.run.inicio = ''; s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; s.run.carga = []; msg = aplicarDiasNosTreinos(s); }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); if (msg) toast('Musculação: ' + msg); },
+        onDone: (r) => { let msg = ''; update((s) => { s.run.answers = limparDiasAntigos(r); delete s.run.answers.dias; s.run.aceitoEm = ''; s.run.inicio = ''; s.run.pausadoEm = ''; s.run.pausas = []; s.run.cron = null; s.run.mostrados = []; s.run.degrau = null; s.run.carga = []; msg = aplicarDiasNosTreinos(s); }); modo = 'proposta'; refresh(); window.scrollTo(0, 0); if (msg) toast('Musculação: ' + msg); },
         onCancel: () => { modo = 'auto'; refresh(); },
       })],
     };

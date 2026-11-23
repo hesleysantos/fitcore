@@ -35,7 +35,7 @@ export default async (page) => {
   await carregar(st(resp({ experiencia: 'iniciante', kmSemana: 8, longoAtual: 4 })));
   await page.goto(B + '#/corrida', 300); await page.reload(1500);
   const t2 = await page.eval(`return document.body.textContent;`);
-  ok(/Você marcou os 7 dias/.test(t2) && /começando/.test(t2), 'explica por que um dia fica sem corrida', t2.slice(0, 200));
+  ok(/Você pediu para correr todo dia/.test(t2) && /começando/.test(t2), 'explica por que um dia fica sem corrida', t2.slice(0, 200));
   await page.shot('_todo_dia_iniciante');
 
   console.log(falhas.length ? `\n${falhas.length} falha(s)` : '\nTudo certo.');

@@ -89,7 +89,7 @@ function agendaSheet(plan, wd) {
   list.appendChild(h('button', { class: 'item' + (!plan.agenda[wd] ? ' sel' : ''), type: 'button', onClick: () => set('') }, h('div', { class: 'grow' }, h('div', { class: 't', text: 'Descanso' }), h('div', { class: 's', text: 'Sem treino neste dia' }))));
   // dia que a pessoa marcou no Treinador como sem treino: a escolha à mão continua livre, mas a folha lembra
   const semTreino = diasBloqueados(state).includes(Number(wd));
-  const s = folha({ title: DIAS_LONGO[wd], body: [h('p', { class: 'muted small', text: 'Qual treino você faz neste dia da semana?' }), semTreino ? note('info', 'Este dia não está entre os que você marcou para a musculação no Treinador.') : null, list].filter(Boolean) });
+  const s = folha({ title: DIAS_LONGO[wd], body: [h('p', { class: 'muted small', text: 'Qual treino você faz neste dia da semana?' }), semTreino ? note('info', 'No Treinador, você marcou que não pode fazer musculação neste dia.') : null, list].filter(Boolean) });
 }
 
 function planMenu(plan) {
