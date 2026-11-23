@@ -11,7 +11,7 @@ import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate } from '../device.js
 import { buscarFaq } from '../data/knowledge.js';
 import { REFS_CORRIDA, FAQ_CORRIDA, TIPOS_TREINO, FONTES_TELA } from '../data/corrida.js';
 import {
-  PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, planoAtual, planoDaSemana, treinoDoDia, avisosBloqueio, inicioPara, diasDeForca, evolucao, alertas, naoMedeDe, dicas,
+  PERGUNTAS, ROTULO, respostasCompletas, gerarPlano, planoAtual, planoDaSemana, treinoDoDia, avisosBloqueio, inicioPara, diasDeForca, evolucao, alertas, naoMedeDe, podeTodoDiaDe, dicas,
   efeitoDaDor, orientacaoDor, expandirBlocos, textoBloco, limparRegistro, MAX_REGISTROS, fmtRitmo, fmtFaixa, fmtKm, fmtTempo, fmtDia, somaDias, diaValido, diasEntre,
   retomarPlano, diaLocal, segundaDe, planejadoDe, analiseDoRegistro, analiseRecente, guardarDoDia, perfil, saudeDaCorrida,
   MAX_DORES_REGISTRO, MUSCULO_CORRIDA, soDorMuscularLeve, etapasDe,
@@ -392,7 +392,7 @@ function painel() {
   if (!sem.antesDoInicio && !sem.concluido) { const cs = cartaoSemana(hoje); if (cs) body.push(cs); }
   // 2. o que muda o treino: avisos graves (meta que não coube, prova retirada), alertas dos registros, dores e ajustes
   for (const av of p.avisos) if (av.destaque || av.tipo === 'danger') body.push(aviso(av));
-  for (const al of alertas(state.runs, hoje, naoMedeDe(state))) body.push(aviso(al));
+  for (const al of alertas(state.runs, hoje, naoMedeDe(state), podeTodoDiaDe(state))) body.push(aviso(al));
   // dores: o mesmo registro vale para a musculação. Com dor contada, o cartão fica aqui; sem dor, só o botão, mais abaixo
   const pfDor = perfilAtual();
   // (o efeito da dor que já está em "O que ajustei no plano", com o porquê e as fontes, não se repete no cartão)

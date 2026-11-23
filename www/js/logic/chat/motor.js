@@ -79,7 +79,9 @@ const DIA_DITO = /\b(hoje|agora|amanha|ontem|segunda|terca|quarta|quinta|sexta|s
 // (e as perguntas da Nutricionista que são do treino: jejum, comer antes e depois, proteína)
 const FAQ_TREINO_NUTRI = FAQ_NUTRI.filter((it) => /jejum|antes do treino|depois do treino|proteína preciso/.test(it.q));
 const FAQ_SONO_TREINO = FAQ_SONO.filter((it) => /ganho de músculo|Quem treina precisa/.test(it.q));
-const FAQ_DO = { treinador: [...FAQ_TREINO, ...FAQ_SONO_TREINO, ...FAQ_TREINO_NUTRI], corrida: [...FAQ_CORRIDA, ...FAQ_NUTRI.filter((it) => /jejum|antes do treino|durante a corrida|carga de carboidrato/.test(it.q))], nutri: FAQ_NUTRI };
+// (de quem faz musculação e pergunta ao Treinador se pode correr todo dia: a resposta da Corrida)
+const FAQ_CORRIDA_TREINO = FAQ_CORRIDA.filter((it) => /Posso correr todo dia/.test(it.q));
+const FAQ_DO = { treinador: [...FAQ_TREINO, ...FAQ_SONO_TREINO, ...FAQ_TREINO_NUTRI, ...FAQ_CORRIDA_TREINO], corrida: [...FAQ_CORRIDA, ...FAQ_NUTRI.filter((it) => /jejum|antes do treino|durante a corrida|carga de carboidrato/.test(it.q))], nutri: FAQ_NUTRI };
 // como usar o app (data/ajuda.js: onde fica cada coisa): buscado só quando a frase pergunta do app (USO_DO_APP)
 const AJUDA_DO = { treinador: ajudaDe('treinador'), corrida: ajudaDe('corrida'), nutri: ajudaDe('nutri') };
 // ordem dos assuntos nos botões da abertura (os que não estão aqui vêm depois, na ordem dos módulos)

@@ -117,7 +117,7 @@ export const PERGUNTAS = [
   // dias sem treino (a mesma pergunta do Treinador: a resposta vale para os dois treinos) e, de quem também faz musculação,
   // os dias em que ainda quer correr (logic/dias-livres.js). Os dias sem corrida saem das opções logo abaixo.
   perguntaSemTreino(), perguntaSoCorrida(),
-  { k: 'dias', tipo: 'varios', titulo: 'Em quais dias da semana você pode correr?', ajuda: 'Marque os dias possíveis. Eu deixo pelo menos um dia de descanso por semana e evito treinos fortes em dias seguidos.', op: DIAS_OP.map((o) => [...o, (a) => !semCorridaDe(a).includes(Number(o[0]))]) },
+  { k: 'dias', tipo: 'varios', titulo: 'Em quais dias da semana você pode correr?', ajuda: 'Marque os dias possíveis. Correr todo dia só vale para quem já corre com regularidade; para os outros, eu deixo um dia de descanso. Treinos fortes nunca ficam em dias seguidos.', op: DIAS_OP.map((o) => [...o, (a) => !semCorridaDe(a).includes(Number(o[0]))]) },
   { k: 'diaLongo', tipo: 'um', se: (a) => Array.isArray(a.dias) && a.dias.length >= 2, titulo: 'Qual é o melhor dia para o treino mais longo?', ajuda: 'Se o dia não estiver entre os que você marcou, eu escolho.', op: [['auto', 'Tanto faz', 'Eu escolho o melhor dia'], ...DIAS_OP.map((o) => [...o, (a) => !semCorridaDe(a).includes(Number(o[0]))])] },
   { k: 'tempo', tipo: 'um', titulo: 'Quanto tempo você tem por treino, em um dia comum?', ajuda: 'Conte com aquecimento e volta à calma.', op: [['30', 'Cerca de 30 minutos', ''], ['45', 'Cerca de 45 minutos', ''], ['60', 'Cerca de 1 hora', ''], ['90', 'Até 1h30', '']] },
   { k: 'tempoLongo', tipo: 'um', se: comDistancia, titulo: 'E no dia do treino mais longo?', op: [['60', 'Até 1 hora', ''], ['90', 'Até 1h30', ''], ['120', 'Até 2 horas', ''], ['150', 'Até 2h30', ''], ['180', 'Até 3 horas', 'Na meia e na maratona, o treino mais longo pode chegar a 3 horas'], ['210', 'Até 3h30', 'Só na maratona: acima de 3 horas, o longo alterna corrida e caminhada', (a) => a.distancia === '42']] },
@@ -348,14 +348,12 @@ export function perfil(respostas) {
   const imc = peso > 0 && altura > 0 ? peso / ((altura / 100) ** 2) : null;
   const obeso = imc != null && imc >= 30;
   const lesaoPrevia = a.lesao12m === 'sim';
-  // dias disponíveis (0 = domingo), na ordem da semana; no máximo 6 sessões: 1 dia de descanso total (meeusen2013, warden2021)
+  // dias disponíveis (0 = domingo), na ordem da semana (os 7 dias: ver todoDia, mais abaixo)
   let dias = Array.isArray(a.dias) ? [...new Set(a.dias.map((x) => (typeof x === 'string' && /^[0-6]$/.test(x) ? Number(x) : -1)).filter((x) => x >= 0))] : [];
   if (!dias.length) dias = [2, 4, 6];
   dias.sort((x, y) => pos(x) - pos(y));
   const pedido = typeof a.diaLongo === 'string' && /^[0-6]$/.test(a.diaLongo) && dias.includes(Number(a.diaLongo)) ? Number(a.diaLongo) : null;
   const diaLongo = pedido != null ? pedido : dias.includes(0) ? 0 : dias.includes(6) ? 6 : dias[dias.length - 1];
-  let descansoForcado = null;
-  if (dias.length === 7) { descansoForcado = (diaLongo + 1) % 7; dias = dias.filter((d) => d !== descansoForcado); }
   // na gestação, sessões de até 30 minutos (sbc_gestacao2021: 20 a 30 minutos por sessão; csep2019: sem evidência de segurança muito acima da meta)
   const tempo = Math.min(maisPerto(Number(a.tempo), TEMPOS, 45), cond.includes('gestante') ? 30 : 999);
   // objetivo e distância. Idades mínimas: até 5 km aos 12 (fitmodel2025, paz2021) e, em prova oficial, aos 14 (cbat_norma12);
@@ -401,6 +399,27 @@ export function perfil(respostas) {
   // a partir dos 15–16: fitmodel2025).
   let qMax = nivel === 0 || cautela || idade < 16 || (idade < 18 && dist === 10) ? 0 : nivel === 1 || jovem || idoso ? 1 : 2;
   if (dias.length <= 1) qMax = 0;
+  // Correr todo dia. O número de dias, sozinho, não é fator de risco de lesão: o que pesa é o volume, subir rápido, a
+  // intensidade e a falta de experiência (vanpoppel2021, texto completo: "moderate quality evidence ... for running
+  // frequency not being a risk factor"; nielsen2012: o risco maior de quem corre 6 a 7 vezes some quando se considera o
+  // volume). Para a saúde, o benefício é o mesmo com 1 a 2 dias por semana (lee2014, odonovan2017, khurshid2023): todo dia
+  // é opção, não necessidade. Os planos de maratona de maior volume não têm dia de descanso (knopp2024: 0,1 por semana;
+  // 4,9 corridas e 1,3 dia de descanso nos de volume médio). O dia de descanso por semana é recomendação de consenso para
+  // treino intensificado e para jovens (meeusen2013, warden2021), não resultado de estudo com corredores amadores em treino
+  // leve. Por isso, os 7 dias valem (regra do app, a partir desses dados) para quem já corre com regularidade e sem pausa:
+  //   saúde ou prazer: a partir do nível 2 (corre com regularidade, 10 km ou mais por semana);
+  //   distância, ritmo ou prova: só no nível 3 (treina há anos, 25 km ou mais por semana), como nos planos de maior volume.
+  // Ficam com 1 dia de descanso: quem começa (3 corridas por semana nos programas estudados — buist2008, nhs_c25k; o risco
+  // por hora é 2,3 vezes maior — videbaek2015; mais de 3 dias por semana aumentam as lesões de quem começa — pollock1998),
+  // quem corre de vez em quando, volta de pausa, teve lesão recente (o principal fator de risco: vanpoppel2021), tem menos de
+  // 18 anos (warden2021), 60 anos ou mais, gestação, pós-parto, cautela de saúde ou doença crônica (mesmo com liberação).
+  // Os treinos fortes seguem as regras de sempre (no máximo 2, só em semana com 5 corridas ou mais, nunca em dias seguidos).
+  const podeTodoDia = !cautela && !gestante && !posparto && !hipertensao && !cronica && !diabetes && idade >= 18 && !idoso && !irregular && retorno === 0 && !lesaoPrevia
+    && ((objetivo === 'saude' && nivel >= 2) || (nivel >= 3 && ['distancia', 'ritmo', 'prova'].includes(objetivo)));
+  // (com 6 ou 7 dias marcados, até uma corrida por dia; o 7º dia só fica sem corrida para quem não pode correr todo dia)
+  const todoDia = podeTodoDia && dias.length >= 6;
+  let descansoForcado = null;
+  if (dias.length === 7 && !podeTodoDia) { descansoForcado = (diaLongo + 1) % 7; dias = dias.filter((d) => d !== descansoForcado); }
   const longoAtual = jaCorre ? entre(numero(a.longoAtual, Math.max(3, km * 0.4)), 0.5, 60) : 0;
   // minutos de corrida sem parar hoje. Sem a resposta (ela é opcional), quem já corre e não passou de 3 km tem a conta feita
   // pela corrida mais longa, a 6:30 por km: um ritmo mais rápido que o de quem está começando, para a conta dar MENOS minutos
@@ -411,7 +430,7 @@ export function perfil(respostas) {
     idade, exp, nivel, nivelBase, retorno, pausaDias, ativo, jaCorre, jovem, idoso, master, gestante, posparto, cardiaco, renal, diabetes, hipertensao, cronica, liberado,
     precisaLiberacao, confirmar, bloqueio, bloqueado: !!bloqueio, cautela, imc, obeso, lesaoPrevia, limitacoes: lim, condicoes: cond, triagem: tri, remedios, pulsoBaixo, supervisao,
     resultadoInvalido: !!rd && typeof a.resultadoMin === 'number' && !resultado, alvoInvalido: temAlvo && !alvoOk,
-    dias, diaLongo, descansoForcado, tempo, tempoLongo, objetivo, dist, distPedida, distMax, semanasProva, alvoSeg, resultado, aparelho, local, modo, qMax,
+    dias, diaLongo, descansoForcado, todoDia, podeTodoDia, tempo, tempoLongo, objetivo, dist, distPedida, distMax, semanasProva, alvoSeg, resultado, aparelho, local, modo, qMax,
     // irregular: cerca de 3 km (20 a 25 minutos) por dia de corrida, até 3 dias
     kmSemana: irregular ? 3 * Math.min(3, dias.length) : km, longoAtual, tempoLongoDito, provas: ['nenhuma', '5a10', 'meia', 'maratona'].includes(a.provas) ? a.provas : 'nenhuma',
     // passo semanal de volume: até 14% (cerca de 30% em 2 semanas). A mudança de volume de uma semana para outra não previu
@@ -904,6 +923,8 @@ const CORTE_POLIMENTO = { 1: [0.5], 2: [0.3, 0.55], 3: [0.22, 0.4, 0.58] };
 // corridas por semana: 3 para quem começa (buist2008, nhs_c25k); nos planos publicados, 4,1 nos de menor volume, 4,9 nos médios e
 // 6,8 nos maiores (knopp2024); sempre com 1 dia de descanso (meeusen2013)
 const MAX_CORRIDAS = [3, 4, 5, 6];
+// (com os 7 dias liberados — perfil, todoDia —, até 7 corridas; a 7ª só entra quando o volume pede, como nos outros dias)
+const maxCorridasDe = (pf, nivel) => (pf.todoDia ? 7 : MAX_CORRIDAS[nivel]);
 
 function semanasNecessarias(pf, dist, nivel, longo0) {
   const alvo = LONGO[dist] ? LONGO[dist][nivel] : 0.3 * PICO[dist][nivel];
@@ -915,14 +936,15 @@ function semanasNecessarias(pf, dist, nivel, longo0) {
 function curva(pf, cfg) {
   const { T, nivel, dist, evento, v0, longo0, semQ, estLeve } = cfg;
   const qMax = cfg.qMax != null ? cfg.qMax : pf.qMax;
-  const nMax = Math.min(pf.dias.length, MAX_CORRIDAS[nivel], pf.idade < 14 ? 3 : 9, pf.maxCorridas || 9); // antes dos 14, até 3 corridas por semana (paz2021)
+  const nMax = Math.min(pf.dias.length, maxCorridasDe(pf, nivel), pf.idade < 14 ? 3 : 9, pf.maxCorridas || 9); // antes dos 14, até 3 corridas por semana (paz2021)
   const capDe = (k) => (((k - 1) * pf.tempo + pf.tempoLongo) * 60 / estLeve) * 0.95; // km que cabem em k corridas, pelo tempo disponível
   const capKm = capDe(nMax);
   const capLeveKm = (pf.tempo * 60) / estLeve;
   // só entra mais um dia de corrida quando cada rodagem tem, em média, 30 minutos ou mais (vdoto2_definicoes: mínimo da rodagem leve;
   // para quem corre sem regularidade, 20 minutos: a frequência de 3 vezes por semana vem antes da duração — pollock1998);
   // a rodagem mais curta tem 20 minutos (o primeiro trecho contínuo dos programas de iniciantes: nhs_c25k, kluitenberg2015)
-  const minPorCorrida = ((pf.irregular ? 20 : 30) * 60) / estLeve, minLeveKm = Math.min(capLeveKm, (20 * 60) / estLeve);
+  // (quem corre todo dia pela saúde ou pelo prazer: também 20 minutos — o volume da semana é o mesmo, dividido em mais dias)
+  const minPorCorrida = ((pf.irregular || (pf.todoDia && !dist) ? 20 : 30) * 60) / estLeve, minLeveKm = Math.min(capLeveKm, (20 * 60) / estLeve);
   cfg.minPorCorrida = minPorCorrida;
   const kmForte = Math.min(capLeveKm, ((nivel <= 1 ? 30 : 40) * 60) / (estLeve * 0.93)); // tamanho típico de um treino forte
   // quantas rodagens da semana viram regenerativo (o dia seguinte a um treino forte ou ao longo), que tem teto de duração
@@ -1315,6 +1337,7 @@ const ehCorrida = (r) => r.tipo !== 'caminhada';
 // Quem disse na entrevista que não mede a distância pode anotar os km de uma corrida (para o histórico e o pace), mas o
 // treinador não se baseia neles: o volume, o maior treino do mês e a análise do registro vão pelo tempo e pelo esforço. A
 // exceção é o "Teste de ritmo" e a prova, em que a pessoa mede de propósito (numa pista, numa esteira ou no percurso oficial).
+export const podeTodoDiaDe = (st) => { try { return !!(st && isObj(st.run) && perfil(st.run.answers).podeTodoDia); } catch { return false; } };
 export const naoMedeDe = (st) => { try { return !!(st && isObj(st.run) && perfil(st.run.answers).naoMede); } catch { return false; } };
 export const distanciaDoTreinador = (rs, naoMede) => (naoMede && Array.isArray(rs) ? rs.map((r) => (r && r.distKm && r.durMin > 0 && r.tipo !== 'teste' && r.tipo !== 'prova' ? { ...r, distKm: 0 } : r)) : rs);
 // km de um registro: a distância anotada; sem ela, pelo tempo. Se o registro veio de um treino do plano, os km previstos na
@@ -2455,6 +2478,17 @@ function focoDe(s, cfg) {
 }
 
 // ---------- avisos e orientações ----------
+// Por que o 7º dia ficou sem corrida (ver perfil, todoDia): o primeiro motivo que vale para a pessoa.
+function motivoDoDescanso(pf) {
+  if (pf.cautela || pf.gestante || pf.posparto || pf.hipertensao || pf.cronica || pf.diabetes) return { texto: 'com a sua condição de saúde, o plano fica leve e com descanso entre os treinos', refs: ['meeusen2013', 'pescatello2004'] };
+  if (pf.idade < 18) return { texto: 'antes dos 18 anos, a recomendação é ter pelo menos 1 dia de descanso por semana', refs: ['warden2021'] };
+  if (pf.nivel <= 1 || pf.irregular) return { texto: 'quem está começando se lesiona mais que o dobro por hora de corrida, e os programas estudados usam 3 corridas por semana. Correr todo dia fica para quando a corrida for regular, com 10 km ou mais por semana', refs: ['videbaek2015', 'buist2008', 'pollock1998'] };
+  if (pf.retorno > 0) return { texto: 'na volta de uma pausa, a corrida cresce aos poucos e com descanso', refs: ['caterisano2019', 'vanpoppel2021'] };
+  if (pf.lesaoPrevia) return { texto: 'lesão nos últimos 12 meses é o principal fator de risco para uma nova', refs: ['vanpoppel2021'] };
+  if (pf.idoso) return { texto: 'depois dos 60, o plano deixa 1 dia por semana para a recuperação', refs: ['borges2016', 'oms2020'] };
+  if (pf.objetivo !== 'saude') return { texto: 'para correr mais longe ou mais rápido, todo dia só vale com muito volume, como nos planos de maratona de maior volume: quem treina há anos e corre 25 km ou mais por semana. Com treinos fortes na semana, o dia de descanso ajuda a recuperar', refs: ['knopp2024', 'meeusen2013'] };
+  return { texto: 'pelo menos um dia sem corrida por semana', refs: ['meeusen2013', 'warden2021'] };
+}
 function avisos(pf, P, { semanas, limitado }) {
   const a = [];
   const av = (tipo, texto, refs) => a.push({ tipo, texto, refs });
@@ -2491,7 +2525,14 @@ function avisos(pf, P, { semanas, limitado }) {
     if (o) av('warn', `Você disse que sente dor: ${o.nome.toLowerCase()}. Por isso as 2 primeiras semanas ficam sem treinos fortes e o plano sobe mais devagar (7% por semana). ${o.reduzir} Conte a dor com a intensidade em “Contar uma dor”: o plano se ajusta ao que você sente.`, [...new Set(['nhs_dor', ...o.f])].slice(0, 5));
   }
   if (pf.diasTirados) av('info', pf.diasRemanejados ? `Os dias que você marcou para correr estão entre os dias sem treino (${pf.diasTirados.map((w) => DIAS_NOME[w]).join(', ')}): a corrida foi para ${pf.dias.map((w) => DIAS_NOME[w]).join(', ')}. Confira em “Mudar respostas”.` : `Sem corrida ${pf.diasTirados.map((w) => DIAS_NOME[w]).join(' e ')}: você marcou que não treina ${pf.diasTirados.length === 1 ? 'nesse dia' : 'nesses dias'}.`, []);
-  if (pf.descansoForcado != null) av('info', `Você marcou os 7 dias. Deixei ${DIAS_NOME[pf.descansoForcado]} como descanso: pelo menos um dia sem treino por semana.`, ['meeusen2013', 'warden2021']);
+  if (pf.descansoForcado != null) {
+    const m = motivoDoDescanso(pf);
+    av('info', `Você marcou os 7 dias. Deixei ${DIAS_NOME[pf.descansoForcado]} sem corrida: ${m.texto}. Nesse dia, caminhada, bicicleta ou natação leves valem.`, m.refs);
+  }
+  if (pf.todoDia && pf.dias.length === 7) av('info', pf.dist
+    ? 'Você pode correr todo dia: os planos de maratona de maior volume não têm dia de descanso. Os dias a mais são rodagens leves, e os treinos fortes continuam separados. A 7ª corrida entra quando o volume da semana pede. Se aparecer dor ou um cansaço que não passa, tire o dia.'
+    : 'Você pode correr todo dia: os dias a mais são corridas leves e curtas, e o volume da semana sobe aos poucos, como em qualquer plano. O risco de lesão vem do volume e de subir rápido, não do número de dias. Para a saúde, 1 a 2 dias por semana já trazem o benefício: correr todo dia é escolha sua. Nas primeiras semanas, com menos volume, ficam menos corridas. Se aparecer dor, pule o dia: uma sequência não vale uma lesão.',
+    pf.dist ? ['knopp2024', 'vanpoppel2021', 'meeusen2013'] : ['vanpoppel2021', 'nielsen2012', 'lee2014', 'odonovan2017', 'khurshid2023', 'curran2024']);
   if (pf.nivel === 0 && !pf.gestante && pf.tempo <= 30) av('info', 'Com cerca de 30 minutos por treino, o programa chega a 26 minutos seguidos de corrida. Para chegar aos 30, as últimas semanas pedem treinos de 35 a 40 minutos, contando a caminhada do começo e do fim.', ['nhs_c25k']);
   if (limitado) av('info', `Com os dias e o tempo que você tem, o plano chega a cerca de ${limitado} km por semana. Para evoluir mais, abra mais um dia ou mais tempo por treino.`, ['fokkema2020', 'knopp2024']);
   // resultado e meta
@@ -2844,7 +2885,7 @@ export function evolucao(registros, hoje, nSemanas = 8) {
   };
 }
 // Alertas de lesão e excesso a partir dos registros.
-export function alertas(registros0, hoje, naoMede = false) {
+export function alertas(registros0, hoje, naoMede = false, podeTodoDia = false) {
   const registros = distanciaDoTreinador(registros0, naoMede);
   const out = [];
   if (!diaValido(hoje)) return out;
@@ -2868,11 +2909,14 @@ export function alertas(registros0, hoje, naoMede = false) {
   // dor muscular leve repetida é o esperado de quem treina: só conta a de 4 ou mais
   for (const r of rs) for (const rd of (Array.isArray(r.dores) ? r.dores : [])) if (temLocal(rd.onde) && diasEntre(r.data, hoje) <= 14 && (rd.tipo !== 'muscular' || rd.nivel >= 4)) dores[rd.onde] = (dores[rd.onde] || 0) + 1;
   for (const k of Object.keys(dores)) if (dores[k] >= 2 && temLocal(k)) out.push({ tipo: 'warn', texto: `Você anotou dor em ${LOCAIS_DOR[k].toLowerCase()} em ${dores[k]} corridas nas últimas 2 semanas. Dor que se repete pede avaliação de um médico ou fisioterapeuta.`, refs: ['vangent2007', 'esculier2016'] });
-  // 7 dias seguidos correndo (meeusen2013, warden2021)
+  // 7 dias seguidos correndo: para quem o plano libera os 7 dias (perfil, podeTodoDia), só o lembrete de pular o dia com dor
+  // (curran2024: quem mantém uma sequência diária conta que corre com dor e sem recuperar); para os outros, o dia de descanso
   const dias = new Set(rs.map((r) => r.data));
   let seguidos = 0;
   for (let k = 0; k < 10; k++) { if (dias.has(somaDias(hoje, -k))) seguidos++; else if (k > 0) break; }
-  if (seguidos >= 7) out.push({ tipo: 'info', texto: 'Você correu 7 dias seguidos. Tenha pelo menos um dia de descanso total por semana.', refs: ['meeusen2013', 'warden2021'] });
+  if (seguidos >= 7) out.push(podeTodoDia
+    ? { tipo: 'info', texto: `Você correu ${seguidos} dias seguidos. Com a sua base, tudo bem, desde que a maioria seja leve. Se aparecer dor, pule o dia: uma sequência não vale uma lesão.`, refs: ['vanpoppel2021', 'curran2024'] }
+    : { tipo: 'info', texto: 'Você correu 7 dias seguidos. No seu momento, o plano deixa 1 dia sem corrida por semana. Nesse dia, caminhada, bicicleta ou natação leves valem.', refs: ['meeusen2013', 'warden2021', 'videbaek2015'] });
   return out;
 }
 // Dicas curtas conforme o perfil, com fontes.
@@ -2886,7 +2930,7 @@ export function dicas(respostas) {
   t('Tênis: nenhum tipo previne lesão', 'Não há evidência de que o tênis “certo para a sua pisada” previna lesões.', ['relph2022']);
   if (pf.limitacoes.includes('joelho')) t('Passos mais curtos aliviam o joelho', 'Aumentar a cadência em 5 a 10% (passos mais curtos e rápidos, no mesmo ritmo) reduz a energia absorvida pelo joelho em cerca de 20% (com 5% a mais de passos) a 34% (com 10%).', ['heiderscheit2011', 'esculier2016']);
   if (pf.master) t('Força também depois dos 40', 'Mantenha exercícios de força em 2 ou mais dias por semana, como a OMS recomenda para todos os adultos.', ['oms2020']);
-  t('Sono e descanso fazem parte do treino', 'Tenha pelo menos um dia de descanso total por semana. Cansaço que não passa em uma semana é sinal para reduzir.', ['meeusen2013', 'saw2016']);
+  t('Sono e descanso fazem parte do treino', 'Quem começa, volta de pausa ou treina forte se recupera melhor com um dia de descanso por semana. Cansaço que não passa em uma semana é sinal para reduzir.', ['meeusen2013', 'saw2016']);
   if (pf.dist && pf.dist >= 21) t('Treine a alimentação nos longos', 'Em corridas acima de 1h30, leve água e algo para comer, e use nos treinos o que pretende usar na prova.', ['kenefick2018', 'smyth2021muro']);
   return d;
 }

@@ -195,8 +195,8 @@ test('cardápio com "mais baratos": respeita restrições, fecha as metas e most
       for (const t of restricoes) if (t !== 'nenhuma') assert.ok(f.tags.includes(t), `${it.id} fere ${t}`);
       if (!restricoes.includes('vegano')) assert.ok(f.preco.faixa <= 2, `alimento caro com "mais baratos" (${rot}): ${it.id}`);
     }
-    // a gordura do prato é o óleo de soja, não o azeite
-    assert.ok(!c.refeicoes.some((ref) => ref.itens.some((it) => it.id === 'azeite-de-oliva')), rot);
+    // óleo de cozinha não aparece como alimento; com "mais baratos", nem o azeite (que é caro)
+    assert.ok(!c.refeicoes.some((ref) => ref.itens.some((it) => /^oleo-|azeite|manteiga|margarina/.test(it.id) && ref.tipo === 'principal')), rot);
   }
 });
 
@@ -684,4 +684,24 @@ test('condição "Coração, circulação ou AVC" na Nutricionista: tira a dose 
   assert.equal(q.op.find((o) => o[0] === 'cardiaco')[1], 'Coração, circulação ou AVC');
   assert.match(suplementos(calcular(base)).linhas[1], /3 mg/);
   assert.ok(!/3 mg/.test(suplementos(calcular({ ...base, condicoes: ['cardiaco'] })).linhas[1]));
+});
+
+test('nada inviável no cardápio: óleo de cozinha, manteiga e margarina não vêm no prato; o azeite vem "na salada"; amendoim cru e polpa sem preparo, não', () => {
+  const todaCasa = [...USADOS_EM_CASA, 'oleo-de-soja', 'oleo-de-girassol', 'oleo-de-milho', 'oleo-de-canola', 'margarina-com-sal', 'manteiga-com-sal', 'amendoim-cru'];
+  const casas = [null, todaCasa, todaCasa.filter((id) => id !== 'azeite-de-oliva')];
+  let azeite = 0;
+  for (const preco of ['barato', 'tanto_faz']) for (const restricoes of [['nenhuma'], ['vegano'], ['sem_lactose']]) for (const refeicoes of ['3', '6']) {
+    const r = calcular({ ...base, preco, restricoes, refeicoes });
+    for (const emCasa of casas) for (let s = 0; s < 10; s++) for (const ref of cardapio(r, s, { emCasa }).refeicoes) for (const it of ref.itens) {
+      assert.ok(!/^oleo-de-|^amendoim-cru$/.test(it.id), `${it.id} no cardápio (${preco}, ${restricoes}, ${ref.tipo})`);
+      if (ref.tipo === 'principal') assert.ok(!/manteiga|margarina/.test(it.id), `${it.id} no prato`);
+      if (it.id === 'azeite-de-oliva') { azeite++; assert.match(it.medida, /na salada\)$/); assert.ok(preco !== 'barato' || emCasa, 'azeite com "mais baratos"'); }
+      if (/^polpa-de|acai-polpa/.test(it.id)) assert.match(it.medida, /batida/);
+      if (/^leite-em-po/.test(it.id)) assert.match(it.medida, /dissolvido em água/);
+    }
+  }
+  assert.ok(azeite > 0, 'o azeite da salada sumiu');
+  // sem azeite em casa, o prato não tem gordura de cozinha à parte
+  const r = calcular({ ...base, preco: 'tanto_faz' });
+  for (let s = 0; s < 10; s++) assert.ok(!cardapio(r, s, { emCasa: casas[2] }).refeicoes.some((ref) => ref.itens.some((it) => it.id === 'azeite-de-oliva')));
 });

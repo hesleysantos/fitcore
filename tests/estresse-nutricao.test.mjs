@@ -258,7 +258,9 @@ function validarCardapio(a, r, seed, F, { metas = true } = {}) {
   // (acima de 3.600 kcal também: frutas e acompanhamentos entram duas vezes para fechar a energia)
   // (vale o mesmo quando a meta passa de 900 kcal por refeição, a mesma régua que o montador usa para "meta alta")
   // (com 6 refeições, uma repetição a mais: três lanches pequenos, nas porções de referência, voltam a pão, fruta e leite)
-  if (metas && r.kcal <= 3600 && !(r.kcal / c.refeicoes.length > 900) && repetidos.length > (rest.includes('vegano') ? 5 : rest.includes('vegetariano') ? 4 : 3) + (c.refeicoes.length >= 6 ? 1 : 0)) F.add('muitos alimentos repetidos no dia', `${rot}: ${repetidos}`);
+  // (com "mais baratos" e mais de 3.000 kcal, uma a mais: o óleo de cozinha não entra como alimento, e a energia vem de porções
+  // a mais dos poucos alimentos baratos)
+  if (metas && r.kcal <= 3600 && !(r.kcal / c.refeicoes.length > 900) && repetidos.length > (rest.includes('vegano') ? 5 : rest.includes('vegetariano') ? 4 : 3) + (c.refeicoes.length >= 6 ? 1 : 0) + (a.preco === 'barato' && r.kcal > 3000 ? 1 : 0)) F.add('muitos alimentos repetidos no dia', `${rot}: ${repetidos}`);
   if (noDia.size < 8) F.add('pouca variedade (menos de 8 alimentos no dia)', `${rot}: ${noDia.size}`);
   if (![...noDia.keys()].some((id) => FOOD.get(id).papel === 'fruta')) F.add('dia sem fruta', rot);
   if ([...noDia.keys()].filter((id) => FOOD.get(id).papel === 'vegetal').length < 2) F.add('dia com menos de 2 verduras/legumes', rot);
@@ -478,8 +480,9 @@ test('preço: com "mais baratos" o custo médio do cardápio cai em todas as com
     }
     n++;
     assert.ok(k > 0 && barato <= normal, `"mais baratos" saiu mais caro em ${restricoes}/${objetivo}: ${(barato / k).toFixed(2)} vs ${(normal / k).toFixed(2)}`);
-    // quem come de tudo economiza pelo menos 20%; no vegano, com poucas fontes de proteína, a diferença é menor
-    if (!restricoes.includes('vegano')) assert.ok(barato <= normal * 0.8, `economia pequena em ${restricoes}/${objetivo}: ${Math.round((barato / normal) * 100)}%`);
+    // quem come de tudo economiza pelo menos 18% (o óleo de soja, a energia mais barata, não entra mais como alimento); no
+    // vegano, com poucas fontes de proteína, a diferença é menor
+    if (!restricoes.includes('vegano')) assert.ok(barato <= normal * 0.82, `economia pequena em ${restricoes}/${objetivo}: ${Math.round((barato / normal) * 100)}%`);
   }
   assert.equal(n, 16 * 3);
 });

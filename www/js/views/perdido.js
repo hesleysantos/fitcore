@@ -261,7 +261,7 @@ export function folhaNaoCorri(data, aoMudar, opc = {}) {
     const naoDa = ops.filter((d) => !d.pode && d !== amanha && d.motivo !== 'sem_plano').map((d) => P.porQueNaoCorrida(d, hoje));
     corpo.appendChild(porQue([...extra.porque, ...naoDa,
       'Uma corrida por dia: juntar a corrida perdida a outra faz uma corrida maior. Uma corrida mais de 10% maior do que a mais longa dos últimos 30 dias aumenta o risco de lesão.',
-      'Treino forte e longão nunca ficam em dias seguidos, e a semana guarda pelo menos um dia de descanso.',
+      'Treino forte e longão nunca ficam em dias seguidos, e a semana guarda o dia de descanso, quando o plano tem um.',
       'Se faltarem corridas, o plano retoma de onde você está e sobe aos poucos.'], [...extra.refs, ...P.REFS_CORRIDA, 'seiler2009', 'casado2022', 'meeusen2013', ...(esteira ? ['miller2019'] : [])]));
   }
   desenhar();

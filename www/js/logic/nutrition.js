@@ -359,16 +359,17 @@ const QUEIJOS = ['queijo-minas-frescal', 'queijo-minas-meia-cura', 'queijo-mucar
 const doPapel = (papel, fora = []) => ALIMENTOS.filter((f) => f.papel === papel && !fora.includes(f.id)).map((f) => f.id);
 const MAIS_CASA = {
   cafe_carbo: ['pao-de-forma', 'torrada', 'granola', 'biscoito-cream-cracker', 'cereal-matinal-de-milho', 'pao-de-queijo-assado', 'bolo-de-milho', 'canjica-com-leite', 'pamonha', 'milho-verde-espiga', 'batata-doce-cozida', 'mandioca-cozida', 'inhame-cozido', 'cara-cozido', 'banana-da-terra', 'biscoito-maisena', 'biscoito-de-polvilho', 'bolo-de-chocolate', 'biscoito-recheado'],
-  cafe_prot: [...LEITES, ...QUEIJOS, ...FRIOS, 'ovo-frito', 'omelete-de-queijo', 'clara-de-ovo-cozida', 'ovo-de-codorna', 'whey-protein', 'amendoim-torrado-salgado', 'amendoim-cru'],
+  cafe_prot: [...LEITES, ...QUEIJOS, ...FRIOS, 'ovo-frito', 'omelete-de-queijo', 'clara-de-ovo-cozida', 'ovo-de-codorna', 'whey-protein', 'amendoim-torrado-salgado'],
   fruta: doPapel('fruta', ['limao-tahiti']),
   carbo: ['batata-inglesa-assada', 'mandioquinha-cozida', 'cuscuz-de-milho-cozido', 'cara-cozido', 'polenta-cozida', 'milho-verde-espiga', 'milho-verde-enlatado', 'nhoque-de-batata-cozido', 'lasanha-massa-cozida', 'macarrao-a-bolonhesa', 'baiao-de-dois', 'batata-saute', 'pinhao-cozido', 'banana-da-terra', 'farinha-de-mandioca-torrada', 'pao-frances', 'batata-inglesa-frita', 'mandioca-frita', 'macarrao-instantaneo'],
   legum: ['ervilha-enlatada', 'ervilha-fresca', 'feijao-fradinho-cozido', 'feijao-roxo-cozido', 'feijao-jalo-cozido', 'feijao-tropeiro', 'feijoada'],
   prot: [...ALIMENTOS.filter((f) => (f.cat === 'carnes' || f.cat === 'peixes') && f.papel === 'proteina' && !FRIOS.includes(f.id)).map((f) => f.id), ...OVOS_E_SOJA],
   salada: CRUS,
   legume: doPapel('vegetal', [...CRUS, 'molho-de-tomate', 'cebola-crua']),
-  lanche_prot: [...LEITES, ...QUEIJOS, ...FRIOS, 'ovo-de-codorna', 'whey-protein', 'amendoim-cru'],
-  lanche_extra: ['granola', 'linhaca', 'gergelim', 'amendoim-cru', 'amendoim-torrado-salgado', 'coco-cru', 'pacoca', 'pe-de-moleque', 'chocolate-amargo-70'],
-  ceia: [...LEITES, ...QUEIJOS, 'ovo-de-codorna', 'whey-protein', 'amendoim-cru'],
+  // (o amendoim cru não entra nas sugestões: ele vai torrado ou cozido antes de comer; fica só para o diário)
+  lanche_prot: [...LEITES, ...QUEIJOS, ...FRIOS, 'ovo-de-codorna', 'whey-protein'],
+  lanche_extra: ['granola', 'linhaca', 'gergelim', 'amendoim-torrado-salgado', 'coco-cru', 'pacoca', 'pe-de-moleque', 'chocolate-amargo-70'],
+  ceia: [...LEITES, ...QUEIJOS, 'ovo-de-codorna', 'whey-protein'],
   gordura: ['oleo-de-girassol', 'oleo-de-milho', 'oleo-de-canola', 'manteiga-com-sal', 'margarina-com-sal'],
 };
 const POOL_CASA = Object.fromEntries(Object.keys(POOL).map((k) => [k, [...new Set([...POOL[k], ...(MAIS_CASA[k] || [])])].filter((id) => FOOD.has(id))]));
@@ -472,11 +473,13 @@ function concentradas(lista) {
   const boas = lista.filter((id) => densidade(id) >= 0.3);
   return boas.length >= 2 ? boas : lista.slice().sort((a, b) => densidade(b) - densidade(a)).slice(0, 2);
 }
-// gordura de cozinha do prato (1 colher): azeite; com "mais baratos", óleo de soja; com a lista de casa, a que houver
+// Gordura do prato: só o azeite, para temperar a salada (1 colher). Óleo de soja, girassol, milho e canola, manteiga e
+// margarina não aparecem como alimento do almoço e do jantar: óleos são ingredientes culinários, usados em pequena
+// quantidade para cozinhar e temperar, e não alimentos para comer à parte (ref guia2014). Sem azeite, o prato fica
+// sem esse lugar e as calorias vêm dos outros alimentos.
 function oleoDoPrato(ctx) {
-  if (ctx.casa) return POOL_CASA.gordura.find(ctx.pode) || null;
-  // (com alergia à soja, o óleo de soja não entra: fica o azeite)
-  return ctx.barato && ctx.pode('oleo-de-soja') ? 'oleo-de-soja' : 'azeite-de-oliva';
+  // (com a lista de casa, só se houver azeite; com "mais baratos", sem esse lugar: o azeite é caro, e a salada pode ir com limão ou vinagre)
+  return !ctx.barato && ctx.pode('azeite-de-oliva') ? 'azeite-de-oliva' : null;
 }
 // ---------- modelos de refeição ----------
 // Cada refeição sai de um MODELO: uma combinação que se come junto no Brasil — pão com ovo e café com leite, tapioca
@@ -509,7 +512,7 @@ const PAPEIS = {
   coco: [['coco-cru'], []],
   semente: [['chia'], ['linhaca', 'gergelim']],
   mel: [['mel'], []],
-  castanha: [['castanha-de-caju', 'castanha-do-para', 'nozes', 'amendoa', 'amendoim-torrado-salgado'], ['amendoim-cru', 'pacoca', 'pe-de-moleque', 'chocolate-amargo-70']],
+  castanha: [['castanha-de-caju', 'castanha-do-para', 'nozes', 'amendoa', 'amendoim-torrado-salgado'], ['pacoca', 'pe-de-moleque', 'chocolate-amargo-70']],
   fruta: [POOL.fruta, semRepetir(POOL.fruta, POOL_CASA.fruta)],
   // almoço e jantar
   arroz: [['arroz-branco-cozido', 'arroz-integral-cozido', 'quinoa-cozida'], []],
@@ -536,7 +539,7 @@ const PAPEIS = {
 // (a banana-da-terra, em casa, é acompanhamento do prato, não sobremesa)
 PAPEIS.sobremesa = [[...POOL.fruta, 'abacate'], PAPEIS.fruta[1].filter((id) => id !== 'banana-da-terra')];
 // os alimentos que o cardápio "em casa" sabe usar (os demais — açúcar, refrigerante, doces, molhos — podem ser marcados, mas não entram)
-export const USADOS_EM_CASA = new Set([...Object.values(PAPEIS).flat(2), ...POOL_CASA.gordura].filter((id) => FOOD.has(id) && !FOOD.get(id).soDiario));
+export const USADOS_EM_CASA = new Set([...Object.values(PAPEIS).flat(2), 'azeite-de-oliva'].filter((id) => FOOD.has(id) && !FOOD.get(id).soDiario));
 const SO_SEM_CARNE = new Set(['reforco_veg', 'leg_prot']);
 const COM_PASTA = new Set([...PAPEIS.pao[0], ...PAPEIS.pao[1], 'tapioca-pronta', 'aveia-em-flocos', 'granola']);
 // Uma bebida por refeição (café com leite, leite ou suco); com suco, uma fruta só — sem suco, até duas. Pasta de amendoim
@@ -844,7 +847,7 @@ function montarModelo(m, tipo, nome, kcalAlvo, pAlvo, ctx, seed, usados, rico) {
     // (o legume não repete a verdura da salada: cenoura crua e cenoura cozida no mesmo prato, não)
     const lg = escolhe(opcoes(['legume'], ctx, tipo).filter((id) => !sal || nomeDeCompra(FOOD.get(id).nome) !== nomeDeCompra(FOOD.get(sal).nome)), seed * 2 + 1);
     lugar('legume', ['legume'], lg, lg ? porcaoDe(lg) * 1.5 : 0, { papel: 'legume' });
-    const ol = ctx.casa ? POOL_CASA.gordura.find(ctx.pode) || null : oleoDoPrato(ctx);
+    const ol = oleoDoPrato(ctx);
     lugar('oleo', ['oleo'], ol, 8, { papel: 'oleo' });
     for (const e of m.extra || []) if (e !== 'guarnicao' && e !== 'farinha') lugar('extra', [e], null, 0, { opc: true, papel: e });
   } else {
@@ -1186,7 +1189,8 @@ export function cardapio(res, semente = 0, { emCasa = null, trocas = null } = {}
   refs = refs.filter((r) => r.slots.some((s) => s.on));
   if (refs.length) balancear(refs, res, ctx);
   const refeicoes = refs.map((r) => {
-    const itens = r.slots.filter((s) => s.on).map((s) => porcao(s.id, s.g));
+    // (o azeite do prato é o tempero da salada: a medida diz isso)
+    const itens = r.slots.filter((s) => s.on).map((s) => { const x = porcao(s.id, s.g); if (s.k === 'oleo') x.medida = x.medida.replace(/^(\d+ g)(?: \((.*)\))?$/,(t, g, m) => `${g} (${m ? m + ', ' : ''}na salada)`); return x; });
     return { nome: r.nome, tipo: r.tipo, itens, kcal: soma(itens, 'kcal'), p: soma(itens, 'p'), c: soma(itens, 'c'), g: soma(itens, 'gd'), fibra: soma(itens, 'fibra'), ordem: r.ordem };
   }).filter((r) => r.itens.length);
   const dia = { refeicoes, kcal: soma(refeicoes, 'kcal'), p: soma(refeicoes, 'p'), c: soma(refeicoes, 'c'), g: soma(refeicoes, 'g'), fibra: soma(refeicoes, 'fibra') };

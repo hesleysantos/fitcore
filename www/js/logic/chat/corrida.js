@@ -16,7 +16,7 @@
 import * as P from '../perdido.js';
 import { temCorrida } from '../combinado.js';
 import { doresAtivas } from '../dor.js';
-import { planoAtual, treinoDoDia as corridaDoDia, alertas, naoMedeDe, analiseRecente, fmtFaixa, textoBloco } from '../corrida.js';
+import { planoAtual, treinoDoDia as corridaDoDia, alertas, naoMedeDe, podeTodoDiaDe, analiseRecente, fmtFaixa, textoBloco } from '../corrida.js';
 import { corridaDeHoje, corridaChave, treinoDeHoje, passoJuntar, passoDor, acaoNaoCorrer, passoSemana, diaDe, cap } from './treino.js';
 import { faqDe, nomeDia, noDia, diaValido, segundaDa, somaDia, impedimento } from './comum.js';
 import { FAQ_CORRIDA, TIPOS_TREINO } from '../../data/corrida.js';
@@ -139,7 +139,7 @@ export function passoMaisRapido(ctx) {
   const d = corridaNoDia(ctx, data);
   const pf = perfilDoPlano(ctx);
   let al = [];
-  try { al = alertas(ctx.st.runs, hoje, naoMedeDe(ctx.st)).filter((x) => x.tipo === 'warn'); } catch { al = []; }
+  try { al = alertas(ctx.st.runs, hoje, naoMedeDe(ctx.st), podeTodoDiaDe(ctx.st)).filter((x) => x.tipo === 'warn'); } catch { al = []; }
   const dores = (() => { try { return doresAtivas(ctx.st, hoje); } catch { return []; } })();
   const texto = [], detalhes = [], refs = [];
   let aviso;
@@ -240,7 +240,7 @@ export function passoMover(ctx) {
     if (!outros.length) {
       return {
         texto: [`Nesta semana, nenhum outro dia recebe a ${nome} sem quebrar as regras do plano.`, 'Corrida perdida não se repõe: o plano segue.'],
-        detalhes: ['Treino forte e longão nunca ficam em dias seguidos; uma corrida por dia; e pelo menos um dia de descanso na semana.'], refs: REFS_MOVER,
+        detalhes: ['Treino forte e longão nunca ficam em dias seguidos; uma corrida por dia; e o dia de descanso da semana, quando o plano tem um.'], refs: REFS_MOVER,
         ...(de <= hoje && P.podeMarcarCorrida(ctx.st, de, hoje) ? { acoes: [acaoNaoCorrer('Marcar como não feita', de)] } : {}), data: de,
       };
     }
@@ -255,7 +255,7 @@ export function passoMover(ctx) {
     try { naEst = temEsteira() && typeof EST.naEsteira === 'function' && EST.naEsteira(ctx.st, de); } catch { naEst = false; }
     return {
       texto: [`Pode: a ${nome} vai para ${nomeDia(para, hoje)}.`, ...(naEst ? ['Ela estava marcada na esteira: a esteira vai junto, se der no dia novo.'] : []), 'Assim fica a semana:', ...(semana.some((l) => /passou para|veio de/.test(l)) ? semana.filter((l) => /passou para|veio de/.test(l)) : semana)],
-      detalhes: ['Conferi as regras do plano: uma corrida por dia, treino forte e longão nunca em dias seguidos, os dias em que você não treina, o treino de pernas e pelo menos um dia de descanso.'],
+      detalhes: ['Conferi as regras do plano: uma corrida por dia, treino forte e longão nunca em dias seguidos, os dias em que você não treina, o treino de pernas e o dia de descanso (quando o plano tem um).'],
       refs: [...REFS_MOVER, ...(a.chave ? ['blagrove2018'] : [])],
       acoes: [{
         rotulo: `Passar para ${nomeDia(para, hoje)}`,

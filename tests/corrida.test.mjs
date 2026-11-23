@@ -1308,3 +1308,50 @@ test('teste de ritmo marcado pelo plano: só sem resultado e com como medir a di
   const feito = [{ id: 't1', data: '2026-09-09', tipo: 'teste', distKm: 5, durMin: 27, pse: 8, dores: [], nota: '', planejado: '' }];
   assert.equal(testes({ ...base, resultado: 'nao' }, feito, '2026-09-10').length, 0);
 });
+
+test('correr todo dia: cada perfil tem a sua regra (saúde e prazer com base, distância só com muito volume; quem começa, não)', async () => {
+  const { alertas: al } = await import('../www/js/logic/corrida.js');
+  const sete = ['0', '1', '2', '3', '4', '5', '6'];
+  const a = { ...base, dias: sete, objetivo: 'saude', resultado: 'nao', kmSemana: 25, longoAtual: 10 };
+  const corridasMax = (p) => Math.max(...p.semanas.map((s) => s.dias.filter(corr).length));
+  const casos = [
+    // [respostas, pode correr todo dia]
+    [{ ...a }, true],
+    [{ ...a, soTempo: 'sim', aparelho: 'tempo' }, true], // pelo prazer
+    [{ ...a, experiencia: 'avancado', kmSemana: 50, longoAtual: 20, objetivo: 'prova', distancia: '42', semanasProva: 16, tempoLongo: '180' }, true],
+    [{ ...a, objetivo: 'distancia', distancia: '21' }, false], // correr mais longe sem muito volume
+    [{ ...a, experiencia: 'nunca', objetivo: 'comecar' }, false],
+    [{ ...a, experiencia: 'iniciante', kmSemana: 8, longoAtual: 4 }, false],
+    [{ ...a, experiencia: 'irregular' }, false],
+    [{ ...a, pausa: '1a3m' }, false],
+    [{ ...a, lesao12m: 'sim' }, false],
+    [{ ...a, idade: 16 }, false],
+    [{ ...a, idade: 65 }, false],
+    [{ ...a, condicoes: ['hipertensao'], liberado: 'sim' }, false],
+  ];
+  for (const [r, pode] of casos) {
+    const pf = perfil(r), p = gerarPlano(r);
+    assert.equal(pf.podeTodoDia, pode, JSON.stringify(r));
+    assert.equal(pf.descansoForcado == null, pode);
+    if (pode) {
+      assert.equal(corridasMax(p), 7);
+      assert.ok(p.avisos.some((x) => /Você pode correr todo dia/.test(x.texto)));
+      // nunca 2 treinos fortes em dias seguidos, nem forte colado no longo
+      for (const s of p.semanas) for (let i = 1; i < s.dias.length; i++) assert.ok(!(s.dias[i].intensidade === 'forte' && s.dias[i - 1].intensidade === 'forte'));
+    } else {
+      assert.ok(corridasMax(p) <= 6);
+      const av = p.avisos.find((x) => /Você marcou os 7 dias/.test(x.texto));
+      if (!pf.bloqueado) assert.ok(av && av.refs.length, JSON.stringify(r));
+    }
+  }
+  // quem começa: o motivo é o risco de quem começa; quem corre: a regra da distância
+  assert.match(gerarPlano({ ...a, experiencia: 'iniciante', kmSemana: 8, longoAtual: 4 }).avisos.find((x) => /7 dias/.test(x.texto)).texto, /começando/);
+  assert.match(gerarPlano({ ...a, objetivo: 'distancia', distancia: '21' }).avisos.find((x) => /7 dias/.test(x.texto)).texto, /mais longe ou mais rápido/);
+  // com 6 dias, quem pode correr todo dia corre os 6; com 4, nada muda
+  assert.equal(corridasMax(gerarPlano({ ...a, dias: ['1', '2', '3', '4', '5', '6'] })), 6);
+  // 7 dias seguidos: o lembrete muda conforme o perfil
+  const hoje = '2026-11-23';
+  const rs = Array.from({ length: 7 }, (_, k) => ({ id: 'r' + k, data: `2026-11-${String(23 - k).padStart(2, '0')}`, tipo: 'leve', durMin: 30, distKm: 5, pse: 3 }));
+  assert.match(al(rs, hoje, false, true).find((x) => /dias seguidos/.test(x.texto)).texto, /pule o dia/);
+  assert.match(al(rs, hoje, false, false).find((x) => /dias seguidos/.test(x.texto)).texto, /1 dia sem corrida/);
+});

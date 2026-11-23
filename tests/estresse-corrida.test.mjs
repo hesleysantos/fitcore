@@ -88,7 +88,8 @@ function conferir(p, a, rot, F, adaptado = false) {
   const ehEv = (d) => d.tipo === 'prova' || d.tipo === 'teste';
   const longosMin = [];
   if (!Array.isArray(p.semanas) || p.semanas.length !== p.totalSemanas || p.totalSemanas < 1 || p.totalSemanas > 70) { F.add('número de semanas inválido', rot + ' ' + p.totalSemanas); return; }
-  const nDias = pf.foco ? pf.dias.length : Math.min(new Set(a.dias).size, 6); // com prioridade para a musculação ou para os dois, sobram menos dias de corrida
+  // (os 7 dias só para quem pode correr todo dia: logic/corrida.js, perfil)
+  const nDias = pf.foco ? pf.dias.length : Math.min(new Set(a.dias).size, pf.podeTodoDia ? 7 : 6); // com prioridade para a musculação ou para os dois, sobram menos dias de corrida
   let picoKm = 0;
   const longos = [];
   p.semanas.forEach((s, i) => {
