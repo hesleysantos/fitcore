@@ -999,8 +999,22 @@ export const INTENCOES = [
     inicio: passoAparelhoFalta,
   },
   {
+    // "quero treinar terça, quinta e sábado": o treinador redistribui os treinos nos dias novos (views/trocar-dias.js)
+    id: 'trocar-dias', coach: 'treinador', titulo: 'Trocar os dias dos treinos', resumo: 'trocar os dias da semana dos treinos',
+    palavras: ['trocar dias', 'trocar os dias', 'mudar dias', 'mudar os dias', 'outros dias', 'dias treino', 'dias de treino', 'treinar outros dias', 'mudar dia semana', 'trocar dia semana', 'reorganizar semana', 'reorganizar dias', 'dias diferentes', 'mudar agenda', 'trocar agenda', 'em vez de', 'ao inves de', 'treinar terca quinta', 'treinar segunda quarta'],
+    // "trocar os dias de treino"; "quero treinar terça, quinta e sábado" (três dias da semana ou mais)
+    bonus: (i) => (/\b(nao vou|faltei|feriado|nao consigo|nao posso)\b/.test(i.texto) ? 0 : (/\b(troc\w*|mud\w*|reorganiz\w*|outr\w*)\b/.test(i.texto) && /\b(dias|agenda)\b/.test(i.texto) ? 5.5 : 0) + (i.datas.filter((d) => !d.semana).length >= 3 && /\b(treinar|treino|treinos|malhar)\b/.test(i.texto) ? 5 : 0)),
+    disponivel: temPlano,
+    inicio: () => ({
+      texto: ['Me diga em que dias da semana você quer treinar: eu distribuo os treinos com 48 horas de descanso para os mesmos músculos e mostro como fica antes de mudar.'],
+      detalhes: ['Os dias em que você marcou que não treina ficam de fora. Quem também corre: o treino de pernas fica longe da véspera da corrida forte e do longão.'],
+      refs: ['garber2011', 'acsm2009'],
+      ir: [{ rotulo: 'Escolher os dias', abrir: 'trocar-dias' }],
+    }),
+  },
+  {
     id: 'mudar-plano', coach: 'treinador', titulo: 'Mudar ou refazer o treino', resumo: 'mudar ou refazer o seu treino',
-    palavras: ['mudei turno', 'mudei de horario', 'agora so consigo', 'so consigo noite', 'nova rotina', 'rotina mudou', 'mudou rotina', 'vezes semana', 'treinar vezes', 'mais dias', 'menos dias', 'mudei academia', 'nao tenho halteres', 'sem halteres', 'treinar sem aparelho', 'treino sem aparelho', 'mudar plano', 'mudar treino', 'mudar dia', 'mudar dias', 'trocar dia', 'outro treino', 'treino novo', 'novo treino', 'refazer treino', 'refazer entrevista', 'refazer plano',
+    palavras: ['mudei turno', 'mudei de horario', 'agora so consigo', 'so consigo noite', 'nova rotina', 'rotina mudou', 'mudou rotina', 'vezes semana', 'treinar vezes', 'mais dias', 'menos dias', 'mudei academia', 'nao tenho halteres', 'sem halteres', 'treinar sem aparelho', 'treino sem aparelho', 'mudar plano', 'mudar treino', 'outro treino', 'treino novo', 'novo treino', 'refazer treino', 'refazer entrevista', 'refazer plano',
       'treinar casa', 'treino casa', 'trocar exercicio', 'mudar exercicio', 'enjoei treino', 'cansei treino', 'treino chato', 'treino diferente', 'algo diferente', 'mudar academia', 'mudar horario', 'plano novo', 'mudar', 'novo plano', 'posso mudar', 'mudar algo', 'alterar treino', 'mudar ordem', 'trocar ordem', 'ordem exercicio', '!enjoei', 'enjoei plano', 'treino enjoativo', 'cansei plano'],
     inicio: passoMudar,
   },

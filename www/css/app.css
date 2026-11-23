@@ -688,3 +688,5 @@ details.pq.perdido-pq > summary { min-height: 44px; }
 .esporte-total { font-size: 1.5rem; font-weight: 750; color: var(--accent); }
 .esporte-item .iconbtn { flex: none; }
 .resto-semana { margin: 8px 2px -2px; }
+.tempo-campos { flex-wrap: nowrap; align-items: center; }
+.tempo-campos .input { width: 3.6em; min-width: 0; flex: 0 1 auto; text-align: center; padding-left: 6px; padding-right: 6px; }

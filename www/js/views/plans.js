@@ -19,6 +19,7 @@ import { diasBloqueados } from '../logic/dias-livres.js';
 import { itensDoDia } from '../logic/ajuste-semana.js';
 import { alcance, mudarItens, seloSemana } from './ajuste-semana.js';
 import { linhasAtividades, botaoOutroTreino } from './esportes.js';
+import { folhaTrocarDias } from './trocar-dias.js';
 
 const ORDEM_SEMANA = [1, 2, 3, 4, 5, 6, 0];
 const AGENDA_PADRAO = { 1: [1], 2: [1, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5], 6: [1, 2, 3, 4, 5, 6], 7: [1, 2, 3, 4, 5, 6, 0] };
@@ -316,7 +317,8 @@ export function plansView() {
     if (semanaVista === 0 && dataDia <= hojeK) {
       const la = linhasAtividades(dataDia, refresh);
       if (la) card.append(rotulo('star', 'Outros esportes'), la);
-      if (dataDia === hojeK) card.appendChild(h('div', { class: 'row outro-treino' }, botaoOutroTreino(dataDia, refresh)));
+      // hoje: outro treino; um dia que já passou: lançar o que foi feito (o treinador reajusta a semana)
+      card.appendChild(h('div', { class: 'row outro-treino' }, botaoOutroTreino(dataDia, refresh, 'plain sm', dataDia === hojeK ? 'Adicionar outro treino' : 'Adicionar treino feito')));
     }
     semana.appendChild(card);
   }
@@ -328,7 +330,7 @@ export function plansView() {
   }
   body.push(semana);
   // um link só, discreto, no fim da semana (é usado pouco)
-  if (plan && semanaVista === 0) body.push(h('div', { class: 'row feriado-acao' }, h('span', { class: 'grow' }), btn('Tem feriado nesta semana?', folhaFeriado, 'plain sm', 'calendar')));
+  if (plan && semanaVista === 0) body.push(h('div', { class: 'row feriado-acao' }, btn('Trocar os dias dos treinos', () => folhaTrocarDias(refresh), 'plain sm', 'swap'), h('span', { class: 'grow' }), btn('Tem feriado nesta semana?', folhaFeriado, 'plain sm', 'calendar')));
   // análise do plano: o que ele trabalha mais e menos, para que serve e se combina com o perfil
   if (plan) { let av = null; try { av = cartaoAvaliacaoDoPlano(plan, { data: dateKey(segunda) }); } catch { av = null; } if (av) body.push(av); }
 

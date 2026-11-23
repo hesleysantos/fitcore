@@ -75,15 +75,20 @@ async function podeIniciar() {
 }
 // `opc.itens`: começa com estes itens no lugar dos do plano (a versão curta que o chat do Treinador monta — logic/chat/
 // treino.js); o plano não muda.
+// `opc.registro` ('AAAA-MM-DD', um dia que já passou): o treino é lançado depois — a tela marca as séries feitas, sem
+// cronômetro nem descanso, e ele fica gravado naquele dia (o treinador reajusta a semana do mesmo jeito)
+const diaDoRegistro = (opc) => (opc && typeof opc.registro === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(opc.registro) && opc.registro < dateKey(new Date()) ? opc.registro : '');
+const inicioDoRegistro = (data) => new Date(`${data}T18:00:00`).toISOString();
 export async function startSession(planId, dayId, opc = {}) {
   const plan = planById(planId);
+  const registro = diaDoRegistro(opc);
   const day = plan && plan.dias.find((d) => d.id === dayId);
   if (!day) return;
   // sem lista pronta: a versão "só nesta semana" do treino, se houver (logic/ajuste-semana.js); senão, o plano
   const itensDoDia = opc && Array.isArray(opc.itens) && opc.itens.length ? opc.itens : itensDaSemana(state, planId, dayId, dateKey(new Date()));
   if (!itensDoDia.length) { toast('Este treino ainda não tem exercícios.'); return; }
   // febre, diarreia, pancada na cabeça... (logic/saude-fora.js): dia sem treino, com o porquê e o "Já melhorei"
-  if (barrarSemTreino()) return;
+  if (!registro && barrarSemTreino()) return;
   if (!(await podeIniciar())) { if (state.current) go('sessao'); return; }
   unlockAudio();
   // Volta depois de 2 semanas ou mais parado (consenso CSCCa/NSCA de 2019, regra FIT): nas 2 primeiras semanas o treino
@@ -99,15 +104,16 @@ export async function startSession(planId, dayId, opc = {}) {
   try { leve = efeitoDeHoje(state, dateKey(new Date())).musc === 'leve'; } catch { leve = false; }
   if (leve) base = base.map((it) => ({ ...it, series: Math.max(1, (Number(it.series) || 1) - 1) }));
   update((s) => {
-    s.current = { id: 's' + uid(), planId, diaId: dayId, nome: day.nome, inicio: new Date().toISOString(), fim: '', nota: '', itens: base.map(montarItem), restEnd: 0, restTotal: 0, volta: volta ? volta.dias : 0, cron: null };
+    s.current = { id: 's' + uid(), planId, diaId: dayId, nome: day.nome, inicio: registro ? inicioDoRegistro(registro) : new Date().toISOString(), ...(registro ? { registro } : {}), fim: '', nota: '', itens: base.map(montarItem), restEnd: 0, restTotal: 0, volta: volta ? volta.dias : 0, cron: null };
   });
   go('sessao');
 }
-export async function startFree() {
-  if (barrarSemTreino()) return;
+export async function startFree(opc = {}) {
+  const registro = diaDoRegistro(opc);
+  if (!registro && barrarSemTreino()) return;
   if (!(await podeIniciar())) { if (state.current) go('sessao'); return; }
   unlockAudio();
-  update((s) => { s.current = { id: 's' + uid(), planId: '', diaId: '', nome: 'Treino livre', inicio: new Date().toISOString(), fim: '', nota: '', itens: [], restEnd: 0, restTotal: 0, volta: 0, cron: null }; });
+  update((s) => { s.current = { id: 's' + uid(), planId: '', diaId: '', nome: 'Treino livre', inicio: registro ? inicioDoRegistro(registro) : new Date().toISOString(), ...(registro ? { registro } : {}), fim: '', nota: '', itens: [], restEnd: 0, restTotal: 0, volta: 0, cron: null }; });
   go('sessao');
 }
 
@@ -228,7 +234,7 @@ export function sessionView() {
   const mutCur = (fn) => update((s) => { if (s.current) fn(s.current); });
 
   function startRest(seconds) {
-    if (!seconds) return;
+    if (!seconds || (state.current && state.current.registro)) return; // registro de outro dia: sem descanso
     alarmed = false;
     mutCur((c) => { c.restEnd = Date.now() + seconds * 1000; c.restTotal = seconds; });
     agendarAviso(state.current.restEnd);
@@ -551,7 +557,9 @@ export function sessionView() {
     update((s) => {
       const cc = s.current;
       const itens = cc.itens.map((it) => ({ ex: it.ex, alvo: it.alvo, descanso: it.descanso, planejadas: it.sets.length, sets: it.sets.filter((x) => x.ok) })).filter((it) => it.sets.length);
-      const feita = { id: cc.id, planId: cc.planId, diaId: cc.diaId, nome: cc.nome, inicio: cc.inicio, fim: new Date().toISOString(), nota: cc.nota || '', itens };
+      // registro de outro dia: a duração é a estimada pelas séries (cerca de 2,5 min por série, com o descanso), no máximo 2 h
+      const fimReg = cc.registro ? new Date(Date.parse(cc.inicio) + Math.min(120, Math.max(10, itens.reduce((n, it) => n + it.sets.length, 0) * 2.5)) * 60000).toISOString() : '';
+      const feita = { id: cc.id, planId: cc.planId, diaId: cc.diaId, nome: cc.nome, inicio: cc.inicio, fim: fimReg || new Date().toISOString(), nota: cc.nota || '', itens };
       s.sessions.push(feita);
       if (s.sessions.length > 5000) s.sessions.splice(0, s.sessions.length - 5000);
       s.current = null;
@@ -575,7 +583,7 @@ export function sessionView() {
     const c = state.current;
     if (!c) return;
     const now = Date.now();
-    elapsed.textContent = fmtClock((now - Date.parse(c.inicio)) / 1000);
+    elapsed.textContent = c.registro ? 'Registro' : fmtClock((now - Date.parse(c.inicio)) / 1000);
     const t = document.getElementById('rest-time');
     if (work) {
       const rem = (work.end - now) / 1000;
@@ -634,6 +642,8 @@ export function sessionView() {
   for (const ev of TOQUES) document.addEventListener(ev, liberarSom, true);
 
   const body = [];
+  // registro de um dia que já passou: só marcar o que foi feito
+  if (cur.registro) { const d = new Date(cur.registro + 'T12:00:00'); body.push(note('info', `Registrando o treino de ${['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][d.getDay()]}, ${cur.registro.slice(8, 10)}/${cur.registro.slice(5, 7)}: marque as séries que você fez, com a carga e as repetições. Sem cronômetro nem descanso.`)); }
   // problema de saúde de hoje (logic/saude-fora.js): treino leve ou região fora; o aviso por exercício fica em cada cartão
   { let av = null; try { av = avisoDoTreino(); } catch { av = null; } if (av) { av.id = 'sessao-saude'; body.push(av); } }
   if (cur.volta >= 14) body.push(note('info', `De volta depois de ${duracaoTxt(cur.volta)} parado: nas duas primeiras semanas o treino começa com menos séries por músculo, mais descanso e carga menor. Você pode ajustar qualquer série.`));

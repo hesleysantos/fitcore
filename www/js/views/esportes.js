@@ -18,16 +18,18 @@ export function folhaOutroTreino(data = dateKey(new Date()), aoMudar = refresh) 
   const opt = (ic, t, s, onClick, attrs = {}) => h('button', { class: 'opt', type: 'button', onClick, ...attrs }, icon(ic, 'l accent'), h('div', null, h('div', { class: 'o-t', text: t }), h('div', { class: 'o-s', text: s })));
   const corpo = h('div', { class: 'col gap-s', id: 'folha-outro-treino' });
   const opcoes = h('div', { class: 'opts' });
-  // musculação só se começa hoje (o treino é cronometrado na hora)
-  if (hoje && plan && plan.dias.length) opcoes.appendChild(opt('dumbbell', 'Outro treino de musculação', 'Um treino do seu plano, além do de hoje', () => {
-    corpo.replaceChildren(h('p', { class: 'small muted', text: 'Qual treino?' }), h('div', { class: 'list' }, ...plan.dias.map((d) => h('button', { class: 'item', type: 'button', onClick: () => { s.close(); startSession(plan.id, d.id); } },
-      h('div', { class: 'grow' }, h('div', { class: 't', text: d.nome }), h('div', { class: 's', text: plural(d.itens.length, 'exercício', 'exercícios') })), icon('play', 's accent')))));
+  // musculação: hoje, o treino cronometrado; num dia que já passou, o registro do que foi feito (sem cronômetro)
+  const passado = data < dateKey(new Date());
+  const reg = passado ? { registro: data } : {};
+  if ((hoje || passado) && plan && plan.dias.length) opcoes.appendChild(opt('dumbbell', passado ? 'Musculação feita neste dia' : 'Outro treino de musculação', passado ? 'Um treino do seu plano: marque as séries que você fez' : 'Um treino do seu plano, além do de hoje', () => {
+    corpo.replaceChildren(h('p', { class: 'small muted', text: 'Qual treino?' }), h('div', { class: 'list' }, ...plan.dias.map((d) => h('button', { class: 'item', type: 'button', onClick: () => { s.close(); startSession(plan.id, d.id, reg); } },
+      h('div', { class: 'grow' }, h('div', { class: 't', text: d.nome }), h('div', { class: 's', text: plural(d.itens.length, 'exercício', 'exercícios') })), icon(passado ? 'edit' : 'play', 's accent')))));
   }));
-  if (hoje) opcoes.appendChild(opt('bolt', 'Treino livre de musculação', 'Comece e vá adicionando os exercícios', () => { s.close(); startFree(); }));
+  if (hoje || passado) opcoes.appendChild(opt('bolt', passado ? 'Treino livre feito neste dia' : 'Treino livre de musculação', passado ? 'Escolha os exercícios e marque as séries' : 'Comece e vá adicionando os exercícios', () => { s.close(); startFree(reg); }));
   opcoes.appendChild(opt('run', 'Corrida ou caminhada', 'Registre com tempo e distância', () => { s.close(); go('corrida/dia/' + data); }));
   opcoes.appendChild(opt('star', 'Outro esporte', 'Futebol, vôlei, natação, dança... com as calorias', () => { s.close(); folhaEsporte(data, aoMudar); }, { 'data-acao': 'outro-esporte' }));
   corpo.appendChild(opcoes);
-  const s = folha({ title: 'Adicionar ao dia', body: corpo });
+  const s = folha({ title: data < dateKey(new Date()) ? 'Adicionar treino feito' : 'Adicionar ao dia', body: corpo });
 }
 
 // Escolher o esporte e o tempo; mostra o gasto estimado enquanto a pessoa escolhe

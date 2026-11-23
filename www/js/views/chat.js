@@ -14,6 +14,7 @@ import { perguntarCombinado } from './combinado.js';
 import { abrirNoTreinador } from './trainer.js';
 import { abrirEntrevistaCorrida } from './corrida.js';
 import { abrirEntrevistaNutri } from './nutrition.js';
+import { folhaTrocarDias } from './trocar-dias.js';
 
 const VOLTA = { treinador: 'treinador', corrida: 'corrida', nutri: 'nutricao' };
 const ICONE = { treinador: 'coach', corrida: 'run', nutri: 'apple' };
@@ -98,6 +99,7 @@ function irPara(coach, x) {
     contarDor({ aoSalvar: () => { const u = [...conversa(coach).msgs].reverse().find((x) => x.de === 'coach'); if (u) u.respondida = true; falar(coach, M.depoisDaDor(coach, ctx(coach))); } });
   } else if (x.abrir === 'combinado') perguntarCombinado({ aoMudar: () => falar(coach, { texto: ['Prioridade guardada. Os treinos passam a segui-la.'] }) });
   else if (x.abrir === 'corrida-entrevista') abrirEntrevistaCorrida();
+  else if (x.abrir === 'trocar-dias') folhaTrocarDias(() => falar(coach, { texto: ['Pronto: os treinos estão nos dias novos.'] }));
   else if (x.abrir === 'nutri-entrevista') abrirEntrevistaNutri();
   else if (typeof x.abrir === 'string' && x.abrir.startsWith('treinador-')) abrirNoTreinador(x.abrir.slice(10));
 }

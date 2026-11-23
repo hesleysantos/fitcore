@@ -152,8 +152,8 @@ test('podeNaEsteira: dias, plano, saúde, registro, perdido, cronômetro e idade
   assert.ok(dDor, 'a dor forte tira a corrida de algum dia');
   nao(dor, dDor, /dor/); assert.equal(E.versaoNaEsteira(dor, dDor, HOJE), null);
   // dia da prova (objetivo prova): a corrida é no local da prova
-  // caminhada do plano também pode ir para a esteira
-  const prova = estado({ ...base, semanasProva: 8 });
+  // caminhada do plano também pode ir para a esteira (quem está começando, com 5 dias: os dias a mais são de caminhada)
+  const prova = estado({ ...base, experiencia: 'nunca', objetivo: 'comecar', dias: ['1', '2', '3', '4', '5'] });
   const dCam = [0, 1, 2, 3, 4, 5, 6].map(D).find((x) => tipoEm(prova, x) === 'caminhada');
   assert.ok(dCam && E.podeNaEsteira(prova, dCam, HOJE).pode);
   assert.ok(E.versaoNaEsteira(prova, dCam, HOJE).linhas.some((x) => /Passo firme/.test(x)));

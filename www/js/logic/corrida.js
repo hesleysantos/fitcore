@@ -74,6 +74,14 @@ export const PERGUNTAS = [
   },
   { k: 'kmSemana', tipo: 'numero', se: corre, titulo: 'Quantos quilômetros você corre por semana?', ajuda: 'A média das últimas semanas em que treinou. Uma estimativa serve.', min: 0, max: 200, un: 'km por semana', padrao: 15 },
   { k: 'longoAtual', tipo: 'numero', se: (a) => corre(a) || a.experiencia === 'irregular', titulo: 'Qual foi a sua corrida mais longa nas últimas 4 semanas?', ajuda: 'O treino longo cresce a partir dela, sem saltos. Se ficou parado, informe a de antes da pausa.', min: 1, max: 60, un: 'km', padrao: 5 },
+  // Quem vai para o programa de corrida e caminhada (ainda não corre 10 minutos seguidos, ou não passou de 3 km na corrida
+  // mais longa): quanto corre hoje sem parar. O programa começa da etapa que já é possível, e não do zero. O NHS Couch to 5K
+  // (ref nhs_c25k) tem 20 minutos seguidos na semana 5 e 25 na semana 6; não há estudo sobre começar adiantado pela
+  // capacidade atual (a regra é do app: a etapa cujo maior trecho de corrida cabe no que a pessoa já faz). Opcional: quem
+  // respondeu antes desta pergunta começa como antes.
+  { k: 'continuo', tipo: 'um', opcional: true, se: (a) => a.experiencia === 'caminha' || ((corre(a) || a.experiencia === 'irregular') && Number(a.longoAtual) < 3),
+    titulo: 'Quanto tempo você corre sem parar hoje?', ajuda: 'Sem caminhar no meio, em ritmo de conversa. O programa começa do que você já consegue.',
+    op: [['0', 'Menos de 1 minuto', ''], ['1', 'De 1 a 4 minutos', ''], ['5', 'De 5 a 9 minutos', ''], ['10', 'De 10 a 14 minutos', 'Cerca de 1,5 a 2 km'], ['15', 'De 15 a 19 minutos', ''], ['20', '20 minutos ou mais', '']] },
   {
     // tempo parado: muda o nível e o volume de partida (caterisano2019, zheng2022)
     k: 'pausa', tipo: 'um', opcional: true, se: corre, titulo: 'Há quanto tempo você está sem correr?',
@@ -112,7 +120,7 @@ export const PERGUNTAS = [
   { k: 'dias', tipo: 'varios', titulo: 'Em quais dias da semana você pode correr?', ajuda: 'Marque os dias possíveis. Eu deixo pelo menos um dia de descanso por semana e evito treinos fortes em dias seguidos.', op: DIAS_OP.map((o) => [...o, (a) => !semCorridaDe(a).includes(Number(o[0]))]) },
   { k: 'diaLongo', tipo: 'um', se: (a) => Array.isArray(a.dias) && a.dias.length >= 2, titulo: 'Qual é o melhor dia para o treino mais longo?', ajuda: 'Se o dia não estiver entre os que você marcou, eu escolho.', op: [['auto', 'Tanto faz', 'Eu escolho o melhor dia'], ...DIAS_OP.map((o) => [...o, (a) => !semCorridaDe(a).includes(Number(o[0]))])] },
   { k: 'tempo', tipo: 'um', titulo: 'Quanto tempo você tem por treino, em um dia comum?', ajuda: 'Conte com aquecimento e volta à calma.', op: [['30', 'Cerca de 30 minutos', ''], ['45', 'Cerca de 45 minutos', ''], ['60', 'Cerca de 1 hora', ''], ['90', 'Até 1h30', '']] },
-  { k: 'tempoLongo', tipo: 'um', se: comDistancia, titulo: 'E no dia do treino mais longo?', op: [['60', 'Até 1 hora', ''], ['90', 'Até 1h30', ''], ['120', 'Até 2 horas', ''], ['150', 'Até 2h30', ''], ['180', 'Até 3 horas', 'O treino mais longo do plano vai até 2h30']] },
+  { k: 'tempoLongo', tipo: 'um', se: comDistancia, titulo: 'E no dia do treino mais longo?', op: [['60', 'Até 1 hora', ''], ['90', 'Até 1h30', ''], ['120', 'Até 2 horas', ''], ['150', 'Até 2h30', ''], ['180', 'Até 3 horas', 'Na meia e na maratona, o treino mais longo pode chegar a 3 horas']] },
   {
     // como medir o treino: define se a prescrição sai em distância e ritmo, em velocidade de esteira ou em tempo e esforço
     k: 'aparelho', tipo: 'um', titulo: 'Como você mede as suas corridas?',
@@ -355,9 +363,12 @@ export function perfil(respostas) {
   if (objetivo === 'comecar' && nivel >= 1) objetivo = 'saude';
   if ((cautela || idade < 16) && objetivo === 'ritmo') objetivo = 'distancia'; // sem treino forte, a meta passa a ser completar a distância
   if (idade < 14 && objetivo === 'prova') objetivo = 'distancia'; // prova oficial de rua só a partir dos 14 (cbat_norma12)
-  // o treino contínuo mais longo não passa de 150 minutos (vdoto2_definicoes)
+  // O treino longo não passa de 150 minutos nas distâncias até 10 km (o teto de Daniels: vdoto2_definicoes — é a opinião de um
+  // treinador, não um resultado de estudo). Na meia e na maratona, quem corre mais devagar não chega à distância que protege
+  // a prova em 150 minutos (meia: maior treino de 15 a 21 km; maratona: 30 a 35 km, e abaixo de 25 km, prova pior — refs
+  // fokkema2020, knopp2024): o longo vai até o tempo que a pessoa disse ter, no máximo 3 horas.
   const tempoLongoDito = dist ? Math.max(tempo, maisPerto(Number(a.tempoLongo), TEMPOS_LONGO, 90)) : tempo; // o que a pessoa disse ter no dia mais longo
-  const tempoLongo = Math.min(150, tempoLongoDito);
+  const tempoLongo = Math.min(dist === 21 || dist === 42 ? 180 : 150, tempoLongoDito);
   const semanasProva = objetivo === 'prova' ? Math.round(entre(numero(a.semanasProva, 12), 1, 52)) : null;
   // tempo-alvo: entre o recorde mundial da distância e 12 minutos por km
   const temAlvo = !cautela && idade >= 16 && dist === distPedida && (objetivo === 'ritmo' || objetivo === 'prova') && a.temAlvo === 'sim' && Number.isFinite(a.alvoMin);
@@ -379,6 +390,7 @@ export function perfil(respostas) {
   let qMax = nivel === 0 || cautela || idade < 16 || (idade < 18 && dist === 10) ? 0 : nivel === 1 || jovem || idoso ? 1 : 2;
   if (dias.length <= 1) qMax = 0;
   const longoAtual = jaCorre ? entre(numero(a.longoAtual, Math.max(3, km * 0.4)), 1, 60) : 0;
+  const continuo = ['1', '5', '10', '15', '20'].includes(a.continuo) ? Number(a.continuo) : 0; // minutos de corrida sem parar hoje
   return {
     idade, exp, nivel, nivelBase, retorno, pausaDias, ativo, jaCorre, jovem, idoso, master, gestante, posparto, cardiaco, renal, diabetes, hipertensao, cronica, liberado,
     precisaLiberacao, confirmar, bloqueio, bloqueado: !!bloqueio, cautela, imc, obeso, lesaoPrevia, limitacoes: lim, condicoes: cond, triagem: tri, remedios, pulsoBaixo, supervisao,
@@ -386,14 +398,18 @@ export function perfil(respostas) {
     dias, diaLongo, descansoForcado, tempo, tempoLongo, objetivo, dist, distPedida, distMax, semanasProva, alvoSeg, resultado, aparelho, local, modo, qMax,
     // irregular: cerca de 3 km (20 a 25 minutos) por dia de corrida, até 3 dias
     kmSemana: irregular ? 3 * Math.min(3, dias.length) : km, longoAtual, tempoLongoDito, provas: ['nenhuma', '5a10', 'meia', 'maratona'].includes(a.provas) ? a.provas : 'nenhuma',
-    // passo semanal de volume: até 10% (soligard2016, selman2022); nos planos publicados, 5 a 9% (knopp2024). Quem tem mais
-    // risco de lesão fica com 7%, o meio dessa faixa (lesão prévia: vangent2007; idade e IMC: kluitenberg2015)
-    // quem corre pouco e sem regularidade também: baixo volume semanal e pouca experiência são fatores de risco (vanpoppel2021)
-    passo: lesaoPrevia || idoso || jovem || obeso || lim.length || irregular ? 0.07 : 0.10,
+    // passo semanal de volume: até 14% (cerca de 30% em 2 semanas). A mudança de volume de uma semana para outra não previu
+    // lesão em 5.205 corredores (frandsen2025: "no significant relationship was identified for the week-to-week ratio"), a
+    // "regra dos 10%" não tem evidência (damsted2018: "no evidence was found to support the use of the so-called '10% rule'";
+    // buist2008: o programa graduado não reduziu lesões), e em iniciantes subir mais de 30% em 2 semanas pareceu deixar mais
+    // vulnerável (nielsen2014). O que protege é o treino de cada dia: nenhum mais de 10% acima do mais longo do mês
+    // (frandsen2025). Quem tem mais risco de lesão fica com 10% (lesão prévia: vangent2007; idade e IMC: kluitenberg2015;
+    // pouco volume e pouca experiência: vanpoppel2021)
+    passo: lesaoPrevia || idoso || jovem || obeso || lim.length || irregular ? 0.10 : 0.14,
     // corridas por semana: no máximo 3 para quem corre sem regularidade (iniciantes se lesionam mais acima de 3 dias: pollock1998)
     irregular, maxCorridas: irregular ? 3 : 9,
     // começo mais lento no programa de corrida e caminhada (bertelsen2018, chodzko2009, goom2019)
-    inicioLento: nivel === 0 && (obeso || idoso || posparto),
+    inicioLento: nivel === 0 && (obeso || idoso || posparto), continuo,
   };
 }
 
@@ -861,7 +877,9 @@ function fatiaLongo(n, vol, dist) {
 const limiteLongo = (n, vol, dist, longo0) => Math.max(fatiaLongo(n, vol, dist) * vol, Math.min(longo0, 0.46 * vol));
 // duração (semanas) quando não há data: maratona 12 a 30 nos planos publicados (knopp2024); meia, 14 semanas (damsted2018);
 // 5 e 10 km: 9 semanas no programa do NHS (nhs_c25k), 10 no ensaio de 10 km (filipas2022), 1 a 4 meses em 80% dos amadores (knechtle2021)
-const DURACAO = { 5: [8, 12], 10: [8, 16], 21: [10, 20], 42: [14, 26] };
+// meia: até 24 semanas para quem parte de pouco (o ProjectRun21, de Damsted, usou 14 semanas com quem já fazia 8 km no longo;
+// partindo de 5 km, com o longo subindo até 10% sobre o maior do mês, a conta pede cerca de 22)
+const DURACAO = { 5: [8, 12], 10: [8, 16], 21: [10, 24], 42: [14, 26] };
 const POLIMENTO = { 5: 1, 10: 1, 21: 2, 42: 3 };
 // corte de volume em cada semana do polimento (a última é a da prova): progressivo, chegando a 41–60% (wang2023)
 const CORTE_POLIMENTO = { 1: [0.5], 2: [0.3, 0.55], 3: [0.22, 0.4, 0.58] };
@@ -905,7 +923,7 @@ function curva(pf, cfg) {
   const tp = evento ? Math.min(POLIMENTO[dist], Math.floor(T / 4)) : 0;
   const R = T - tp;
   const fr = nivel === 1 ? [0.5, 0.8] : [0.35, 0.7];
-  const longoMaxKm = Math.min(LONGO[dist] ? LONGO[dist][nivel] : Infinity, (Math.min(pf.tempoLongo, 150) * 60) / (estLeve * 1.02));
+  const longoMaxKm = Math.min(LONGO[dist] ? LONGO[dist][nivel] : Infinity, (pf.tempoLongo * 60) / (estLeve * 1.02));
   const sem = [];
   let ref = ini, maxLongo = 0;
   for (let w = 1; w <= T; w++) {
@@ -1836,7 +1854,9 @@ const MIN_ETAPA = ETAPAS.map((e) => e.reduce((s, sess) => s + sess.reduce((x, [a
 function estruturaNivel0(pf, est, grade, semAlvo) {
   const corridaDias = escolherDias(pf.dias, 3, pf.dias.includes(pf.diaLongo) ? pf.diaLongo : null, true);
   const nC = corridaDias.length;
-  const comeco = pf.posparto ? 0 : pf.inicioLento ? 1 : pf.exp === 'nunca' ? 3 : 5;
+  // a etapa cujo maior trecho de corrida cabe no que a pessoa já corre sem parar (5 min: trechos de 5; 10 min: de 10; 20 min: 20 seguidos)
+  const pelaCapacidade = { 1: 3, 5: 7, 10: 10, 15: 12, 20: 13 }[pf.continuo] || 0;
+  const comeco = pf.posparto ? 0 : Math.max(pf.inicioLento ? 1 : pf.exp === 'nunca' ? 3 : 5, pelaCapacidade);
   const passoEtapa = nC === 1 ? 2 : 1; // com 1 corrida por semana, cada etapa dura 2 semanas
   const nCC = (ETAPAS.length - comeco) * passoEtapa;
   let geral = null, T0 = nCC;
@@ -2116,7 +2136,14 @@ export function gerarPlano(respostas, opcoes) {
       let i = 0;
       for (const wd of ORDEM) {
         if (!pf.dias.includes(wd)) continue;
-        if (corridaDias.includes(wd)) { const idx = nC === 3 ? i : nC === 2 ? [0, 2][i] : 2; i++; dias.push({ wd, ...tCC(etapa, idx, c) }); }
+        // com 3 corridas, a terceira (no dia do longo, quando ele está entre elas) é a sessão mais longa da semana: a primeira da
+        // etapa seguinte, como no Couch to 5K, em que a última sessão da semana costuma ser a mais longa (nhs_c25k)
+        if (corridaDias.includes(wd)) {
+          const idx = nC === 3 ? i : nC === 2 ? [0, 2][i] : 2; i++;
+          let t = tCC(etapa, idx, c);
+          if (nC === 3 && idx === 2 && etapa + 1 < ETAPAS.length) { const mais = tCC(etapa + 1, 0, c); if (mais.corridaMin > t.corridaMin) t = { ...mais, nome: 'Corrida e caminhada mais longa', maisLonga: true }; }
+          dias.push({ wd, ...t });
+        }
         else dias.push({ wd, ...tCaminhada(Math.min(30, pf.tempo), c, pf.idade < 14 ? 'Atividade livre' : '') });
       }
       if (semAlvo && !geral && w === T0 && pf.dist) {
@@ -2415,9 +2442,26 @@ function avisos(pf, P, { semanas, limitado }) {
   if (pf.dist) {
     const maior = Math.max(0, ...semanas.flatMap((s) => s.dias.filter((d) => ehCorridaDia(d) && !ehEventoDia(d)).map((d) => d.distKm)));
     const km = DIST[pf.dist];
-    // maratona: maior treino abaixo de 25 km, resultado pior; meia: 15 a 21 km (fokkema2020). O longo não passa de 2h30 (vdoto2_definicoes)
+    // maratona: maior treino abaixo de 25 km, resultado pior; meia: 15 a 21 km (fokkema2020)
     const minimo = pf.dist === 42 ? 25 : pf.dist === 21 ? 15 : 0;
-    if (maior < minimo) av('warn', `O maior treino do plano chega a ${fmtKm(maior)}, pouco para ${ROTULO.distancia[pf.dist]} (${fmtKm(km)}). O plano não acelera além do seguro, e nenhum treino passa de 2h30. ${pf.dist === 42 ? 'Na maratona, quem fica abaixo de 25 km no maior treino termina, em média, 13 minutos mais lento. ' : ''}Considere mais semanas de preparação ou completar a prova alternando corrida e caminhada.`, ['frandsen2025', 'fokkema2020', 'vdoto2_definicoes']);
+    // O que segura o maior treino: o tempo do dia mais longo (o longo já chega ao limite que a pessoa deu) ou o prazo (cada
+    // treino longo sobe no máximo 10% sobre o maior do mês — frandsen2025). O aviso diz qual dos dois e o que muda.
+    // (quem já corre a distância mínima não recebe o aviso: o maior treino fica baixo só porque a prova está perto)
+    if (maior < minimo && (pf.longoAtual || 0) < minimo) {
+      const durLongo = Math.max(0, ...semanas.flatMap((s) => s.dias.filter((d) => d.tipo === 'longo').map((d) => d.durMin)));
+      const peloTempo = durLongo >= pf.tempoLongo - 5;
+      const precisa = semanasNecessarias(pf, pf.dist, Math.max(1, pf.nivel), Math.max(2, pf.longoAtual || 2));
+      const tempoTxt = fmtTempo(pf.tempoLongo * 60);
+      const volMax = Math.max(0, ...semanas.map((s) => s.volumeKm || 0));
+      // três causas: o tempo do dia mais longo; o prazo (o longo sobe no máximo 10% sobre o maior do mês); ou o volume da semana
+      // (com poucos dias e pouco tempo nos dias comuns, o longo fica em até cerca de metade da semana — ramskov2016, knopp2024)
+      const causa = peloTempo
+        ? `No seu ritmo leve, o treino longo usa todo o tempo que você tem no dia mais longo (${tempoTxt}) e chega a ${fmtKm(maior)}.${pf.tempoLongoDito < 180 && (pf.dist === 21 || pf.dist === 42) ? ' Com mais tempo nesse dia (até 3 horas), ele vai mais longe.' : ''}`
+        : semanas.length < precisa
+          ? `Partindo da sua corrida mais longa (${fmtKm(pf.longoAtual || 2)}), cada treino longo sobe no máximo 10% sobre o maior do mês, e em ${semanas.length} ${semanas.length === 1 ? 'semana' : 'semanas'} ele chega a ${fmtKm(maior)}. Para chegar a ${fmtKm(minimo)}, seriam cerca de ${precisa} semanas.`
+          : `O treino longo fica em até cerca de metade do volume da semana, como nos planos estudados, e o volume sobe aos poucos: do seu ponto de partida, o plano chega a cerca de ${fmtKm(volMax)} por semana e ${fmtKm(maior)} no longo. Ao terminar, refaça a entrevista: com a base nova, o próximo plano vai mais longe. Mais dias de corrida ou mais tempo nos dias comuns também ajudam.`;
+      av('warn', `O maior treino do plano chega a ${fmtKm(maior)}, pouco para ${ROTULO.distancia[pf.dist]} (${fmtKm(km)}): o recomendado é chegar a ${pf.dist === 42 ? '25 a 35 km' : '15 a 21 km'}. ${causa} ${pf.dist === 42 ? 'Na maratona, quem fica abaixo de 25 km no maior treino termina, em média, 13 minutos mais lento. ' : ''}Se a prova não muda de data, dá para completar alternando corrida e caminhada: o tempo final fica parecido, com menos desconforto.`, ['frandsen2025', 'fokkema2020', 'knopp2024', 'ramskov2016', 'hottenrott2016']);
+    }
     // 5 e 10 km: prazo menor que o dos programas estudados (9 a 10 semanas: nhs_c25k, filipas2022)
     if (pf.dist <= 10 && pf.semanasProva && pf.semanasProva < DURACAO[pf.dist][0]) av('warn', `${pf.semanasProva === 1 ? 'Falta 1 semana' : `Faltam ${pf.semanasProva} semanas`}, menos do que os programas estudados para essa distância (9 a 13 semanas). O plano não acelera além do seguro: vá para completar, sem meta de tempo.`, ['nhs_c25k', 'ryan2003', 'frandsen2025']);
     {

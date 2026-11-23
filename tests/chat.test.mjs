@@ -130,7 +130,7 @@ test('reconhecimento: frases reais do Treinador, com e sem acento', () => {
     ['tô cansado demais pra treinar', 'treino-perdido'], ['dormi mal essa noite', 'dormi-mal'], ['estou gripado', M.intencaoPorId('saude-fora-treino') ? 'saude-fora-treino' : 'treino-perdido'], ['vou viajar amanhã', 'treino-perdido'],
     ['tenho só 30 minutos hoje', 'pouco-tempo'], ['estou com pressa, dá pra fazer um treino rápido?', 'pouco-tempo'], ['tô sem tempo', 'pouco-tempo'], ['preciso de uma versão curta do treino', 'pouco-tempo'],
     ['quantos quilos eu coloco no supino?', 'carga'], ['quanto tempo de descanso entre as séries?', 'carga'], ['quantas repetições devo fazer?', 'carga'], ['quando aumentar a carga', 'carga'],
-    ['quero mudar os dias do treino', 'mudar-plano'], ['quero treinar em casa', 'mudar-plano'], ['enjoei do meu treino', 'mudar-plano'], ['quero um treino novo', 'mudar-plano'],
+    ['quero mudar os dias do treino', 'trocar-dias'], ['quero treinar em casa', 'mudar-plano'], ['enjoei do meu treino', 'mudar-plano'], ['quero um treino novo', 'mudar-plano'],
     ['estou com dor no joelho', 'dor-treino'], ['meu ombro está doendo', 'dor-treino'], ['dor muscular depois do treino', 'dor-treino'],
     ['o aparelho está ocupado', 'aparelho-ocupado'], ['a academia está lotada', 'aparelho-ocupado'],
     ['posso correr depois da musculação?', 'juntar-treino'], ['dá pra fazer corrida e musculação no mesmo dia?', 'juntar-treino'],

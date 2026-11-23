@@ -149,6 +149,8 @@ function cleanSession(s, isCurrent) {
     out.cron = c && Number.isInteger(c.i) && Number.isInteger(c.j) && out.itens[c.i] && out.itens[c.i].sets[c.j] && !out.itens[c.i].sets[c.j].ok
       && out.itens[c.i].ex === c.ex && dentro(c.end, 1, 4e12) && dentro(c.total, 1, 36000)
       ? { i: c.i, j: c.j, end: c.end, total: c.total, ex: c.ex } : null;
+    // registro: o treino é de um dia que já passou (sem cronômetro nem descanso): 'AAAA-MM-DD'
+    if (typeof s.registro === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.registro)) out.registro = s.registro;
   }
   else if (!out.fim || Date.parse(out.fim) < Date.parse(inicio)) return null;
   // treino já finalizado: só as séries concluídas fazem parte do histórico (um arquivo com séries vazias não incha os dados)

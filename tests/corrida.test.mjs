@@ -79,7 +79,8 @@ test('iniciante: corrida e caminhada por tempo, 3 vezes por semana, em dias alte
   const cam = s1.caminhadaMin || 0;
   assert.ok(cam >= 10 && p.semanas[0].dias.reduce((t, d) => t + minutosEquivalentes(d), 0) >= 140, 'a semana chega perto dos 150 minutos da OMS');
   assert.deepEqual(s1.blocos.map((b) => [b.tipo, b.seg, b.repeticoes || 1]), [['aquecer', 300, 1], ['correr', 60, 10], ['desaquecer', 300 + cam * 60, 1]], '1ª semana: 10 × (1 min correndo + 1 min caminhando), com 5 min de caminhada antes e depois');
-  assert.equal(p.semanas[0].corridaMin, 30);
+  // (a terceira sessão da semana é a primeira da etapa seguinte: a mais longa da semana, como no Couch to 5K)
+  assert.ok(p.semanas[0].corridaMin > 30 && p.semanas[0].dias[2].maisLonga, 'semana 1: 2 sessões de 10 × 1 min e a terceira mais longa');
   const ultimo = p.semanas[p.totalSemanas - 1].dias[2];
   assert.ok(ultimo.blocos.some((b) => b.tipo === 'correr' && b.seg === 1800), 'o programa termina em 30 minutos seguidos');
   for (let i = 1; i < p.semanas.length; i++) assert.ok(p.semanas[i].corridaMin - p.semanas[i - 1].corridaMin <= 10, 'no máximo 10 min de corrida a mais por semana');
@@ -100,7 +101,7 @@ test('IMC de 30 ou mais, 60+ e pós-parto: começo mais lento, com menos de 3 km
   for (const a of [{ ...novato, peso: 95 }, { ...novato, idade: 66 }]) {
     const p = gerarPlano(a);
     assert.equal(p.totalSemanas, ETAPAS_CC - 1);
-    assert.equal(p.semanas[0].corridaMin, 18, '1ª semana: 6 min de corrida por sessão');
+    assert.ok(p.semanas[0].dias.slice(0, 2).every((d) => d.corridaMin === 6), '1ª semana: 6 min de corrida por sessão (a terceira, um pouco mais longa)');
     assert.ok((p.semanas[0].corridaMin * 60) / 480 < 3, 'menos de 3 km de corrida na primeira semana');
   }
   assert.ok(gerarPlano({ ...novato, peso: 95 }).avisos.some((a) => /menos de 3 km/.test(a.texto) && a.refs.includes('bertelsen2018')));
@@ -108,7 +109,7 @@ test('IMC de 30 ou mais, 60+ e pós-parto: começo mais lento, com menos de 3 km
   const pp = gerarPlano({ ...novato, condicoes: ['posparto'], liberado: 'sim' });
   assert.equal(pp.totalSemanas, ETAPAS_CC);
   assert.deepEqual(pp.semanas[0].dias[0].blocos[1].seg, 30);
-  assert.equal(pp.semanas[0].corridaMin, 12);
+  assert.ok(pp.semanas[0].dias.slice(0, 2).every((d) => d.corridaMin === 4), 'pós-parto: 4 min de corrida nas duas primeiras sessões (a terceira, um pouco mais longa)');
   assert.ok(pp.avisos.some((a) => /Pós-parto/.test(a.texto) && a.refs.includes('selman2022')));
 });
 
@@ -154,8 +155,9 @@ test('maratona: longo de até 2h30, polimento de 3 semanas e aviso de primeira m
   const p = gerarPlano(a);
   const longos = p.semanas.flatMap((s) => s.dias.filter((d) => d.tipo === 'longo').map((d) => d.distKm));
   assert.ok(Math.max(...longos) >= 22 && Math.max(...longos) <= 32, String(Math.max(...longos)));
-  assert.ok(p.semanas.every((s) => s.dias.every((d) => d.tipo !== 'longo' || d.durMin <= 152)), 'nenhum treino longo passa de 2h30 (Daniels)');
-  assert.equal(p.perfil.tempoLongo, 150);
+  // na meia e na maratona, o longo vai até o tempo que a pessoa deu, no máximo 3 horas (o teto de 2h30 de Daniels é opinião)
+  assert.ok(p.semanas.every((s) => s.dias.every((d) => d.tipo !== 'longo' || d.durMin <= Math.min(182, p.perfil.tempoLongo + 2))), 'nenhum treino longo passa do tempo dado (no máximo 3 horas)');
+  assert.equal(p.perfil.tempoLongo, Math.min(180, p.perfil.tempoLongoDito)); // maratona: até o tempo dado, no máximo 3 horas
   assert.equal(p.semanas.filter((s) => s.fase === 'polimento').length, 3);
   const pico = Math.max(...p.semanas.map((s) => s.volumeKm));
   const [a1, a2] = [p.semanas[15].volumeKm, p.semanas[16].volumeKm];
@@ -165,10 +167,13 @@ test('maratona: longo de até 2h30, polimento de 3 semanas e aviso de primeira m
   assert.ok(p.ritmos.prova[42].ate > p.ritmos.prova[42].de, 'ritmo de maratona como faixa (a previsão é otimista para amadores)');
   // prazo curto demais: o plano não acelera além do seguro e avisa
   const curto = gerarPlano({ ...base, distancia: '42', semanasProva: 5, tempoLongo: '180' });
-  assert.ok(curto.avisos.some((x) => x.tipo === 'danger' && x.destaque && /Não marquei a prova de maratona em 5 semanas/.test(x.texto)), 'prazo que não comporta a distância: a prova não é marcada');
+  assert.ok(curto.avisos.some((x) => x.tipo === 'danger' && x.destaque && /Não marquei a prova de maratona em 5 semanas|Em 5 semanas não dá para preparar maratona/.test(x.texto)), 'prazo que não comporta a distância: a prova não é marcada');
   assert.ok(curto.perfil.objetivo === 'distancia' && !curto.semanas.some((s) => s.dias.some((d) => d.nome.startsWith('Prova'))));
-  // maior treino entre a metade da prova e 25 km: a prova fica, com aviso
-  assert.ok(p.avisos.some((x) => x.tipo === 'warn' && /pouco para maratona/.test(x.texto)));
+  // com até 3 horas no dia mais longo, o longo chega aos 25 km que protegem a prova (fokkema2020): sem o aviso de "pouco"
+  assert.ok(Math.max(...longos) >= 25 && !p.avisos.some((x) => /pouco para maratona/.test(x.texto)));
+  // com até 2 horas no dia mais longo, o longo fica abaixo de 25 km: aviso ("pouco" ou a prova não marcada)
+  const duasHoras = gerarPlano({ ...a, tempoLongo: '120' });
+  assert.ok(duasHoras.avisos.some((x) => /pouco para maratona|Não marquei a prova de maratona/.test(x.texto)));
   // meta fora do alcance do condicionamento atual: aviso, e o ritmo da prova segue a previsão
   const meta = gerarPlano({ ...base, temAlvo: 'sim', alvoMin: 45 });
   assert.ok(meta.avisos.some((x) => /Meta ambiciosa/.test(x.texto)));
@@ -220,11 +225,11 @@ test('segurança: triagem, bloqueios e cautela por população', () => {
   assert.ok(gerarPlano({ ...base, idade: 17, distancia: '21' }).avisos.some((x) => /Confederação Brasileira de Atletismo/.test(x.texto) && x.refs.includes('cbat_norma12')));
   // 60+: no máximo 1 forte e progressão mais lenta
   const i = gerarPlano({ ...base, idade: 64, dias: ['1', '2', '3', '5', '0'], kmSemana: 40, longoAtual: 12 });
-  assert.equal(i.perfil.passo, 0.07);
+  assert.equal(i.perfil.passo, 0.10);
   assert.ok(i.semanas.every((s) => s.dias.filter((d) => d.intensidade === 'forte' && d.tipo !== 'prova').length <= 1));
   // lesão recente: progressão mais lenta, com fonte
   const l = gerarPlano({ ...base, lesao12m: 'sim' });
-  assert.equal(l.perfil.passo, 0.07); assert.ok(l.avisos.some((x) => x.refs.includes('vangent2007')));
+  assert.equal(l.perfil.passo, 0.10); assert.ok(l.avisos.some((x) => x.refs.includes('vangent2007')));
 });
 
 test('volta de pausa informada na entrevista: menos volume e sem treinos fortes no começo', () => {
@@ -791,7 +796,7 @@ test('corredor irregular e lento: 3 corridas curtas, só por esforço, base de 8
   assert.equal(respostasCompletas({ ...a, longoAtual: undefined }), false);
   assert.ok(respostasCompletas(base) && respostasCompletas(novato), 'respostas antigas continuam válidas');
   const p = gerarPlano(a);
-  assert.ok(p.perfil.irregular && p.perfil.nivel === 1 && p.modo === 'tempo' && p.ritmos === null && p.perfil.passo === 0.07);
+  assert.ok(p.perfil.irregular && p.perfil.nivel === 1 && p.modo === 'tempo' && p.ritmos === null && p.perfil.passo === 0.10);
   assert.ok(p.semanas.every((s) => s.dias.filter(corr).length === 3), '3 corridas por semana, desde a primeira');
   assert.ok(p.semanas[0].dias.filter(corr).every((d) => d.durMin <= 35) && p.semanas[0].volumeKm <= 11, 'começa com corridas curtas');
   assert.ok(p.semanas.slice(0, 8).every((s) => s.dias.every((d) => d.intensidade !== 'forte')), '8 semanas de base');
@@ -799,7 +804,7 @@ test('corredor irregular e lento: 3 corridas curtas, só por esforço, base de 8
   assert.ok(p.avisos.some((x) => /sem regularidade/.test(x.texto) && x.refs.includes('vanpoppel2021') && x.refs.includes('pollock1998')));
   // difere de quem corre com regularidade o mesmo tanto
   const reg = gerarPlano({ ...a, experiencia: 'iniciante', kmSemana: 9, pausa: 'treinando', resultado: 'nao' });
-  assert.ok(Math.max(...reg.semanas.map((s) => s.dias.filter(corr).length)) === 4 && reg.perfil.passo === 0.1);
+  assert.ok(Math.max(...reg.semanas.map((s) => s.dias.filter(corr).length)) === 4 && reg.perfil.passo === 0.14);
   // resultado que tenha sobrado de uma entrevista antiga não vira ritmo
   assert.equal(gerarPlano({ ...a, resultado: '5', resultadoMin: 27 }).ritmos, null);
   assert.ok(limparCorrida({ answers: a }).answers.experiencia === 'irregular', 'a opção passa pela validação do estado');
@@ -1123,7 +1128,7 @@ test('A1, B3 e B4: uma corrida por semana, dor informada na entrevista e plano s
   for (const regiao of ['joelho', 'canela', 'aquiles', 'pe', 'quadril', 'coxa', 'lombar']) {
     const p = gerarPlano({ ...a, limitacoes: [regiao] });
     assert.ok(p.semanas.slice(0, 2).every((s) => s.dias.every((d) => d.intensidade !== 'forte' && !d.blocos.some((b) => b.rotulo === 'Acelerações'))), regiao);
-    assert.ok(p.semanas[2].dias.some((d) => d.intensidade === 'forte') && p.perfil.passo === 0.07);
+    assert.ok(p.semanas[2].dias.some((d) => d.intensidade === 'forte') && p.perfil.passo === 0.10);
     assert.notDeepEqual(p.semanas[0], p0.semanas[0]);
     const av = p.avisos.find((x) => /Você disse que sente dor/.test(x.texto));
     assert.ok(av && av.tipo === 'warn' && av.refs.length && av.refs.every((k) => REFS_CORRIDA[k]), regiao);

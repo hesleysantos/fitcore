@@ -716,24 +716,26 @@ function formulario(data, planejado, existente, aoFechar) {
     const dig = dist.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 5);
     dist.value = dig ? (Number(dig) / 100).toFixed(2).replace('.', ',') : '';
   });
-  // tempo: minutos e segundos em dois campos, só números
+  // tempo: horas, minutos e segundos em três campos, só números (1 h 13 min 48 s, como no relógio)
   const seg0 = Math.round((r.durMin || 0) * 60);
-  const durMinI = h('input', { class: 'input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'off', maxlength: '3', value: seg0 ? String(Math.floor(seg0 / 60)) : '', placeholder: 'min', 'aria-label': 'Tempo: minutos' });
+  const durHI = h('input', { class: 'input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'off', maxlength: '2', value: seg0 >= 3600 ? String(Math.floor(seg0 / 3600)) : '', placeholder: 'h', 'aria-label': 'Tempo: horas' });
+  const durMinI = h('input', { class: 'input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'off', maxlength: '3', value: seg0 ? String(Math.floor((seg0 % 3600) / 60)) : '', placeholder: 'min', 'aria-label': 'Tempo: minutos' });
   const durSegI = h('input', { class: 'input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'off', maxlength: '2', value: seg0 % 60 ? String(seg0 % 60).padStart(2, '0') : '', placeholder: 'seg', 'aria-label': 'Tempo: segundos' });
-  for (const el of [durMinI, durSegI]) el.addEventListener('input', () => { el.value = el.value.replace(/\D/g, ''); });
+  for (const el of [durHI, durMinI, durSegI]) el.addEventListener('input', () => { el.value = el.value.replace(/\D/g, ''); });
+  const lerSegundos = () => (durHI.value ? Number(durHI.value) : 0) * 3600 + (durMinI.value ? Number(durMinI.value) : 0) * 60 + (durSegI.value ? Number(durSegI.value) : 0);
   // o pace calculado aparece na hora, com a distância e o tempo preenchidos (a média da sessão)
   const paceVivo = h('div', { class: 'small bold', id: 'pace-calculado', 'aria-live': 'polite' });
   const atualizarPace = () => {
     const km = dist.value ? parseNum(dist.value) : 0;
-    const seg = (durMinI.value ? Number(durMinI.value) : 0) * 60 + (durSegI.value ? Number(durSegI.value) : 0);
+    const seg = lerSegundos();
     const ok = km > 0 && seg > 0 && seg / km >= 110 && seg / km <= 1800;
     paceVivo.textContent = ok ? `Pace: ${fmtRitmo(seg / km)} por km${r.plan && r.plan.trecho ? ' (média da sessão)' : ''}` : '';
     paceVivo.hidden = !ok;
   };
-  for (const el of [durMinI, durSegI]) el.addEventListener('input', atualizarPace);
+  for (const el of [durHI, durMinI, durSegI]) el.addEventListener('input', atualizarPace);
   dist.addEventListener('input', atualizarPace);
   durMinI.addEventListener('input', () => { if (durMinI.value.length >= 3) durSegI.focus(); });
-  const campoTempo = h('div', { class: 'field grow' }, h('span', { text: 'Tempo' }), h('div', { class: 'row gap-s tempo-campos' }, durMinI, h('span', { class: 'muted', text: 'min' }), durSegI, h('span', { class: 'muted', text: 's' })));
+  const campoTempo = h('div', { class: 'field grow' }, h('span', { text: 'Tempo' }), h('div', { class: 'row gap-s tempo-campos' }, durHI, h('span', { class: 'muted', text: 'h' }), durMinI, h('span', { class: 'muted', text: 'min' }), durSegI, h('span', { class: 'muted', text: 's' })));
   const campoDist = h('label', { class: 'field grow' }, h('span', { text: 'Distância (km)' }), dist);
   // pace do trecho principal (o que o relógio mostra durante a rodagem, os tiros ou o ritmo de limiar): opcional
   const trecho = r.plan && r.plan.trecho ? r.plan.trecho : null;
@@ -762,10 +764,12 @@ function formulario(data, planejado, existente, aoFechar) {
     }
     if (modo === 'tempo') {
       const mostraDist = comDistancia || !!r.distKm;
-      medidas.appendChild(h('div', { class: 'row top' }, campoTempo, mostraDist && r.tipo !== 'caminhada' ? campoDist : null));
-      if (r.tipo === 'caminhada') medidas.appendChild(h('p', { class: 'tiny muted', text: 'Na caminhada, basta o tempo.' }));
-      else if (unPlano === 't') medidas.appendChild(h('p', { class: 'tiny muted', text: 'Este treino é por tempo: basta o tempo.' }));
-      else if (!mostraDist) medidas.appendChild(h('div', { class: 'row between' }, h('span', { class: 'tiny muted grow', text: 'Sem GPS, basta o tempo.' }), btn('Tenho a distância', () => { comDistancia = true; drawMedidas(); dist.focus(); }, 'plain sm')));
+      // a distância é sempre opcional: o plano pode não pedir, mas a pessoa pode querer acompanhar (e o pace aparece)
+      medidas.appendChild(h('div', { class: 'row top wrap' }, campoTempo, mostraDist ? campoDist : null));
+      if (mostraDist) { medidas.appendChild(paceVivo); atualizarPace(); }
+      const basta = r.tipo === 'caminhada' ? 'Na caminhada, basta o tempo.' : unPlano === 't' ? 'Este treino é por tempo: basta o tempo.' : 'Sem GPS, basta o tempo.';
+      if (!mostraDist) medidas.appendChild(h('div', { class: 'row between' }, h('span', { class: 'tiny muted grow', text: basta }), btn('Informar a distância', () => { comDistancia = true; drawMedidas(); dist.focus(); }, 'plain sm')));
+      else medidas.appendChild(h('p', { class: 'tiny muted', text: 'Distância opcional: fica no seu histórico, com o pace.' }));
       return;
     }
     medidas.appendChild(h('div', { class: 'row top' }, campoDist, campoTempo));
@@ -835,10 +839,11 @@ function formulario(data, planejado, existente, aoFechar) {
     aoFechar ? btn('Cancelar', aoFechar, 'ghost') : null,
     btn(existente ? 'Salvar alterações' : 'Registrar corrida', () => {
       const modo = modoDeMedir();
-      const d = modo === 'completo' || (modo === 'tempo' && (comDistancia || r.distKm) && r.tipo !== 'caminhada') ? (dist.value.trim() ? parseNum(dist.value) : 0) : 0;
-      const mm = durMinI.value ? Number(durMinI.value) : 0, ss = durSegI.value ? Number(durSegI.value) : 0;
+      const d = modo === 'completo' || (modo === 'tempo' && (comDistancia || r.distKm)) ? (dist.value.trim() ? parseNum(dist.value) : 0) : 0;
+      const hh = durHI.value ? Number(durHI.value) : 0, mm = durMinI.value ? Number(durMinI.value) : 0, ss = durSegI.value ? Number(durSegI.value) : 0;
       if (ss > 59) { toast('Os segundos vão de 0 a 59.'); durSegI.focus(); return; }
-      let t = emMin(mm * 60 + ss), durEst = false;
+      if (hh > 0 && mm > 59) { toast('Com as horas preenchidas, os minutos vão de 0 a 59.'); durMinI.focus(); return; }
+      let t = emMin(hh * 3600 + mm * 60 + ss), durEst = false;
       if (!Number.isFinite(d) || d < 0 || d > 120) { toast('Confira a distância, em quilômetros.'); dist.focus(); return; }
       if (t > 900) { toast('Confira o tempo, em minutos.'); durMinI.focus(); return; }
       const pc = campoPace && modo === 'completo' && r.tipo !== 'teste' && r.tipo !== 'prova' ? lerPace() : 0;
@@ -887,7 +892,7 @@ function formulario(data, planejado, existente, aoFechar) {
         : existente ? 'Registro atualizado.' : reajuste ? 'Corrida registrada! ' + reajuste.textos.join(' ') : 'Corrida registrada! O plano leva em conta.');
       refresh();
     }, 'primary grow', 'check')));
-  return { card, definirTempo: (min) => { if (!durMinI.value.trim() && !durSegI.value.trim()) durMinI.value = String(min); } };
+  return { card, definirTempo: (min) => { if (!durHI.value.trim() && !durMinI.value.trim() && !durSegI.value.trim()) { const m = Math.round(min); if (m >= 60) { durHI.value = String(Math.floor(m / 60)); durMinI.value = String(m % 60); } else durMinI.value = String(m); } } };
 }
 
 // Fazer na esteira / Voltar para a rua. Marcado: o que muda na esteira (poucas linhas), os cuidados de segurança e o

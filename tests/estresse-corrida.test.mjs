@@ -164,7 +164,9 @@ function conferir(p, a, rot, F, adaptado = false) {
     // o longão é o treino mais longo da semana (dentro e fora da janela de ajuste por dor, cada grupo por si)
     const lg = s.dias.find((d) => d.tipo === 'longo');
     if (lg) for (const d of s.dias) if ((d.tipo === 'leve' || d.tipo === 'regenerativo') && !!d.ajustado === !!lg.ajustado && corMin(d) > corMin(lg)) F.add('rodagem mais longa que o longão', `${rot} sem ${w}: ${d.tipo} ${corMin(d)} min > longo ${corMin(lg)} min`);
-    if (lg && corMin(lg) > 152) F.add('treino longo acima de 2h30', `${rot} sem ${w}: ${corMin(lg)} min`);
+    // até 2h30 (Daniels) nas distâncias até 10 km; na meia e na maratona, até o tempo dado, no máximo 3 horas
+    const tetoLongo = pf.dist === 21 || pf.dist === 42 ? Math.min(180, pf.tempoLongoDito || 150) : 150;
+    if (lg && corMin(lg) > tetoLongo + 2) F.add('treino longo acima do teto (2h30; 3 h na meia e na maratona)', `${rot} sem ${w}: ${corMin(lg)} min`);
     // nenhum treino forte dura mais que o longão da mesma semana; regenerativo de até 40 min
     if (lg) for (const d of s.dias) if (d.intensidade !== 'leve' && !ehEv(d) && d.tipo !== 'longo' && !!d.ajustado === !!lg.ajustado && corMin(d) > corMin(lg)) F.add('treino forte mais longo que o longão', `${rot} sem ${w}: ${d.tipo} ${corMin(d)} min > longo ${corMin(lg)} min`);
     for (const d of s.dias) if (d.tipo === 'regenerativo' && corMin(d) > 41) F.add('regenerativo acima de 40 min', `${rot} sem ${w}: ${corMin(d)} min`);

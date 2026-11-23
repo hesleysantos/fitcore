@@ -37,13 +37,13 @@ export default async (page) => {
 
   console.log('2. Um link só, discreto, no fim da semana; nenhum dia vem marcado');
   ok(!(await page.eval(`return document.querySelectorAll('.card.dia .feriado-acao, .card.dia .feriado-linha').length;`)), 'nenhum dia tem botão de feriado nem vem marcado');
-  const estilo = await page.eval(`const b = document.querySelector('.feriado-acao button'); if (!b) return null; const cs = getComputedStyle(b); return { txt: b.textContent.trim(), fundo: cs.backgroundColor, h: Math.round(b.getBoundingClientRect().height), depois: !!(document.querySelector('.semana').compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) };`);
+  const estilo = await page.eval(`const b = [...document.querySelectorAll('.feriado-acao button')].find((x) => /feriado/i.test(x.textContent)); if (!b) return null; const cs = getComputedStyle(b); return { txt: b.textContent.trim(), fundo: cs.backgroundColor, h: Math.round(b.getBoundingClientRect().height), depois: !!(document.querySelector('.semana').compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) };`);
   ok(estilo && estilo.txt === 'Tem feriado nesta semana?' && estilo.depois && /rgba\(0, 0, 0, 0\)|transparent/.test(estilo.fundo) && estilo.h >= 44, 'o link fica depois da semana, discreto e fácil de tocar: ' + JSON.stringify(estilo));
-  await page.eval(`const b = document.querySelector('.feriado-acao button'); b.scrollIntoView({ block: 'center' }); return 1;`);
+  await page.eval(`const b = [...document.querySelectorAll('.feriado-acao button')].find((x) => /feriado/i.test(x.textContent)); b.scrollIntoView({ block: 'center' }); return 1;`);
   await page.shot('feriado/1-semana');
 
   console.log('3. Escolher o dia: o treino do dia vai para outro dia');
-  await page.eval(`document.querySelector('.feriado-acao button').click(); return 1;`);
+  await page.eval(`[...document.querySelectorAll('.feriado-acao button')].find((x) => /feriado/i.test(x.textContent)).click(); return 1;`);
   await page.sleep(500);
   const dataF = (() => { const d = new Date(hoje); d.setDate(d.getDate() + (((dF === 0 ? 7 : dF) - (wd === 0 ? 7 : wd)))); return dk(d); })();
   const chips = await page.eval(`return [...document.querySelectorAll('#folha-feriado [data-dia]')].map((b) => b.dataset.dia);`);

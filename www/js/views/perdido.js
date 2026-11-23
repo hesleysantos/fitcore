@@ -32,7 +32,9 @@ const porQue = (linhas, refs) => h('details', { class: 'pq perdido-pq' }, h('sum
 
 // os botões do motivo (o mesmo conjunto nos dois; "Chuva" só na corrida)
 const MOTIVOS_MUSC = ['tempo', 'cansaco', 'dor', 'doente', 'viagem', 'feriado', 'outro'];
-const MOTIVOS_CORRIDA = ['tempo', 'chuva', 'cansaco', 'dor', 'doente', 'viagem', 'outro'];
+const MOTIVOS_CORRIDA = ['tempo', 'chuva', 'cansaco', 'dor', 'doente', 'viagem', 'feriado', 'outro'];
+// feriado escolhido no "Não treinei" / "Não corri": o dia fica marcado como feriado (nenhum treino vai para ele)
+const comFeriado = (st, motivo, data) => { if (motivo === 'feriado' && !(st.feriados || []).includes(data)) st.feriados = [...(st.feriados || []), data]; };
 function perguntaMotivo(corpo, lista, escolher) {
   corpo.appendChild(h('p', { class: 'bold', text: 'O que aconteceu?' }));
   corpo.appendChild(h('div', { class: 'stats two', role: 'list' },
@@ -115,7 +117,7 @@ export function folhaNaoTreinei(data, aoMudar, opc = {}) {
     const m = P.novaMarca(state, data, hoje, escolha, new Date().toISOString(), { ...fut, para: escolha === 'mover' ? r.alvo : '', motivo: r.motivo });
     s.close();
     if (!m || (escolha === 'mover' && !m.movs.length)) { toast('Não foi possível marcar este treino.'); return; }
-    update((st) => { st.perdidos = P.limparPerdidos([...(st.perdidos || []), m]); });
+    update((st) => { st.perdidos = P.limparPerdidos([...(st.perdidos || []), m]); comFeriado(st, r.motivo, data); });
     const nome = P.planoAtivo(state).dias.find((x) => x.id === m.diaId);
     toast(m.movs.length ? `${nome ? nome.nome : 'O treino'} passou para ${P.nomeDoDia(m.movs[0].para, hoje)}.` : `Marcado. O treino volta ${P.naProxima(data)}.`);
     if (aoMudar) aoMudar();
@@ -207,12 +209,12 @@ export function folhaNaoCorri(data, aoMudar, opc = {}) {
   const naoFeita = () => {
     const m = P.marcaCorrida(data, new Date().toISOString(), r.motivo);
     if (!m) { s.close(); return; }
-    update((st) => { st.perdidos = P.limparPerdidos([...(st.perdidos || []), m]); });
+    update((st) => { st.perdidos = P.limparPerdidos([...(st.perdidos || []), m]); comFeriado(st, r.motivo, data); });
     fim('Marcado. Siga o plano.');
   };
   const mover = () => {
     let ok = false;
-    update((st) => { ok = moverCorrida(st, data, r.alvo, hoje, r.motivo); });
+    update((st) => { ok = moverCorrida(st, data, r.alvo, hoje, r.motivo); if (ok) comFeriado(st, r.motivo, data); });
     if (!ok) { s.close(); toast('Não foi possível mudar a corrida de dia.'); return; }
     fim(`A corrida passou para ${P.nomeDoDia(r.alvo, hoje)}.`);
   };
