@@ -7,14 +7,14 @@ import { EQUIPAMENTOS, CATEGORIAS_EQUIP } from '../data/equipment.js';
 import { REFS } from '../data/knowledge.js';
 import { REFS_CORRIDA } from '../data/corrida.js';
 import { REFS_SONO } from '../data/sono.js';
-import { cancelarAviso, avisoDisponivel, avisoPermitido, pedirPermissaoDeAviso, telaLigadaDisponivel, SONS_ALERTA, SOM_PADRAO, tocarAlerta, unlockAudio, prepararSom } from '../device.js';
+import { cancelarAviso, avisoDisponivel, avisoPermitido, pedirPermissaoDeAviso, telaLigadaDisponivel, faixaDisponivel, SONS_ALERTA, SOM_PADRAO, tocarAlerta, unlockAudio, prepararSom } from '../device.js';
 import { canSuggestInstall, openInstall, isIos } from '../install.js';
 import { entregarArquivo } from './arquivo.js';
 import { abrirExportar } from './exportar.js';
 import { abrirPrivacidade, abrirTermos, blocoPrivacidade, blocoTermos } from './termos.js';
 import { folhaDoNome } from './home.js';
 
-export const APP_VERSAO = '1.26.0';
+export const APP_VERSAO = '1.27.0';
 
 // ---------- Minha academia ----------
 export function gymView() {
@@ -167,10 +167,13 @@ export function settingsView() {
     linha('Falar “Descanso terminado”', isIos() ? 'Junto do som. No iPhone, a música abaixa enquanto a voz fala.' : 'Junto do som, no fim do descanso.', toggle(st.voz !== false, (v) => { set('voz', v); if (v) { unlockAudio(); tocarAlerta(st.somAlerta, 'Descanso terminado'); } }, 'Falar “Descanso terminado”')),
     linha('Vibrar ao fim do descanso', isIos() ? 'O iPhone não deixa páginas vibrarem: o aviso é o som e a tela.' : 'Só no Android.', toggle(st.vibrar, (v) => set('vibrar', v), 'Vibrar ao fim do descanso')),
     // aviso por notificação quando a pessoa troca de aplicativo durante o descanso (só onde o navegador oferece)
-    avisoDisponivel() ? linha('Avisar com o aplicativo em segundo plano', isIos() ? 'Se você sair do aplicativo no descanso, a notificação mostra quanto falta e avisa no fim. No iPhone o sistema pausa o aplicativo: a contagem pode parar e o aviso pode atrasar.' : 'Se você sair do aplicativo no descanso, a notificação mostra quanto falta e avisa no fim.', toggle(!!st.avisoFundo && avisoPermitido(), async (v) => {
+    // fora do app (device.js): no Android, o som e a notificação saem sozinhos, junto da música; no iPhone, o sistema pausa
+    // o app, e só a faixa de áudio toca com a tela bloqueada (pausando a música)
+    faixaDisponivel() ? linha('Som com a tela bloqueada', (isIos() ? 'No iPhone, o app para quando sai da tela. Com isto ligado, o descanso toca como uma faixa de áudio e o som do fim sai mesmo com a tela bloqueada.' : 'O aviso já sai fora do app, junto da música. Se no seu aparelho ele falhar, ligue isto: o descanso toca como uma faixa de áudio.') + ' A sua música pausa durante o descanso.', toggle(!!st.somFaixa, (v) => { set('somFaixa', v); if (!v) cancelarAviso(); }, 'Som com a tela bloqueada')) : null,
+    avisoDisponivel() ? linha('Notificação do descanso', isIos() ? 'Ao sair do app, mostra a hora do fim. O aviso do fim, no iPhone, só sai com “Som com a tela bloqueada” ligado.' : 'Ao sair do app, mostra a hora do fim e avisa quando acabar.', toggle(!!st.avisoFundo && avisoPermitido(), async (v) => {
       if (!v) { set('avisoFundo', false); return; }
       if (await pedirPermissaoDeAviso()) { set('avisoFundo', true); toast('Aviso ligado.'); } else { set('avisoFundo', false); toast('O navegador não deu permissão para notificações. Libere nas configurações do site e tente de novo.'); refresh(); }
-    }, 'Avisar com o aplicativo em segundo plano')) : null));
+    }, 'Notificação do descanso')) : null));
   body.push(h('div', { class: 'card row between' }, h('div', { class: 'grow' }, h('div', { class: 'bold', text: 'Descanso padrão' }), h('div', { class: 'small muted', text: 'Para o treino livre, em segundos.' })), stepper({ value: st.descanso, min: 15, max: 600, step: 15, label: 'Descanso padrão em segundos', cls: 'sm', onChange: (v) => set('descanso', v) })));
 
   body.push(sectionTitle('Seus dados'));
@@ -212,7 +215,7 @@ export function settingsView() {
 // ---------- Sobre ----------
 export function aboutView() {
   const body = [];
-  body.push(h('div', { class: 'card col center' }, h('img', { src: 'icons/icon-192.png', alt: '', width: 72, height: 72, class: 'appic-l' }), h('h2', { text: 'FitCore — Treino e Nutrição' }), h('p', { class: 'small muted', text: `Versão ${APP_VERSAO}` })));
+  body.push(h('div', { class: 'card col center' }, ...['claro', 'escuro'].map((v) => h('img', { src: `icons/logo-${v}.png`, alt: 'FitCore', width: 720, height: 584, class: 'logo-sobre so-' + v })), h('h2', { text: 'Treino e Nutrição' }), h('p', { class: 'small muted', text: `Versão ${APP_VERSAO}` })));
   const bloco = (titulo, ps) => { const d = h('details', { class: 'acc' }, h('summary', { text: titulo })); const inner = h('div'); for (const p of ps) inner.appendChild(typeof p === 'string' ? h('p', { text: p }) : p); d.appendChild(inner); return d; };
   // os mesmos textos das folhas de Privacidade e Termos de uso de Ajustes (views/termos.js)
   body.push(bloco('Termos de uso e aviso de saúde', blocoTermos()));

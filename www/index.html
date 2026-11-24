@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="format-detection" content="telephone=no">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/favicon-48.png" sizes="48x48" type="image/png">
   <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="css/app.css">
@@ -26,7 +26,8 @@
   <link rel="stylesheet" href="css/chat.css">
 </head>
 <body>
-  <div id="app"><div class="view"><p class="muted center mt-l">Carregando…</p></div></div>
+  <div id="abertura" aria-hidden="true"><img class="so-claro" src="icons/logo-claro.png" alt="" width="720" height="584"><img class="so-escuro" src="icons/logo-escuro.png" alt="" width="720" height="584"></div>
+  <div id="app"><div class="view carregando"><img class="so-claro" src="icons/simbolo-claro.png" alt="" width="256" height="246"><img class="so-escuro" src="icons/simbolo-escuro.png" alt="" width="256" height="246"><p class="muted center">Carregando…</p></div></div>
   <noscript><p class="center">Este aplicativo precisa de JavaScript ativado para funcionar.</p></noscript>
   <script type="module" src="js/main.js"></script>
 </body>

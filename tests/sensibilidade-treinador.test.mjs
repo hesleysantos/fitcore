@@ -36,10 +36,11 @@ const todosDiferentes = (lista, rot) => { const s = new Set(lista); assert.equal
 const p0 = gerarPlano(base, GYM, 0);
 
 test('todas as perguntas da entrevista estão cobertas por este arquivo', () => {
-  assert.deepEqual(PERGUNTAS.map((q) => q.k), ['objetivo', 'idade', 'condicoes', 'triagem', 'remedios', 'experiencia', 'pausa', 'liberado', 'peso', 'altura', 'semTreino', 'tempo', 'local', 'extras', 'limitacoes', 'foco'], 'pergunta nova na entrevista: acrescente o teste de sensibilidade dela');
+  assert.deepEqual(PERGUNTAS.map((q) => q.k), ['objetivo', 'idade', 'condicoes', 'triagem', 'remedios', 'experiencia', 'pausa', 'liberado', 'peso', 'altura', 'preferidos', 'semTreino', 'tempo', 'local', 'extras', 'limitacoes', 'foco'], 'pergunta nova na entrevista: acrescente o teste de sensibilidade dela');
   assert.deepEqual(opcoes('objetivo'), ['hipertrofia', 'emagrecimento', 'forca', 'saude', 'resistencia']);
   assert.deepEqual(opcoes('experiencia'), ['nunca', 'iniciante', 'intermediario', 'avancado']);
   assert.deepEqual(opcoes('pausa'), ['treinando', '2a4s', '1a3m', '3a6m', 'mais6m']);
+  assert.deepEqual(opcoes('preferidos'), ['1', '2', '3', '4', '5', '6', '0']);
   assert.deepEqual(opcoes('semTreino'), ['1', '2', '3', '4', '5', '6', '0', 'nenhum']);
   assert.deepEqual(opcoes('tempo'), ['30', '45', '60', '75']);
   assert.deepEqual(opcoes('local'), ['completa', 'minha', 'halteres', 'corporal']);

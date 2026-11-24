@@ -1,12 +1,13 @@
 // Os dias de cada treino. Puro: sem DOM e sem importar o estado.
-// Cada entrevista pergunta só os dias dela, numa pergunta só: a do Treinador, em quais dias a pessoa NÃO pode fazer
-// musculação (semTreino; o treinador escolhe quantos treinos cabem nos outros — logic/trainer.js, diasRecomendados); a da
-// corrida, em quais dias pode correr (logic/corrida.js, pergunta "dias"). Os dois planos se combinam depois (logic/trainer.js:
-// pernas longe das corridas mais fortes; o mesmo dia pode ter os dois treinos). Os dias sem musculação valem para a
-// musculação, o fortalecimento e o treino perdido de musculação.
+// Cada entrevista pergunta os dias do seu treino, em duas perguntas: os dias em que a pessoa PREFERE treinar (preferidos) e
+// os dias em que ela NÃO pode de jeito nenhum (semTreino na musculação; semCorrida na corrida — logic/corrida.js). O
+// treinador escolhe quantos treinos fazer (logic/trainer.js, diasRecomendados) e usa primeiro os dias preferidos; para
+// deixar as pernas longe da corrida forte e do longo, pode pôr um treino num outro dia livre, nunca num dia proibido.
+// Os dias sem musculação valem para a musculação, o fortalecimento e o treino perdido de musculação.
 // Respostas antigas: semTreino guardado na entrevista da corrida (valia para os dois treinos) e "Em algum desses dias você
 // ainda quer correr?" (soCorrida). Continuam valendo até a entrevista ser refeita.
 // Ids: '0' = domingo ... '6' = sábado (os mesmos da pergunta de dias da corrida); 'nenhum' = treina em qualquer dia.
+// Respostas de antes da pergunta dos preferidos: todos os dias livres contam como preferidos (o plano fica como era).
 //
 // Limite: até 5 dias fora, para sobrarem os 2 dias livres do menor plano do Treinador (2 treinos por semana). As regras de
 // descanso continuam as de sempre (48 horas entre treinos do mesmo músculo — ref garber2011; força em dias não seguidos
@@ -20,13 +21,30 @@ export const NOME_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'se
 const ORDEM = [1, 2, 3, 4, 5, 6, 0];
 const OP_DIAS = [['1', 'Segunda', ''], ['2', 'Terça', ''], ['3', 'Quarta', ''], ['4', 'Quinta', ''], ['5', 'Sexta', ''], ['6', 'Sábado', ''], ['0', 'Domingo', '']];
 
-// A pergunta da entrevista do Treinador (até 5 dias: sobram os 2 do menor plano). Opcional: respostas salvas antes dela
-// valem como "nenhum".
-export const perguntaSemTreino = () => ({
-  k: 'semTreino', tipo: 'varios', opcional: true, titulo: 'Tem algum dia em que você não pode fazer musculação?',
-  ajuda: 'Nos outros dias, eu escolho quantos treinos fazer. A corrida tem os dias dela.', nenhum: NENHUM, max: MAX_BLOQUEADOS, unidade: ['dia', 'dias'],
-  op: [...OP_DIAS, [NENHUM, 'Nenhum, qualquer dia serve', '']],
+// dias marcados numa resposta de dias ('0' a '6', sem repetir, na ordem da semana)
+const marcadosDe = (v) => (Array.isArray(v) ? OP_DIAS.map((o) => o[0]).filter((x) => v.includes(x)) : []);
+// As duas perguntas da entrevista do Treinador. A segunda só mostra os dias que não foram marcados na primeira (um dia não
+// pode ser preferido e proibido) e não aparece quando os 7 são preferidos. Até 5 dias proibidos: sobram os 2 do menor plano.
+export const perguntaPreferidos = (treino = 'fazer musculação', op = OP_DIAS) => ({
+  k: 'preferidos', tipo: 'varios', opcional: true, titulo: `Em quais dias você prefere ${treino}?`,
+  ajuda: treino === 'correr' ? 'Eu escolho quantas corridas fazer e uso estes dias primeiro.' : 'Eu escolho quantos treinos fazer e uso estes dias primeiro.',
+  unidade: ['dia', 'dias'], op,
 });
+export const perguntaSemTreino = () => ({
+  k: 'semTreino', tipo: 'varios', opcional: true, se: (a) => marcadosDe(a && a.preferidos).length < 7,
+  titulo: 'Tem algum dia em que você não pode fazer musculação de jeito nenhum?',
+  ajuda: 'Nesses dias, nenhum treino. Nos outros, eu posso pôr um treino para afastar as pernas da corrida forte.', nenhum: NENHUM, max: MAX_BLOQUEADOS, unidade: ['dia', 'dias'],
+  op: [...OP_DIAS.map((o) => [...o, (a) => !marcadosDe(a && a.preferidos).includes(o[0])]), [NENHUM, 'Nenhum', '']],
+});
+// Dias preferidos (números de 0 a 6, na ordem da semana), fora os proibidos; null quando a resposta não tem a pergunta
+// (respostas antigas: todos os dias livres valem como preferidos).
+export function preferidosDe(respostas, bloqueados = []) {
+  const v = respostas && typeof respostas === 'object' ? respostas.preferidos : null;
+  if (!Array.isArray(v) || !v.length) return null;
+  const b = new Set(bloqueados);
+  const l = marcadosDe(v).map(Number).filter((w) => !b.has(w));
+  return ORDEM.filter((w) => l.includes(w));
+}
 // As perguntas antigas, só para a validação das respostas guardadas (store.js e logic/corrida.js): não aparecem mais nas
 // entrevistas, mas a resposta continua valendo até a entrevista ser refeita.
 export const PERGUNTAS_DIAS_ANTIGAS = [
@@ -43,9 +61,11 @@ export function soCorridaDe(respostas) {
 // dias sem corrida: os sem treino, menos os que ficaram só para a corrida
 export const semCorridaDe = (respostas) => { const so = soCorridaDe(respostas); return bloqueadosDe(respostas).filter((w) => !so.includes(w)); };
 const respostasDe = (st, k) => (st && st[k] && st[k].answers && typeof st[k].answers === 'object' ? st[k].answers : null);
-// Dias sem corrida do estado: só os da resposta antiga da própria entrevista da corrida (na nova, os dias de corrida são a
-// pergunta "dias", e o plano usa só eles)
-export const diasSemCorrida = (st) => semCorridaDe(respostasDe(st, 'run'));
+// Dias sem corrida do estado: os da entrevista da corrida (semCorrida) e, nas respostas antigas, os dias sem treino que
+// valiam para os dois treinos
+export const diasSemCorrida = (st) => { const r = respostasDe(st, 'run'); return ORDEM.filter((w) => semCorridaNova(r).includes(w) || semCorridaDe(r).includes(w)); };
+// Dias preferidos da musculação no estado (null: sem a pergunta, todos os dias livres)
+export const diasPreferidos = (st) => preferidosDe(respostasDe(st, 'trainer'), diasBloqueados(st));
 // As respostas antigas de dias saem da entrevista guardada (as perguntas antigas não são mais feitas)
 export function limparDiasAntigos(respostas) {
   if (respostas && typeof respostas === 'object') { delete respostas.semTreino; delete respostas.soCorrida; }
@@ -83,17 +103,23 @@ export function aplicarDiasNosTreinos(s) {
   return r.movidos.map((m) => `${nome(m.diaId)} passou de ${nomesDosDias([m.de])} para ${nomesDosDias([m.para])}.`).join(' ') + (r.sobrou.length ? ' Sem dia livre para ' + r.sobrou.map(nome).join(', ') + ': escolha na aba Treinos.' : '');
 }
 
-// Dias sem musculação de um conjunto de respostas: números de 0 a 6, na ordem da semana (no máximo 5).
-export function bloqueadosDe(respostas) {
-  const v = respostas && typeof respostas === 'object' ? respostas.semTreino : null;
+// Dias proibidos de uma resposta (chave k): números de 0 a 6, na ordem da semana. Um dia também marcado como preferido
+// não conta (a pessoa voltou e mudou a primeira pergunta).
+function proibidosDe(respostas, k, max) {
+  const v = respostas && typeof respostas === 'object' ? respostas[k] : null;
   if (!Array.isArray(v) || v.includes(NENHUM)) return [];
-  const s = new Set(v.filter((x) => typeof x === 'string' && /^[0-6]$/.test(x)).map(Number));
-  return ORDEM.filter((w) => s.has(w)).slice(0, MAX_BLOQUEADOS);
+  const pref = new Set(marcadosDe(respostas.preferidos));
+  const s = new Set(v.filter((x) => typeof x === 'string' && /^[0-6]$/.test(x) && !pref.has(x)).map(Number));
+  return ORDEM.filter((w) => s.has(w)).slice(0, max);
 }
+// Dias sem musculação de um conjunto de respostas: números de 0 a 6, na ordem da semana (no máximo 5).
+export const bloqueadosDe = (respostas) => proibidosDe(respostas, 'semTreino', MAX_BLOQUEADOS);
+// Dias sem corrida da entrevista da corrida (semCorrida, até 6 dias)
+export const semCorridaNova = (respostas) => proibidosDe(respostas, 'semCorrida', 6);
 // Dias sem musculação do estado (a resposta do Treinador; sem ela, a resposta antiga da corrida, que valia para os dois)
 export const diasBloqueados = (st) => {
   const t = respostasDe(st, 'trainer');
-  if (t && Array.isArray(t.semTreino)) return bloqueadosDe(t);
+  if (t && (Array.isArray(t.semTreino) || Array.isArray(t.preferidos))) return bloqueadosDe(t);
   return bloqueadosDe(respostasDe(st, 'run'));
 };
 // quantos dias livres sobram na semana

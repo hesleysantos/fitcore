@@ -638,9 +638,10 @@ function respostasCorrida(r) {
     else if (q.k === 'triagem') a[q.k] = ['nenhum'];
     else if (q.k === 'remedios') a[q.k] = ['nenhum'];
     else if (q.k === 'limitacoes') a[q.k] = ['nenhuma'];
-    else if (q.k === 'semCorrida') a[q.k] = um(r, [['2', '4', '6', '0'], ['1', '3', '5'], ['0'], ['1', '2', '3', '4', '5']]);
+    else if (q.k === 'preferidos') a[q.k] = um(r, [['1', '2', '3', '4', '5', '6', '0'], ['1', '3', '5', '6'], ['2', '4', '6', '0'], ['1', '2', '3', '4', '6', '0']]);
+    else if (q.k === 'semCorrida') a[q.k] = um(r, [['nenhum'], ['0'], ['5']]);
     else if (q.k === 'idade') a[q.k] = inteiro(r, 12, 80);
-    else if (q.k === 'semanasProva') a[q.k] = inteiro(r, 1, 20);
+    else if (q.k === 'semanasProva') a[q.k] = inteiro(r, 1, 10); // prova mais perto: a semana da prova aparece no sorteio
     else if (q.tipo === 'numero') a[q.k] = q.padrao ?? q.min;
     else if (q.tipo === 'um') a[q.k] = um(r, q.op)[0];
     else a[q.k] = [um(r, q.op)[0]];

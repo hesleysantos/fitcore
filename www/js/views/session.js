@@ -16,7 +16,7 @@ import { barrarSemTreino, avisoDoTreino } from './saude-fora.js';
 import { efeitoDeHoje } from '../logic/saude-fora.js';
 import { itensDoDia as itensDaSemana } from '../logic/ajuste-semana.js';
 import { reajustarDepoisDoTreino } from '../logic/perdido.js';
-import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate, agendarAviso, cancelarAviso, fimDoDescanso, alertaDoDescanso } from '../device.js';
+import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate, agendarAviso, cancelarAviso, fimDoDescanso, alertaDoDescanso, manterNoFundo } from '../device.js';
 
 // ---------- carga recomendada ----------
 // Perfil para a carga inicial (logic/carga.js): as respostas do Treinador (com a proteção das outras entrevistas), o sexo
@@ -206,6 +206,7 @@ export function sessionView() {
   let work = null; // cronômetro de exercício por tempo: { i, j, end, total }
   const setWork = (w) => {
     work = w;
+    manterNoFundo('serie', !!w); // série por tempo correndo: o app continua vivo em segundo plano (device.js)
     cronometro = w && state.current ? { sid: state.current.id, it: state.current.itens[w.i], j: w.j, end: w.end, total: w.total } : null;
     // também fica gravado no treino em andamento, para não se perder se a página for recarregada
     update((s) => { if (s.current) s.current.cron = w && s.current.itens[w.i] ? { i: w.i, j: w.j, end: w.end, total: w.total, ex: s.current.itens[w.i].ex } : null; });
@@ -227,6 +228,9 @@ export function sessionView() {
   }
   let alarmed = false;
   let doneUntil = 0;
+  // descanso que já estava correndo (tela reaberta ou página recarregada): o relógio do app volta a vigiar o fim
+  if (cur.restEnd && cur.restEnd > Date.now()) agendarAviso(cur.restEnd);
+  if (work) manterNoFundo('serie', true);
 
   const elapsed = h('span', { class: 'timer-big', 'aria-label': 'Tempo de treino' });
   const cards = h('div', { class: 'col gap-l' });
@@ -668,6 +672,7 @@ export function sessionView() {
       document.removeEventListener('visibilitychange', onVis);
       for (const ev of TOQUES) document.removeEventListener(ev, liberarSom, true);
       for (const parar of [...repeticoes]) parar();
+      manterNoFundo('serie', false);
       keepAwake(false);
     },
   };

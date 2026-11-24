@@ -7,7 +7,9 @@ import { respostasParaEntrevista } from '../logic/saude.js';
 import { diasSemCorrida, aplicarDiasNosTreinos, limparDiasAntigos } from '../logic/dias-livres.js';
 import { cartaoDores } from './dor.js';
 import { barChart } from './charts.js';
-import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate } from '../device.js';
+import { keepAwake, unlockAudio, beep, tocarAlerta, vibrate, manterNoFundo } from '../device.js';
+// cronômetro da corrida rodando: tela ligada e, em segundo plano, o app continua vivo para apitar nas trocas (device.js)
+const cronLigado = (on) => { keepAwake(on); manterNoFundo('corrida', on); };
 import { buscarFaq } from '../data/knowledge.js';
 import { REFS_CORRIDA, FAQ_CORRIDA, TIPOS_TREINO, FONTES_TELA } from '../data/corrida.js';
 import {
@@ -522,14 +524,17 @@ export function corridaView() {
     // as respostas guardadas, mais o que as outras entrevistas disseram sobre a saúde (a pessoa confere e desmarca)
     const pre = respostasParaEntrevista('corrida', state);
     for (const k of ['idade', 'peso', 'altura']) if (pre[k] == null) { const v = typeof state.trainer.answers[k] === 'number' ? state.trainer.answers[k] : state.nutri.answers[k]; if (typeof v === 'number') pre[k] = v; }
-    // (as perguntas antigas de dias sem treino não são mais feitas: os dias da corrida são a pergunta "dias")
-    // a pergunta é sobre os dias em que NÃO pode correr: quem respondeu a antiga ("em quais dias pode") já vem com os
-    // outros dias marcados; quem marcou os 7, com "Nenhum" e o pedido de correr todo dia
-    if (!Array.isArray(pre.semCorrida) && Array.isArray(pre.dias) && pre.dias.length) {
+    // Os dias: preferidos e proibidos (logic/dias-livres.js). Respostas antigas já vêm marcadas: os dias em que podia correr
+    // viram os preferidos (quem marcou os 7, com o pedido de correr todo dia); os dias sem treino antigos, os proibidos.
+    if (!Array.isArray(pre.preferidos) || !pre.preferidos.length) {
+      const antiga = !Array.isArray(pre.semCorrida) && Array.isArray(pre.dias) && pre.dias.length;
       const pode = diasDaCorrida(pre);
-      const fora = ['1', '2', '3', '4', '5', '6', '0'].filter((x) => !pode.includes(x));
-      pre.semCorrida = fora.length ? fora.slice(0, 6) : ['nenhum'];
-      if (!fora.length && pre.todoDia == null) pre.todoDia = 'sim';
+      if (antiga || (Array.isArray(pre.semCorrida) && pre.semCorrida.length)) pre.preferidos = pode;
+      if (antiga) {
+        const proibidos = diasSemCorrida({ run: { answers: pre } }).map(String);
+        pre.semCorrida = proibidos.length ? proibidos : ['nenhum'];
+        if (pode.length === 7 && pre.todoDia == null) pre.todoDia = 'sim';
+      }
     }
     if (!Array.isArray(pre.semCorrida) || !pre.semCorrida.length) pre.semCorrida = ['nenhum'];
     limparDiasAntigos(pre);
@@ -635,7 +640,7 @@ function cronometro(data, treino, aoTerminar, esteira = null) {
     if (cron.i >= passos.length) {
       cron.i = passos.length - 1; cron.terminado = t;
       if (aviso) { tocarAlerta(); vibrate([300, 150, 300, 150, 300]); }
-      keepAwake(false); gravar(); desenhar(); aoTerminar(Math.max(1, Math.round(decorrido() / 60)));
+      cronLigado(false); gravar(); desenhar(); aoTerminar(Math.max(1, Math.round(decorrido() / 60)));
       return;
     }
     iniciarPasso(t);
@@ -656,7 +661,7 @@ function cronometro(data, treino, aoTerminar, esteira = null) {
       tempo.textContent = temTotal ? fmtClock(passos.reduce((x, p) => x + p.seg, 0)) : `≈ ${treino.durMin} min`;
       sub.textContent = !temTotal ? 'As etapas por distância contam o tempo para cima: toque em “Próxima” quando completar a distância.' : passos.length > 1 ? `${passos.length} etapas. O aparelho apita e vibra a cada troca.` : 'Conta o tempo do treino e avisa no fim.';
       prox.textContent = '';
-      acoes.appendChild(btn('Iniciar', () => { unlockAudio(); cron = { data, i: 0, fim: 0, pausadoEm: 0, inicio: agora(), parado: 0, inicioPasso: 0, terminado: 0, chave }; iniciarPasso(cron.inicio); keepAwake(true); beep(1); gravar(); desenhar(); }, 'primary lg grow', 'play'));
+      acoes.appendChild(btn('Iniciar', () => { unlockAudio(); cron = { data, i: 0, fim: 0, pausadoEm: 0, inicio: agora(), parado: 0, inicioPasso: 0, terminado: 0, chave }; iniciarPasso(cron.inicio); cronLigado(true); beep(1); gravar(); desenhar(); }, 'primary lg grow', 'play'));
       return;
     }
     if (cron.terminado) {
@@ -673,11 +678,11 @@ function cronometro(data, treino, aoTerminar, esteira = null) {
     prox.textContent = n ? `Depois: ${n.rotulo.toLowerCase()}${n.seg ? ' · ' + fmtClock(n.seg) : ''}${n.vel ? ' · ' + n.vel : ''}` : 'Última etapa';
     acoes.appendChild(btn(cron.pausadoEm ? 'Continuar' : 'Pausar', () => {
       unlockAudio();
-      if (cron.pausadoEm) { const d = agora() - cron.pausadoEm; cron.parado += d; if (cron.fim) cron.fim += d; cron.inicioPasso += d; cron.pausadoEm = 0; keepAwake(true); } else { cron.pausadoEm = agora(); keepAwake(false); }
+      if (cron.pausadoEm) { const d = agora() - cron.pausadoEm; cron.parado += d; if (cron.fim) cron.fim += d; cron.inicioPasso += d; cron.pausadoEm = 0; cronLigado(true); } else { cron.pausadoEm = agora(); cronLigado(false); }
       gravar(); desenhar();
     }, 'grow', cron.pausadoEm ? 'play' : 'pause'));
     acoes.appendChild(btn('Próxima', () => { unlockAudio(); const t = cron.pausadoEm || agora(); avancar(t, false); if (!cron.terminado) { gravar(); desenhar(); } }, 'grow ghost', 'right'));
-    acoes.appendChild(btn('Encerrar', async () => { if (await confirmSheet({ title: 'Encerrar o cronômetro?', text: 'O tempo corrido até aqui vai para o registro.', okLabel: 'Encerrar' })) { cron.terminado = cron.pausadoEm || agora(); keepAwake(false); gravar(); desenhar(); aoTerminar(Math.max(1, Math.round(decorrido() / 60))); } }, 'ghost', 'close'));
+    acoes.appendChild(btn('Encerrar', async () => { if (await confirmSheet({ title: 'Encerrar o cronômetro?', text: 'O tempo corrido até aqui vai para o registro.', okLabel: 'Encerrar' })) { cron.terminado = cron.pausadoEm || agora(); cronLigado(false); gravar(); desenhar(); aoTerminar(Math.max(1, Math.round(decorrido() / 60))); } }, 'ghost', 'close'));
     tique();
   }
   function tique() {
@@ -692,7 +697,7 @@ function cronometro(data, treino, aoTerminar, esteira = null) {
   clearInterval(cronT);
   cronT = setInterval(tique, 250);
   box.appendChild(fase); box.appendChild(tempo); box.appendChild(sub); box.appendChild(prox); box.appendChild(acoes);
-  if (cron && !cron.terminado && !cron.pausadoEm) { alcancar(); if (cron && !cron.terminado) keepAwake(true); }
+  if (cron && !cron.terminado && !cron.pausadoEm) { alcancar(); if (cron && !cron.terminado) cronLigado(true); }
   desenhar();
   return box;
 }
@@ -911,7 +916,7 @@ function formulario(data, planejado, existente, aoFechar) {
         }
         if (s.dores.length > MAX_DORES) s.dores.splice(0, s.dores.length - MAX_DORES);
       });
-      if (!state.run.cron) { clearInterval(cronT); cronT = 0; keepAwake(false); }
+      if (!state.run.cron) { clearInterval(cronT); cronT = 0; cronLigado(false); }
       guardarMostrado();
       toast(soDorMuscularLeve(limpo.dores) ? 'Corrida registrada. Parece dor muscular comum de treino: costuma piorar em 1 a 3 dias e passar em até uma semana.'
         : existente ? 'Registro atualizado.' : reajuste ? 'Corrida registrada! ' + reajuste.textos.join(' ') : 'Corrida registrada! O plano leva em conta.');
@@ -1022,5 +1027,5 @@ export function corridaDiaView(data) {
   desenhar();
   body.push(area);
   if (!futuro && data !== hoje) body.push(btn('Registrar uma corrida de hoje', () => go('corrida/dia/' + hoje), 'block ghost sm', 'plus'));
-  return { title: 'Corrida', back: 'corrida', body, cleanup: () => { clearInterval(cronT); cronT = 0; const c = state.run.cron; if (!c || c.terminado || c.pausadoEm) keepAwake(false); } };
+  return { title: 'Corrida', back: 'corrida', body, cleanup: () => { clearInterval(cronT); cronT = 0; const c = state.run.cron; if (!c || c.terminado || c.pausadoEm) cronLigado(false); } };
 }

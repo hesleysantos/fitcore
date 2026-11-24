@@ -5,7 +5,7 @@
 // Na proposta: o resumo, os avisos, os treinos da semana (fechados, um toque abre os exercícios) e o botão de aceitar.
 import { h, btn, icon, note, badge, sectionTitle, toggle, toast, confirmSheet, plural, dateKey, uid, DIAS_CURTO, DIAS_LONGO } from '../ui.js';
 import { state, update, activePlan } from '../store.js';
-import { aplicarDiasNosTreinos } from '../logic/dias-livres.js';
+import { aplicarDiasNosTreinos, bloqueadosDe } from '../logic/dias-livres.js';
 import { go, refresh } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { FAQ_TREINO } from '../data/knowledge.js';
@@ -138,6 +138,7 @@ function perfilCard(a, pf, extra) {
     pf.retorno ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Parado antes de voltar' }), h('span', { text: ROTULO.pausa[a.pausa] })) : null,
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Frequência' }), h('span', { text: `${plural(pf.dias, 'dia', 'dias')} por semana · ${pf.tempo >= 75 ? 'mais de 1 h' : pf.tempo + ' min'}` })),
     // dias em que a pessoa não treina (vale também para a corrida)
+    pf.preferidos && pf.preferidos.length < 7 ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Dias preferidos' }), h('span', { text: pf.preferidos.map((w) => DIAS_CURTO[w]).join(', ') })) : null,
     pf.bloqueados.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Sem musculação' }), h('span', { text: pf.bloqueados.map((w) => DIAS_CURTO[w]).join(', ') })) : null,
     h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Local' }), h('span', { text: ROTULO.local[a.local] })),
     pf.extras.length ? h('div', { class: 'kv' }, h('span', { class: 'muted', text: 'Também tem' }), h('span', { text: pf.extras.map((x) => ROTULO.extras[x] || x).join(', ') })) : null,
@@ -461,7 +462,11 @@ export function trainerView() {
     for (const k of ['idade', 'peso', 'altura']) if (pre[k] == null) { const v = typeof state.run.answers[k] === 'number' ? state.run.answers[k] : n[k]; if (typeof v === 'number') pre[k] = v; }
     // o objetivo começa igual ao da alimentação (o usuário pode trocar)
     if (pre.objetivo == null && treinoPara(n.objetivo)) pre.objetivo = treinoPara(n.objetivo);
-    // dias sem musculação: o padrão é "Nenhum" (qualquer dia serve); respostas antigas, sem a pergunta, também
+    // dias preferidos: nas respostas de antes da pergunta, os dias livres; dias sem musculação: o padrão é "Nenhum"
+    if ((!Array.isArray(pre.preferidos) || !pre.preferidos.length) && Array.isArray(pre.semTreino) && pre.semTreino.length) {
+      const b = bloqueadosDe(pre);
+      pre.preferidos = ['1', '2', '3', '4', '5', '6', '0'].filter((x) => !b.includes(Number(x)));
+    }
     if (!Array.isArray(pre.semTreino) || !pre.semTreino.length) pre.semTreino = ['nenhum'];
     return {
       title: 'Treinador', body: [interview({

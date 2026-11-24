@@ -55,11 +55,18 @@ function confere(p, bloq, pf, rot) {
   }
 }
 
-test('a pergunta: uma só, "Tem algum dia em que você não pode fazer musculação?", com "Nenhum" por último; até 5 dias', () => {
+test('as duas perguntas: dias preferidos e dias proibidos ("de jeito nenhum"), com "Nenhum" por último; até 5 dias', () => {
+  const pref = PERGUNTAS.find((x) => x.k === 'preferidos');
   const q = PERGUNTAS.find((x) => x.k === 'semTreino');
-  assert.ok(q && q.opcional && q.tipo === 'varios' && q.nenhum === 'nenhum' && /não pode fazer musculação/.test(q.titulo));
+  assert.ok(pref && pref.tipo === 'varios' && /prefere fazer musculação/.test(pref.titulo));
+  assert.equal(PERGUNTAS.indexOf(pref) + 1, PERGUNTAS.indexOf(q), 'a de preferência vem logo antes');
+  assert.ok(q && q.opcional && q.tipo === 'varios' && q.nenhum === 'nenhum' && /não pode fazer musculação de jeito nenhum/.test(q.titulo));
   assert.deepEqual(q.op.map((o) => o[0]), ['1', '2', '3', '4', '5', '6', '0', 'nenhum']);
-  assert.deepEqual(perguntaSemTreino().op, q.op);
+  assert.deepEqual(perguntaSemTreino().op.map((o) => o[0]), q.op.map((o) => o[0]));
+  // a segunda só mostra os dias que não são preferidos, e some quando os 7 são preferidos
+  const vis = (a) => q.op.filter((o) => typeof o[3] !== 'function' || o[3](a)).map((o) => o[0]);
+  assert.deepEqual(vis({ preferidos: ['1', '3', '5'] }), ['2', '4', '6', '0', 'nenhum']);
+  assert.ok(!q.se({ preferidos: ['1', '2', '3', '4', '5', '6', '0'] }) && q.se({ preferidos: ['1'] }) && q.se({}));
   // não há mais "quantos dias" nem as perguntas de dias das versões anteriores: o treinador escolhe quantos treinos
   for (const k of ['dias', 'diasMusc', 'soCorrida']) assert.ok(!PERGUNTAS.some((x) => x.k === k), k);
   for (const k of ['semTreino', 'diasMusc', 'soCorrida']) assert.ok(!P_CORRIDA.some((x) => x.k === k), 'corrida: ' + k);
@@ -315,4 +322,58 @@ test('mudar os dias da musculação tira o treino do dia que saiu; a corrida nã
   // sem dia livre: o treino fica de fora e a frase pede para escolher
   const r = ajustarAgenda({ 1: 'a', 2: 'b' }, [0, 2, 3, 4, 5, 6].slice(0, 5).concat());
   assert.ok(r.movidos.length + r.sobrou.length === 1);
+});
+
+// ---------- dias preferidos (a primeira das duas perguntas de cada entrevista) ----------
+const semDias = (a) => { const { dias, ...r } = a; return r; };
+const agendaDe = (p) => Object.keys(p.agenda).map(Number).sort((x, y) => x - y);
+test('preferidos: o treinador usa os dias preferidos; com menos dias que a recomendação, fica neles (mínimo 2) e explica', () => {
+  const ini = semDias({ ...base, experiencia: 'iniciante', objetivo: 'emagrecimento' }); // recomendação: 3 treinos
+  // 3 preferidos: os 3 treinos neles
+  assert.deepEqual(agendaDe(gerarPlano({ ...ini, preferidos: ['1', '3', '5'], semTreino: ['nenhum'] }, GYM)), [1, 3, 5]);
+  assert.deepEqual(agendaDe(gerarPlano({ ...ini, preferidos: ['2', '4', '6'], semTreino: ['nenhum'] }, GYM)), [2, 4, 6]);
+  // 5 preferidos: 3 treinos, todos em dias preferidos
+  const p5 = gerarPlano({ ...ini, preferidos: ['1', '2', '3', '4', '5'], semTreino: ['nenhum'] }, GYM);
+  assert.equal(agendaDe(p5).length, 3);
+  assert.ok(agendaDe(p5).every((w) => [1, 2, 3, 4, 5].includes(w)));
+  // 2 preferidos: 2 treinos, e o aviso diz quantos indicaria
+  const p2 = gerarPlano({ ...ini, preferidos: ['2', '5'], semTreino: ['nenhum'] }, GYM);
+  assert.deepEqual(agendaDe(p2), [2, 5]);
+  assert.ok(p2.avisos.some((x) => /nos dias que você prefere\. Eu indicaria 3/.test(x.texto)), JSON.stringify(p2.avisos.map((x) => x.texto)));
+  // 1 preferido: o mínimo de 2 treinos, o outro fora, nunca num dia proibido
+  const p1 = gerarPlano({ ...ini, preferidos: ['3'], semTreino: ['5', '6'] }, GYM);
+  assert.equal(agendaDe(p1).length, 2);
+  assert.ok(agendaDe(p1).includes(3) && !agendaDe(p1).some((w) => w === 5 || w === 6));
+  assert.ok(p1.avisos.some((x) => /mínimo é 2 treinos/.test(x.texto)));
+  // os 7 preferidos: o mesmo plano de quem não tem a pergunta (resposta antiga)
+  const r = { ...ini, semTreino: ['nenhum'] };
+  assert.deepEqual(agendaDe(gerarPlano({ ...r, preferidos: ['1', '2', '3', '4', '5', '6', '0'] }, GYM)), agendaDe(gerarPlano(r, GYM)));
+  // um dia preferido também marcado como proibido (a pessoa voltou e mudou a primeira): vale a preferência
+  assert.deepEqual(bloqueadosDe({ preferidos: ['1', '2'], semTreino: ['2', '6'] }), [6]);
+});
+test('preferidos com corrida: a perna sai do dia preferido que é véspera da corrida forte ou do longo, para outro dia livre', () => {
+  const r = semDias({ ...base, preferidos: ['1', '2', '4', '5'], semTreino: ['nenhum'] }); // intermediário: 4 treinos
+  const pernas = (p) => Object.entries(p.agenda).filter(([, id]) => p.dias.find((d) => d.id === id).itens.filter((it) => ['quadriceps', 'posteriores', 'gluteos'].includes(EX_POR_ID.get(it.ex).grupo)).length >= 2).map(([w]) => Number(w));
+  const sem = gerarPlano(r, GYM);
+  assert.deepEqual(agendaDe(sem), [1, 2, 4, 5]);
+  assert.ok(pernas(sem).includes(2) && pernas(sem).includes(5)); // vésperas de quarta e sábado
+  // corrida forte na quarta e longo no sábado
+  const com = gerarPlano(r, GYM, 0, null, { foco: 'corrida', fortes: [3], longo: 6, dias: [3, 6, 0], fortalecimento: 'nao' });
+  for (const w of pernas(com)) assert.ok(w !== 2 && w !== 5, 'pernas na véspera: ' + w);
+  assert.equal(agendaDe(com).length, 4);
+  assert.ok(com.avisos.some((x) => /Domingo entrou fora dos dias que você prefere: .*pernas longe da corrida forte/.test(x.texto)), JSON.stringify(com.avisos.map((x) => x.texto)));
+  // com o domingo proibido, o treino não vai para ele
+  const proib = gerarPlano({ ...r, semTreino: ['0'] }, GYM, 0, null, { foco: 'corrida', fortes: [3], longo: 6, dias: [3, 6, 0], fortalecimento: 'nao' });
+  assert.ok(!agendaDe(proib).includes(0));
+});
+test('preferidos na corrida: as corridas ficam nos dias preferidos; os proibidos valem também para trocar a corrida de dia', () => {
+  const q = P_CORRIDA.find((x) => x.k === 'preferidos');
+  const s = P_CORRIDA.find((x) => x.k === 'semCorrida');
+  assert.ok(q && /prefere correr/.test(q.titulo) && P_CORRIDA.indexOf(q) + 1 === P_CORRIDA.indexOf(s) && /de jeito nenhum/.test(s.titulo));
+  const corr = { idade: 30, peso: 70, altura: 175, condicoes: ['nenhuma'], triagem: ['nenhum'], remedios: ['nenhum'], limitacoes: ['nenhuma'], experiencia: 'regular', kmSemana: 20, longoAtual: 8, pausa: 'treinando', objetivo: 'saude', resultado: 'nao', diaLongo: 'auto', tempo: '45', aparelho: 'gps' };
+  const p = gerarCorrida({ ...corr, preferidos: ['1', '3', '5', '6'], semCorrida: ['0'] });
+  for (const sem of p.semanas) for (const d of sem.dias) if (d.tipo !== 'descanso' && d.tipo !== 'caminhada') assert.ok([1, 3, 5, 6].includes(d.wd ?? sem.dias.indexOf(d)), 'corrida fora dos dias preferidos');
+  // os proibidos da corrida entram no estado (troca de dia e treino perdido)
+  assert.deepEqual(diasSemCorrida({ run: { answers: { preferidos: ['1', '3'], semCorrida: ['0', '6'] } } }), [6, 0]);
+  assert.deepEqual(diasSemCorrida({ run: { answers: { preferidos: ['1', '3'], semCorrida: ['nenhum'] } } }), []);
 });

@@ -86,6 +86,8 @@ function render(keepScroll = false) {
   // barra superior
   const top = h('header', { class: 'topbar' });
   if (page.back != null) top.appendChild(iconBtn('back', 'Voltar', () => back(page.back)));
+  // na tela inicial, o símbolo antes do nome
+  if (!page.title || page.title === 'FitCore') for (const v of ['claro', 'escuro']) top.appendChild(h('img', { class: 'marca so-' + v, src: `icons/simbolo-${v}.png`, alt: '', width: 30, height: 29 }));
   top.appendChild(h('h1', { text: page.title || 'FitCore' }));
   for (const a of page.actions || []) top.appendChild(a);
   root.appendChild(top);
@@ -143,6 +145,19 @@ async function registerSw() {
   } catch { /* sem service worker: o app continua funcionando online */ }
 }
 
+// A abertura (index.html): a logo completa, no tema do app, por pelo menos 1,2 s desde que o app começou a abrir; depois
+// some num esmaecer curto. Só na abertura do app (não volta ao trocar de tela).
+const ABERTURA_MS = 1200;
+function temaDaAbertura() {
+  const a = document.getElementById('abertura');
+  if (a) a.dataset.tema = document.documentElement.dataset.theme === 'light' ? 'claro' : 'escuro';
+}
+function fecharAbertura() {
+  const a = document.getElementById('abertura');
+  if (!a) return;
+  const falta = Math.max(0, ABERTURA_MS - (typeof performance !== 'undefined' ? performance.now() : ABERTURA_MS));
+  setTimeout(() => { a.classList.add('sai'); setTimeout(() => a.remove(), 400); }, falta);
+}
 async function boot() {
   // Defesa contra clickjacking: o app não roda embutido (iframe) em outro site.
   let emMoldura = false;
@@ -155,6 +170,7 @@ async function boot() {
   initInstall();
   await load();
   applyTheme();
+  temaDaAbertura();
   subscribe(applyTheme);
   if (window.matchMedia) {
     const mq = window.matchMedia('(prefers-color-scheme: light)');
@@ -163,6 +179,7 @@ async function boot() {
   onExternalChange((motivo) => { render(true); toast(motivo === 'conflito' ? 'O aplicativo estava aberto em outra janela: carreguei os dados mais recentes.' : 'Dados atualizados a partir de outra janela do aplicativo.'); });
   onSaveError(() => toast('Atenção: não foi possível salvar. Libere espaço no aparelho e faça um backup em Ajustes.'));
   render();
+  fecharAbertura();
   if (!armazenamentoOk()) toast('Atenção: o armazenamento principal do aparelho não respondeu. Seus dados estão indo para uma cópia de reserva. Faça um backup em Ajustes.');
   // app deixado aberto de um dia para o outro: ao voltar, redesenha (treino de hoje, semana, datas)
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && diaDoDesenho !== new Date().toDateString() && !document.querySelector('.backdrop')) render(true); });
@@ -170,6 +187,7 @@ async function boot() {
   maybeAutoPrompt();
 }
 boot().catch(() => {
+  fecharAbertura();
   clear(root);
   root.appendChild(h('div', { class: 'view' }, h('h1', { text: 'Não foi possível abrir o aplicativo' }), h('p', { class: 'muted', text: 'Feche e abra de novo. Se o problema continuar, atualize o aplicativo.' }), btn('Tentar de novo', () => location.reload(), 'primary block')));
 });

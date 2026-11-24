@@ -10,7 +10,7 @@ import { doresForaDoTreino } from './saude-fora.js';
 import { planoDaSemana, planoDaSemanaEm } from './corrida.js';
 import { limparCombo, FOCOS, FORTALECIMENTOS } from './combinado.js';
 import { perguntaCondicoes, perguntaTriagem, perguntaRemedios, perguntaLiberado, condicoesDe, sinaisDe, remediosDe, soComSupervisao, respostasProtegidas } from './saude.js';
-import { perguntaSemTreino, bloqueadosDe, livresDe, nomesDosDias, diasBloqueados } from './dias-livres.js';
+import { perguntaSemTreino, perguntaPreferidos, preferidosDe, bloqueadosDe, livresDe, nomesDosDias, diasBloqueados } from './dias-livres.js';
 
 // ---------- perguntas ----------
 export const PERGUNTAS = [
@@ -61,8 +61,9 @@ export const PERGUNTAS = [
   perguntaLiberado((a) => precisaLiberacao(a) && !soComSupervisao(a), 'Um médico já liberou você para treinar musculação?'),
   { k: 'peso', tipo: 'numero', informar: true, titulo: 'Qual é o seu peso?', ajuda: 'Uma estimativa já serve.', min: 30, max: 250, un: 'kg', padrao: 70, passo: 0.5, dec: 1 },
   { k: 'altura', tipo: 'numero', informar: true, titulo: 'Qual é a sua altura?', ajuda: 'Em centímetros.', min: 120, max: 220, un: 'cm', padrao: 170 },
-  // os dias sem musculação (a corrida tem a pergunta dela): logic/dias-livres.js. Quantos treinos por semana, o treinador
-  // escolhe (diasRecomendados).
+  // os dias preferidos e os dias sem musculação (a corrida tem as perguntas dela): logic/dias-livres.js. Quantos treinos
+  // por semana, o treinador escolhe (diasRecomendados).
+  perguntaPreferidos(),
   perguntaSemTreino(),
   {
     k: 'tempo', tipo: 'um', titulo: 'Quanto tempo você tem por treino?',
@@ -221,7 +222,11 @@ export function perfil(respostas) {
   // quantos treinos por semana: o treinador escolhe (a resposta antiga de "quantos dias", quando existe, continua valendo)
   const rec = diasRecomendados({ nivel, objetivo, idoso, jovem, diabetes, cautela });
   const diasAuto = !Number.isFinite(d);
-  const diasPedidos = diasAuto ? rec.dias : Math.min(6, Math.max(2, d));
+  // dias preferidos (null nas respostas antigas: todos os livres). Com menos preferidos que a recomendação, o plano fica nos
+  // preferidos, com o mínimo de 2 treinos por semana (oms2020, acsm2026): o que passar disso vai para outro dia livre.
+  const preferidos = preferidosDe(a, bloqueados);
+  const poucosPreferidos = !!(diasAuto && preferidos && preferidos.length < rec.dias);
+  const diasPedidos = diasAuto ? (poucosPreferidos ? Math.max(2, preferidos.length) : rec.dias) : Math.min(6, Math.max(2, d));
   const dias = Math.min(diasPedidos, livres);
   const tempo = Number.isFinite(t) && t > 0 ? TEMPOS.reduce((m, x) => (Math.abs(x - t) < Math.abs(m - t) ? x : m), 60) : 60;
   // músculos em prioridade, na ordem em que foram escolhidos; as áreas antigas ("pernas", "braços") valem por dois
@@ -237,7 +242,7 @@ export function perfil(respostas) {
     objetivoDose: gestante ? 'saude' : objetivo,
     obeso: imc != null && imc >= 30,
     baixoPeso: imc != null && (idoso ? imc < 22 : imc < 18.5),
-    dias, tempo, diasPedidos, bloqueados, livres, diasAuto, motivoDias: rec,
+    dias, tempo, diasPedidos, bloqueados, livres, diasAuto, motivoDias: rec, preferidos, poucosPreferidos,
     // os dois únicos dias livres são seguidos (só com 5 dias bloqueados): ver divisoes()
     livresSeguidos: livres === 2 && [0, 1, 2, 3, 4, 5, 6].filter((w) => !bloqueados.includes(w)).some((w, _, l) => l.includes((w + 1) % 7)),
     local: OPC.local.has(a.local) ? a.local : 'completa',
@@ -723,7 +728,13 @@ export function gerarPlano(respostas, gymBruta, versaoBruta = 0, doresBrutas = n
   // o número de treinos que o treinador escolheu, e por quê (curto)
   if (p && p.perfil.diasAuto && p.perfil.motivoDias) {
     const n = Object.keys(p.agenda || {}).length || p.perfil.dias;
-    p.avisos.unshift({ tipo: 'info', diasLivres: true, texto: `${n} ${n === 1 ? 'treino' : 'treinos'} por semana: ${p.perfil.motivoDias.texto}.${p.perfil.livres < 7 ? '' : ' Para treinar em menos dias, marque na entrevista os dias em que você não pode.'}`, refs: p.perfil.motivoDias.refs });
+    const { preferidos, poucosPreferidos, motivoDias } = p.perfil;
+    const fora = preferidos ? Object.keys(p.agenda || {}).map(Number).filter((w) => !preferidos.includes(w)) : [];
+    const texto = poucosPreferidos
+      ? `${n} ${n === 1 ? 'treino' : 'treinos'} por semana, nos dias que você prefere. Eu indicaria ${motivoDias.dias}: ${motivoDias.texto}. Para isso, marque mais dias na entrevista.`
+      : `${n} ${n === 1 ? 'treino' : 'treinos'} por semana: ${motivoDias.texto}.`;
+    const foraTxt = fora.length ? ` ${nomesDosDias(fora).replace(/^./, (c) => c.toUpperCase())} ${fora.length === 1 ? 'entrou' : 'entraram'} fora dos dias que você prefere: ${preferidos.length < 2 && poucosPreferidos ? 'o mínimo é 2 treinos por semana' : 'assim fica o descanso entre os treinos' + (p.combinado ? ' e as pernas longe da corrida forte' : '')}.` : '';
+    p.avisos.unshift({ tipo: 'info', diasLivres: true, texto: texto + foraTxt, refs: [...new Set([...motivoDias.refs, ...(poucosPreferidos && preferidos.length < 2 ? ['oms2020'] : [])])] });
   }
   return p;
 }
@@ -1576,7 +1587,13 @@ function encaixarNaCorrida(dias, pf, corrBruto) {
   // a agenda de sempre cai num deles; com corrida, as regras abaixo valem do mesmo jeito, só que nos dias livres.
   const bloq = new Set(pf.bloqueados || []);
   const fora = dias.some((d) => bloq.has(d._wd));
-  if (!corrBruto && !fora) return null;
+  // dias preferidos (logic/dias-livres.js): treino fora deles custa 5 — menos do que pernas na véspera da corrida forte
+  // ou do longo (10), mais do que as outras regras da corrida. Sem a pergunta (respostas antigas) ou com os 7, não pesa.
+  const pref = Array.isArray(pf.preferidos) && pf.preferidos.length && pf.preferidos.length < 7 ? new Set(pf.preferidos) : null;
+  const foraPref = !!pref && dias.some((d) => !pref.has(d._wd));
+  // com dias marcados (proibidos ou preferidos), as regras de quando há dias bloqueados
+  const marcados = bloq.size > 0 || !!pref;
+  if (!corrBruto && !fora && !foraPref) return null;
   const corr = corrBruto || { foco: '', chave: [], dias: [] };
   // com prioridade na musculação (ou sem resposta), as pernas não mudam de dia por causa da corrida: os treinos só
   // saem do lugar quando, sem isso, a semana ficaria sem nenhum dia de descanso
@@ -1585,12 +1602,12 @@ function encaixarNaCorrida(dias, pf, corrBruto) {
   const n = dias.length;
   if (!n || n > 6) return null;
   const temDescanso = 7 - new Set([...corr.dias, ...dias.map((d) => d._wd)]).size > 0;
-  if (!fora && temDescanso && (!ajusta || !chave.size)) return null;
+  if (!fora && !foraPref && temDescanso && (!ajusta || !chave.size)) return null;
   const pernas = dias.map(ehDiaDePernas);
   const prim = dias.map((d) => { const m = {}; for (const it of d.itens) { const ex = EX_POR_ID.get(it.ex); if (!ex || ex.padrao === 'cardio') continue; for (const mu of new Set(ex.primarios)) if (GRANDES.includes(grupoVol(mu))) m[mu] = (m[mu] || 0) + it.series; } return m; });
   // Com dias bloqueados, a regra fica a do texto da diretriz: 48 horas entre sessões do MESMO músculo, qualquer que seja
   // o número de séries (ref garber2011). Sem bloqueio, vale o critério de sempre (3 séries ou mais nos dois dias).
-  const choca = bloq.size
+  const choca = marcados
     ? (i, j) => Object.keys(prim[i]).some((mu) => (prim[j][mu] || 0) > 0)
     : (i, j) => Object.keys(prim[i]).some((mu) => prim[i][mu] >= 3 && (prim[j][mu] || 0) >= 3);
   const alternado = pf.jovem || pf.diabetes;
@@ -1612,7 +1629,7 @@ function encaixarNaCorrida(dias, pf, corrBruto) {
     return c;
   };
   // ordem dos treinos (A, B, C) na semana: com dias bloqueados, na semana que a tela mostra (segunda a domingo)
-  const ord = (w) => (bloq.size ? (w + 6) % 7 : w);
+  const ord = (w) => (marcados ? (w + 6) % 7 : w);
   const custo = (wds) => {
     let c = 0;
     const descanso = descansoDe(wds);
@@ -1620,6 +1637,7 @@ function encaixarNaCorrida(dias, pf, corrBruto) {
     for (let i = 0; i < n; i++) {
       const w = wds[i];
       if (corr.dias.includes(w)) c += 1;
+      if (pref && !pref.has(w)) c += 5;
       if (pernas[i]) { if (chave.has((w + 1) % 7)) c += 10; if (pf.nivel === 1 && chave.has((w + 2) % 7)) c += 4; if (chave.has(w)) c += 3; }
       if (w !== original[i]) c += 0.1;
       for (let j = 0; j < n; j++) {
@@ -1628,7 +1646,7 @@ function encaixarNaCorrida(dias, pf, corrBruto) {
         if ((wds[j] - w + 7) % 7 === 1) { if (choca(i, j)) c += 100; if (alternado) c += 200; }
       }
     }
-    return bloq.size ? c + espalha(wds) : c;
+    return marcados ? c + espalha(wds) : c;
   };
   // agenda de sempre num dia bloqueado: ela não é opção (o melhor sai da busca, só nos dias livres)
   let melhor = original.slice(), menor = fora ? Infinity : custo(melhor);

@@ -24,7 +24,7 @@ import { FAIXA_DA_RESPOSTA, FAIXAS_PAUSA } from './pausa.js';
 import { LOCAIS_DOR, DIAS_ATIVA, dorDeAlerta, doresAtivas } from './dor.js';
 import { doresForaDaCorrida } from './saude-fora.js';
 import { comboAtual } from './combinado.js';
-import { diasSemCorrida, semCorridaDe, PERGUNTAS_DIAS_ANTIGAS } from './dias-livres.js';
+import { diasSemCorrida, semCorridaDe, semCorridaNova, perguntaPreferidos, PERGUNTAS_DIAS_ANTIGAS } from './dias-livres.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { TIPOS_TREINO, DOR_CORRIDA, MOTIVOS_CARGA } from '../data/corrida.js';
 import { perguntaCondicoes, perguntaTriagem, perguntaRemedios, perguntaLiberado, condicoesDe, sinaisDe, remediosDe, soComSupervisao, respostasProtegidas } from './saude.js';
@@ -114,11 +114,13 @@ export const PERGUNTAS = [
     op: [['3', '3 km', ''], ['5', '5 km', ''], ['10', '10 km', ''], ['21', 'Meia maratona', ''], ['42', 'Maratona', ''], ['nao', 'Não tenho', '']],
   },
   { k: 'resultadoMin', tipo: 'numero', se: (a) => corre(a) && !!a.resultado && a.resultado !== 'nao', titulo: 'Em quanto tempo?', ajuda: 'Em horas, minutos e segundos, como no relógio. Exemplo: 27 min 30 s.', min: 8, max: 420, un: 'minutos', padrao: 30, formato: 'tempo' },
-  // Os dias da corrida, com a mesma pergunta da musculação (cada entrevista para o seu treino — logic/dias-livres.js): os dias
-  // em que a pessoa NÃO pode correr; nos outros, o plano escolhe quantas corridas fazer, pelo nível (MAX_CORRIDAS). Correr
-  // todo dia é um pedido à parte (todoDia): "qualquer dia serve" não quer dizer "quero correr todo dia". Respostas antigas
-  // ("Em quais dias da semana você pode correr?", em `dias`) continuam valendo até a entrevista ser refeita (diasDaCorrida).
-  { k: 'semCorrida', tipo: 'varios', opcional: true, titulo: 'Tem algum dia em que você não pode correr?', ajuda: 'Nos outros dias, eu escolho quantas corridas fazer. A musculação tem os dias dela.', nenhum: 'nenhum', max: 6, unidade: ['dia', 'dias'], op: [...DIAS_OP, ['nenhum', 'Nenhum, qualquer dia serve', '']] },
+  // Os dias da corrida, com as mesmas duas perguntas da musculação (cada entrevista para o seu treino — logic/dias-livres.js):
+  // os dias em que a pessoa prefere correr (o plano escolhe quantas corridas fazer neles, pelo nível — MAX_CORRIDAS) e os dias
+  // em que não pode de jeito nenhum (nem uma corrida trocada de dia vai para eles). Correr todo dia é um pedido à parte
+  // (todoDia). Respostas antigas (só semCorrida, ou "Em quais dias da semana você pode correr?" em `dias`) continuam
+  // valendo até a entrevista ser refeita (diasDaCorrida).
+  perguntaPreferidos('correr', DIAS_OP),
+  { k: 'semCorrida', tipo: 'varios', opcional: true, se: (a) => diasMarcados(a.preferidos).length < 7, titulo: 'Tem algum dia em que você não pode correr de jeito nenhum?', ajuda: 'Nesses dias, nenhuma corrida, nem quando uma corrida muda de dia.', nenhum: 'nenhum', max: 6, unidade: ['dia', 'dias'], op: [...DIAS_OP.map((o) => [...o, (a) => !diasMarcados(a.preferidos).includes(o[0])]), ['nenhum', 'Nenhum', '']] },
   { k: 'todoDia', tipo: 'um', opcional: true, se: (a) => diasDaCorrida(a).length === 7 && (a.experiencia === 'regular' || a.experiencia === 'avancado'), titulo: 'Quer correr todos os dias?', ajuda: 'Só vale para quem já corre com regularidade. Se não der no seu caso, eu explico por quê.', op: [['nao', 'Não', 'Eu escolho quantas corridas, pelo seu nível'], ['sim', 'Sim, todo dia', 'Os dias a mais são corridas leves e curtas']] },
   { k: 'diaLongo', tipo: 'um', se: (a) => diasDaCorrida(a).length >= 2, titulo: 'Qual é o melhor dia para o treino mais longo?', ajuda: 'Se não der nesse dia, eu escolho.', op: [['auto', 'Tanto faz', 'Eu escolho o melhor dia'], ...DIAS_OP.map((o) => [...o, (a) => diasDaCorrida(a).includes(o[0])])] },
   { k: 'tempo', tipo: 'um', titulo: 'Quanto tempo você tem por treino, em um dia comum?', ajuda: 'Conte com aquecimento e volta à calma.', op: [['30', 'Cerca de 30 minutos', ''], ['45', 'Cerca de 45 minutos', ''], ['60', 'Cerca de 1 hora', ''], ['90', 'Até 1h30', '']] },
@@ -303,8 +305,12 @@ const maisPerto = (v, l, padrao) => (Number.isFinite(v) && v > 0 ? l.reduce((m, 
 
 // Os dias em que a corrida pode cair, como na resposta antiga ('0' a '6'): os que não estão entre os dias sem corrida
 // (semCorrida, "Nenhum" = os 7); sem essa resposta, a antiga (`dias`), menos os dias sem treino antigos que ela tenha.
+const diasMarcados = (v) => (Array.isArray(v) ? ['1', '2', '3', '4', '5', '6', '0'].filter((x) => v.includes(x)) : []);
+const formatoNovo = (r) => (Array.isArray(r.preferidos) && r.preferidos.length > 0) || (Array.isArray(r.semCorrida) && r.semCorrida.length > 0);
 export function diasDaCorrida(a) {
   const r = isObj(a) ? a : {};
+  // os dias preferidos, fora os proibidos
+  if (Array.isArray(r.preferidos) && r.preferidos.length) { const fora = semCorridaNova(r).map(String); return diasMarcados(r.preferidos).filter((x) => !fora.includes(x)); }
   if (Array.isArray(r.semCorrida) && r.semCorrida.length) {
     const fora = new Set(r.semCorrida.includes('nenhum') ? [] : r.semCorrida.filter((x) => typeof x === 'string' && /^[0-6]$/.test(x)));
     return ['1', '2', '3', '4', '5', '6', '0'].filter((x) => !fora.has(x));
@@ -314,8 +320,8 @@ export function diasDaCorrida(a) {
 // a resposta nova vira `dias` (o resto do plano usa só essa chave); `querTodoDia`: o pedido de correr todo dia (na
 // resposta antiga, marcar os 7 dias)
 function comDias(a) {
-  if (typeof a.querTodoDia === 'boolean' && !Array.isArray(a.semCorrida)) return a; // já convertida (semDiasBloqueados)
-  if (!Array.isArray(a.semCorrida) || !a.semCorrida.length) return { ...a, querTodoDia: Array.isArray(a.dias) && new Set(a.dias).size >= 6 };
+  if (typeof a.querTodoDia === 'boolean' && !Array.isArray(a.semCorrida) && !Array.isArray(a.preferidos)) return a; // já convertida (semDiasBloqueados)
+  if (!formatoNovo(a)) return { ...a, querTodoDia: Array.isArray(a.dias) && new Set(a.dias).size >= 6 };
   return { ...a, dias: diasDaCorrida(a), querTodoDia: a.todoDia === 'sim' };
 }
 export function perfil(respostas) {
@@ -1870,7 +1876,7 @@ function opcoesLimpas(o) {
 // livres, os mais espalhados. O longo marcado num dia bloqueado volta para "Tanto faz". Devolve { respostas, tirados, todos }.
 function semDiasBloqueados(respostas, bloqueados) {
   const a0 = isObj(respostas) ? respostas : {};
-  const a = Array.isArray(a0.semCorrida) && a0.semCorrida.length ? { ...a0, dias: diasDaCorrida(a0), semCorrida: undefined, querTodoDia: a0.todoDia === 'sim' } : a0;
+  const a = formatoNovo(a0) ? { ...a0, dias: diasDaCorrida(a0), semCorrida: undefined, preferidos: undefined, querTodoDia: a0.todoDia === 'sim' } : a0;
   const bloq = new Set(bloqueados);
   const marcados = Array.isArray(a.dias) ? [...new Set(a.dias.filter((x) => typeof x === 'string' && /^[0-6]$/.test(x)))] : [];
   const tirados = marcados.map(Number).filter((w) => bloq.has(w)).sort((x, y) => pos(x) - pos(y));

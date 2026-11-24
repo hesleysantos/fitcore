@@ -40,7 +40,7 @@ export default async (page) => {
 
   console.log('2. O fim do descanso avisa em qualquer tela, uma vez só, com a fala');
   await page.goto(B + '#/treinos', 900);
-  await page.eval(`const d = await import('/js/device.js'); window.__plays = []; window.__falas = []; d.vigiarDescanso(Date.now() + 400); return 1;`);
+  await page.eval(`const d = await import('/js/device.js'); window.__plays = []; window.__falas = []; d.agendarAviso(Date.now() + 400); return 1;`);
   await page.sleep(1200);
   const p3 = await page.eval(`return { plays: window.__plays.length, falas: window.__falas };`);
   ok(p3.plays === 1, 'fora da tela do treino, o aviso toca uma vez: ' + p3.plays);
