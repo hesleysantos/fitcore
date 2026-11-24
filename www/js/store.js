@@ -33,7 +33,7 @@ export const LETRAS = ['normal', 'grande', 'muito']; // tamanhos de letra de Aju
 const defaults = () => ({
   v: VERSAO,
   // letra: tamanho do texto ('normal' | 'grande' | 'muito'); contraste: cores mais fortes (views/more.js, main.js)
-  settings: { tema: 'auto', descanso: 90, som: true, somAlerta: 'equilibrado', vibrar: true, telaLigada: true, animar: true, avisoFundo: false, letra: 'normal', contraste: false, voz: true, nome: '', trato: '' },
+  settings: { tema: 'auto', descanso: 90, som: true, somAlerta: 'equilibrado', vibrar: true, telaLigada: true, animar: true, avisoFundo: false, somFaixa: false, letra: 'normal', contraste: false, voz: true, nome: '', trato: '' },
   gym: { all: true, has: {} },
   plans: [],
   activePlan: '',
@@ -211,7 +211,7 @@ export function sanitize(raw, { doAparelho = false } = {}) {
   d.settings = {
     tema: oneOf(s.tema, ['auto', 'escuro', 'claro'], 'auto'),
     descanso: Math.round(num(s.descanso, 15, 600, 90)),
-    som: bool(s.som, true), somAlerta: ['equilibrado', 'sino', 'alto', 'longo', 'discreto'].includes(s.somAlerta) ? s.somAlerta : 'equilibrado', vibrar: bool(s.vibrar, true), telaLigada: bool(s.telaLigada, true), animar: bool(s.animar, true), avisoFundo: bool(s.avisoFundo, false), voz: bool(s.voz, true),
+    som: bool(s.som, true), somAlerta: ['equilibrado', 'sino', 'alto', 'longo', 'discreto'].includes(s.somAlerta) ? s.somAlerta : 'equilibrado', vibrar: bool(s.vibrar, true), telaLigada: bool(s.telaLigada, true), animar: bool(s.animar, true), avisoFundo: bool(s.avisoFundo, false), somFaixa: bool(s.somFaixa, false), voz: bool(s.voz, true),
     letra: oneOf(s.letra, LETRAS, 'normal'), contraste: bool(s.contraste, false),
     // saudação do Início: o nome (texto simples, até 24 letras) e o trato (bem-vindo, bem-vinda ou neutro)
     nome: limparNome(s.nome), trato: oneOf(s.trato, ['', 'o', 'a', 'n'], ''),

@@ -74,19 +74,27 @@ function comPct(kg, pct) {
 //    plateaued"), bell2023 (PMC10511399: depois da semana leve, "intensity of training can be increased"), rogerson2024
 //    (PMC10948666: a semana leve é feita quando o desempenho trava) e coleman2024 (PMC10809978: parar de vez uma semana
 //    tirou força; por isso é mais leve, não parado). Se travar de novo, a troca do exercício (logic/variacao.js).
-export const ROTULO_RIR = ['0', '1', '2', '3', '4+'];
+// A pergunta, depois da última série do exercício: três respostas, cada uma com as repetições que ainda sairiam (RIR).
+// "No limite" (1 ou nenhuma) fica como 0; "Na medida" (2 ou 3), como 2; "Fácil" (4 ou mais), como 4.
+// Perto do limite, a repetição fica mais lenta (helms2016: a velocidade cai conforme o esforço sobe).
+export const ESFORCOS = [
+  { id: 'facil', rotulo: 'Fácil', rir: 4 },
+  { id: 'medida', rotulo: 'Na medida', rir: 2 },
+  { id: 'limite', rotulo: 'No limite', rir: 0 },
+];
 export const TEXTO_RIR = [
-  'Depois da série, marque quantas repetições a mais você ainda conseguiria fazer com boa técnica.',
-  'Isso mostra se o peso está leve, certo ou pesado para você, e o app ajusta o próximo treino. Parar 2 a 3 repetições antes do limite já basta para ficar mais forte: não precisa ir até a falha.',
-  'No primeiro ano de treino, é comum errar essa conta. Por isso, para quem está começando, a carga segue pelas repetições feitas, e a resposta fica guardada para você treinar o olhar.',
-  'É opcional: sem resposta, a sugestão segue só pelas repetições.',
+  'Ao terminar a última série, pense: se eu continuasse, com a técnica certa, quantas repetições a mais eu conseguiria?',
+  ['Fácil', '4 ou mais'], ['Na medida', '2 ou 3'], ['No limite', '1 ou nenhuma'],
+  'Perto do limite, cada repetição sai mais lenta e mais pesada: é o sinal mais fácil de notar.',
+  'Com isso, o app sabe se o peso está leve, certo ou pesado e ajusta o próximo treino. O ideal é “Na medida”: parar 2 ou 3 antes do limite já basta para ficar mais forte, sem ir até a falha.',
+  'No primeiro ano de treino, é comum errar essa conta: a carga segue pelas repetições feitas, e a resposta fica guardada. Responder é opcional.',
 ];
 // faixa-alvo: principais (várias articulações) 2 a 3; os de uma articulação, 1 a 2 (acsm2026, helms2016)
 export const alvoRir = (ex) => (ex && ex.tipo === 'composto' ? [2, 3] : [1, 2]);
-// média das respostas nas séries (null quando menos da metade das séries tem resposta)
+// média das respostas nas séries do treino (em geral, só a última série tem resposta); null sem nenhuma
 export function rirMedio(sets) {
   const l = lista(sets).map((s) => s && s.rir).filter((x) => Number.isInteger(x) && x >= 0 && x <= 4);
-  return l.length && l.length * 2 >= lista(sets).length ? l.reduce((a, b) => a + b, 0) / l.length : null;
+  return l.length ? l.reduce((a, b) => a + b, 0) / l.length : null;
 }
 // começando (no primeiro ano): o RIR é só anotado (helms2016, steele2017). Pela entrevista do Treinador; sem ela, pelo
 // primeiro treino registrado no app.
@@ -135,7 +143,7 @@ export function sugestao(exId, alvoReps, nSeries) {
     if (!last || !Math.max(...reps)) return { kg: null, reps: lo, texto: `Primeira vez: faça ${lo === hi ? '' : 'de '}${faixa} repetições com boa técnica.` };
     const topo = reps.length >= minSeries && reps.every((r) => r >= hi);
     const rr0 = rirMedio(last.sets), rr1 = h2[1] ? rirMedio(h2[1].sets) : null;
-    if (!topo && !rirSoAnotado() && rr0 != null && rr1 != null && rr0 >= 4 && rr1 >= 4) return { kg: pos(last.sets[0].kg) || null, reps: Math.max(...reps), rir: true, texto: `Última vez: ${reps.join(', ')} repetições, e ainda sobravam 4 ou mais. Está fácil: tente uma variação mais difícil ou adicione carga.` };
+    if (!topo && !rirSoAnotado() && rr0 != null && rr1 != null && rr0 >= 4 && rr1 >= 4) return { kg: pos(last.sets[0].kg) || null, reps: Math.max(...reps), rir: true, texto: `Última vez: ${reps.join(', ')} repetições, e a última série foi fácil nos dois últimos treinos. Tente uma variação mais difícil ou adicione carga.` };
     return { kg: pos(last.sets[0].kg) || null, reps: Math.max(...reps), texto: topo ? `Última vez: ${reps.join(', ')} repetições. Você atingiu o alvo: tente uma variação mais difícil ou adicione carga.` : `Última vez: ${reps.join(', ')} repetições. Tente fazer 1 a mais em cada série.` };
   }
   const primeira = { kg: null, reps: lo, texto: `Primeira vez: comece leve. Escolha uma carga com que você faça ${hi} repetições sobrando umas 3.` };
@@ -180,11 +188,13 @@ export function sugestao(exId, alvoReps, nSeries) {
     const faixaRir = `${aMin} a ${aMax}`;
     if (r0 >= aMax + 1 && r1 >= aMax + 1) {
       const novo = comPct(kg, Math.min(ex.tipo === 'composto' ? 0.1 : 0.05, 0.04 * (Math.min(r0, r1) - aMax)));
-      return { kg: novo, reps: lo, rir: true, texto: `Última vez: ${resumo}. Nos dois últimos treinos, ainda sobravam ${Math.floor(Math.min(r0, r1))} repetições ou mais: a carga está leve. Suba para ${kgTxt(novo)} kg; o ideal é parar com ${faixaRir} sobrando.` };
+      return { kg: novo, reps: lo, rir: true, texto: `Última vez: ${resumo}. Nos dois últimos treinos, a última série foi fácil: a carga está leve. Suba para ${kgTxt(novo)} kg; o ideal é terminar na medida, com ${faixaRir} repetições ainda possíveis.` };
     }
     if (r0 <= aMin - 2 && r1 <= aMin - 2) {
-      const novo = comPct(kg, -Math.min(0.1, 0.04 * (aMin - Math.max(r0, r1))));
-      if (novo > 0) return { kg: novo, reps: lo, rir: true, texto: `Última vez: ${resumo}. Nos dois últimos treinos, não sobrou nenhuma repetição. Baixe para ${kgTxt(novo)} kg: parar com ${faixaRir} sobrando dá o mesmo resultado, com menos cansaço.` };
+      // "No limite" (1 ou nenhuma) fica cerca de 1,5 abaixo da faixa dos principais: cerca de 6% pela regra de helms2018;
+      // o app usa 5%, do lado mais leve
+      const novo = comPct(kg, -0.05);
+      if (novo > 0) return { kg: novo, reps: lo, rir: true, texto: `Última vez: ${resumo}. Nos dois últimos treinos, a última série foi no limite. Baixe para ${kgTxt(novo)} kg: terminar na medida dá o mesmo resultado, com menos cansaço.` };
     }
   }
   if (abaixo(last) && abaixo(h2[1]) && kg > 0) {

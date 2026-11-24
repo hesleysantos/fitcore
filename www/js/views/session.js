@@ -4,7 +4,7 @@ import { state, update, planById } from '../store.js';
 import { go, refresh, replace } from '../router.js';
 import { EX_POR_ID } from '../data/exercises.js';
 import { figure, thumb } from '../figure.js';
-import { recorde, e1rm, assistido, voltaDePausa, seriesNaVolta, descansoNaVolta, ROTULO_RIR, TEXTO_RIR } from '../logic/progress.js';
+import { recorde, e1rm, assistido, voltaDePausa, seriesNaVolta, descansoNaVolta, ESFORCOS, TEXTO_RIR } from '../logic/progress.js';
 import { nivelPausa, cortePausa, duracaoTxt } from '../logic/pausa.js';
 import { alertaDoExercicio, doresDoTreino, respostasParaAvisos } from '../logic/trainer.js';
 import { pickExercises, novoItem, subtitulo, folha, exItem } from './common.js';
@@ -228,7 +228,7 @@ export function sessionView() {
   }
   let alarmed = false;
   let doneUntil = 0;
-  const abertoRir = new Map(); // exercício (posição) → série com a escolha de "quantas ainda sairiam" reaberta
+  const abertoRir = new Set(); // exercícios (posição) com a escolha de "Como foi a última série?" reaberta
   // descanso que já estava correndo (tela reaberta ou página recarregada): o relógio do app volta a vigiar o fim
   if (cur.restEnd && cur.restEnd > Date.now()) agendarAviso(cur.restEnd);
   if (work) manterNoFundo('serie', true);
@@ -322,21 +322,18 @@ export function sessionView() {
         grid.appendChild(cell);
       }
       grid.appendChild(h('button', { class: 'check' + (st.ok ? ' on' : ''), type: 'button', 'aria-label': st.ok ? `Desmarcar série ${j + 1}` : `Marcar série ${j + 1} como feita`, 'aria-pressed': st.ok ? 'true' : 'false', onClick: () => check(i, j) }, icon('check')));
-      // repetições que ainda sairiam (opcional): a escolha aparece na última série feita; depois, fica um resumo que
+      // "Como foi a última série?" (opcional): só depois da última série do exercício; respondida, fica um resumo que
       // reabre a escolha ao toque (logic/progress.js usa na sugestão do próximo treino)
-      if ((tipo === 'peso_reps' || tipo === 'reps') && st.ok) {
-        const ultimaFeita = it.sets.reduce((u, x, k) => (x.ok ? k : u), -1) === j;
-        if (st.rir == null && !(ultimaFeita || abertoRir.get(i) === j)) return;
-        // 1ª vez no exercício: o "Como foi a 1ª série?" (logic/guiado.js) já pergunta isso; a resposta dele vira o número
-        if (st.rir == null && j === it.sets.findIndex((x) => x.ok) && testeDaSerie(i, it, it.sets.filter((x) => x.ok).length)) return;
-        if (st.rir != null && abertoRir.get(i) !== j) {
-          grid.appendChild(h('button', { class: 'rir-resumo', type: 'button', 'aria-label': `Série ${j + 1}: sobraram ${ROTULO_RIR[st.rir]}. Tocar para mudar`, onClick: () => { abertoRir.set(i, j); drawCard(i); } }, `Sobraram ${ROTULO_RIR[st.rir]}`));
+      if ((tipo === 'peso_reps' || tipo === 'reps') && st.ok && j === it.sets.length - 1) {
+        const atual = ESFORCOS.find((e) => e.rir === st.rir);
+        if (atual && !abertoRir.has(i)) {
+          grid.appendChild(h('button', { class: 'rir-resumo', type: 'button', 'aria-label': `Última série: ${atual.rotulo}. Tocar para mudar`, onClick: () => { abertoRir.add(i); drawCard(i); } }, `Última série: ${atual.rotulo}`));
           return;
         }
         const escolher = (v) => { mutCur((c) => { const s = c.itens[i].sets[j]; if (s.rir === v) delete s.rir; else s.rir = v; }); abertoRir.delete(i); drawCard(i); };
-        grid.appendChild(h('div', { class: 'rir-linha', role: 'group', 'aria-label': `Série ${j + 1}: quantas repetições ainda sairiam` },
-          h('span', { class: 'small muted rir-tit' }, 'Quantas ainda sairiam?', ajuda('Quantas ainda sairiam?', TEXTO_RIR)),
-          ...ROTULO_RIR.map((r, v) => chip(r, st.rir === v, () => escolher(v)))));
+        grid.appendChild(h('div', { class: 'rir-linha', role: 'group', 'aria-label': 'Como foi a última série?' },
+          h('span', { class: 'small muted rir-tit' }, 'Como foi a última série?', ajuda('Como foi a última série?', TEXTO_RIR)),
+          ...ESFORCOS.map((e) => chip(e.rotulo, st.rir === e.rir, () => escolher(e.rir)))));
       }
     });
     const maisSerie = btn('Série', () => {
@@ -429,8 +426,8 @@ export function sessionView() {
       let mudou = 0;
       if (o.kg != null) mutCur((c) => { for (const x of c.itens[i].sets.slice(j0 + 1)) if (!x.ok && (x.kg == null || x.kg === kg0)) { x.kg = o.kg; mudou++; } });
       mudarGuia((x) => { x.teste[it.ex] = o.id; });
-      // a resposta também fica como "quantas ainda sairiam" da 1ª série: leve demais = 4 ou mais; na medida = 2; pesada = 1
-      const rirDoTeste = { leve: 4, medida: 2, pesada: 1 }[o.id];
+      // a resposta também fica guardada na 1ª série, nos mesmos números de "Como foi a última série?" (logic/progress.js)
+      const rirDoTeste = { leve: 4, medida: 2, pesada: 0 }[o.id];
       if (rirDoTeste != null) mutCur((c) => { const x = c.itens[i].sets[j0]; if (x && x.rir == null) x.rir = rirDoTeste; });
       toast(mudou || o.kg == null ? o.texto : 'As próximas séries ficam com a carga que você escolheu.');
       drawCard(i);
@@ -675,7 +672,7 @@ export function sessionView() {
   body.push(aquec, cards);
   if (cur.itens.length) body.push(note('info', 'Toque no ✓ ao terminar cada série. O descanso começa sozinho e o app avisa quando acabar.'));
   // iPhone: fora da tela o sistema pausa o app, e o aviso não toca sem pausar a música (device.js): o app fica aberto
-  if (cur.itens.length && isIOS() && !cur.registro) body.push(note('info', 'No iPhone, deixe o app aberto no descanso: o aviso só toca com ele na tela. A música segue tocando, e dá para trocá-la pela Central de Controle.'));
+  if (cur.itens.length && isIOS() && !cur.registro && !state.settings.somFaixa) body.push(note('info', 'No iPhone, deixe o app aberto no descanso: o aviso só toca com ele na tela. A música segue tocando, e dá para trocá-la pela Central de Controle.'));
   body.push(h('div', { class: 'row' }, btn('Descartar treino', async () => {
     const ok = await confirmSheet({ title: 'Descartar este treino?', text: 'Tudo o que foi registrado nesta sessão será perdido.', okLabel: 'Descartar', danger: true });
     if (!ok) return;

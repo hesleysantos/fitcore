@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as store from '../www/js/store.js';
-import { sugestao, estagnados, rirMedio, alvoRir, rirSoAnotado, TEXTO_RIR, ROTULO_RIR } from '../www/js/logic/progress.js';
+import { sugestao, estagnados, rirMedio, alvoRir, rirSoAnotado, TEXTO_RIR, ESFORCOS } from '../www/js/logic/progress.js';
 import { recomendacao } from '../www/js/logic/carga.js';
 import { EX_POR_ID } from '../www/js/data/exercises.js';
 import { REFS } from '../www/js/data/knowledge.js';
@@ -25,11 +25,13 @@ test('RIR: o registro guarda a resposta (0 a 4) e descarta o resto', () => {
   const d = store.sanitize({ v: store.VERSAO, sessions: [{ id: 'x', nome: 'T', inicio: new Date().toISOString(), fim: new Date().toISOString(), itens: [{ ex: SUPINO, alvo: '8-12', descanso: 90, sets: [{ kg: 40, reps: 10, ok: true, rir: 2 }, { kg: 40, reps: 10, ok: true, rir: 7 }, { kg: 40, reps: 10, ok: true, rir: '1' }] }] }] });
   assert.deepEqual(d.sessions[0].itens[0].sets.map((s) => s.rir), [2, undefined, undefined]);
   assert.equal(rirMedio([{ rir: 4 }, { rir: 2 }, {}]), 3);
-  assert.equal(rirMedio([{ rir: 4 }, {}, {}]), null, 'menos da metade das séries com resposta: não conta');
+  assert.equal(rirMedio([{ rir: 4 }, {}, {}]), 4, 'a resposta da última série basta');
+  assert.equal(rirMedio([{}, {}]), null);
   assert.deepEqual(alvoRir(EX_POR_ID.get(SUPINO)), [2, 3]);
   assert.deepEqual(alvoRir(EX_POR_ID.get(ROSCA)), [1, 2]);
-  assert.deepEqual(ROTULO_RIR, ['0', '1', '2', '3', '4+']);
-  assert.ok(TEXTO_RIR.length >= 2 && TEXTO_RIR.every((t) => t.length < 260) && /2 a 3 repetições antes do limite/.test(TEXTO_RIR.join(' ')));
+  assert.deepEqual(ESFORCOS.map((e) => [e.rotulo, e.rir]), [['Fácil', 4], ['Na medida', 2], ['No limite', 0]]);
+  const txt = TEXTO_RIR.flat().join(' ');
+  assert.ok(TEXTO_RIR.every((t) => (Array.isArray(t) ? t.join(' ') : t).length < 260) && /quantas repetições a mais eu conseguiria/.test(txt) && /parar 2 ou 3 antes do limite/.test(txt) && /mais lenta/.test(txt));
   assert.ok(REFS.helms2018 && REFS.bell2022 && REFS.bell2023 && REFS.acsm2026);
 });
 
@@ -37,7 +39,7 @@ test('RIR: carga leve em dois treinos seguidos sobe; pesada desce; só um treino
   // 4 ou mais sobrando no supino (alvo 2 a 3), 40 kg, 10 repetições: +4% por repetição acima do teto, até 10%
   montar(SUPINO, [[6, 40, 10, 4], [3, 40, 10, 4]]);
   let g = sugestao(SUPINO, '8-12', 3);
-  assert.equal(g.kg, 42.5); assert.ok(g.rir && /ainda sobravam 4 repetições ou mais: a carga está leve/.test(g.texto), g.texto);
+  assert.equal(g.kg, 42.5); assert.ok(g.rir && /a última série foi fácil: a carga está leve/.test(g.texto), g.texto);
   assert.deepEqual(recomendacao(SUPINO, '8-12', 3).refs, ['acsm2009', 'helms2018', 'acsm2026']);
   // só o último treino com folga: segue a dupla progressão (mais repetições)
   montar(SUPINO, [[6, 40, 10, 2], [3, 40, 10, 4]]);
@@ -49,7 +51,7 @@ test('RIR: carga leve em dois treinos seguidos sobe; pesada desce; só um treino
   // nenhuma sobrando em dois treinos: desce
   montar(SUPINO, [[6, 60, 9, 0], [3, 60, 9, 0]]);
   g = sugestao(SUPINO, '8-12', 3);
-  assert.ok(g.kg < 60 && g.kg >= 54 && /não sobrou nenhuma repetição/.test(g.texto), JSON.stringify(g));
+  assert.ok(g.kg < 60 && g.kg >= 54 && /a última série foi no limite/.test(g.texto), JSON.stringify(g));
   // na faixa-alvo: nada muda pela resposta
   montar(SUPINO, [[6, 40, 10, 2], [3, 40, 10, 3]]);
   assert.ok(!sugestao(SUPINO, '8-12', 3).rir);
