@@ -7,14 +7,14 @@ import { EQUIPAMENTOS, CATEGORIAS_EQUIP } from '../data/equipment.js';
 import { REFS } from '../data/knowledge.js';
 import { REFS_CORRIDA } from '../data/corrida.js';
 import { REFS_SONO } from '../data/sono.js';
-import { cancelarAviso, avisoDisponivel, avisoPermitido, pedirPermissaoDeAviso, telaLigadaDisponivel, faixaDisponivel, SONS_ALERTA, SOM_PADRAO, tocarAlerta, unlockAudio, prepararSom } from '../device.js';
+import { cancelarAviso, avisoDisponivel, avisoPermitido, pedirPermissaoDeAviso, telaLigadaDisponivel, SONS_ALERTA, SOM_PADRAO, tocarAlerta, unlockAudio, prepararSom } from '../device.js';
 import { canSuggestInstall, openInstall, isIos } from '../install.js';
 import { entregarArquivo } from './arquivo.js';
 import { abrirExportar } from './exportar.js';
 import { abrirPrivacidade, abrirTermos, blocoPrivacidade, blocoTermos } from './termos.js';
 import { folhaDoNome } from './home.js';
 
-export const APP_VERSAO = '1.27.0';
+export const APP_VERSAO = '1.28.0';
 
 // ---------- Minha academia ----------
 export function gymView() {
@@ -168,9 +168,8 @@ export function settingsView() {
     linha('Vibrar ao fim do descanso', isIos() ? 'O iPhone não deixa páginas vibrarem: o aviso é o som e a tela.' : 'Só no Android.', toggle(st.vibrar, (v) => set('vibrar', v), 'Vibrar ao fim do descanso')),
     // aviso por notificação quando a pessoa troca de aplicativo durante o descanso (só onde o navegador oferece)
     // fora do app (device.js): no Android, o som e a notificação saem sozinhos, junto da música; no iPhone, o sistema pausa
-    // o app, e só a faixa de áudio toca com a tela bloqueada (pausando a música)
-    faixaDisponivel() ? linha('Som com a tela bloqueada', (isIos() ? 'No iPhone, o app para quando sai da tela. Com isto ligado, o descanso toca como uma faixa de áudio e o som do fim sai mesmo com a tela bloqueada.' : 'O aviso já sai fora do app, junto da música. Se no seu aparelho ele falhar, ligue isto: o descanso toca como uma faixa de áudio.') + ' A sua música pausa durante o descanso.', toggle(!!st.somFaixa, (v) => { set('somFaixa', v); if (!v) cancelarAviso(); }, 'Som com a tela bloqueada')) : null,
-    avisoDisponivel() ? linha('Notificação do descanso', isIos() ? 'Ao sair do app, mostra a hora do fim. O aviso do fim, no iPhone, só sai com “Som com a tela bloqueada” ligado.' : 'Ao sair do app, mostra a hora do fim e avisa quando acabar.', toggle(!!st.avisoFundo && avisoPermitido(), async (v) => {
+    // o app fora da tela, e o aviso do fim só toca com ele aberto
+    avisoDisponivel() ? linha('Notificação do descanso', isIos() ? 'Ao sair do app, mostra a hora do fim. No iPhone, o som do fim só toca com o app na tela: deixe-o aberto no descanso e mude a música pela Central de Controle.' : 'Ao sair do app, mostra a hora do fim e avisa quando acabar, sem pausar a sua música.', toggle(!!st.avisoFundo && avisoPermitido(), async (v) => {
       if (!v) { set('avisoFundo', false); return; }
       if (await pedirPermissaoDeAviso()) { set('avisoFundo', true); toast('Aviso ligado.'); } else { set('avisoFundo', false); toast('O navegador não deu permissão para notificações. Libere nas configurações do site e tente de novo.'); refresh(); }
     }, 'Notificação do descanso')) : null));

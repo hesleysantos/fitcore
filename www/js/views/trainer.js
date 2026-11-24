@@ -406,7 +406,7 @@ function painel() {
   // 4. seções fechadas: sem evolução, cuidados, perfil, séries por semana, como treinar
   const est = estagnados(plan).map((id) => EX_POR_ID.get(id)).filter(Boolean);
   if (est.length) {
-    body.push(acc(`Exercícios sem evolução (${est.length})`, [h('p', { class: 'small muted', text: 'Marca parada há 3 treinos. Baixe a carga uns 10% e suba de novo, ou troque o exercício.' }),
+    body.push(acc(`Exercícios sem evolução (${est.length})`, [h('p', { class: 'small muted', text: 'Marca parada há 3 treinos. No treino, a sugestão de carga já traz um treino mais leve e depois a volta à carga. Se continuar parado, troque o exercício.' }),
       ...est.slice(0, 4).map((ex) => h('button', { class: 'menu-item', type: 'button', onClick: () => go('exercicio/' + ex.id) }, icon('swap'), h('span', { class: 'grow', text: ex.nome }), icon('right', 's muted')))], 'treinador-estagnados'));
   }
   body.push(cuidadosCard(avisos.info));

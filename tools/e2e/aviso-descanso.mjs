@@ -3,7 +3,7 @@
 //    cada 5 s); no fim, a mesma etiqueta vira "Descanso terminado", com aviso; ao voltar, as notificações somem;
 // 2) enquanto o descanso corre, o app toca pela Web Audio o tom que o mantém vivo no Android (30 Hz, −60 dBFS), e ele
 //    para no fim e quando o descanso é cancelado;
-// 3) com "Som com a tela bloqueada", o descanso toca como uma faixa de áudio do tamanho do descanso;
+// 3) nenhuma faixa de áudio longa (ela pausaria a música de outro aplicativo);
 // 4) descanso pulado ou opção desligada: nenhuma notificação.
 // O navegador sem janela não tem central de notificações: o roteiro troca a permissão, o registro do service worker e a
 // visibilidade da página por versões de mentira que registram o que o app fez.
@@ -57,11 +57,9 @@ export default async (page) => {
   await mudar('visible'); await page.sleep(300);
   ok((await av()).fechadas >= 1, 'voltar para o app fecha a notificação');
 
-  console.log('3. "Som com a tela bloqueada": o descanso vira uma faixa de áudio');
-  await page.eval(`const m = await import('/js/store.js'); m.update((s) => { s.settings.somFaixa = true; }); window.__av.faixas = []; const d = await import('/js/device.js'); d.agendarAviso(Date.now() + 20000); await new Promise((r) => setTimeout(r, 900)); return true;`);
-  a = await av();
-  ok(a.faixas.length === 1, 'a faixa começa a tocar com o descanso');
-  await page.eval(`(await import('/js/device.js')).cancelarAviso(); const m = await import('/js/store.js'); m.update((s) => { s.settings.somFaixa = false; }); return true;`);
+  console.log('3. Nada de mídia longa (ela pausaria a música de outro aplicativo)');
+  await page.eval(`window.__av.faixas = []; const d = await import('/js/device.js'); d.agendarAviso(Date.now() + 20000); await new Promise((r) => setTimeout(r, 900)); d.cancelarAviso(); return true;`);
+  ok((await av()).faixas.length === 0, 'o descanso não toca nenhuma faixa de áudio');
 
   console.log('4. Descanso pulado ou opção desligada: nada aparece');
   await page.eval(`window.__av.mostradas = []; window.__av.parados = 0; const d = await import('/js/device.js'); d.agendarAviso(Date.now() + 20000); d.cancelarAviso(); return true;`);

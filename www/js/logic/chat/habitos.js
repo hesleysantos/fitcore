@@ -92,7 +92,7 @@ function passoSemResultado(ctx) {
   const texto = [prot ? 'Músculo cresce devagar: leva meses, e varia muito de uma pessoa para outra.' : 'Músculo cresce devagar: nos estudos, uns 3 meses de treino deram em média cerca de 1 kg de massa magra, com muita diferença entre as pessoas.'];
   if (travados.length) {
     const nomes = travados.slice(0, 3).map((e) => e.nome).join(', ');
-    texto.push(`Parados há 3 treinos: ${nomes}. Baixe a carga uns 10% e suba de novo, ou troque o exercício.`);
+    texto.push(`Parados há 3 treinos: ${nomes}. No treino, a sugestão de carga já traz um treino mais leve (10% menos carga e uma série a menos) e depois a volta à carga. Se continuar parado, troque o exercício.`);
   }
   texto.push('O que mais conta:',
     '• Subir a carga ou as repetições aos poucos, quando ficar fácil.',

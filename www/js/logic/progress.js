@@ -50,6 +50,66 @@ export function recorde(exId) {
 }
 
 function passo(kg) { return kg < 10 ? 0.5 : kg < 25 ? 1 : 2.5; }
+// carga com uma fração a mais ou a menos, no passo da grade (pelo menos um passo de diferença)
+function comPct(kg, pct) {
+  const p = passo(kg);
+  const v = Math.round((kg * (1 + pct)) / p) * p;
+  return Math.round((pct > 0 ? Math.max(kg + p, v) : Math.max(0, Math.min(kg - p, v))) * 100) / 100;
+}
+
+// ---------- repetições que ainda sairiam (RIR) e exercício travado ----------
+// Fontes (texto completo, novembro de 2026):
+//  • acsm2026: esforço suficiente com "a target of 2–3 repetitions in reserve (RIR)"; ir até a falha não melhora força nem
+//    músculo. helms2016 (PMC4961270): para hipertrofia, RIR de 0 a 2 nos exercícios de uma articulação e 2 a 4 nos
+//    principais; novatos "likely not base training intensity or progression solely on the RIR-based scale".
+//  • steele2017 (PMC5712461): os menos experientes erram por 4 a 5 repetições; os experientes, por 1 a 2 → para quem está
+//    começando, a resposta fica guardada, mas a carga segue só pelas repetições (dupla progressão).
+//  • helms2018 (PMC5877330): "for every 0.5 RPE above or below ... load was decreased or increased by 2%" → cerca de 4% por
+//    repetição fora da faixa, com teto de 10% (acsm2009: aumentos de 2 a 10%); 5% nos exercícios de uma articulação.
+//    Sobe com a média de 1 ou mais acima do teto da faixa e desce com 0 nos principais (nos de uma articulação, chegar
+//    perto de 0 é normal: helms2016, 0 a 2). O estudo ajustava de uma série para a outra; aqui, como na regra "2 por 2" do acsm2009, só depois de DOIS treinos
+//    seguidos com a mesma carga (escolha do app, para não seguir um dia ruim nem um erro de conta).
+//  • Exercício travado (a melhor marca não sobe há 3 treinos): bell2022 (PMC9811819, Tabela 3: menos séries e "reducing the
+//    absolute load (e.g., by 10%) whilst keeping the number of repetitions constant"; usado quando "performance has
+//    plateaued"), bell2023 (PMC10511399: depois da semana leve, "intensity of training can be increased"), rogerson2024
+//    (PMC10948666: a semana leve é feita quando o desempenho trava) e coleman2024 (PMC10809978: parar de vez uma semana
+//    tirou força; por isso é mais leve, não parado). Se travar de novo, a troca do exercício (logic/variacao.js).
+export const ROTULO_RIR = ['0', '1', '2', '3', '4+'];
+export const TEXTO_RIR = [
+  'Depois da série, marque quantas repetições a mais você ainda conseguiria fazer com boa técnica.',
+  'Isso mostra se o peso está leve, certo ou pesado para você, e o app ajusta o próximo treino. Parar 2 a 3 repetições antes do limite já basta para ficar mais forte: não precisa ir até a falha.',
+  'No primeiro ano de treino, é comum errar essa conta. Por isso, para quem está começando, a carga segue pelas repetições feitas, e a resposta fica guardada para você treinar o olhar.',
+  'É opcional: sem resposta, a sugestão segue só pelas repetições.',
+];
+// faixa-alvo: principais (várias articulações) 2 a 3; os de uma articulação, 1 a 2 (acsm2026, helms2016)
+export const alvoRir = (ex) => (ex && ex.tipo === 'composto' ? [2, 3] : [1, 2]);
+// média das respostas nas séries (null quando menos da metade das séries tem resposta)
+export function rirMedio(sets) {
+  const l = lista(sets).map((s) => s && s.rir).filter((x) => Number.isInteger(x) && x >= 0 && x <= 4);
+  return l.length && l.length * 2 >= lista(sets).length ? l.reduce((a, b) => a + b, 0) / l.length : null;
+}
+// começando (no primeiro ano): o RIR é só anotado (helms2016, steele2017). Pela entrevista do Treinador; sem ela, pelo
+// primeiro treino registrado no app.
+export function rirSoAnotado() {
+  const exp = state.trainer && state.trainer.answers ? state.trainer.answers.experiencia : '';
+  if (exp === 'nunca' || exp === 'iniciante') return true;
+  if (exp === 'intermediario' || exp === 'avancado') return false;
+  const t = state.sessions.map((s) => Date.parse(s && s.inicio)).filter(Number.isFinite);
+  return !t.length || Date.now() - Math.min(...t) < 365 * DIA;
+}
+const maxKgDe = (hst) => Math.max(0, ...lista(hst && hst.sets).filter((s) => pos(s.reps) > 0).map((s) => pos(s.kg)));
+const melhorDe = (hst) => Math.max(0, ...lista(hst && hst.sets).map((s) => e1rm(pos(s.kg), pos(s.reps))));
+// treino mais leve: a carga máxima ficou 5% ou mais abaixo da do treino anterior
+const maisLeve = (a, b) => maxKgDe(b) > 0 && maxKgDe(a) <= maxKgDe(b) * 0.95 + 1e-9;
+// travado: nos 4 últimos treinos (do mais novo ao mais velho), os 3 mais novos não passaram da marca do 4º, sem nenhum
+// treino mais leve no meio (um treino leve não conta como travado: era a semana leve)
+export function travadoEm(hs) {
+  if (lista(hs).length < 4) return false;
+  const b = hs.slice(0, 4).map(melhorDe);
+  if (!(b[3] > 0)) return false;
+  for (let k = 0; k < 3; k++) if (maisLeve(hs[k], hs[k + 1]) || maisLeve(hs[k + 1], hs[k])) return false;
+  return b[0] <= b[3] * 1.005 && b[1] <= b[3] * 1.005 && b[2] <= b[3] * 1.005;
+}
 function mais(kg) { const p = passo(kg); return Math.round((kg + Math.max(p, Math.round((kg * 0.05) / p) * p)) * 100) / 100; }
 function menos(kg) { const p = passo(kg); return Math.max(0, Math.round((kg - Math.max(p, Math.round((kg * 0.075) / p) * p)) * 100) / 100); }
 const kgTxt = (n) => String(n).replace('.', ',');
@@ -74,6 +134,8 @@ export function sugestao(exId, alvoReps, nSeries) {
     const reps = last ? last.sets.map((s) => pos(s.reps)) : [];
     if (!last || !Math.max(...reps)) return { kg: null, reps: lo, texto: `Primeira vez: faça ${lo === hi ? '' : 'de '}${faixa} repetições com boa técnica.` };
     const topo = reps.length >= minSeries && reps.every((r) => r >= hi);
+    const rr0 = rirMedio(last.sets), rr1 = h2[1] ? rirMedio(h2[1].sets) : null;
+    if (!topo && !rirSoAnotado() && rr0 != null && rr1 != null && rr0 >= 4 && rr1 >= 4) return { kg: pos(last.sets[0].kg) || null, reps: Math.max(...reps), rir: true, texto: `Última vez: ${reps.join(', ')} repetições, e ainda sobravam 4 ou mais. Está fácil: tente uma variação mais difícil ou adicione carga.` };
     return { kg: pos(last.sets[0].kg) || null, reps: Math.max(...reps), texto: topo ? `Última vez: ${reps.join(', ')} repetições. Você atingiu o alvo: tente uma variação mais difícil ou adicione carga.` : `Última vez: ${reps.join(', ')} repetições. Tente fazer 1 a mais em cada série.` };
   }
   const primeira = { kg: null, reps: lo, texto: `Primeira vez: comece leve. Escolha uma carga com que você faça ${hi} repetições sobrando umas 3.` };
@@ -94,6 +156,14 @@ export function sugestao(exId, alvoReps, nSeries) {
   // abaixo: a maioria das séries de trabalho ficou abaixo do mínimo da faixa
   const abaixo = (hst) => { const w = deTrabalho(hst); return w.length > 0 && w.filter((s) => pos(s.reps) < lo).length * 2 > w.length; };
   const maisUma = Math.min(hi, Math.max(lo, pos(comCarga[0].reps) + 1));
+  if (!ajuda) {
+    // o último treino foi o mais leve, por exercício travado: volta à carga de antes (bell2023)
+    const h5 = historico(exId, 5);
+    if (h5.length >= 5 && maisLeve(h5[0], h5[1]) && travadoEm(h5.slice(1))) {
+      const antes = maxKgDe(h5[1]);
+      return { kg: antes, reps: lo, plato: 'volta', texto: `Depois do treino mais leve, volte a ${kgTxt(antes)} kg e siga a progressão: mais repetições a cada treino, até ${hi}.` };
+    }
+  }
   if (ajuda) {
     if (noTopo(last) && kg > 0) return { kg: menos(kg), reps: lo, texto: `Última vez: ${resumo}. Você atingiu o alvo: reduza a ajuda da máquina para ${kgTxt(menos(kg))} kg.` };
     return { kg, reps: maisUma, texto: `Última vez: ${resumo}. Mantenha a ajuda e tente mais repetições.` };
@@ -103,11 +173,30 @@ export function sugestao(exId, alvoReps, nSeries) {
     return { kg: novo, reps: lo, texto: `Última vez: ${resumo}. Você atingiu ${hi} repetições em todas as séries por dois treinos seguidos: suba para ${kgTxt(novo)} kg e volte a ${lo} repetições.` };
   }
   if (noTopo(last)) return { kg, reps: hi, texto: `Última vez: ${resumo}. Repita ${hi} repetições em todas as séries hoje; se conseguir, aumente a carga no próximo treino.` };
+  // quantas ainda sairiam: dois treinos seguidos com a mesma carga e fora da faixa-alvo (helms2018, acsm2026)
+  const r0 = rirMedio(deTrabalho(last)), r1 = h2[1] ? rirMedio(deTrabalho(h2[1])) : null;
+  if (!rirSoAnotado() && kg > 0 && r0 != null && r1 != null && Math.abs(maxKgDe(h2[1]) - kg) < 1e-9 && !abaixo(last)) {
+    const [aMin, aMax] = alvoRir(ex);
+    const faixaRir = `${aMin} a ${aMax}`;
+    if (r0 >= aMax + 1 && r1 >= aMax + 1) {
+      const novo = comPct(kg, Math.min(ex.tipo === 'composto' ? 0.1 : 0.05, 0.04 * (Math.min(r0, r1) - aMax)));
+      return { kg: novo, reps: lo, rir: true, texto: `Última vez: ${resumo}. Nos dois últimos treinos, ainda sobravam ${Math.floor(Math.min(r0, r1))} repetições ou mais: a carga está leve. Suba para ${kgTxt(novo)} kg; o ideal é parar com ${faixaRir} sobrando.` };
+    }
+    if (r0 <= aMin - 2 && r1 <= aMin - 2) {
+      const novo = comPct(kg, -Math.min(0.1, 0.04 * (aMin - Math.max(r0, r1))));
+      if (novo > 0) return { kg: novo, reps: lo, rir: true, texto: `Última vez: ${resumo}. Nos dois últimos treinos, não sobrou nenhuma repetição. Baixe para ${kgTxt(novo)} kg: parar com ${faixaRir} sobrando dá o mesmo resultado, com menos cansaço.` };
+    }
+  }
   if (abaixo(last) && abaixo(h2[1]) && kg > 0) {
     const novo = menos(kg);
     // carga já no mínimo: não há o que reduzir
     if (novo <= 0) return { kg, reps: lo, texto: `Últimos treinos abaixo de ${lo} repetições. Mantenha a carga e capriche na técnica.` };
     return { kg: novo, reps: lo, texto: `Últimos treinos abaixo de ${lo} repetições. Reduza para ${kgTxt(novo)} kg e capriche na técnica.` };
+  }
+  // travado há 3 treinos: um treino mais leve, com uma série a menos e 10% menos carga, e depois a volta (bell2022)
+  if (travadoEm(historico(exId, 4))) {
+    const leve = comPct(kg, -0.1);
+    if (leve > 0) return { kg: leve, reps: pos(comCarga[0].reps) || lo, plato: 'leve', texto: `Marca parada há 3 treinos. Hoje, um treino mais leve: uma série a menos, com ${kgTxt(leve)} kg e as mesmas repetições. No próximo, volte a ${kgTxt(kg)} kg.` };
   }
   return { kg, reps: maisUma, texto: `Última vez: ${resumo}. Mantenha a carga e tente mais repetições (alvo: ${faixa}).` };
 }
@@ -328,10 +417,7 @@ export function estagnados(plan) {
   for (const id of ids) {
     const ex = EX_POR_ID.get(id);
     if (!ex || ex.registro !== 'peso_reps') continue;
-    const hst = historico(id, 4);
-    if (hst.length < 4) continue;
-    const best = hst.map((x) => Math.max(...x.sets.map((s) => e1rm(pos(s.kg), pos(s.reps)))));
-    if (best[3] > 0 && best[0] <= best[3] * 1.005 && best[1] <= best[3] * 1.005 && best[2] <= best[3] * 1.005) out.push(id);
+    if (travadoEm(historico(id, 4))) out.push(id);
   }
   return out;
 }

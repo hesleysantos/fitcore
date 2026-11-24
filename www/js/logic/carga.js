@@ -185,7 +185,7 @@ export function recomendacao(exId, alvoReps, nSeries, ctx = {}, agora = Date.now
   const sug = retomada(exId, sugestao(exId, alvoReps, nSeries), alvoReps, agora);
   if (!ex) return { ...sug, origem: '', linha: '', porque: [], refs: [] };
   if (temRegistro(exId)) {
-    const refs = ['acsm2009'];
+    const refs = ['acsm2009', ...(sug.rir ? ['helms2018', 'acsm2026'] : []), ...(sug.plato ? ['bell2022', 'bell2023'] : [])];
     if (sug.pausaDias || (typeof sug.texto === 'string' && /pausa|sem treinar|não faz este/.test(sug.texto))) refs.push('caterisano2019');
     return { ...sug, origem: 'historico', linha: linhaDoHistorico(ex, sug), porque: sug.texto ? [sug.texto] : [], refs };
   }

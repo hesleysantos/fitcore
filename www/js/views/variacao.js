@@ -108,7 +108,7 @@ export function cartaoVariacao(plan, sit, { forcar = false, aoFechar = null } = 
   }
   const acoes = h('div', { class: 'row par-de-botoes' },
     btn('Lembrar depois', () => { update((s) => { const p = s.plans.find((x) => x.id === plan.id); if (p) V.adiarVariacao(p, new Date().toISOString()); }); toast(`Combinado. Lembro você daqui a ${V.ADIAR_SEMANAS} semanas.`); fechar(); }, 'grow ghost'),
-    btn('Manter meu treino', () => { update((s) => { const p = s.plans.find((x) => x.id === plan.id); if (p) V.manterTreino(p, new Date().toISOString(), sit.motivo, sit.prazo); }); toast(sit.motivo === 'travado' ? 'Treino mantido. Baixe a carga uns 10% e suba de novo.' : `Treino mantido. Volto a sugerir em ${sit.prazo} semanas de treino.`); fechar(); }, 'grow ghost'));
+    btn('Manter meu treino', () => { update((s) => { const p = s.plans.find((x) => x.id === plan.id); if (p) V.manterTreino(p, new Date().toISOString(), sit.motivo, sit.prazo); }); toast(sit.motivo === 'travado' ? 'Treino mantido. A sugestão de carga traz um treino mais leve e depois a volta à carga.' : `Treino mantido. Volto a sugerir em ${sit.prazo} semanas de treino.`); fechar(); }, 'grow ghost'));
   card.appendChild(!forcar || sit.devido ? acoes : btn('Fechar', fechar, 'block ghost'));
   card.appendChild(porQue());
   return card;

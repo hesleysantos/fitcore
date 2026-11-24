@@ -224,14 +224,16 @@ export function vibrate(pattern = [220, 120, 220]) {
 //    página continua viva: o som e a notificação do fim saem na hora certa. Fontes: blink-dev "Faster background freezing
 //    on Android" (2025); Chromium page_scheduler_impl (kRecentAudioDelay), services/audio/output_stream.cc
 //    (kSilenceThresholdDBFS), content/browser/media/session/media_session_impl.cc (Web Audio fora do foco de áudio).
-//  • iPHONE: a página pausa logo que sai da tela, e o som da Web Audio para junto (categoria "Ambient" do iOS). Só um
-//    <audio> que JÁ está tocando, na categoria "Playback", continua em segundo plano, e essa categoria pausa a música de
-//    outros aplicativos (WebKit: bugs 198277, 264473; DOMAudioSession.cpp e AudioSessionIOS.mm). Não existe tipo de sessão
-//    de áudio que toque em segundo plano E misture com a música. Por isso, no iPhone, o aviso com a tela bloqueada é uma
-//    escolha: "Tocar o descanso como faixa" (abaixo), que pausa a música durante o descanso.
+//  • iPHONE: a página pausa logo que sai da tela, e o som da Web Audio para junto (categoria "Ambient" do iOS). Só mídia
+//    que toca som de verdade mantém a página viva, e ela entra na categoria "Playback", que pausa a música de outros
+//    aplicativos: o WebKit nunca liga "mixWithOthers" nem "duckOthers" (WebKit: bugs 198277, 264473; DOMAudioSession.cpp,
+//    AudioSessionIOS.mm, WebPageProxy.cpp e WebProcessProxy.cpp, conferidos em novembro de 2026). Mídia sem som (muda ou
+//    em picture-in-picture) não segura a página, e no iPhone o volume da página não muda. Sem servidor, também não há
+//    notificação marcada para depois. Conclusão: sem pausar a música e sem internet, o aviso do fim só toca com o app na
+//    tela. Por isso, no iPhone, a tela fica ligada durante o treino (Wake Lock, que funciona no app da tela de início desde
+//    o iOS 18.4) e o som sai por cima da música (sessão "transient", que mistura).
 //  • Notificação marcada para mais tarde, sem servidor, não existe em nenhum dos dois (Notification Triggers foi
-//    abandonado pelo Chrome; o Safari só tem push com servidor). A notificação do fim sai da página viva (Android) ou da
-//    faixa (iPhone com a opção ligada).
+//    abandonado pelo Chrome; o Safari só tem push com servidor). A notificação do fim sai da página viva (Android).
 //  • Notificação estável: uma só, com a hora do fim, mostrada quando a pessoa sai do app (nada de repostar a cada 5 s, que
 //    para quando a página congela e recria a notificação que a pessoa dispensou). No fim, a mesma etiqueta vira
 //    "Descanso terminado". As duas saem da central só quando a pessoa volta ao app.
@@ -262,53 +264,6 @@ export function manterNoFundo(motivo, ligado) {
 }
 // o som pode ter sido liberado depois de o motivo começar (primeiro toque): tenta de novo
 if (typeof document !== 'undefined') document.addEventListener('pointerdown', () => { if (segurando.size && !tomFundo) ligarTomFundo(); }, { capture: true, passive: true });
-
-// --- o descanso como uma faixa de áudio (opção, para a tela bloqueada) ---
-// Uma faixa do tamanho do descanso: silêncio e, no fim, o som do alerta. Começa no toque que inicia o descanso (o navegador
-// só deixa tocar depois de um toque) e segue tocando em segundo plano, porque é mídia de verdade. No iPhone, a sessão
-// de áudio vai para "playback" enquanto ela toca (a única que continua em segundo plano) e volta depois. Pausa a música
-// de outros aplicativos durante o descanso: no Android, mídia com mais de 5 s pede o foco de áudio inteiro (Chromium,
-// media_content_type.cc); no iPhone, "playback" não mistura. A tela de bloqueio mostra "Descanso" (Media Session).
-export const faixaDisponivel = () => typeof Audio !== 'undefined' && typeof URL !== 'undefined' && !!URL.createObjectURL && !!OAC();
-let faixa = null, faixaUrl = '', faixaFim = 0;
-const FAIXA_HZ = 16000;
-function pararFaixa() {
-  if (faixa) { try { faixa.pause(); faixa.removeAttribute('src'); faixa.load(); } catch { /* ignore */ } }
-  if (faixaUrl) { try { URL.revokeObjectURL(faixaUrl); } catch { /* ignore */ } faixaUrl = ''; }
-  faixaFim = 0;
-  try { if (navigator.audioSession) navigator.audioSession.type = 'transient'; } catch { /* sem suporte */ }
-  try { if (navigator.mediaSession) navigator.mediaSession.metadata = null; } catch { /* ignore */ }
-}
-const faixaTocando = () => !!faixaFim && !!faixa && !faixa.paused;
-async function tocarFaixa(fim) {
-  pararFaixa();
-  const id = state.settings.somAlerta || SOM_PADRAO;
-  const seg = (fim - Date.now()) / 1000;
-  if (!state.settings.somFaixa || !state.settings.som || id === 'silencioso' || !faixaDisponivel() || seg < 3 || seg > 900) return;
-  try {
-    // o som do alerta, gravado na taxa da faixa
-    const dur = (DURACAO[id] || 1) + 0.15;
-    const off = new (OAC())(1, Math.round(FAIXA_HZ * dur), FAIXA_HZ);
-    montar(off, id, 0.02);
-    const buf = await off.startRendering();
-    const som = buf.getChannelData(0);
-    const n0 = Math.max(0, Math.round((fim - Date.now()) / 1000 * FAIXA_HZ));
-    const n = n0 + som.length;
-    const out = new DataView(new ArrayBuffer(44 + n * 2));
-    const txt = (o, s) => { for (let i = 0; i < s.length; i++) out.setUint8(o + i, s.charCodeAt(i)); };
-    txt(0, 'RIFF'); out.setUint32(4, 36 + n * 2, true); txt(8, 'WAVE'); txt(12, 'fmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true);
-    out.setUint32(24, FAIXA_HZ, true); out.setUint32(28, FAIXA_HZ * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); txt(36, 'data'); out.setUint32(40, n * 2, true);
-    for (let i = 0; i < som.length; i++) { const v = Math.max(-1, Math.min(1, som[i])); out.setInt16(44 + (n0 + i) * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true); }
-    if (!faixa) { faixa = new Audio(); faixa.preload = 'auto'; faixa.addEventListener('ended', () => pararFaixa()); }
-    faixaUrl = URL.createObjectURL(new Blob([out], { type: 'audio/wav' }));
-    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* sem suporte */ }
-    try { if (navigator.mediaSession && typeof MediaMetadata !== 'undefined') navigator.mediaSession.metadata = new MediaMetadata({ title: 'Descanso', artist: `Termina às ${horaDe(fim)}`, album: 'FitCore', artwork: [{ src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' }] }); } catch { /* ignore */ }
-    faixa.src = faixaUrl; // a cada vez um endereço novo (no iPhone com iOS 26, reaproveitar o mesmo deixa o áudio mudo: WebKit, bug 295518)
-    faixaFim = fim;
-    const p = faixa.play();
-    if (p && typeof p.catch === 'function') p.catch(() => pararFaixa());
-  } catch { pararFaixa(); }
-}
 
 // --- notificações ---
 const TAG_AVISO = 'fitcore-descanso';
@@ -343,8 +298,7 @@ export function alertaDoDescanso(fim) {
   if (!fim || avisadoPara === fim) return;
   avisadoPara = fim;
   if (Date.now() - fim > ATRASO_MAX_AVISO) return;
-  // a faixa já toca o som no fim (e, em segundo plano, é ela que toca): não repete
-  if (!(faixaFim === fim && faixaTocando())) tocarAlerta(state.settings.somAlerta, 'Descanso terminado');
+  tocarAlerta(state.settings.somAlerta, 'Descanso terminado');
   vibrate();
   if (document.visibilityState !== 'visible') notificar('Descanso terminado', { body: 'Hora da próxima série.', renotify: true, silent: !state.settings.som, vibrate: state.settings.vibrar ? [220, 120, 220] : undefined, requireInteraction: true });
 }
@@ -356,14 +310,13 @@ function vigiar() {
     manterNoFundo('descanso', false);
   }
 }
-// O descanso que termina em `quando` (ms): vigia o fim, mantém o app vivo no Android e, com a opção, toca a faixa.
+// O descanso que termina em `quando` (ms): vigia o fim e mantém o app vivo no Android.
 export function agendarAviso(quando) {
   fimVigiado = Number.isFinite(quando) && quando > Date.now() ? quando : 0;
   clearInterval(vigiaT); vigiaT = 0;
   manterNoFundo('descanso', !!fimVigiado);
-  if (!fimVigiado) { pararFaixa(); return; }
+  if (!fimVigiado) return;
   vigiaT = setInterval(vigiar, 250);
-  if (faixaFim !== fimVigiado) tocarFaixa(fimVigiado);
   if (document.visibilityState === 'hidden') mostrarContagem();
 }
 // a notificação do descanso em andamento: uma só, com a hora do fim, quando a pessoa sai do app
@@ -374,8 +327,6 @@ function mostrarContagem() {
 export function cancelarAviso() {
   fimVigiado = 0; clearInterval(vigiaT); vigiaT = 0;
   manterNoFundo('descanso', false);
-  // a faixa que já chegou ao som do fim toca até o fim (ela se limpa sozinha)
-  if (!(faixaFim && Date.now() >= faixaFim - 500 && faixaTocando())) pararFaixa();
   fecharAvisos();
 }
 // O descanso chegou ao fim sozinho (a tela do treino viu). Com o app na frente, limpa tudo; em segundo plano, deixa a
