@@ -295,6 +295,12 @@ textarea.input { min-height: 84px; resize: vertical; }
 .sheet-ft .btn { flex: 1 1 0; }
 @keyframes up { from { transform: translateY(24px); opacity: 0.6; } to { transform: none; opacity: 1; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.barra-versao {
+  position: fixed; left: 12px; right: 12px; top: calc(var(--safe-t) + var(--top-h) + 8px); z-index: 65; max-width: 596px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 6px 6px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; font-weight: 600; font-size: 0.92rem;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); animation: fade 0.2s ease-out;
+}
 .toast {
   position: fixed; left: 50%; bottom: calc(var(--nav-h) + var(--safe-b) + 18px); transform: translateX(-50%); z-index: 70;
   background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-weight: 600; font-size: 0.92rem; max-width: 90vw;

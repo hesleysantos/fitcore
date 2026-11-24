@@ -1,6 +1,6 @@
 // Ponto de entrada: carrega o estado, monta a navegação e desenha a tela atual.
 import { h, clear, icon, iconBtn, btn, toast } from './ui.js';
-import { load, state, subscribe, onExternalChange, onSaveError, armazenamentoOk } from './store.js';
+import { load, state, subscribe, onExternalChange, onSaveError, armazenamentoOk, flush } from './store.js';
 import { setRenderer, back, replace } from './router.js';
 import { initInstall, maybeAutoPrompt } from './install.js';
 import { homeView } from './views/home.js';
@@ -12,7 +12,7 @@ import { trainerView } from './views/trainer.js';
 import { corridaView, corridaDiaView } from './views/corrida.js';
 import { sonoView } from './views/sono.js';
 import { nutritionView } from './views/nutrition.js';
-import { gymView, settingsView, aboutView } from './views/more.js';
+import { gymView, settingsView, aboutView, APP_VERSAO } from './views/more.js';
 import { resumoView } from './views/exportar.js';
 import { chatView } from './views/chat.js';
 
@@ -124,6 +124,25 @@ function telaDeErro() {
 window.addEventListener('hashchange', () => render());
 setRenderer(render);
 
+// Atualização: o service worker novo se instala e assume sozinho (skipWaiting). O app procura versão nova ao abrir e
+// cada vez que volta para a tela, no máximo a cada 30 min (no Android, o app costuma ficar aberto em segundo plano e não
+// recarrega). Achou: uma barra fixa com "Atualizar"; se a pessoa não tocar, a versão nova entra na próxima abertura.
+const BUSCA_MS = 30 * 60000;
+const LS_VERSAO = 'fitcore-versao';
+function avisoNovaVersao() {
+  if (document.querySelector('.barra-versao')) return;
+  document.body.appendChild(h('div', { class: 'barra-versao', role: 'status' },
+    h('span', { text: 'Nova versão do FitCore pronta.' }),
+    btn('Atualizar', async () => { try { await flush(); } catch { /* recarrega mesmo assim */ } location.reload(); }, 'primary')));
+}
+// depois de atualizar, avisa uma vez
+function versaoNova() {
+  try {
+    const antes = localStorage.getItem(LS_VERSAO);
+    if (antes !== APP_VERSAO) localStorage.setItem(LS_VERSAO, APP_VERSAO);
+    if (antes && antes !== APP_VERSAO) toast(`FitCore atualizado para a versão ${APP_VERSAO}.`);
+  } catch { /* sem armazenamento: sem aviso */ }
+}
 async function registerSw() {
   if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
   try {
@@ -138,9 +157,15 @@ async function registerSw() {
       if (!nw) return;
       nw.addEventListener('statechange', () => {
         if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-          import('./ui.js').then(({ toast }) => toast('Nova versão instalada. Feche e abra o aplicativo para atualizar.'));
+          avisoNovaVersao();
         }
       });
+    });
+    let busca = Date.now();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible' || Date.now() - busca < BUSCA_MS) return;
+      busca = Date.now();
+      reg.update().catch(() => { /* sem internet: tenta na próxima volta */ });
     });
   } catch { /* sem service worker: o app continua funcionando online */ }
 }
@@ -165,6 +190,7 @@ async function boot() {
   onExternalChange((motivo) => { render(true); toast(motivo === 'conflito' ? 'O aplicativo estava aberto em outra janela: carreguei os dados mais recentes.' : 'Dados atualizados a partir de outra janela do aplicativo.'); });
   onSaveError(() => toast('Atenção: não foi possível salvar. Libere espaço no aparelho e faça um backup em Ajustes.'));
   render();
+  versaoNova();
   if (!armazenamentoOk()) toast('Atenção: o armazenamento principal do aparelho não respondeu. Seus dados estão indo para uma cópia de reserva. Faça um backup em Ajustes.');
   // app deixado aberto de um dia para o outro: ao voltar, redesenha (treino de hoje, semana, datas)
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && diaDoDesenho !== new Date().toDateString() && !document.querySelector('.backdrop')) render(true); });
