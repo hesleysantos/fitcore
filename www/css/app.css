@@ -695,31 +695,26 @@ details.pq.perdido-pq > summary { min-height: 44px; }
 .lista-curta { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; }
 
 /* ---------- marca (logo e símbolo) ----------
-   Duas versões: a clara (cinza) no tema claro e a escura (branca) no tema escuro. Antes do app abrir, vale o modo do
-   aparelho; depois, o tema do app (Ajustes), que é o mesmo quando o tema está no automático. */
+   Duas versões: a clara (cinza) no tema claro e a escura (branca) no tema escuro, pelo tema do app (Ajustes). Sem tela
+   de abertura própria: no Android, o sistema já mostra o ícone enquanto o app abre. */
 .so-claro { display: none; }
 :root[data-theme='light'] .so-claro { display: inline-block; }
 :root[data-theme='light'] .so-escuro { display: none; }
+/* carregando (index.html): o símbolo com um anel girando em volta, enquanto o app abre; some quando a primeira tela
+   aparece. Segue o modo do aparelho (claro ou escuro): o tema do app só é lido depois. */
+.carregando { position: fixed; inset: 0; display: grid; place-items: center; background: #0e1116; }
+.carregando > * { grid-area: 1 / 1; }
+.carregando img { width: 64px; height: auto; }
+.carregando .cl { display: none; }
+.carregando .anel { width: 112px; height: 112px; border-radius: 50%; border: 3px solid #2b3242; border-top-color: #ff6b2c; animation: gira 0.9s linear infinite; }
 @media (prefers-color-scheme: light) {
-  #abertura:not([data-tema='escuro']) .so-claro, .carregando .so-claro { display: inline-block; }
-  #abertura:not([data-tema='escuro']) .so-escuro, .carregando .so-escuro { display: none; }
+  .carregando { background: #ffffff; }
+  .carregando .cl { display: block; }
+  .carregando .es { display: none; }
+  .carregando .anel { border-color: #dde1e8; border-top-color: #e8551a; }
 }
-#abertura[data-tema='claro'] .so-claro { display: inline-block; }
-#abertura[data-tema='claro'] .so-escuro { display: none; }
-#abertura[data-tema='escuro'] .so-claro { display: none; }
-#abertura[data-tema='escuro'] .so-escuro { display: inline-block; }
-/* abertura: a logo completa, na tela cheia, até o app desenhar a primeira tela */
-#abertura { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: #0e1116; transition: opacity 0.35s ease; }
-@media (prefers-color-scheme: light) { #abertura:not([data-tema='escuro']) { background: #ffffff; } }
-#abertura[data-tema='claro'] { background: #ffffff; }
-#abertura[data-tema='escuro'] { background: #0e1116; }
-#abertura img { width: min(62vw, 300px); height: auto; }
-#abertura.sai { opacity: 0; pointer-events: none; }
-/* carregando: o símbolo, pulsando de leve */
-.carregando { align-items: center; justify-content: center; min-height: 60vh; }
-.carregando img { width: 88px; height: auto; animation: pulsa 1.4s ease-in-out infinite; }
-@keyframes pulsa { 50% { opacity: 0.55; transform: scale(0.94); } }
+@keyframes gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .carregando .anel { animation-duration: 2.4s; } }
 .topbar .marca { width: 30px; height: auto; flex: none; margin-left: 6px; }
 .topbar .marca + h1 { padding-left: 2px; }
 .logo-sobre { width: min(56vw, 220px); height: auto; margin: 4px auto 0; }
-@media (prefers-reduced-motion: reduce) { #abertura { transition: none; } .carregando img { animation: none; } }
