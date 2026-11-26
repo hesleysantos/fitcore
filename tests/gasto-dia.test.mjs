@@ -24,3 +24,10 @@ test('não mostra calorias para menores nem para quem informou transtorno alimen
 test('dia sem atividades concluídas não exibe total', () => {
   assert.equal(gastoDoDia(state(), dia).mostrar, false);
 });
+
+test('conta caminhada registrada só com duração, como pede o formulário', () => {
+  const g = gastoDoDia(state({ runs: [{ id: 'c1', data: dia, tipo: 'caminhada', durMin: 60, distKm: 0 }] }), dia);
+  assert.equal(g.mostrar, true);
+  assert.equal(g.atividades, 1);
+  assert.equal(g.kcal, 280); // 3,5 MET × 80 kg × 1 h, estimativa para caminhada sem ritmo medido
+});

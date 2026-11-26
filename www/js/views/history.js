@@ -57,8 +57,9 @@ export function sessionDetailView(id) {
     g && g.mostrar ? h('div', { class: 'stat', id: 'gasto-treino' }, h('b', { class: 'nowrap', text: `≈ ${fmtInt(g.kcal)} kcal` }), h('span', { text: 'gasto estimado' })) : null));
   if (g && g.mostrar) {
     const conta = `${g.musculacaoMin ? `musculação moderada (${String(g.idade60 ? MET_MUSC.idoso : MET_MUSC.adulto).replace('.', ',')} METs)` : ''}${g.musculacaoMin && g.cardio.length ? ' e ' : ''}${g.cardio.length ? 'o MET de cada cardio' : ''}`;
+    const fallback60 = g.idade60 && g.cardio.some((c) => c.fallback60);
     body.push(h('details', { class: 'pq', id: 'gasto-porque' }, h('summary', { text: 'Por quê?' }),
-      h('p', { class: 'small', text: `Estimativa pela tabela de atividades: ${conta}, vezes o seu peso (${fmtKg(g.peso)} kg) e o tempo. O gasto real varia muito de pessoa para pessoa.${g.foraDaConta.length ? ` Fica fora da conta (sem valor na tabela): ${g.foraDaConta.join(', ')}.` : ''}` }),
+      h('p', { class: 'small', text: `Estimativa pela tabela de atividades: ${conta}, vezes o seu peso (${fmtKg(g.peso)} kg) e o tempo. O gasto real varia muito de pessoa para pessoa.${fallback60 ? ' Para os aparelhos sem valor específico no Compendium 60+, usei o valor adulto publicado com a conversão da base metabólica 60+.' : ''}${g.foraDaConta.length ? ` Fica fora da conta (sem valor na tabela): ${g.foraDaConta.join(', ')}.` : ''}` }),
       h('p', { class: 'tiny muted', text: 'Fonte: ' + (g.idade60 ? REFS.compendio60_2024 : REFS.compendio2024) })));
   } else if (g && g.motivo === 'peso') {
     body.push(h('button', { class: 'plainlink small gasto-peso', type: 'button', id: 'gasto-treino', onClick: () => abrir({ aba: 'peso', rota: 'progresso' }) }, h('span', { class: 'muted', text: 'Informe seu peso para ver as calorias ' }), h('span', { class: 'bold', text: '→' })));

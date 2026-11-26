@@ -238,6 +238,29 @@ export function plansView() {
   const hojeK = dateKey(hojeD);
   const efetiva = plan ? semanaEfetiva(plan, state.perdidos, dateKey(segunda)) : null;
   const acoesPerdido = (b) => h('div', { class: 'perdido-acoes' }, b);
+  const verTreino = (d) => {
+    const itens = d.itens.map((it, i) => {
+      const ex = EX_POR_ID.get(it.ex);
+      if (!ex) return null;
+      return h('div', { class: 'card' },
+        h('div', { class: 'exhead' },
+          h('button', { class: 'thumb', type: 'button', 'aria-label': 'Ver exercício ' + ex.nome, onClick: () => go('exercicio/' + ex.id) }, thumb(ex)),
+          h('div', { class: 'grow' },
+            h('div', { class: 'bold', text: `${i + 1}. ${ex.nome}` }),
+            h('div', { class: 'small muted', text: subtitulo(ex) }),
+            h('div', { class: 'tiny muted', text: alvoTexto(it) }),
+            ex.registro !== 'minutos' ? h('div', { class: 'tiny muted', text: `Descanso: ${descTxt(it.descanso)}` }) : null)));
+    }).filter(Boolean);
+    folha({
+      title: d.nome,
+      full: true,
+      body: [
+        d.foco ? h('p', { class: 'muted', text: d.foco }) : null,
+        h('p', { class: 'small muted', text: `${plural(itens.length, 'exercício', 'exercícios')} · cerca de ${duracaoEstimada(d)} minutos` }),
+        ...itens,
+      ].filter(Boolean),
+    });
+  };
   // `ef` = o dia na semana com as marcas: treino que veio de outro dia mostra de onde veio (no lugar do "Trocar")
   // treino mudado só nesta semana (logic/ajuste-semana.js): a contagem é a da semana, com o selo e o "Desfazer"
   const blocoTreino = (d0, wd = null, ef = null) => { const dataK = wd != null ? dateKey(dataDe(wd)) : ''; const d = dataK ? { ...d0, itens: itensDoDia(state, plan.id, d0.id, dataK) } : d0; const feita = dataK ? sessaoFeitaEm(d0, dataK) : null; return h('div', { class: 'treino col gap-s', 'data-treino': d.id, ...(ef && ef.veioDe ? { 'data-movido': ef.veioDe } : {}) },
@@ -251,8 +274,10 @@ export function plansView() {
     (() => { const mx = ef && semanaVista === 0 ? (ef.extra || ((state.perdidos || []).find((e) => e && e.tipo === 'troca' && e.data === dataK && e.extra) || {}).extra) : ''; return mx && !feita ? h('div', { class: 'row between treino-extra', 'data-extra-musc': mx }, h('span', { class: 'small muted', text: ef.extra ? 'Treino a mais nesta semana.' : 'Trazido para este dia a seu pedido.' }), btn(ef.extra ? 'Tirar' : 'Desfazer', () => { update((st) => apagarExtra(st, mx)); toast('Desfeito. A semana voltou ao que era.'); refresh(); }, 'sm ghost')) : null; })(),
     // treino já feito neste dia: só "Ver treino" (abre o registro no histórico)
     feita ? btn('Ver treino', () => go('historico/' + feita.id), 'ghost block', 'right') : h('div', { class: 'row' },
-      btn('Editar', () => go(`treino/${plan.id}/${d.id}`), 'ghost grow', 'edit'),
-      semanaVista === 0 || wd == null ? btn('Iniciar', () => startSession(plan.id, d.id), 'primary grow', 'play') : null),
+      btn('Ver treino', () => verTreino(d), 'block ghost'),
+      h('div', { class: 'row' },
+        btn('Editar', () => go(`treino/${plan.id}/${d.id}`), 'ghost grow', 'edit'),
+        semanaVista === 0 || wd == null ? btn('Iniciar', () => startSession(plan.id, d.id), 'primary grow', 'play') : null)),
     ef && semanaVista === 0 && podeMarcar(state, ef.data, hojeK).pode ? acoesPerdido(botaoNaoTreinei(ef.data, refresh)) : null); };
   const blocoCorrida = (c) => h('div', { class: 'treino col gap-s' },
     h('div', { class: 'row top' },

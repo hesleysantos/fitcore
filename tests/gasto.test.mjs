@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { gastoDoTreino, pesoParaGasto, METS_CARDIO } from '../www/js/logic/gasto.js';
 import { REFS } from '../www/js/data/knowledge.js';
-import { EX_POR_ID } from '../www/js/data/exercises.js';
+import { EXERCICIOS, EX_POR_ID } from '../www/js/data/exercises.js';
 
 const inicio = '2026-11-16T10:00:00.000Z';
 const fimEm = (min) => new Date(Date.parse(inicio) + min * 60000).toISOString();
@@ -27,10 +27,11 @@ test('com cardio: o tempo do cardio sai da musculação e usa o MET do aparelho'
   assert.equal(g.kcal, Math.round((3.5 * 40 / 60 + 6.8 * 20 / 60) * 80 / 10) * 10); // 187 + 181 = 368 → 370
   // série de cardio não concluída não conta
   assert.equal(gastoDoTreino(sessao(60, [forca('supino-reto-barra'), cardio('bicicleta-ergometrica', 20, false)]), st()).musculacaoMin, 60);
-  // aparelho sem valor na tabela: o tempo dele fica fora da conta, e a tela diz qual
+  // air bike usa a categoria oficial equivalente de bicicleta estacionária geral
   const r = gastoDoTreino(sessao(60, [forca('supino-reto-barra'), cardio('air-bike', 10)]), st());
   assert.equal(r.musculacaoMin, 50);
-  assert.deepEqual(r.foraDaConta, ['Air bike']);
+  assert.equal(r.cardio[0].met, 6.8);
+  assert.deepEqual(r.foraDaConta, []);
   // só cardio: nada de musculação no tempo que sobra
   const so = gastoDoTreino(sessao(40, [cardio('eliptico', 30)]), st());
   assert.equal(so.musculacaoMin, 0);
@@ -61,13 +62,24 @@ test('60 anos ou mais: valores do Older Adult Compendium (1 MET60+ = 2,7 mL/kg/m
   const g = gastoDoTreino(sessao(60, [forca('supino-reto-barra')]), st({ trainer: { answers: { idade: 65, peso: 70 } } }));
   assert.equal(g.idade60, true);
   assert.equal(g.kcal, Math.round((4.3 * 70 * 2.7 / 3.5) / 10) * 10); // ≈ 232 → 230
-  // cardio sem valor na tabela de 60+: fora da conta
-  assert.deepEqual(gastoDoTreino(sessao(30, [cardio('pular-corda', 10)]), st({ trainer: { answers: { idade: 65, peso: 70 } } })).foraDaConta, ['Pular corda']);
+  // sem MET60+ específico, usa o MET adulto publicado com a base metabólica 60+ (2,7/3,5)
+  const corda = gastoDoTreino(sessao(30, [cardio('pular-corda', 10)]), st({ trainer: { answers: { idade: 65, peso: 70 } } }));
+  assert.deepEqual(corda.foraDaConta, []);
+  assert.equal(corda.cardio[0].fallback60, true);
+  assert.ok(corda.kcal > 0);
 });
 
 test('entradas inválidas não quebram; todo cardio da tabela existe no catálogo; as fontes existem', () => {
   for (const lixo of [null, undefined, 5, 'x', {}, { inicio: 'x', fim: 'y', itens: 'z' }]) assert.doesNotThrow(() => gastoDoTreino(lixo, lixo));
   assert.equal(gastoDoTreino({ inicio, fim: inicio, itens: [] }, st()).mostrar, false);
   for (const id of Object.keys(METS_CARDIO)) assert.ok(EX_POR_ID.has(id) && EX_POR_ID.get(id).registro === 'minutos', id);
+  for (const ex of EXERCICIOS.filter((e) => e.registro === 'minutos')) {
+    assert.ok(METS_CARDIO[ex.id], `sem MET: ${ex.id}`);
+    for (const idade of [30, 65]) {
+      const g = gastoDoTreino(sessao(30, [cardio(ex.id, 10)]), st({ trainer: { answers: { idade, peso: 70 } } }));
+      assert.equal(g.mostrar, true, `sem calorias para ${ex.id} aos ${idade}`);
+      assert.deepEqual(g.foraDaConta, [], `${ex.id} fora da conta aos ${idade}`);
+    }
+  }
   assert.ok(REFS.compendio2024 && REFS.compendio60_2024);
 });

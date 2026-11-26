@@ -23,6 +23,7 @@ import { cartaoCombinado, perguntarCombinado } from './combinado.js';
 import { LOCAIS_DOR, doresAtivas, limparDor, MAX_DORES } from '../logic/dor.js';
 import { botaoChat } from './chat.js';
 import { podeNaEsteira, versaoNaEsteira, naEsteira, marcarEsteira, etapasNaEsteira } from '../logic/esteira.js';
+import { gastoDoDia } from '../logic/gasto-dia.js';
 import { podeMarcarCorrida, corridaPerdidaEm, reajustarDepoisDaCorrida } from '../logic/perdido.js';
 import { botaoNaoCorri, linhaNaoCorrida } from './perdido.js';
 import { cargaDaSemana, cargaDoDia, aplicarCarga, desfazerCarga } from '../logic/carga-corrida.js';
@@ -1018,6 +1019,10 @@ export function corridaDiaView(data) {
           }, 'grow ghost sm danger', 'trash'))));
     }
     const tem = state.runs.some((x) => x.data === data);
+    const gasto = gastoDoDia(state, data);
+    if (gasto.mostrar) area.appendChild(h('div', { class: 'card hl col gap-s', id: 'gasto-corrida-dia' },
+      h('div', { class: 'row between' }, h('div', { class: 'bold', text: 'Gasto estimado neste dia' }), h('strong', { class: 'nowrap accent', text: `≈ ${Math.round(gasto.kcal).toLocaleString('pt-BR')} kcal` })),
+      h('p', { class: 'tiny muted', text: 'Soma das corridas, caminhadas, treinos e atividades registrados nesta data.' })));
     if (futuro) area.appendChild(note('info', 'Este dia ainda não chegou. Você poderá registrar a corrida quando ela acontecer.'));
     else if (!tem) { form = formulario(data, planejado, null, null); area.appendChild(form.card); }
     else if (!editando) area.appendChild(btn('Registrar outra corrida neste dia', () => { editando = 'novo'; desenhar(); }, 'block ghost sm', 'plus'));

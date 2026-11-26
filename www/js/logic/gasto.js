@@ -23,18 +23,22 @@ import { EX_POR_ID } from '../data/exercises.js';
 import { perfilDoDiario } from './diario.js';
 
 const MET_MUSCULACAO = 3.5, MET_MUSCULACAO_60 = 4.3;
-// Cardio do catálogo → [MET adulto, MET 60+ (null = sem valor na tabela de 60+)]. Sem valor para adultos (bicicleta
-// reclinada, air bike, simulador de esqui, ergômetro de braço), o tempo do aparelho fica fora da conta.
+// Cardio do catálogo → [MET adulto, MET 60+ (null = sem valor específico na tabela de 60+)]. Para máquinas sem MET60+
+// próprio, usa o valor adulto publicado como referência e converte pela base metabólica 60+ (2,7/3,5).
 export const METS_CARDIO = {
   'caminhada-esteira': [3.8, null],            // 17355: esteira, 4,8 a 5,5 km/h, sem inclinação
   'caminhada-inclinada-esteira': [5.3, null],  // 17034: subida de 1% a 5%, ritmo moderado a rápido (não há esteira inclinada)
   'corrida-esteira': [8.0, null],              // 12150: corrida
   'caminhada-esteira-curva': [8.3, null],      // 17455: esteira curva, 4,8 a 8 km/h, ritmo rápido
   'bicicleta-ergometrica': [6.8, 5.3],         // 01200: bicicleta ergométrica, geral (60+: 0101060, moderado)
+  'bicicleta-reclinada': [6.8, 5.3],            // 01200/0101060: bicicleta estacionária, geral (categoria oficial equivalente)
+  'air-bike': [6.8, 5.3],                       // 01200/0101060: bicicleta estacionária, geral (sem MET específico para Air Bike)
   'hiit-bicicleta': [8.8, null],               // 01305: bicicleta, treino intervalado de alta intensidade
   eliptico: [5.0, 3.0],                        // 02048: elíptico, moderado (60+: 0204760, leve)
   'remo-ergometro': [5.0, 6.5],                // 02071: remo ergômetro, abaixo de 100 W, moderado (60+: 0207260, 50 a 99 W)
   'simulador-escada': [9.3, null],             // 02065: simulador de escada, geral
+  'simulador-esqui': [10.5, null],              // 02082: SkiErg, dupla impulsão, intensidade leve a moderada
+  'ergometro-de-braco': [2.8, null],            // 02115: ergômetro de braço, geral, esforço leve (sem potência/esforço registrados)
   'pular-corda': [11.0, null],                 // 02068: pular corda, geral
 };
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -75,9 +79,9 @@ export function gastoDoTreino(sessao, st) {
     if (!min) continue;
     cardioMin += min;
     const m = METS_CARDIO[ex.id];
-    const met = m ? (idade60 ? m[1] : m[0]) : null;
+    const met = m ? (idade60 ? (m[1] ?? m[0]) : m[0]) : null;
     if (met == null) out.foraDaConta.push(ex.nome);
-    else out.cardio.push({ ex: ex.id, nome: ex.nome, min, met });
+    else out.cardio.push({ ex: ex.id, nome: ex.nome, min, met, ...(idade60 && m[1] == null ? { fallback60: true } : {}) });
   }
   // o cardio registrado não passa da duração do treino; o que sobra é musculação (se houve exercício de força)
   const escala = cardioMin > totalMin && cardioMin > 0 ? totalMin / cardioMin : 1;
