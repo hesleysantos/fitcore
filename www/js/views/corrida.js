@@ -843,6 +843,10 @@ function formulario(data, planejado, existente, aoFechar, manualNovo = false) {
   const tipoIntervalo = [['aquecer', 'Aquecimento'], ['correr', 'Corrida leve'], ['forte', 'Tiro / ritmo forte'], ['trote', 'Trote de recuperação'], ['caminhar', 'Caminhada'], ['desaquecer', 'Desaquecimento']];
   const nomeIntervalo = NOME_INTERVALO;
   const textoPace = (seg) => (seg ? `${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, '0')}` : '');
+  const textoTempoIntervalo = (seg) => {
+    const h = Math.floor(seg / 3600), m = Math.floor((seg % 3600) / 60), s = seg % 60;
+    return h ? `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
   const campoPaceIntervalo = (valor, i) => {
     const el = h('input', { class: 'input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'off', value: textoPace(valor), placeholder: '0:00', 'aria-label': `Ritmo do intervalo ${i + 1}, min/km` });
     el.addEventListener('input', () => {
@@ -860,8 +864,15 @@ function formulario(data, planejado, existente, aoFechar, manualNovo = false) {
       const sel = h('select', { class: 'input', 'aria-label': `Tipo do intervalo ${i + 1}` }, ...tipoIntervalo.map(([v, nome]) => h('option', { value: v, selected: x.tipo === v }, nome)));
       sel.addEventListener('change', () => { x.tipo = sel.value; });
       const segVal = Math.max(0, Math.round(Number(x.seg) || 0));
-      const tempo = h('input', { class: 'input', type: 'text', inputmode: 'numeric', autocomplete: 'off', value: segVal ? `${Math.floor(segVal / 60)}:${String(segVal % 60).padStart(2, '0')}` : '', placeholder: 'min:seg', 'aria-label': `Tempo do intervalo ${i + 1}` });
-      tempo.addEventListener('input', () => { tempo.value = tempo.value.replace(/[^\d:,\.]/g, ''); const m = lerTempo(tempo.value); x.seg = Number.isFinite(m) ? Math.round(m * 60) : NaN; x.medido = false; });
+      const tempo = h('input', { class: 'input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: 'off', maxlength: '8', value: segVal ? textoTempoIntervalo(segVal) : '', placeholder: '00:00', 'aria-label': `Tempo do intervalo ${i + 1}` });
+      tempo.addEventListener('input', () => {
+        const digitos = tempo.value.replace(/\D/g, '').slice(0, 6);
+        const seg = Number(digitos.slice(-2) || 0), min = Number(digitos.slice(-4, -2) || 0), hora = Number(digitos.slice(0, -4) || 0);
+        tempo.value = hora ? `${String(hora).padStart(2, '0')}:${String(min).padStart(2, '0')}:${String(seg).padStart(2, '0')}` : `${String(min).padStart(2, '0')}:${String(seg).padStart(2, '0')}`;
+        x.seg = hora * 3600 + min * 60 + seg;
+        x.medido = false;
+        tempo.setSelectionRange(tempo.value.length, tempo.value.length);
+      });
       const pace = campoPaceIntervalo(x.ritmo, i);
       listaIntervalos.appendChild(h('div', { class: 'card col gap-s', 'data-intervalo': i + 1 },
         h('div', { class: 'row between' }, h('strong', { text: `Intervalo ${i + 1}` }), btn('Remover', () => { r.intervalos.splice(i, 1); desenharIntervalos(); }, 'plain sm danger', 'trash')),
