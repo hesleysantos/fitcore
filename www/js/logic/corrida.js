@@ -1261,6 +1261,13 @@ export function limparRegistro(raw) {
   // ritmo impossível (mais rápido que 1:50 por km): o registro é recusado
   if (distKm && durMin && (durMin * 60) / distKm < 110) return null;
   const pse = typeof raw.pse === 'number' && Number.isFinite(raw.pse) && Math.round(raw.pse) >= 1 && Math.round(raw.pse) <= 10 ? Math.round(raw.pse) : null;
+  const tiposIntervalo = new Set(['aquecer', 'correr', 'forte', 'trote', 'caminhar', 'desaquecer']);
+  const intervalos = Array.isArray(raw.intervalos) ? raw.intervalos.slice(0, 60).map((x) => {
+    if (!isObj(x) || !tiposIntervalo.has(x.tipo) || !(typeof x.seg === 'number' && Number.isFinite(x.seg) && x.seg >= 1 && x.seg <= 7200)) return null;
+    const ritmo = x.ritmo == null ? null : typeof x.ritmo === 'number' && Number.isFinite(x.ritmo) && x.ritmo >= 110 && x.ritmo <= 1800 ? Math.round(x.ritmo) : NaN;
+    if (Number.isNaN(ritmo)) return null;
+    return { tipo: x.tipo, seg: Math.round(x.seg), ritmo, ...(x.medido === true ? { medido: true } : {}) };
+  }).filter(Boolean) : [];
   return {
     id: raw.id, data: raw.data, tipo: typeof raw.tipo === 'string' && TIPOS_REGISTRO.has(raw.tipo) ? raw.tipo : 'livre', distKm, durMin, pse, dores: limparDoresDoRegistro(raw),
     nota: typeof raw.nota === 'string' ? raw.nota.slice(0, 200) : '', planejado: typeof raw.planejado === 'string' ? raw.planejado.slice(0, 160) : '',
@@ -1274,6 +1281,7 @@ export function limparRegistro(raw) {
     ...(Number.isFinite(raw.paceTrecho) && raw.paceTrecho >= 120 && raw.paceTrecho <= 1200 ? { paceTrecho: Math.round(raw.paceTrecho) } : {}),
     // corrida e caminhada: quantas etapas de corrida foram feitas
     ...(etapasOk(raw.etapas) ? { etapas: { feitas: Math.round(raw.etapas.feitas), de: Math.round(raw.etapas.de) } } : {}),
+    ...(intervalos.length ? { intervalos } : {}),
   };
 }
 export const MAX_REGISTROS = 3000;
@@ -1317,7 +1325,19 @@ function limparCron(c) {
   if (Object.values(o).some((x) => x === -1) || o.inicio < 1e12) return null;
   // instantes coerentes entre si: nada antes do início; o fim da etapa não vem antes do começo dela
   if (o.inicioPasso < o.inicio || (o.fim && o.fim < o.inicioPasso) || (o.pausadoEm && o.pausadoEm < o.inicio) || (o.terminado && o.terminado < o.inicio)) return null;
-  return o;
+  const intervaloTipos = new Set(['aquecer', 'correr', 'forte', 'trote', 'caminhar', 'desaquecer']);
+  const intervalos = Array.isArray(c.intervalos) ? c.intervalos.slice(0, 60).map((x) => {
+    if (!isObj(x) || !intervaloTipos.has(x.tipo)) return null;
+    const seg = typeof x.seg === 'number' && Number.isFinite(x.seg) && x.seg >= 0 && x.seg <= 7200 ? Math.round(x.seg) : null;
+    const ritmo = x.ritmo == null ? null : typeof x.ritmo === 'number' && Number.isFinite(x.ritmo) && x.ritmo >= 110 && x.ritmo <= 1800 ? Math.round(x.ritmo) : NaN;
+    if (seg == null || Number.isNaN(ritmo)) return null;
+    return { tipo: x.tipo, rotulo: typeof x.rotulo === 'string' ? x.rotulo.slice(0, 60) : '', seg, ritmo };
+  }).filter(Boolean) : [];
+  if (intervalos.length && intervalos.length !== c.intervalos.length) return null;
+  const parciais = Array.isArray(c.parciais) && c.parciais.length <= intervalos.length
+    ? c.parciais.map((x) => typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 7200 ? Math.round(x) : -1) : [];
+  if (parciais.some((x) => x < 0)) return null;
+  return { ...o, ...(intervalos.length ? { intervalos, parciais } : {}) };
 }
 // pausas do plano já encerradas: { de, ate, semanas (quantas semanas o plano pulou; 0 quando há prova com data) }
 export const MAX_PAUSAS = 20;
@@ -1354,7 +1374,7 @@ export function limparCorrida(raw) {
   const r = isObj(raw) ? raw : {};
   const aceitoEm = isoOk(r.aceitoEm);
   const inicio = aceitoEm && diaValido(r.inicio) ? segundaDe(r.inicio) : '';
-  return { answers: limparRespostas(r.answers), aceitoEm: inicio ? aceitoEm : '', inicio, pausadoEm: inicio ? isoOk(r.pausadoEm) : '', cron: inicio ? limparCron(r.cron) : null, pausas: inicio ? limparPausas(r.pausas) : [],
+  return { answers: limparRespostas(r.answers), aceitoEm: inicio ? aceitoEm : '', inicio, pausadoEm: inicio ? isoOk(r.pausadoEm) : '', cron: limparCron(r.cron), pausas: inicio ? limparPausas(r.pausas) : [],
     // o treino mostrado em cada dia e o degrau de ritmo já concedido (ver guardarDoDia)
     mostrados: inicio ? limparMostrados(r.mostrados) : [], degrau: inicio ? limparDegrau(r.degrau) : null, carga: inicio ? limparCarga(r.carga) : [] };
 }

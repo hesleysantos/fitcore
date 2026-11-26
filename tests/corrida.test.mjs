@@ -425,6 +425,8 @@ test('registros e estado: validação na fronteira', () => {
   assert.equal(limparRegistro({ id: 'a b', data: '2026-11-01', tipo: 'leve', distKm: 5, durMin: 30 }), null);
   assert.equal(limparRegistro({ id: 'a', data: '2026-11-01', tipo: 'descanso', distKm: 5, durMin: 30 }).tipo, 'livre');
   assert.deepEqual(limparRegistro({ id: 'a', data: '2026-11-01', tipo: 'longo', distKm: 12.345, durMin: 80.2501, pse: 5, dor: { onde: 'pe', nivel: 3 }, nota: 'ok', planejado: 'x' }), { id: 'a', data: '2026-11-01', tipo: 'longo', distKm: 12.35, durMin: 80.25, pse: 5, dores: [{ onde: 'pe', nivel: 3, tipo: 'articular' }], nota: 'ok', planejado: 'x' });
+  const intervalado = limparRegistro({ id: 'int1', data: '2026-11-01', tipo: 'intervalado', durMin: 8, intervalos: [{ tipo: 'forte', seg: 180, ritmo: 285, medido: true }, { tipo: 'caminhar', seg: 90, ritmo: null }, { tipo: 'x', seg: 5, ritmo: 200 }, { tipo: 'trote', seg: 0 }] });
+  assert.deepEqual(intervalado.intervalos, [{ tipo: 'forte', seg: 180, ritmo: 285, medido: true }, { tipo: 'caminhar', seg: 90, ritmo: null }], 'guarda apenas os intervalos válidos com tempo e ritmo dentro da faixa');
   assert.deepEqual(limparCorrida({ answers: { ...base, extra: 1, idade: 500 }, aceitoEm: '2026-10-07T12:00:00.000Z', inicio: '2026-10-08' }).inicio, '2026-10-05');
   // cronômetro guardado: só números dentro dos limites, e só com plano aceito
   const cron = { data: '2026-10-08', i: 3, fim: 1791460000000, pausadoEm: 0, inicio: 1791459000000, parado: 0, inicioPasso: 1791459900000, terminado: 0, chave: 12345 };
@@ -443,7 +445,10 @@ test('registros e estado: validação na fronteira', () => {
   assert.equal(limpos.length, MAX_REGISTROS);
   assert.equal(limpos[limpos.length - 1].data, somaDias('2015-01-01', MAX_REGISTROS + 49));
   assert.equal(limpos[0].data, somaDias('2015-01-01', 50));
-  assert.equal(limparCorrida({ answers: base, cron }).cron, null, 'sem plano aceito não há cronômetro');
+  assert.equal(limparCorrida({ answers: base, cron }).cron.data, cron.data, 'o cronômetro pode ser de uma sessão manual sem plano aceito');
+  const cronIntervalado = { ...cron, intervalos: [{ tipo: 'forte', rotulo: 'Tiro 1', seg: 60, ritmo: 280 }, { tipo: 'caminhar', rotulo: 'Recuperação 1', seg: 0, ritmo: null }], parciais: [62] };
+  const salvo = limparCorrida({ answers: base, cron: cronIntervalado }).cron;
+  assert.deepEqual(salvo.intervalos, cronIntervalado.intervalos); assert.deepEqual(salvo.parciais, [62]);
   assert.equal(limparCorrida({ answers: { ...base, idade: 500 } }).answers.idade, undefined);
   assert.equal(fmtDuracao(90), '1 min 30 s'); assert.equal(fmtDuracao(1800), '30 min'); assert.equal(fmtDuracao(5400), '1h30');
 });
