@@ -83,7 +83,7 @@ O FitCore é um PWA: instala-se pelo navegador, sem loja e sem APK.
 - **Android (Chrome):** ao abrir o endereço, o app oferece “Instalar”; também dá para usar o menu ⋮ → *Adicionar à tela inicial*.
 - **iPhone (Safari):** *Compartilhar → Adicionar à Tela de Início* (o próprio app mostra esse passo a passo na primeira abertura). Instale antes de registrar treinos: no iPhone, os dados do navegador e os do app instalado ficam separados, e o Safari pode apagar os dados de um site que fica 7 dias sem ser aberto; instalado, isso não acontece.
 
-Depois de instalado, abre em tela cheia e funciona sem internet. O que depende do aparelho: a vibração só existe no Android; no iPhone o bipe não toca com o modo silencioso ligado; o aviso do fim do descanso com o app em segundo plano é uma notificação do navegador (opção em Ajustes), confiável no Android e sujeita a atraso no iPhone, que pausa o app em segundo plano.
+Depois de instalado, abre em tela cheia e funciona sem internet. O que depende do aparelho: a vibração só existe no Android; no iPhone o bipe não toca com o modo silencioso ligado. A notificação do descanso mostra a hora prevista quando você sai do app. O Android também avisa quando o descanso acaba; no iPhone, o sistema suspende o app e não há como agendar esse segundo aviso localmente. Para receber o aviso no iPhone, deixe o app aberto (e mude a música pela Central de Controle) ou ligue “Tocar o descanso com a tela bloqueada”, que pausa a música. Um aviso garantido com o app suspenso precisaria de Web Push enviado por servidor e internet.
 
 ### GitHub Pages (já configurado)
 

@@ -169,7 +169,7 @@ export function settingsView() {
     // aviso por notificação quando a pessoa troca de aplicativo durante o descanso (só onde o navegador oferece)
     // fora do app (device.js): no Android, o som e a notificação saem sozinhos, junto da música; no iPhone, o sistema pausa
     // o app fora da tela, e o aviso do fim só toca com ele aberto
-    avisoDisponivel() ? linha('Notificação do descanso', isIos() ? 'Ao sair do app, mostra a hora do fim. No iPhone, o som do fim só toca com o app na tela (ou com a opção abaixo): deixe-o aberto no descanso e mude a música pela Central de Controle.' : 'Ao sair do app, mostra a hora do fim e avisa quando acabar, sem pausar a sua música.', toggle(!!st.avisoFundo && avisoPermitido(), async (v) => {
+    avisoDisponivel() ? linha('Notificação do descanso', isIos() ? 'Ao sair do app, mostra a hora prevista. O iPhone suspende o app: essa notificação não é agendada para tocar de novo no fim. Para receber o aviso, deixe o app aberto (e mude a música pela Central de Controle) ou ative a opção abaixo, que pausa a música.' : 'Ao sair do app, mostra a hora do fim e avisa quando acabar, sem pausar a sua música.', toggle(!!st.avisoFundo && avisoPermitido(), async (v) => {
       if (!v) { set('avisoFundo', false); return; }
       if (await pedirPermissaoDeAviso()) { set('avisoFundo', true); toast('Aviso ligado.'); } else { set('avisoFundo', false); toast('O navegador não deu permissão para notificações. Libere nas configurações do site e tente de novo.'); refresh(); }
     }, 'Notificação do descanso')) : null,
