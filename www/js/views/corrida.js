@@ -1126,9 +1126,7 @@ export function corridaDiaView(data) {
     else if (!tem) { form = formulario(data, planejado, null, null); area.appendChild(form.card); }
     else if (!editando) area.appendChild(btn('Registrar outra corrida neste dia', () => { editando = 'novo'; desenhar(); }, 'block ghost sm', 'plus'));
     // outra corrida no mesmo dia: entra com o mesmo treino planejado (a análise soma as corridas do dia)
-    if (editando === 'novo') { form = formulario(data, planejado, null, () => { editando = ''; desenhar(); }); area.appendChild(form.card); }
-    if (editando === 'manual') { form = formulario(data, null, null, () => { editando = ''; desenhar(); }, true); area.appendChild(form.card); }
-    if (!futuro && editando !== 'manual' && planejado && planejado.tipo !== 'descanso') area.appendChild(btn('Adicionar treino manual', () => { editando = 'manual'; desenhar(); }, 'block ghost sm', 'plus'));
+    if (editando === 'novo') { form = formulario(data, planejado, null, () => { editando = ''; desenhar(); }, true); area.appendChild(form.card); }
   };
   desenhar();
   body.push(area);

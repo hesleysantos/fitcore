@@ -336,6 +336,11 @@ export default async (page) => {
   await km('1000'); await tempo('9');
   await page.eval(`[...document.querySelectorAll('#registro .btn.primary')].pop().click(); return true;`); await page.sleep(400);
   ok((await estado('s.runs.length')) === 1, 'ritmo impossível (10 km em 9 min) não é gravado');
+  t = await texto();
+  ok(t.includes('Intervalos e parciais') && t.includes('Cronometrar intervalos') && !t.includes('Adicionar treino manual'), '“Registrar outra corrida” oferece o formulário completo de intervalos sem um segundo botão');
+  await page.click('Adicionar intervalo');
+  const mascara = await page.eval(`const i = document.querySelector('[aria-label="Tempo do intervalo 1"]'); if (!i) return false; i.value = '0500'; i.dispatchEvent(new Event('input', { bubbles: true })); return i.value;`);
+  ok(mascara === '05:00', 'o formulário único mantém o preenchimento e a máscara do tempo dos intervalos');
 
   console.log('7. Corrida nas outras telas e encerramento');
   await page.goto(B + '#/treinos', 900);
