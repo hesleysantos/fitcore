@@ -41,6 +41,7 @@ test('com cardio: o tempo do cardio sai da musculação e usa o MET do aparelho'
 test('peso: o último registro vale mais que a entrevista; sem peso, pede o peso', () => {
   assert.equal(pesoParaGasto(st({ body: [{ data: '2026-11-01', peso: 82 }, { data: '2026-11-10', peso: 78.5 }] })), 78.5);
   assert.equal(pesoParaGasto(st()), 80);
+  assert.equal(pesoParaGasto({ trainer: { answers: {} }, run: { answers: { idade: 42, peso: 73 } }, nutri: { answers: {} }, body: [] }), 73);
   assert.equal(pesoParaGasto({ trainer: { answers: {} }, nutri: { answers: { peso: 66 } } }), 66);
   const g = gastoDoTreino(sessao(60, [forca('supino-reto-barra')]), { trainer: { answers: { idade: 30 } }, nutri: { answers: {} }, body: [] });
   assert.equal(g.mostrar, false);
@@ -61,8 +62,8 @@ test('transtorno alimentar (em qualquer entrevista) e menores de 18: sem caloria
 test('60 anos ou mais: valores do Older Adult Compendium (1 MET60+ = 2,7 mL/kg/min)', () => {
   const g = gastoDoTreino(sessao(60, [forca('supino-reto-barra')]), st({ trainer: { answers: { idade: 65, peso: 70 } } }));
   assert.equal(g.idade60, true);
-  assert.equal(g.kcal, Math.round((4.3 * 70 * 2.7 / 3.5) / 10) * 10); // ≈ 232 → 230
-  // sem MET60+ específico, usa o MET adulto publicado com a base metabólica 60+ (2,7/3,5)
+  assert.equal(g.kcal, Math.round((4.3 * 70 * 0.810) / 10) * 10); // ≈ 244 → 240; conversão do Compendium 60+ para kcal
+  // sem MET60+ específico, usa o MET adulto publicado com a conversão 60+ de 0,810 kcal/kg/h
   const corda = gastoDoTreino(sessao(30, [cardio('pular-corda', 10)]), st({ trainer: { answers: { idade: 65, peso: 70 } } }));
   assert.deepEqual(corda.foraDaConta, []);
   assert.equal(corda.cardio[0].fallback60, true);

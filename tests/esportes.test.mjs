@@ -21,15 +21,15 @@ test('tabela: ids únicos, grupos conhecidos, MET do Compendium entre 2 e 12', (
   for (const id of ['futebol', 'basquete', 'volei', 'patins', 'ciclismo', 'natacao', 'calistenia', 'ginastica-aerobica']) assert.ok(ESPORTE_POR_ID.has(id), id);
 });
 
-test('calorias = MET × peso × horas (60+: MET60 × 2,7/3,5), arredondadas a 10 kcal', () => {
+test('calorias = MET × peso × horas (60+: MET60 × 0,810 kcal/kg/h), arredondadas a 10 kcal', () => {
   const s = st();
   // futebol (7,0), 70 kg, 60 min: 490 kcal; 8,17 kcal por minuto
   assert.equal(gastoDaAtividade({ esporte: 'futebol', min: 60 }, s).kcal, 490);
   assert.ok(Math.abs(gastoPorMinuto('futebol', s).porMin - 7 * 70 / 60) < 1e-9);
   assert.equal(gastoDaAtividade({ esporte: 'natacao', min: 30 }, s).kcal, 210); // 6,0 × 70 × 0,5
-  // 60 anos ou mais: com valor próprio, MET60 × 2,7/3,5; sem valor próprio, o de adultos
+  // 60 anos ou mais: com valor próprio, MET60 × 0,810 kcal/kg/h; sem valor próprio, o de adultos
   const idoso = st({ trainer: { answers: { idade: 70 } } });
-  assert.ok(Math.abs(gastoPorMinuto('calistenia', idoso).porMin - (3.5 * 70 * 2.7 / 3.5) / 60) < 1e-9);
+  assert.ok(Math.abs(gastoPorMinuto('calistenia', idoso).porMin - (3.5 * 70 * 0.810) / 60) < 1e-9);
   assert.ok(Math.abs(gastoPorMinuto('futebol', idoso).porMin - 7 * 70 / 60) < 1e-9);
   // sem peso: pede o peso; menor de 18 e transtorno alimentar: nada de calorias
   assert.equal(gastoPorMinuto('futebol', st({ body: [] })).motivo, 'peso');

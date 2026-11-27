@@ -21,7 +21,7 @@ import { alcance, mudarItens, seloSemana } from './ajuste-semana.js';
 import { linhasAtividades, botaoOutroTreino, linhasPlanejados } from './esportes.js';
 import { apagarExtra } from '../logic/treino-extra.js';
 import { folhaTrocarDias } from './trocar-dias.js';
-import { gastoDoDia } from '../logic/gasto-dia.js';
+import { gastoDoDia, resumoGastoDoDia } from '../logic/gasto-dia.js';
 
 const ORDEM_SEMANA = [1, 2, 3, 4, 5, 6, 0];
 const AGENDA_PADRAO = { 1: [1], 2: [1, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5], 6: [1, 2, 3, 4, 5, 6], 7: [1, 2, 3, 4, 5, 6, 0] };
@@ -351,7 +351,9 @@ export function plansView() {
       card.appendChild(h('div', { class: 'row outro-treino' }, botaoOutroTreino(dataDia, refresh, 'plain sm', dataDia === hojeK ? 'Adicionar outro treino' : dataDia < hojeK ? 'Adicionar treino feito' : 'Planejar treino a mais')));
     }
     const gastoDia = gastoDoDia(state, dataDia);
-    if (gastoDia.mostrar) card.appendChild(h('div', { class: 'small muted', 'data-calorias-dia': dataDia, text: `Total estimado: ≈ ${Math.round(gastoDia.kcal).toLocaleString('pt-BR')} kcal` }));
+    if (gastoDia.mostrar) card.appendChild(h('div', { class: 'col gap-s', 'data-calorias-dia': dataDia },
+      h('div', { class: 'small muted', text: `Total estimado: ≈ ${Math.round(gastoDia.kcal).toLocaleString('pt-BR')} kcal` }),
+      h('div', { class: 'tiny muted', 'data-calorias-detalhe': dataDia, text: resumoGastoDoDia(gastoDia) })));
     semana.appendChild(card);
   }
   // na semana atual, o dia de hoje vem primeiro (é o que se usa); o resto da semana, embaixo, na ordem de sempre

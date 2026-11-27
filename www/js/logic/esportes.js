@@ -3,7 +3,7 @@
 //
 // Conta, a mesma do treino registrado (logic/gasto.js, com as fontes lidas em texto completo): kcal = MET × peso (kg) ×
 // horas, com o MET do 2024 Adult Compendium (ref compendio2024); aos 60 anos ou mais, o MET do Older Adult Compendium
-// (ref compendio60_2024) × 2,7/3,5. Abaixo de 18 anos e com transtorno alimentar informado, nada de calorias (o mesmo
+// (ref compendio60_2024) × 0,810 kcal/kg/h. Abaixo de 18 anos e com transtorno alimentar informado, nada de calorias (o mesmo
 // critério do diário). A tabela "não reflete o gasto exato de cada pessoa": o número é sempre uma estimativa (≈).
 import { ESPORTES, ESPORTE_POR_ID } from '../data/esportes.js';
 import { pesoParaGasto } from './gasto.js';
@@ -43,7 +43,7 @@ export function gastoPorMinuto(esporte, st) {
   out.met = idade60 ? e.met60 : e.met;
   const peso = pesoParaGasto(st);
   if (peso == null) { out.motivo = 'peso'; return out; }
-  out.porMin = (out.met * peso * (idade60 ? 2.7 / 3.5 : 1)) / 60;
+  out.porMin = (out.met * peso * (idade60 ? 0.810 : 1)) / 60;
   out.mostrar = true;
   return out;
 }

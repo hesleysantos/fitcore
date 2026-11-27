@@ -9,8 +9,8 @@
 //    conta de energia (MET corrigido × repouso da pessoa = MET padrão × 3,5 mL/kg/min): fica de fora.
 //  • A tabela "não reflete o gasto exato de cada pessoa" e serve como ponto de partida: o número é sempre "≈" e a tela diz
 //    que é estimativa.
-//  • Os valores de adultos valem de 19 a 59 anos; a partir dos 60, os do Older Adult Compendium, em que 1 MET60+ é
-//    2,7 mL/kg/min (e não 3,5: o repouso é mais baixo nessa idade). Por isso, aos 60 ou mais, kcal = MET60+ × 2,7/3,5 ×
+//  • Os valores de adultos valem de 19 a 59 anos; a partir dos 60, os do Older Adult Compendium convertem MET60+ a
+//    0,810 kcal/kg/h (em vez de 1,0 no Compendium adulto). Por isso, aos 60 ou mais, kcal = MET60+ × 0,810 ×
 //    peso × horas. Abaixo de 18 anos (outra
 //    tabela, a Youth Compendium) o aplicativo não mostra calorias — como no diário alimentar, que também não as mostra.
 //  • Transtorno alimentar informado em qualquer entrevista: nada de calorias (o mesmo critério do diário, logic/diario.js).
@@ -24,7 +24,7 @@ import { perfilDoDiario } from './diario.js';
 
 const MET_MUSCULACAO = 3.5, MET_MUSCULACAO_60 = 4.3;
 // Cardio do catálogo → [MET adulto, MET 60+ (null = sem valor específico na tabela de 60+)]. Para máquinas sem MET60+
-// próprio, usa o valor adulto publicado como referência e converte pela base metabólica 60+ (2,7/3,5).
+// próprio, usa o valor adulto publicado como referência e converte para 0,810 kcal/kg/h por MET60+.
 export const METS_CARDIO = {
   'caminhada-esteira': [3.8, null],            // 17355: esteira, 4,8 a 5,5 km/h, sem inclinação
   'caminhada-inclinada-esteira': [5.3, null],  // 17034: subida de 1% a 5%, ritmo moderado a rápido (não há esteira inclinada)
@@ -44,12 +44,13 @@ export const METS_CARDIO = {
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-// Peso para a conta: o último registro de peso; sem ele, o da entrevista do Treinador ou da Nutricionista. null = sem peso.
+// Peso para a conta: o último registro de peso; sem ele, o informado em qualquer entrevista de treinador ou na
+// Nutricionista. null = sem peso.
 export function pesoParaGasto(st) {
   const s = isObj(st) ? st : {};
   const body = Array.isArray(s.body) ? s.body.filter((b) => isObj(b) && num(b.peso) >= 20 && num(b.peso) <= 400) : [];
   if (body.length) return body[body.length - 1].peso;
-  for (const k of ['trainer', 'nutri']) {
+  for (const k of ['trainer', 'run', 'nutri']) {
     const p = isObj(s[k]) && isObj(s[k].answers) ? num(s[k].answers.peso) : null;
     if (p != null && p >= 20 && p <= 400) return p;
   }
@@ -93,7 +94,7 @@ export function gastoDoTreino(sessao, st) {
   const metHoras = (out.musculacaoMin / 60) * (idade60 ? MET_MUSCULACAO_60 : MET_MUSCULACAO) + out.cardio.reduce((t, c) => t + (c.min / 60) * c.met, 0);
   out.peso = peso;
   // arredondado a 10 kcal: a tabela não dá mais precisão do que isso
-  out.kcal = Math.round((metHoras * peso * (idade60 ? 2.7 / 3.5 : 1)) / 10) * 10;
+  out.kcal = Math.round((metHoras * peso * (idade60 ? 0.810 : 1)) / 10) * 10;
   out.mostrar = out.kcal > 0;
   if (!out.mostrar) out.motivo = 'vazio';
   return out;

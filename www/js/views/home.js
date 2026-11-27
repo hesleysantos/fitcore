@@ -24,7 +24,7 @@ import { itensDoDia } from '../logic/ajuste-semana.js';
 import { linhaCargaInicio } from './corrida.js';
 import { linhasAtividades, botaoOutroTreino, linhasPlanejados } from './esportes.js';
 import { botaoChat } from './chat.js';
-import { gastoDoDia } from '../logic/gasto-dia.js';
+import { gastoDoDia, resumoGastoDoDia } from '../logic/gasto-dia.js';
 
 function saudacao(hora = new Date().getHours()) {
   return hora < 5 ? 'Boa noite' : hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
@@ -159,7 +159,9 @@ export function homeView() {
   const esportesHoje = linhasAtividades(hojeK, refresh);
   if (esportesHoje) linhas.push(esportesHoje);
   const gastoHoje = gastoDoDia(state, hojeK);
-  if (gastoHoje.mostrar) linhas.push(h('div', { class: 'small muted', id: 'inicio-calorias-atividade', text: `Gasto estimado hoje: ≈ ${fmtInt(gastoHoje.kcal)} kcal` }));
+  if (gastoHoje.mostrar) linhas.push(h('div', { class: 'col gap-s', id: 'inicio-calorias-atividade' },
+    h('div', { class: 'small muted', text: `Gasto estimado hoje: ≈ ${fmtInt(gastoHoje.kcal)} kcal` }),
+    h('div', { class: 'tiny muted', 'data-calorias-detalhe': 'hoje', text: resumoGastoDoDia(gastoHoje) })));
   // esporte ou corrida a mais planejados para hoje (com "Fiz" e "Registrar")
   const planejadosHoje = linhasPlanejados(hojeK, refresh);
   if (planejadosHoje) linhas.push(planejadosHoje);
